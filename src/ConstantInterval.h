@@ -13,6 +13,8 @@ struct Type;
 
 namespace Internal {
 
+struct Interval;
+
 /** A class to represent ranges of integers. Can be unbounded above or below,
  * but they cannot be empty. */
 struct ConstantInterval {
@@ -64,6 +66,11 @@ struct ConstantInterval {
     /** Test if the interval contains a particular unsigned value */
     bool contains(uint64_t x) const;
 
+    /** Test if this interval contains every value of another interval. An
+     * unbounded side of the other interval is contained only if this interval is
+     * also unbounded on that side. */
+    bool contains(const ConstantInterval &other) const;
+
     /** Construct the smallest interval containing two intervals. */
     static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
 
@@ -100,6 +107,12 @@ struct ConstantInterval {
     /** Get constant integer bounds on a type. */
     static ConstantInterval bounds_of_type(Type);
 };
+
+/** Convert a symbolic Interval to a ConstantInterval, keeping only endpoints that
+ * are already constant integers. A symbolic or infinite bound becomes unbounded.
+ * This does no bounds analysis of its own; any tightening must have already been
+ * done to the Interval upstream. */
+ConstantInterval covering_constant_interval(const Interval &in);
 
 /** Arithmetic operators on ConstantIntervals. The resulting interval contains
  * all possible values of the operator applied to any two elements of the

@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         printf("[SKIP-WITH-ISSUE-5000] Allocation cache not yet implemented for D3D12Compute.\n");
         return 0;
     }
-    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {
+    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::MacOS)) {
         printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK only allows 30 buffers to be allocated)!\n");
         return 0;
     }

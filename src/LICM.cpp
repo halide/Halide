@@ -251,6 +251,18 @@ protected:
             // Lift invariants
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter(op);
+
+            if (lifter.lifted.empty()) {
+                // Nothing was lifted at this loop level, so all of the
+                // register-pressure-reduction bookkeeping below (which
+                // walks the entire loop body to collect variable names,
+                // regardless of whether there's anything to substitute)
+                // would be pure overhead. Just recurse.
+                const For *loop = new_stmt.as<For>();
+                internal_assert(loop);
+                return loop->with(loop->min, loop->max, mutate(loop->body));
+            }
+
             new_stmt = SubstituteTrivialLets()(new_stmt);
 
             // As an optimization to reduce register pressure, take
@@ -276,10 +288,7 @@ protected:
 
             // Peel off containing lets. These will be lifted.
             vector<pair<string, Expr>> lets;
-            while (const Let *let = dummy_call.as<Let>()) {
-                lets.emplace_back(let->name, let->value);
-                dummy_call = let->body;
-            }
+            dummy_call = peel_lets(dummy_call, &lets);
 
             // Track the set of variables used by the inner loop
             set<string> vars;
@@ -327,12 +336,7 @@ protected:
             }
 
             // Wrap the lets pulled out by CSE
-            while (!lets.empty()) {
-                new_stmt = LetStmt::make(lets.back().first, lets.back().second, new_stmt);
-                lets.pop_back();
-            }
-
-            return new_stmt;
+            return rewrap_all_lets(new_stmt, lets);
         }
     }
 };

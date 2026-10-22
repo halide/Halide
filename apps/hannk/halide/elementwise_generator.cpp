@@ -42,7 +42,7 @@ public:
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(x, vector_size * 2, TailStrategy::Predicate);
+            .vectorize(x, vector_size * 2, TailStrategy::GuardWithIf);
 
         // Support broadcasting in the c dimension for either input.
         input1_.dim(0).set_stride(Expr());
@@ -90,7 +90,7 @@ public:
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(x, vector_size * 2, TailStrategy::Predicate);
+            .vectorize(x, vector_size * 2, TailStrategy::GuardWithIf);
 
         // Support broadcasting in the c dimension for either input.
         input1_.dim(0).set_stride(Expr());
@@ -201,7 +201,7 @@ public:
 
         // Schedule.
         output_.compute_root()
-            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
+            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf);
 
         // Only allow this many instructions per input, so we can store scratch
         // on the real stack. This is a lame heuristic.

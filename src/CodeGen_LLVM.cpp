@@ -153,19 +153,19 @@ llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, llvm::Type *gep_type,
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
 llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
-    // TODO(dsharlet): For some reason, marking internal functions as
-    // private linkage on OSX is causing some of the static tests to
-    // fail. Figure out why so we can remove this.
+    switch (t) {
+    case LinkageType::ExternalPlusArgv:
+    case LinkageType::ExternalPlusMetadata:
+    case LinkageType::External:
+        return llvm::GlobalValue::ExternalLinkage;
+    case LinkageType::Internal:
+        // Not PrivateLinkage: on Mach-O that emits an assembler-local label
+        // instead of a symbol, so the function would not get an atom of its
+        // own and the linker could strip or move it with its neighbor.
+        return llvm::GlobalValue::InternalLinkage;
+    }
+    internal_error << "Unknown LinkageType\n";
     return llvm::GlobalValue::ExternalLinkage;
-
-    // switch (t) {
-    // case LinkageType::ExternalPlusArgv:
-    // case LinkageType::ExternalPlusMetadata:
-    // case LinkageType::External:
-    //     return llvm::GlobalValue::ExternalLinkage;
-    // default:
-    //     return llvm::GlobalValue::PrivateLinkage;
-    // }
 }
 
 }  // namespace
@@ -715,6 +715,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
 
     vector<MangledNames> function_names;
+    auto export_from_windows_dll = [&](llvm::Function *f) {
+        if (target.os == Target::Windows) {
+            f->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        }
+    };
 
     // Declare all functions
     for (const auto &f : input.functions()) {
@@ -733,6 +738,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
         function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
         set_function_attributes_from_halide_target_options(*function);
+        if (f.linkage != LinkageType::Internal) {
+            export_from_windows_dll(function);
+        }
 
         // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
         std::vector<bool> buffer_args(f.args.size());
@@ -750,10 +758,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            export_from_windows_dll(add_argv_wrapper(function, names.argv_name, false, buffer_args));
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
-                embed_metadata_getter(names.metadata_name,
-                                      names.simple_name, f.args, input.get_metadata_name_map());
+                export_from_windows_dll(embed_metadata_getter(
+                    names.metadata_name, names.simple_name, f.args, input.get_metadata_name_map()));
             }
         }
 
@@ -798,6 +806,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
                                                                       wrapper_names.extern_name,
                                                                       module.get());
                 set_function_attributes_from_halide_target_options(*wrapper_func);
+                export_from_windows_dll(wrapper_func);
                 llvm::BasicBlock *wrapper_block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper_func);
                 builder->SetInsertPoint(wrapper_block);
 
@@ -1060,16 +1069,16 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
-    // The ABI halide_type_t is a scalar element type: {code, bits, reserved}.
+    // The ABI halide_type_t is a scalar element type: {code, bits, info}.
     // A buffer's element type is always scalar, and the wire struct does not
-    // carry lanes (the third field is now reserved and must be zero).
+    // carry lanes (the third field is now kind-specific info and must be zero).
     internal_assert(buf.type().lanes() == 1)
         << "Embedded buffer " << buf.name()
         << " has a non-scalar element type with " << buf.type().lanes() << " lanes.\n";
     Constant *type_fields[] = {
         ConstantInt::get(i8_t, buf.type().code()),
         ConstantInt::get(i8_t, buf.type().bits()),
-        ConstantInt::get(i16_t, 0)};
+        ConstantInt::get(i16_t, buf.type().to_abi().info)};  // struct byte size, else 0
 
     Constant *shape = nullptr;
     if (buf.dimensions()) {
@@ -1264,7 +1273,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         Constant *type_fields[] = {
             ConstantInt::get(i8_t, args[arg].type.code()),
             ConstantInt::get(i8_t, args[arg].type.bits()),
-            ConstantInt::get(i16_t, 0)};  // reserved (formerly lanes); must be 0
+            ConstantInt::get(i16_t, args[arg].type.to_abi().info)};  // struct byte size, else 0
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
         auto argument_estimates = args[arg].argument_estimates;
@@ -1381,7 +1390,28 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    llvm::PassBuilder pb(tm.get(), pto);
+    llvm::PassInstrumentationCallbacks pic;
+#if LLVM_VERSION < 220
+    if (get_target().has_feature(Target::SVE) || get_target().has_feature(Target::SVE2)) {
+        // LLVM 21's LoopAccessAnalysis::getStrideFromAddRec() queries a
+        // scalable-vector access type's fixed element count, which hits a
+        // fatal assertion (TypeSize::getFixedValue on a scalable TypeSize).
+        // This is reached from LoopLoadEliminationPass, which the default
+        // pipeline always runs (independent of Halide's own loop-opt
+        // settings). Fixed upstream in LLVM 22 by guarding that query
+        // against ScalableVectorType. Loop load elimination looks for
+        // opportunities to forward a store to a later load across loop
+        // iterations, which Halide-generated code essentially never
+        // benefits from, so skip it entirely on affected SVE targets rather
+        // than accept a compiler crash (or, in a no-asserts LLVM build, a
+        // silently bogus stride).
+        pic.registerShouldRunOptionalPassCallback(
+            [](llvm::StringRef pass_name, const llvm::Any &) {
+                return pass_name != "LoopLoadEliminationPass";
+            });
+    }
+#endif
+    llvm::PassBuilder pb(tm.get(), pto, /*PGOOpt=*/std::nullopt, &pic);
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
@@ -2231,19 +2261,29 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
                 int64_t stride = *pstride;
-                base = *pbase;
-                internal_assert(base >= 0);
-                width = next_power_of_two(ramp->lanes * stride);
-
-                while (base % width) {
-                    base -= base % width;
-                    width *= 2;
+                int64_t lo = *pbase;
+                int64_t hi = lo + (ramp->lanes - 1) * stride;
+                if (stride < 0) {
+                    std::swap(lo, hi);
                 }
-                constant_index = true;
+                // Indices below zero can only come from lanes masked off by
+                // a predicate. The blocks below are aligned relative to the
+                // start of the buffer, so they can't describe a range that
+                // straddles it. Fall back to just the buffer-level node.
+                if (lo >= 0) {
+                    base = lo;
+                    width = next_power_of_two(hi - lo + 1);
+
+                    while (base % width) {
+                        base -= base % width;
+                        width *= 2;
+                    }
+                    constant_index = true;
+                }
             }
         } else {
             auto pbase = as_const_int(index);
-            if (pbase) {
+            if (pbase && *pbase >= 0) {
                 base = *pbase;
                 constant_index = true;
             }
@@ -3601,29 +3641,57 @@ void CodeGen_LLVM::visit(const Call *op) {
         //    ...
         //    cond_N, "sub_function_name_N"
         //
+        // Unlike standard boolean conditions, these evaluate to one of four integer states:
+        //    0: Stable False   (Skip this function, try the next one)
+        //    1: Stable True    (Use this function, and cache the result)
+        //    2: Volatile False (Skip this function, but disable caching)
+        //    3: Volatile True  (Use this function, but disable caching)
+        //
         // This will generate code that corresponds (roughly) to
         //
-        //    static FunctionPtr f = []{
-        //      if (cond_1) return sub_function_name_1;
-        //      if (cond_2) return sub_function_name_2;
-        //      ...
-        //      if (cond_N) return sub_function_name_N;
+        //    static FunctionPtr cached_f = nullptr;
+        //    if (cached_f != nullptr) return cached_f(args);
+        //
+        //    FunctionPtr selected_f = nullptr;
+        //    bool should_cache = true;
+        //
+        //    int c1 = cond_1;
+        //    if (c1 == 2 || c1 == 3) should_cache = false;
+        //    if (c1 == 1 || c1 == 3) {
+        //        selected_f = sub_function_name_1;
+        //    } else {
+        //        int c2 = cond_2;
+        //        if (c2 == 2 || c2 == 3) should_cache = false;
+        //        if (c2 == 1 || c2 == 3) {
+        //            selected_f = sub_function_name_2;
+        //        } else {
+        //            ...
+        //        }
         //    }
-        //    return f(args)
         //
-        // i.e.: the conditions will be evaluated *in order*; the first one
-        // evaluating to true will have its corresponding function cached,
-        // which will be used to complete this (and all subsequent) calls.
+        //    if (should_cache) cached_f = selected_f;
+        //    return selected_f(args);
         //
-        // The final condition (cond_N) must evaluate to a constant TRUE
-        // value (so that the final function will be selected if all others
+        // i.e.: the conditions conceptually evaluate *in order*; the first one
+        // evaluating to True (1 or 3) will have its corresponding function selected.
+        // However, if the selected condition is Volatile True (3), or if *any*
+        // preceding skipped condition evaluated to Volatile False (2), the
+        // caching mechanism is bypassed for the current invocation.
+        //
+        // (Note: In the actual emitted LLVM IR, all conditions are evaluated
+        // unconditionally using `select` instructions to avoid basic-block explosion,
+        // but the semantic result is identical to short-circuiting.)
+        //
+        // The final condition (cond_N) must evaluate to a constant Stable True (1)
+        // value (so that the final function will be selected and cached if all others
         // fail); failure to do so will cause unpredictable results.
         //
-        // There is currently no way to clear the cached function pointer.
+        // There is currently no way to clear the cached function pointer manually.
         //
-        // It is assumed/required that all of the conditions are "pure"; each
-        // must evaluate to the same value (within a given runtime environment)
-        // across multiple evaluations.
+        // It is assumed/required that all of the conditions are side-effect free.
+        // Conditions returning 0 or 1 must be "pure" (evaluating to the same value
+        // across multiple evaluations within a given runtime environment), while
+        // conditions returning 2 or 3 are expected to be dynamic/volatile.
         //
         // It is assumed/required that all of the sub-functions have arguments
         // (and return values) that are identical to those of this->function.
@@ -3707,15 +3775,40 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // Build the not-already-inited case
         builder->SetInsertPoint(global_not_inited_bb);
-        llvm::Value *selected_value = nullptr;
+        Value *selected_value = nullptr;
+        // Keep track of whether any of the results was marked as a non-cacheable value (2 or 3).
+        Value *should_cache = builder->getInt1(true);
         for (const auto &sub_fn : reverse_view(sub_fns)) {
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
                 Value *c = codegen(sub_fn.cond);
-                selected_value = builder->CreateSelect(c, sub_fn.fn_ptr, selected_value);
+                Value *c_ext = builder->CreateZExtOrTrunc(c, builder->getInt32Ty());
+                // Check the lower bit: 0:no or 1:yes
+                Value *is_true = builder->CreateICmpNE(
+                    builder->CreateAnd(c_ext, builder->getInt32(1)),
+                    builder->getInt32(0));
+                // Check the upper bit: 0:cacheable or 1:volatile
+                Value *is_volatile = builder->CreateICmpNE(
+                    builder->CreateAnd(c_ext, builder->getInt32(2)),
+                    builder->getInt32(0));
+
+                // Update the selected function to the current one under test, as it passes
+                // the test, and is earlier in the list.
+                selected_value = builder->CreateSelect(is_true, sub_fn.fn_ptr, selected_value);
+
+                // Update should_cache.
+                Value *stable_true = builder->CreateAnd(is_true, builder->CreateNot(is_volatile));
+                Value *new_should_cache = builder->CreateSelect(stable_true, builder->getInt1(true), should_cache);
+                should_cache = builder->CreateSelect(is_volatile, builder->getInt1(false), new_should_cache);
             }
         }
+        // Create a basic block for storing
+        BasicBlock *store_bb = BasicBlock::Create(*context, "store_bb", function);
+        builder->CreateCondBr(should_cache, store_bb, call_fn_bb);
+
+        // Build the store bb
+        builder->SetInsertPoint(store_bb);
         builder->CreateStore(selected_value, global);
         builder->CreateBr(call_fn_bb);
 
@@ -3724,9 +3817,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->CreateBr(call_fn_bb);
 
         builder->SetInsertPoint(call_fn_bb);
-        PHINode *phi = builder->CreatePHI(selected_value->getType(), 2);
-        phi->addIncoming(selected_value, global_not_inited_bb);
-        phi->addIncoming(loaded_value, global_inited_bb);
+        PHINode *phi = builder->CreatePHI(selected_value->getType(), 3);
+        phi->addIncoming(selected_value, global_not_inited_bb);  // Selected it, but not cached it.
+        phi->addIncoming(selected_value, store_bb);              // Selected and cached it.
+        phi->addIncoming(loaded_value, global_inited_bb);        // It was already cached.
 
         std::vector<llvm::Value *> call_args;
         for (auto &arg : function->args()) {
@@ -5937,6 +6031,9 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Value *v) {
 llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
                                        int effective_vscale) const {
     if (t.lanes() == 1) {
+        if (t.is_struct()) {
+            return llvm::ArrayType::get(llvm::Type::getInt8Ty(*c), t.bytes());
+        }
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
             case 16:

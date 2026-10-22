@@ -41,8 +41,7 @@ target_link_libraries(
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME compositing_process COMMAND compositing_process rgba.png 10 out.png)
+    add_test(NAME compositing_process COMMAND compositing_process ${IMAGE} 10 out.png)
     set_tests_properties(
         compositing_process
         PROPERTIES

@@ -1064,6 +1064,7 @@ namespace {
 
 // Compute a factorization of N suitable for use in the FFT.
 vector<int> radix_factor(int N) {
+    assert(N > 0);
     // Some special cases to optimize.
     switch (N) {
     case 16:

@@ -241,6 +241,16 @@ protected:
         }
 
         if (!expr.defined()) {
+            // Adding zero is a no-op. This comes up when terms cancel, or when
+            // a negation arrives here written as (0 - f(x)).
+            if (is_const_zero(b)) {
+                expr = a;
+            } else if (is_const_zero(a)) {
+                expr = b;
+            }
+        }
+
+        if (!expr.defined()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -701,6 +711,8 @@ protected:
                     }
                 } else if (is_const(mul_a->b, -1)) {
                     expr = mutate(Opp::make(mul_a->a, make_zero(b.type()) - b));
+                } else if (is_const(mul_a->b, 0)) {
+                    expr = mutate(Cmp::make(make_zero(b.type()), b));
                 } else if (is_negative_const(mul_a->b) && no_overflow_int(a.type())) {
                     // Restrict to no_overflow_int types: for narrow signed types
                     // (int8, int16), negate(INT_MIN) overflows back to INT_MIN,
@@ -971,6 +983,22 @@ class SolveForInterval : public IRVisitor {
         equiv.accept(this);
     }
 
+    void visit(const Min *op) override {
+        // min of bools is a logical And. These arise from
+        // and_condition_over_domain and the simplifier. Treat it as such so
+        // that Not distributes correctly (otherwise !min(a, b) is mis-solved).
+        internal_assert(op->type.is_bool());
+        Expr equiv = op->a && op->b;
+        equiv.accept(this);
+    }
+
+    void visit(const Max *op) override {
+        // max of bools is a logical Or.
+        internal_assert(op->type.is_bool());
+        Expr equiv = op->a || op->b;
+        equiv.accept(this);
+    }
+
     void visit(const Not *op) override {
         target = !target;
         op->a.accept(this);
@@ -1055,17 +1083,42 @@ class SolveForInterval : public IRVisitor {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
 
+        // When decomposing expressions, we may end up with a condition
+        // that doesn't depend on the variable. In these cases, we still
+        // need to return a sensible interval, e.g. in `x <= 16 && -1 <= 16`,
+        // the second condition should return everything, rather than fail,
+        // and the rule for && will intersect the LHS with everything,
+        // leaving the LHS as the final result.
+        if (Expr cond = le; !expr_uses_var(cond, var)) {
+            // Respect the polarity we're solving for: under a negation we want
+            // the region where the condition is false.
+            if (can_prove(cond)) {
+                result = target ? Interval::everything() : Interval::nothing();
+            } else if (can_prove(!cond)) {
+                result = target ? Interval::nothing() : Interval::everything();
+            } else {
+                fail();
+            }
+            return;
+        }
+
         const Variable *v = le->a.as<Variable>();
         if (!already_solved) {
             SolverResult solved = solve_expression(le, var, scope);
             if (!solved.fully_solved) {
-                // solve_expression failed; try direct max/min decomposition on the LHS.
+                // solve_expression failed; try direct max/min decomposition.
                 if (const Max *max_fallback = le->a.as<Max>()) {
                     // max(a, b) <= c <==> a <= c && b <= c
                     (max_fallback->a <= le->b && max_fallback->b <= le->b).accept(this);
                 } else if (const Min *min_fallback = le->a.as<Min>()) {
                     // min(a, b) <= c <==> a <= c || b <= c
                     (min_fallback->a <= le->b || min_fallback->b <= le->b).accept(this);
+                } else if (const Min *min_b = le->b.as<Min>()) {
+                    // c <= min(a, b) <==> c <= a && c <= b
+                    (le->a <= min_b->a && le->a <= min_b->b).accept(this);
+                } else if (const Max *max_b = le->b.as<Max>()) {
+                    // c <= max(a, b) <==> c <= a || c <= b
+                    (le->a <= max_b->a || le->a <= max_b->b).accept(this);
                 } else if (const Mul *mul_fallback = le->a.as<Mul>()) {
                     // max/min(a, b) * pos_c <= rhs <==> a*pos_c <= rhs [&&/||] b*pos_c <= rhs
                     const Max *mxf = mul_fallback->a.as<Max>();
@@ -1140,17 +1193,35 @@ class SolveForInterval : public IRVisitor {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
 
+        // See the analogous check in visit(const LE *).
+        if (Expr cond = ge; !expr_uses_var(ge, var)) {
+            if (can_prove(cond)) {
+                result = target ? Interval::everything() : Interval::nothing();
+            } else if (can_prove(!cond)) {
+                result = target ? Interval::nothing() : Interval::everything();
+            } else {
+                fail();
+            }
+            return;
+        }
+
         const Variable *v = ge->a.as<Variable>();
         if (!already_solved) {
             SolverResult solved = solve_expression(ge, var, scope);
             if (!solved.fully_solved) {
-                // solve_expression failed; try direct max/min decomposition on the LHS.
+                // solve_expression failed; try direct max/min decomposition.
                 if (const Max *max_fallback = ge->a.as<Max>()) {
                     // max(a, b) >= c <==> a >= c || b >= c
                     (max_fallback->a >= ge->b || max_fallback->b >= ge->b).accept(this);
                 } else if (const Min *min_fallback = ge->a.as<Min>()) {
                     // min(a, b) >= c <==> a >= c && b >= c
                     (min_fallback->a >= ge->b && min_fallback->b >= ge->b).accept(this);
+                } else if (const Min *min_b = ge->b.as<Min>()) {
+                    // c >= min(a, b) <==> c >= a || c >= b
+                    (ge->a >= min_b->a || ge->a >= min_b->b).accept(this);
+                } else if (const Max *max_b = ge->b.as<Max>()) {
+                    // c >= max(a, b) <==> c >= a && c >= b
+                    (ge->a >= max_b->a && ge->a >= max_b->b).accept(this);
                 } else if (const Mul *mul_fallback = ge->a.as<Mul>()) {
                     // max/min(a, b) * pos_c >= rhs <==> a*pos_c >= rhs [||/&&] b*pos_c >= rhs
                     const Max *mxf = mul_fallback->a.as<Max>();
@@ -1284,7 +1355,13 @@ SolverResult solve_expression(const Expr &e, const std::string &variable, const 
 
 Interval solve_for_inner_interval(const Expr &c, const std::string &var) {
     SolveForInterval s(var, false);
-    c.accept(&s);
+    // SolveForInterval's structural rewrites match on the shape of a
+    // comparison's operands, so they're defeated if an operand is hidden
+    // behind a let. Inline them first. graph_substitute keeps shared
+    // subexpressions shared rather than duplicating them, and the solver
+    // caches by Expr, so this stays cheap despite dropping the explicit
+    // sharing that lets provide.
+    substitute_in_all_lets(c).accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_inner_interval returned undefined Exprs: " << c << "\n";
     s.result.min = simplify(common_subexpression_elimination(s.result.min));
@@ -1298,7 +1375,8 @@ Interval solve_for_inner_interval(const Expr &c, const std::string &var) {
 
 Interval solve_for_outer_interval(const Expr &c, const std::string &var) {
     SolveForInterval s(var, true);
-    c.accept(&s);
+    // See the remark in solve_for_inner_interval.
+    substitute_in_all_lets(c).accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_outer_interval returned undefined Exprs: " << c << "\n";
     s.result.min = simplify(common_subexpression_elimination(s.result.min));

@@ -37,12 +37,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 
 # Filters. The operand type picks the schedule: half precision gets the tensor
-# cores, which need compute capability 7.0 or above, and float gets a schedule
-# that accumulates in ordinary registers.
+# cores, and float gets a schedule that accumulates in ordinary registers. Both
+# stage their inputs with asynchronous copies, which need compute capability
+# 8.0 or above.
 add_halide_library(
     mat_mul
     FROM mat_mul.generator
-    FEATURES cuda cuda_capability_50
+    FEATURES cuda cuda_capability_80
     PARAMS size=1024 A.type=float32 B.type=float32 out.type=float32
 )
 add_halide_library(

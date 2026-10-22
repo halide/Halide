@@ -105,6 +105,27 @@ extern int halide_vulkan_release_context(void *user_context,
                                          VkDevice device,
                                          VkQueue queue,
                                          VkDebugUtilsMessengerEXT messenger);
+
+typedef int (*halide_vulkan_acquire_context_t)(void *,                                    // user_context
+                                               struct halide_vulkan_memory_allocator **,  // allocator out parameter
+                                               VkInstance *,                              // instance out parameter
+                                               VkDevice *,                                // device out parameter
+                                               VkPhysicalDevice *,                        // physical device out parameter
+                                               VkQueue *,                                 // queue out parameter
+                                               uint32_t *,                                // queue family index out parameter
+                                               VkDebugUtilsMessengerEXT *,                // debug messenger out parameter
+                                               bool);                                     // should create a context if none exist
+typedef int (*halide_vulkan_release_context_t)(void *,                                    // user_context
+                                               VkInstance,                                // instance
+                                               VkDevice,                                  // device
+                                               VkQueue,                                   // queue
+                                               VkDebugUtilsMessengerEXT);                 // debug messenger
+
+/** Set custom methods to acquire and release Vulkan contexts */
+// @{
+extern halide_vulkan_acquire_context_t halide_set_vulkan_acquire_context(halide_vulkan_acquire_context_t handler);
+extern halide_vulkan_release_context_t halide_set_vulkan_release_context(halide_vulkan_release_context_t handler);
+// @}
 // --
 
 // Override the default allocation callbacks (default uses Vulkan runtime implementation)

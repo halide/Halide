@@ -15,8 +15,8 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-arm-linux.yml"
       - "packaging/**"
-      - "Makefile"
-      - "Makefile.inc"
+      - "**/Makefile"
+      - "apps/support/Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
 
@@ -85,7 +85,7 @@ jobs:
       - name: Sync CI environment
         run: |
           setarch ${{ matrix.arch }} bash -ec "
-            uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+            uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
             echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
             echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
           "

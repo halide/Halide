@@ -89,16 +89,47 @@ class MarkAsyncCopies : public IRMutator {
                            mutate(op->predicate), op->alignment, op->is_streaming);
     }
 
+    // Waiting for a copy is something each thread does for the copies it
+    // issued itself, so the wait belongs inside the loops over threads. Put it
+    // at the end of the innermost one, which is still before the barrier that
+    // publishes the data to the rest of the block and before any of it is
+    // read. Leaving it after them would make it a statement outside the loops
+    // over threads, which is a thing only the first thread does.
+    class AwaitInEachThread : public IRMutator {
+        using IRMutator::visit;
+
+        Stmt visit(const For *op) override {
+            Stmt body = mutate(op->body);
+            if ((op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) &&
+                body.same_as(op->body)) {
+                // Placing the wait is the only thing this does, so a body that
+                // comes back unchanged is one with no loop over threads inside
+                // it, and this is the innermost one.
+                body = Block::make(body, Evaluate::make(wait));
+            }
+            return op->with(op->min, op->max, body);
+        }
+
+        const Expr &wait;
+
+    public:
+        using IRMutator::mutate;
+
+        AwaitInEachThread(const Expr &wait)
+            : wait(wait) {
+        }
+    };
+
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         auto it = groups.find(op->name);
         if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
-            // At the end of the producer, which is before the barrier that
-            // publishes the data to the rest of the block, and before any of
-            // it is read.
             Expr wait = Call::make(Int(32), Call::cuda_await_copies,
                                    {it->second}, Call::Intrinsic);
-            body = Block::make(body, Evaluate::make(wait));
+            Stmt with_wait = AwaitInEachThread(wait).mutate(body);
+            // Unchanged means there was no loop over threads to put it in,
+            // because only one thread runs this producer.
+            body = with_wait.same_as(body) ? Block::make(body, Evaluate::make(wait)) : with_wait;
         }
         return op->with(body);
     }
@@ -110,15 +141,11 @@ public:
 // The copy engine moves up to 16 bytes at a time, and needs its destination
 // aligned to the width of the copy. Allocations are packed one after another,
 // so a group has to end on a 16-byte boundary for whatever follows it to be
-// copyable into. Round a group's size up accordingly, given the size in bytes
-// of the units it is measured in.
-Expr round_up_group_size(const Expr &size, int unit_bytes) {
-    const int alignment = 16;
-    if (unit_bytes >= alignment) {
-        return size;
-    }
-    return align_up(size, alignment / unit_bytes);
-}
+// copyable into. Group sizes are counted in units of the type they are
+// allocated as, so dividing gives the number of those units to align to. Units
+// of 16 bytes or more are big enough already and give zero, which align_up
+// takes to mean no alignment at all.
+const int async_copy_alignment = 16;
 
 class ExtractBlockSize : public IRVisitor {
 protected:
@@ -318,8 +345,8 @@ public:
 // An allocation inside the thread loops stays in register/local memory
 // (handled by ExtractRegisterAllocations) rather than being pulled out to the
 // block level (handled by ExtractSharedAndHeapAllocations) if it has a fixed
-// size or an explicit register/stack/fragment memory type. A tensor core
-// fragment is per-lane, so it belongs in registers wherever it was declared.
+// size or an explicit register/stack/tile memory type. A tensor core fragment
+// is per-lane, so it belongs in registers wherever it was declared.
 bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
     bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
     return (fixed_size_thread_allocation &&
@@ -398,6 +425,23 @@ protected:
 
 public:
     vector<SharedAllocation> allocations;
+
+    /** Which allocations end up sharing one piece of memory. Two Funcs in the
+     * same group are the same bytes at different times, so a hazard between
+     * them is a hazard on that memory even though the names differ, and
+     * whoever places thread barriers has to see them as one thing. The groups
+     * are decided by liveness measured here, before any barriers are placed,
+     * so asking now gives the same answer as rewrapping later will. */
+    std::map<std::string, int> storage_groups() {
+        vector<AllocGroup> groups = allocate_funcs(allocations);
+        std::map<std::string, int> result;
+        for (int i = 0; i < (int)groups.size(); i++) {
+            for (const SharedAllocation &a : groups[i].group) {
+                result[a.name] = i;
+            }
+        }
+        return result;
+    }
 
 protected:
     map<string, SharedAllocation *> shared;
@@ -771,7 +815,7 @@ protected:
     // Given some allocations, return a vector of allocation group where each group
     // consists of a number of allocations which should be coalesced together
     // in the shared memory.
-    vector<AllocGroup> allocate_funcs(vector<SharedAllocation> &allocations) {
+    vector<AllocGroup> allocate_funcs(vector<SharedAllocation> allocations) {
         // Sort based on the ascending order of the min liveness stage,
         // then sort based on the ascending order of the max liveness stage.
         sort(allocations.begin(), allocations.end(),
@@ -971,7 +1015,18 @@ public:
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
-                total_size += round_up_group_size(alloc.max_size * ratio, alloc_type.bytes());
+                // Sizes here are counted in units of one type or another, and
+                // are converted between them by dividing, so the widest type
+                // has to be a whole multiple of alloc_type -- not necessarily
+                // a power of two, e.g. when alloc_type is UInt(8) (always the
+                // case when may_merge_allocs_of_different_type is set) any
+                // byte count, including a struct's, divides evenly.
+                internal_assert(alloc.widest_type.bytes() % alloc_type.bytes() == 0)
+                    << "Allocation type " << alloc.widest_type << " (" << alloc.widest_type.bytes()
+                    << " bytes) is not a whole multiple of the cluster's allocation type "
+                    << alloc_type << " (" << alloc_type.bytes() << " bytes)\n";
+                total_size += align_up(alloc.max_size * ratio,
+                                       async_copy_alignment / alloc_type.bytes());
             }
 
             // Upgrade the alloc type to the widest type found, and
@@ -1046,8 +1101,8 @@ public:
                         offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
                         int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
                         internal_assert(ratio != 0);
-                        offset += simplify(round_up_group_size(
-                            (cluster[i - 1].max_size + ratio - 1) / ratio, widest_type.bytes()));
+                        offset += simplify(align_up((cluster[i - 1].max_size + ratio - 1) / ratio,
+                                                    async_copy_alignment / widest_type.bytes()));
                     } else {
                         if (memory_type == MemoryType::Heap) {
                             // One slice of a larger global allocation
@@ -1395,17 +1450,21 @@ public:
 
 class InjectThreadBarriers : public IRMutator {
 protected:
-    bool in_threads = false, injected_barrier;
+    bool in_threads = false, injected_barrier = false;
 
     using IRMutator::visit;
 
     const ExtractSharedAndHeapAllocations &block_allocs;
     const ExtractRegisterAllocations &register_allocs;
 
-    std::set<std::string> shared_stores;
-    std::set<std::string> device_stores;
-    std::set<std::string> shared_loads;
-    std::set<std::string> device_loads;
+    // Names that share memory answer to the same key, so a hazard between two
+    // Funcs the allocator coalesced is not missed.
+    std::map<std::string, int> storage_group;
+
+    std::string storage_key(const std::string &name) {
+        auto it = storage_group.find(name);
+        return it == storage_group.end() ? name : "group " + std::to_string(it->second);
+    }
 
     MemoryType memory_type_for_name(const std::string &name) {
         for (const auto &x : register_allocs.allocations) {
@@ -1453,99 +1512,138 @@ protected:
         }
     }
 
-    Stmt visit(const Store *op) override {
-        debug(4) << "Encountered store to " << op->name << "\n";
-        auto mem_type = memory_type_for_name(op->name);
-        switch (mem_type) {
-        case MemoryType::GPUSharedAsync:
-        case MemoryType::GPUShared:
-            debug(4) << "   memory type is shared\n";
-            shared_stores.insert(op->name);
-            break;
-        case MemoryType::Auto:
-        case MemoryType::Heap:
-        case MemoryType::GPUTexture:
-            debug(4) << "   memory type is heap or auto\n";
-            device_stores.insert(op->name);
-            break;
-        case MemoryType::Stack:
-        case MemoryType::Register:
-        case MemoryType::LockedCache:
-        case MemoryType::VTCM:
-        case MemoryType::Tile:
-            break;
+    // What a statement touches in the memory the threads of a block share.
+    struct Footprint {
+        std::set<std::string> shared_stores, shared_loads;
+        std::set<std::string> device_stores, device_loads;
+
+        static bool intersects(const std::set<std::string> &a,
+                               const std::set<std::string> &b) {
+            for (const auto &x : a) {
+                if (b.count(x)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
-        return IRMutator::visit(op);
-    }
-
-    Expr visit(const Load *op) override {
-        debug(4) << "Encountered load from " << op->name << "\n";
-        auto mem_type = memory_type_for_name(op->name);
-        switch (mem_type) {
-        case MemoryType::GPUSharedAsync:
-        case MemoryType::GPUShared:
-            debug(4) << "   memory type is shared\n";
-            shared_loads.insert(op->name);
-            break;
-        case MemoryType::Auto:
-        case MemoryType::Heap:
-        case MemoryType::GPUTexture:
-            debug(4) << "   memory type is heap or auto\n";
-            device_loads.insert(op->name);
-            break;
-        case MemoryType::Stack:
-        case MemoryType::Register:
-        case MemoryType::LockedCache:
-        case MemoryType::VTCM:
-        case MemoryType::Tile:
-            break;
-        }
-
-        return IRMutator::visit(op);
-    }
-
-    Stmt visit(const Block *op) override {
-        if (!in_threads && op->rest.defined()) {
-            // First, we record which loads from shared/device memory occur
-            // in the rest block
-            Stmt rest = mutate(op->rest);
-
-            // Now, record which stores occur in the first stmt
-            // of this block
-            shared_stores.clear();
-            device_stores.clear();
-            Stmt first = mutate(op->first);
-
-            // If there are any loads in the rest part that
-            // load from something stored in first, insert the appropriate
-            // fence type
+        // Which memory spaces this statement and everything before it since
+        // the last barrier disagree about: it reads what was written, writes
+        // what was read, or writes what was written. Any of those needs the
+        // threads brought back together first.
+        int conflict(const Footprint &earlier) const {
             int mask = 0;
-            for (const auto &st : shared_stores) {
-                auto elem = shared_loads.find(st);
-                if (elem != shared_loads.end()) {
-                    mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
-                    break;
-                }
+            if (intersects(shared_loads, earlier.shared_stores) ||
+                intersects(shared_stores, earlier.shared_loads) ||
+                intersects(shared_stores, earlier.shared_stores)) {
+                mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
             }
-            for (const auto &st : device_stores) {
-                auto elem = device_loads.find(st);
-                if (elem != device_loads.end()) {
-                    mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
-                    break;
-                }
+            if (intersects(device_loads, earlier.device_stores) ||
+                intersects(device_stores, earlier.device_loads) ||
+                intersects(device_stores, earlier.device_stores)) {
+                mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
             }
-            injected_barrier = true;
-            return Block::make({first, make_barrier(mask), rest});
-        } else {
+            return mask;
+        }
+
+        // Forget the accesses a barrier has now ordered. A barrier only
+        // fences the spaces named in its mask, so accesses in a space it did
+        // not fence are still waiting for one.
+        void clear(int mask) {
+            if (mask & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+                shared_stores.clear();
+                shared_loads.clear();
+            }
+            if (mask & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+                device_stores.clear();
+                device_loads.clear();
+            }
+        }
+
+        void add(const Footprint &other) {
+            shared_stores.insert(other.shared_stores.begin(), other.shared_stores.end());
+            shared_loads.insert(other.shared_loads.begin(), other.shared_loads.end());
+            device_stores.insert(other.device_stores.begin(), other.device_stores.end());
+            device_loads.insert(other.device_loads.begin(), other.device_loads.end());
+        }
+    };
+
+    void record(Footprint &f, const std::string &raw_name, bool is_store) {
+        const std::string name = storage_key(raw_name);
+        switch (memory_type_for_name(raw_name)) {
+        case MemoryType::GPUSharedAsync:
+        case MemoryType::GPUShared:
+            (is_store ? f.shared_stores : f.shared_loads).insert(name);
+            break;
+        case MemoryType::Auto:
+        case MemoryType::Heap:
+        case MemoryType::GPUTexture:
+            (is_store ? f.device_stores : f.device_loads).insert(name);
+            break;
+        default:
+            break;
+        }
+    }
+
+    Footprint footprint_of(const Stmt &s) {
+        Footprint f;
+        visit_with(
+            s,
+            [&](auto *self, const Store *op) {
+                record(f, op->name, true);
+                self->visit_base(op);
+            },
+            [&](auto *self, const Load *op) {
+                record(f, op->name, false);
+                self->visit_base(op);
+            },
+            [&](auto *self, const Call *op) {
+                // A texture is not loaded and stored but passed through these,
+                // which name it in their first argument.
+                if (op->is_intrinsic(Call::image_load) ||
+                    op->is_intrinsic(Call::image_store)) {
+                    const StringImm *name = op->args[0].as<StringImm>();
+                    internal_assert(name) << "Malformed " << op->name << "\n";
+                    record(f, name->value, op->is_intrinsic(Call::image_store));
+                }
+                self->visit_base(op);
+            });
+        return f;
+    }
+
+    // Taking the statements of a block a pair at a time puts a barrier at every
+    // join, whether or not the two halves disagree about any memory. Take the
+    // whole sequence at once and put barriers only where a statement meets
+    // something an earlier one left.
+    Stmt visit(const Block *op) override {
+        if (in_threads || !op->rest.defined()) {
             return IRMutator::visit(op);
         }
+
+        std::vector<Stmt> stmts = Block::to_vector(op);
+
+        std::vector<Stmt> result;
+        Footprint pending;
+        for (const Stmt &s : stmts) {
+            Stmt mutated = mutate(s);
+            Footprint here = footprint_of(mutated);
+            int mask = here.conflict(pending);
+            if (mask) {
+                result.push_back(make_barrier(mask));
+                injected_barrier = true;
+                pending.clear(mask);
+            }
+            pending.add(here);
+            result.push_back(mutated);
+        }
+        return Block::make(result);
     }
 
 public:
     InjectThreadBarriers(ExtractSharedAndHeapAllocations &sha, ExtractRegisterAllocations &ra)
         : block_allocs(sha),
-          register_allocs(ra) {
+          register_allocs(ra),
+          storage_group(sha.storage_groups()) {
     }
 };
 

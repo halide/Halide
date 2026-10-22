@@ -278,10 +278,12 @@ Stmt Simplify::visit(const For *op) {
     } else if (max_info.bounds < min_info.bounds) {
         return Evaluate::make(0);
     } else if (equal(new_min, new_max) &&
+               op->for_type != ForType::Parallel &&
                op->device_api == DeviceAPI::None) {
         // Loop body runs exactly once
         return mutate(LetStmt::make(op->name, new_min, new_body));
     } else if (max_info.bounds <= min_info.bounds &&
+               op->for_type != ForType::Parallel &&
                op->device_api == DeviceAPI::None) {
         // Loop body runs at most once
         Stmt s = LetStmt::make(op->name, new_min, new_body);
@@ -472,21 +474,14 @@ Stmt Simplify::visit(const Evaluate *op) {
 
     // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
     vector<pair<string, Expr>> lets;
-    while (const Let *let = value.as<Let>()) {
-        lets.emplace_back(let->name, let->value);
-        value = let->body;
-    }
+    value = peel_lets(value, &lets);
 
     if (value.same_as(op->value)) {
         internal_assert(lets.empty());
         return op;
     } else {
         // Rewrap the lets outside the evaluate node
-        Stmt stmt = Evaluate::make(value);
-        for (const auto &[var, value] : reverse_view(lets)) {
-            stmt = LetStmt::make(var, value, stmt);
-        }
-        return stmt;
+        return rewrap_all_lets(Evaluate::make(value), lets);
     }
 }
 
@@ -592,6 +587,7 @@ Stmt Simplify::visit(const Block *op) {
     } else if (store_first &&
                store_next &&
                store_first->name == store_next->name &&
+               store_first->value.type() == store_next->value.type() &&
                equal(store_first->index, store_next->index) &&
                equal(store_first->predicate, store_next->predicate) &&
                is_pure(store_first->index) &&

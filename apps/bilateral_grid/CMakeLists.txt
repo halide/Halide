@@ -54,8 +54,7 @@ target_link_libraries(
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} gray.png COPYONLY)
-    add_test(NAME bilateral_grid_process COMMAND bilateral_grid_process gray.png out.png 0.1 10)
+    add_test(NAME bilateral_grid_process COMMAND bilateral_grid_process ${IMAGE} out.png 0.1 10)
     set_tests_properties(
         bilateral_grid_process
         PROPERTIES

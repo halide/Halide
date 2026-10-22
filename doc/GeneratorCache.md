@@ -56,6 +56,7 @@ following are guaranteed to produce identical outputs:
   of its command-line params changed. Autoscheduling itself is deliberately
   excluded so that computing a cache key never requires running a (potentially
   expensive) autoscheduler.
+- **The value of `HL_LLVM_ARGS`**, since it passes options directly to LLVM.
 - **The contents of any `-p` plugins** (e.g. autoschedulers), since they affect
   codegen but live outside libHalide.
 

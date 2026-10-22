@@ -15,8 +15,8 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-linux.yml"
       - "packaging/**"
-      - "Makefile"
-      - "Makefile.inc"
+      - "**/Makefile"
+      - "apps/support/Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
 
@@ -82,7 +82,7 @@ jobs:
         run: |
           setarch ${{ matrix.arch }} bash -ec "
             CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' \
-            uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+            uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
             echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
             echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
           "
@@ -121,12 +121,12 @@ jobs:
     # Xcode or any other macOS-only tooling, so it doesn't need to spend
     # macOS CI minutes. GitHub's hosted ubuntu-24.04 image ships an Android
     # SDK+NDK by default, same as its macOS image does for Xcode/HelloiOS.
-    # Both apps build real APKs via their own Gradle/CMake `externalNativeBuild`
+    # The app builds a real APK via its own Gradle/CMake `externalNativeBuild`
     # project -- Halide's generators are built as a side effect of that same
-    # CMake configure (see app/src/main/cpp/CMakeLists.txt in each app), so no
-    # separate generator pre-build step is needed here.
+    # CMake configure (see app/src/main/cpp/CMakeLists.txt), so no separate
+    # generator pre-build step is needed here.
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: HelloAndroid apps
+    name: HelloAndroid app
     runs-on: ubuntu-24.04
 
     steps:
@@ -141,7 +141,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --group ci-llvm-main --no-install-project
+          uv sync --frozen --group ci-llvm-main --no-install-workspace
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
@@ -156,12 +156,12 @@ jobs:
       - name: Build and install Halide
         run: cmake --build build --target install
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Point Gradle at a CMake >= 3.28
         # AGP's own bundled/SDK-managed CMake package defaults to an older
@@ -170,14 +170,10 @@ jobs:
         # via the documented `cmake.dir` local.properties key instead.
         run: |
           cmake_dir="$(dirname "$(dirname "$(command -v cmake)")")"
-          echo "cmake.dir=${cmake_dir}" | tee apps/HelloAndroid/local.properties apps/HelloAndroidCamera2/local.properties
+          echo "cmake.dir=${cmake_dir}" | tee apps/HelloAndroid/local.properties
 
       - name: Build HelloAndroid
         working-directory: apps/HelloAndroid
-        run: ./gradlew assembleDebug "-PHalide_ROOT=${{ github.workspace }}/install"
-
-      - name: Build HelloAndroidCamera2
-        working-directory: apps/HelloAndroidCamera2
         run: ./gradlew assembleDebug "-PHalide_ROOT=${{ github.workspace }}/install"
 
       - name: Enable KVM group perms (required by the emulator)
@@ -186,11 +182,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Both apps' bugs found in the prior two commits (missing runtime
-      # permission request, native buffer bugs) were invisible to a build-only
-      # check -- they only showed up when the app actually ran and tried to
-      # open the camera. x86_64 (not arm64-v8a) so the emulator gets KVM
-      # hardware acceleration on these x86_64 runners.
+      # A build-only check can't catch bugs like a missing runtime permission
+      # request or native buffer handling -- those only show up once the app
+      # actually runs and tries to open the camera. x86_64 (not arm64-v8a) so
+      # the emulator gets KVM hardware acceleration on these x86_64 runners.
       - name: Run smoke tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -207,8 +202,7 @@ jobs:
           # NOT honor `\` line-continuation across lines -- so each invocation
           # below must stay on a single line.
           script: |
-            apps/support/android_smoke_test.sh apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk com.example.hellohalide .CameraActivity android.permission.CAMERA "requires a buffer of exactly"
-            apps/support/android_smoke_test.sh apps/HelloAndroidCamera2/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroidcamera2 .CameraActivity android.permission.CAMERA
+            apps/HelloAndroid/android_smoke_test.sh apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroid .CameraActivity android.permission.CAMERA
 
   baremetal-apps:
     # Deliberately its own job: needs an arm-none-eabi cross toolchain and
@@ -232,7 +226,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --group ci-llvm-main --no-install-project
+          uv sync --frozen --group ci-llvm-main --no-install-workspace
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 

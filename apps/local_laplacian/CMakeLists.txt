@@ -49,8 +49,7 @@ target_link_libraries(
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME local_laplacian_process COMMAND local_laplacian_process rgb.png 8 1 1 10 out.png)
+    add_test(NAME local_laplacian_process COMMAND local_laplacian_process ${IMAGE} 8 1 1 10 out.png)
     set_tests_properties(
         local_laplacian_process
         PROPERTIES

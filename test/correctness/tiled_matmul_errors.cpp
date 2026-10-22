@@ -7,6 +7,7 @@
 // (a user error) rather than crashing or hitting an internal assert.
 
 #include "Halide.h"
+#include "expect_user_error.h"
 #include <stdio.h>
 
 #if HALIDE_WITH_EXCEPTIONS
@@ -17,49 +18,33 @@ namespace {
 
 const Target amx_target("x86-64-linux-avx512_sapphirerapids");
 
-// Run `body` and assert it produces a Halide user error.
-template<typename F>
-bool expect_user_error(const char *name, const char *substring, F body) {
-    try {
-        body();
-    } catch (const CompileError &e) {
-        std::string msg = e.what();
-        if (msg.find(substring) == std::string::npos) {
-            printf("[%s] FAIL: error did not mention \"%s\":\n%s\n",
-                   name, substring, msg.c_str());
-            return false;
-        }
-        printf("[%s] OK: %s\n", name, e.what());
-        return true;
-    } catch (...) {
-        printf("[%s] FAIL: expected a CompileError but got a different exception\n", name);
-        return false;
-    }
-    printf("[%s] FAIL: expected a user error but none was raised\n", name);
-    return false;
-}
-
 // Apply a stock AMX matmul schedule to `mm` (with reduction var `r`) and
 // the given tile sizes.
 void schedule_matmul(Func mm, RVar r, int tile_x, int tile_y, int tile_r) {
     Var x("x"), y("y"), rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), x)
+        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r, rro, rri, tile_r)
-        .reorder(rro, x, y)
-        .tile_matmul(rri, rxi, ryi);
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
-        .tile_init(ixi, iyi);
+        .vectorize(ixi)
+        .vectorize(iyi);
 
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-        .tile_store(mmxi, mmyi);
+        .vectorize(mmxi)
+        .vectorize(mmyi);
 }
 
 // A tile too large for an AMX register (rows > 16). Triggers the explicit
@@ -220,27 +205,27 @@ void scenario_mismatched_strides() {
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
+    mm.compute_at(mm.in(), x).store_in(MemoryType::Tile);
     mm.update(0)
         .tile(x, y, rxi, ryi, 8, 4, TailStrategy::GuardWithIf)
         .split(r1.x, rro, rri, 8)
-        .reorder(rro, x, y)
-        .tile_matmul(rri, rxi, ryi);
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
     mm.update(1)
         .tile(x, y, rxi, ryi, 4, 8, TailStrategy::GuardWithIf)
         .split(r2.x, rro, rri, 8)
-        .reorder(rro, x, y)
-        .tile_matmul(rri, rxi, ryi);
-
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
     Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), x)
-        .tile(x, y, ixi, iyi, 8, 8)
-        .tile_init(ixi, iyi);
-
+    mm.compute_at(mm.in(), x).tile(x, y, ixi, iyi, 8, 8).vectorize(ixi).vectorize(iyi);
     Var mmxi("mmxi"), mmyi("mmyi");
-    mm.in()
-        .tile(x, y, mmxi, mmyi, 8, 8)
-        .tile_store(mmxi, mmyi);
-
+    mm.in().tile(x, y, mmxi, mmyi, 8, 8).vectorize(mmxi).vectorize(mmyi);
     mm.in().compile_jit(amx_target);
 }
 
@@ -262,26 +247,35 @@ void scenario_inconsistent_tiles() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
 
+    mm.compute_at(mm.in(), x).store_in(MemoryType::Tile);
     mm.update(0)
         .tile(x, y, rxi, ryi, 8, 8, TailStrategy::GuardWithIf)
         .split(r1.x, rro, rri, 8)
-        .reorder(rro, x, y)
-        .tile_matmul(rri, rxi, ryi);
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
     mm.update(1)
         .tile(x, y, rxi, ryi, 4, 4, TailStrategy::GuardWithIf)
         .split(r2.x, rro, rri, 8)
-        .reorder(rro, x, y)
-        .tile_matmul(rri, rxi, ryi);
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, 8, 8)
-        .tile_init(ixi, iyi);
+        .vectorize(ixi)
+        .vectorize(iyi);
 
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, 8, 8)
-        .tile_store(mmxi, mmyi);
+        .vectorize(mmxi)
+        .vectorize(mmyi);
 
     mm.in().compile_jit(amx_target);
 }
@@ -303,21 +297,27 @@ void scenario_not_a_matmul_pattern() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), x)
+        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, 8, 8, TailStrategy::GuardWithIf)
         .split(r.x, rro, rri, 8)
-        .reorder(rro, x, y)
-        .tile_matmul(rri, rxi, ryi);
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, 8, 8)
-        .tile_init(ixi, iyi);
+        .vectorize(ixi)
+        .vectorize(iyi);
 
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, 8, 8)
-        .tile_store(mmxi, mmyi);
+        .vectorize(mmxi)
+        .vectorize(mmyi);
 
     mm.in().compile_jit(amx_target);
 }

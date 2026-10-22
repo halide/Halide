@@ -13,6 +13,15 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
         // cancellation rule that exploits that should always
         // remutate to recalculate the bounds.
         info->bounds = a_info.bounds - b_info.bounds;
+        // Except for the correlation the facts know about: x - 5 * y is
+        // positive wherever 5 * y < x was learned, however little the bounds
+        // of x and of 5 * y say on their own.
+        if (has_facts() && no_overflow_int(op->type)) {
+            ConstantInterval d = known_difference(a.get(), b.get());
+            if (d.min_defined || d.max_defined) {
+                info->bounds = ConstantInterval::make_intersection(info->bounds, d);
+            }
+        }
         info->alignment = a_info.alignment - b_info.alignment;
         info->cast_to(op->type);
         info->trim_bounds_using_alignment();
@@ -244,6 +253,28 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite(min(y + x, z) - x, min(z - x, y)) ||
            rewrite(min(z, x + y) - x, min(z - x, y)) ||
            rewrite(min(z, y + x) - x, min(z - x, y)) ||
+           // The same, where the subtracted sum appears with its terms in
+           // the other order inside the min/max.
+           rewrite(min(x + (y + z), w) - (z + y), min(x, w - (z + y))) ||
+           rewrite(min(x, (y + z) + w) - (z + y), min(x - (y + z), w)) ||
+           rewrite(min(x, y + (z + w)) - (w + z), min(x - (z + w), y)) ||
+           rewrite(min((x + y) + z, w) - (y + x), min(z, (w - y) - x)) ||
+           rewrite(max(x + (y + z), w) - (z + y), max(x, w - (z + y))) ||
+           rewrite(max(x, (y + z) + w) - (z + y), max(x - (y + z), w)) ||
+           rewrite(max(x, y + (z + w)) - (w + z), max(x - (z + w), y)) ||
+           rewrite(max((x + y) + z, w) - (y + x), max(z, (w - y) - x)) ||
+           // The clamped term hides a multiple of x that cancels against
+           // the subtracted one, leaving a constant upper bound.
+           rewrite(min(min(x, c0) * c1 + c2, y) - x * c1, min(min(y, fold(c0 * c1 + c2)) - x * c1, c2), c1 > 0) ||
+           rewrite(min(y, min(x, c0) * c1 + c2) - x * c1, min(min(y, fold(c0 * c1 + c2)) - x * c1, c2), c1 > 0) ||
+           rewrite(min(min(x, c0) * c1, y) - x * c1, min(min(y, fold(c0 * c1)) - x * c1, 0), c1 > 0) ||
+           rewrite(min(y, min(x, c0) * c1) - x * c1, min(min(y, fold(c0 * c1)) - x * c1, 0), c1 > 0) ||
+           // The same without the scale. min(x + c1, c2) is canonicalized
+           // to min(x, c2 - c1) + c1, which hides x from the rules above.
+           rewrite(min(min(x, c0) + c1, y) - x, min(min(y, fold(c0 + c1)) - x, c1)) ||
+           rewrite(min(y, min(x, c0) + c1) - x, min(min(y, fold(c0 + c1)) - x, c1)) ||
+           rewrite(max(max(x, c0) + c1, y) - x, max(max(y, fold(c0 + c1)) - x, c1)) ||
+           rewrite(max(y, max(x, c0) + c1) - x, max(max(y, fold(c0 + c1)) - x, c1)) ||
            rewrite((min(x, (w + (y + z))) - z), min(x - z, w + y)) ||
            rewrite((min(x, (w + (z + y))) - z), min(x - z, w + y)) ||
            rewrite((min(x, ((y + z) + w)) - z), min(x - z, y + w)) ||

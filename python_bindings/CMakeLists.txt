@@ -45,35 +45,24 @@ if (WITH_PYTHON_BINDINGS)
 endif ()
 
 # Note: this must happen, especially when WITH_PYTHON_BINDINGS is OFF.
-find_package(Halide REQUIRED Halide)
+find_package(Halide REQUIRED)
 if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
     message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
 endif ()
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/halide/cmake")
 include(AddPythonTest)
 
 ##
 # Add our sources to this sub-tree.
 ##
 
+# Package subtrees are deliberately ordered: the binary package owns the
+# compiler installation, the runtime owns the header-only extension, and the
+# compiler package consumes both while adding the familiar Python surface.
+set(Halide_Python_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/site-packages/halide")
+add_subdirectory(halide-bin)
 if (WITH_PYTHON_BINDINGS)
-    add_subdirectory(src)
+    add_subdirectory(halide-runtime)
 endif ()
-
-if (WITH_PYTHON_STUBS)
-    add_subdirectory(stub)
-endif ()
-
-if (WITH_TEST_PYTHON)
-    add_subdirectory(apps)
-    add_subdirectory(test)
-endif ()
-
-if (WITH_TUTORIALS)
-    add_subdirectory(tutorial)
-endif ()
-
-if (WITH_PACKAGING)
-    add_subdirectory(packaging)
-endif ()
+add_subdirectory(halide)

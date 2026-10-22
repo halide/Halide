@@ -31,7 +31,7 @@ function(add_wasm_executable TARGET)
     #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
     # endif ()
 
-    find_program(EMCC emcc REQUIRED PATH_SUFFIXES upstream/emscripten HINTS ENV EMSDK)
+    find_program(EMCXX em++ REQUIRED PATH_SUFFIXES upstream/emscripten HINTS ENV EMSDK)
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
@@ -82,8 +82,8 @@ function(add_wasm_executable TARGET)
         OUTPUT
             "${TARGET}.wasm"
             "${TARGET}.js"
-        COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
-        DEPENDS ${EMCC} ${SRCS} ${DEPS}
+        COMMAND ${EMCXX} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
+        DEPENDS ${EMCXX} ${SRCS} ${DEPS}
         VERBATIM
     )
 
@@ -479,6 +479,17 @@ _add_halide_libraries(configure)
 _add_halide_aot_tests(configure)
 add_halide_stub(configure.stub FROM configure.generator GENERATOR configure)
 
+# sever_aottest.cpp
+# sever_generator.cpp
+_add_halide_libraries(sever)
+_add_halide_libraries(
+    sever_dequantize
+    FROM sever.generator
+    GENERATOR_NAME sever
+    PARAMS direction=dequantize
+)
+_add_halide_aot_tests(sever HALIDE_LIBRARIES sever sever_dequantize)
+
 # TODO: this could be made to work under wasm with some tweaking, it's just build-rule complexity
 if (NOT ${_USING_WASM})
     # cxx_mangling_externs.cpp
@@ -817,7 +828,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_none_c
-        USE_RUNTIME rniso_rt_none
     )
 
     # a: export/import prefix "runtime_a_", internal prefix "runtime_ai_".
@@ -838,7 +848,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_a_c
-        USE_RUNTIME rniso_rt_a
         PARAMS runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
     )
 
@@ -860,7 +869,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_b_c
-        USE_RUNTIME rniso_rt_b
         PARAMS runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
     )
 
@@ -1003,6 +1011,34 @@ _add_halide_aot_tests(shuffler)
 # templated_generator.cpp
 _add_halide_libraries(templated)
 _add_halide_aot_tests(templated)
+
+# thread_pool_keep_awake_aottest.cpp
+# thread_pool_keep_awake_generator.cpp
+_add_halide_libraries(
+    thread_pool_keep_awake
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+)
+_add_halide_aot_tests(
+    thread_pool_keep_awake
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+    GROUPS multithreaded
+)
+
+# thread_pool_lost_wakeup_aottest.cpp
+# thread_pool_lost_wakeup_generator.cpp
+_add_halide_libraries(
+    thread_pool_lost_wakeup
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+)
+_add_halide_aot_tests(
+    thread_pool_lost_wakeup
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+    GROUPS multithreaded
+)
 
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp

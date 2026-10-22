@@ -1,6 +1,7 @@
 #ifndef HALIDE_CONSTANT_BOUNDS_H
 #define HALIDE_CONSTANT_BOUNDS_H
 
+#include "Bounds.h"
 #include "ConstantInterval.h"
 #include "Expr.h"
 #include "Scope.h"
@@ -19,15 +20,19 @@ namespace Internal {
  * negated, be incremented, etc without risking overflow.
  *
  * Also optionally accepts a scope containing the integer bounds of any
- * variables that may be referenced, and a cache of constant integer bounds on
- * known Exprs, which this function will update. The cache is helpful to
- * short-circuit large numbers of redundant queries, but it should not be used
- * in contexts where the same Expr object may take on different values within a
- * single Expr (i.e. before uniquify_variable_names).
+ * variables that may be referenced, a cache of constant integer bounds on
+ * known Exprs, which this function will update, and previously-computed
+ * FuncValueBounds for any Halide Call nodes encountered, which lets a call to
+ * a producer Func (e.g. one known to be the result of a clamp) get a tighter
+ * bound than its type's full range. The cache is helpful to short-circuit
+ * large numbers of redundant queries, but it should not be used in contexts
+ * where the same Expr object may take on different values within a single
+ * Expr (i.e. before uniquify_variable_names).
  */
 ConstantInterval constant_integer_bounds(const Expr &e,
                                          const Scope<ConstantInterval> &scope = Scope<ConstantInterval>::empty_scope(),
-                                         std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
+                                         std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr,
+                                         const FuncValueBounds *func_bounds = nullptr);
 
 }  // namespace Internal
 }  // namespace Halide

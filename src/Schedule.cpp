@@ -235,15 +235,25 @@ struct FuncScheduleContents {
 
     LoopLevel store_level, compute_level, hoist_storage_level;
     std::vector<StorageDim> storage_dims;
-    std::vector<Bound> bounds;
+    std::vector<StorageSplit> storage_splits;
+    std::map<std::string, Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
+    // If this is supported by more than just cuda, this will need to be a
+    // map<DeviceAPI, int>, not just an int, so that the correct limit (or lack
+    // thereof) is picked up by each backend.
+    int gpu_max_registers = 0;
     bool memoized = false;
     bool async = false;
     // This is an extent of the ring buffer and expected to be a positive integer.
     Expr ring_buffer;
     Expr memoize_eviction_key;
+    // Static preconditions injected by change_type() that must hold for the
+    // retyped accumulation not to overflow. Each is a (condition, message) pair;
+    // a lowering pass turns them into assertions in the pipeline's initial
+    // assertion block (removed by the no_asserts target feature).
+    std::vector<std::pair<Expr, std::string>> type_change_checks;
 
     FuncScheduleContents()
         : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), hoist_storage_level(LoopLevel::inlined()) {
@@ -251,7 +261,13 @@ struct FuncScheduleContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator &mutator) {
-        for (Bound &b : bounds) {
+        for (StorageSplit &split : storage_splits) {
+            if (split.factor.defined()) {
+                split.factor = mutator(split.factor);
+            }
+        }
+        for (auto &entry : bounds) {
+            Bound &b = entry.second;
             if (b.min.defined()) {
                 b.min = mutator(b.min);
             }
@@ -277,6 +293,11 @@ struct FuncScheduleContents {
             }
             if (b.remainder.defined()) {
                 b.remainder = mutator(b.remainder);
+            }
+        }
+        for (auto &check : type_change_checks) {
+            if (check.first.defined()) {
+                check.first = mutator(check.first);
             }
         }
     }
@@ -330,6 +351,9 @@ struct StageScheduleContents {
             if (s.factor.defined()) {
                 s.factor = mutator(s.factor);
             }
+            if (s.align.defined()) {
+                s.align = mutator(s.align);
+            }
         }
         for (PrefetchDirective &p : prefetches) {
             if (p.offset.defined()) {
@@ -362,13 +386,16 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->compute_level.set(contents->compute_level);
     copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
     copy.contents->storage_dims = contents->storage_dims;
+    copy.contents->storage_splits = contents->storage_splits;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
     copy.contents->memory_type = contents->memory_type;
+    copy.contents->gpu_max_registers = contents->gpu_max_registers;
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
     copy.contents->ring_buffer = contents->ring_buffer;
+    copy.contents->type_change_checks = contents->type_change_checks;
 
     // Deep-copy wrapper functions. In a partial deep-copy (e.g. cloning a
     // single Func via clone_in), the wrapper Funcs may not be among the Funcs
@@ -389,6 +416,14 @@ MemoryType FuncSchedule::memory_type() const {
 
 MemoryType &FuncSchedule::memory_type() {
     return contents->memory_type;
+}
+
+int FuncSchedule::gpu_max_registers() const {
+    return contents->gpu_max_registers;
+}
+
+int &FuncSchedule::gpu_max_registers() {
+    return contents->gpu_max_registers;
 }
 
 bool &FuncSchedule::memoized() {
@@ -423,6 +458,14 @@ Expr &FuncSchedule::ring_buffer() const {
     return contents->ring_buffer;
 }
 
+const std::vector<std::pair<Expr, std::string>> &FuncSchedule::type_change_checks() const {
+    return contents->type_change_checks;
+}
+
+std::vector<std::pair<Expr, std::string>> &FuncSchedule::type_change_checks() {
+    return contents->type_change_checks;
+}
+
 std::vector<StorageDim> &FuncSchedule::storage_dims() {
     return contents->storage_dims;
 }
@@ -431,12 +474,40 @@ const std::vector<StorageDim> &FuncSchedule::storage_dims() const {
     return contents->storage_dims;
 }
 
-std::vector<Bound> &FuncSchedule::bounds() {
+std::vector<StorageSplit> &FuncSchedule::storage_splits() {
+    return contents->storage_splits;
+}
+
+const std::vector<StorageSplit> &FuncSchedule::storage_splits() const {
+    return contents->storage_splits;
+}
+
+std::map<std::string, Bound> &FuncSchedule::bounds() {
     return contents->bounds;
 }
 
-const std::vector<Bound> &FuncSchedule::bounds() const {
+const std::map<std::string, Bound> &FuncSchedule::bounds() const {
     return contents->bounds;
+}
+
+void merge_bound(std::map<std::string, Bound> &bounds, const Bound &b) {
+    auto [it, inserted] = bounds.try_emplace(b.var, b);
+    if (inserted) {
+        return;
+    }
+    Bound &existing = it->second;
+    if (b.min.defined()) {
+        existing.min = b.min;
+    }
+    if (b.extent.defined()) {
+        existing.extent = b.extent;
+    }
+    if (b.modulus.defined()) {
+        existing.modulus = b.modulus;
+    }
+    if (b.remainder.defined()) {
+        existing.remainder = b.remainder;
+    }
 }
 
 std::vector<Bound> &FuncSchedule::estimates() {
@@ -493,7 +564,13 @@ const LoopLevel &FuncSchedule::hoist_storage_level() const {
 }
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
-    for (const Bound &b : bounds()) {
+    for (const StorageSplit &split : storage_splits()) {
+        if (split.factor.defined()) {
+            split.factor.accept(visitor);
+        }
+    }
+    for (const auto &entry : bounds()) {
+        const Bound &b = entry.second;
         if (b.min.defined()) {
             b.min.accept(visitor);
         }
@@ -682,6 +759,9 @@ void StageSchedule::accept(IRVisitor *visitor) const {
     for (const Split &s : splits()) {
         if (s.factor.defined()) {
             s.factor.accept(visitor);
+        }
+        if (s.align.defined()) {
+            s.align.accept(visitor);
         }
     }
     for (const PrefetchDirective &p : prefetches()) {

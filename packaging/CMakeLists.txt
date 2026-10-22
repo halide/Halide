@@ -23,6 +23,10 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
     CACHE STRING "Path to Halide build-time tools and sources"
 )
 
+set(Halide_INSTALL_DOXYGENDIR "${CMAKE_INSTALL_DOCDIR}/html"
+    CACHE STRING "Path to Halide's generated documentation website (API reference and tutorial)"
+)
+
 ##
 # RPATH patching helper
 ##
@@ -267,14 +271,14 @@ else ()
 endif ()
 
 configure_package_config_file(
-    common/HalideConfig.cmake HalideConfig.cmake
+    HalideConfig.cmake HalideConfig.cmake
     PATH_VARS Halide_INSTALL_COMPILERDIR
     INSTALL_DESTINATION "${Halide_INSTALL_CMAKEDIR}"
     NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
 
 configure_package_config_file(
-    common/HalideCompilerConfig.cmake HalideCompilerConfig.cmake
+    HalideCompilerConfig.cmake HalideCompilerConfig.cmake
     PATH_VARS ${extra_paths}
     INSTALL_DESTINATION "${Halide_INSTALL_COMPILERDIR}"
     NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
@@ -282,7 +286,7 @@ configure_package_config_file(
 
 if (WITH_AUTOSCHEDULERS)
     configure_package_config_file(
-        common/HalideAutoschedulersConfig.cmake HalideAutoschedulersConfig.cmake
+        HalideAutoschedulersConfig.cmake HalideAutoschedulersConfig.cmake
         INSTALL_DESTINATION "${Halide_INSTALL_AUTOSCHEDULERSDIR}"
         NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
     )
@@ -335,15 +339,11 @@ _Halide_install_pkgdeps(
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html TYPE DOC COMPONENT Halide_Documentation)
-endif ()
-
-##
-# Pip overrides
-##
-
-if (SKBUILD)
-    add_subdirectory(pip)
+    install(
+        DIRECTORY ${Halide_BINARY_DIR}/doc/sphinx/html/
+        DESTINATION ${Halide_INSTALL_DOXYGENDIR}
+        COMPONENT Halide_Doxygen
+    )
 endif ()
 
 ##
@@ -358,8 +358,8 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${Halide_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${Halide_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${Halide_VERSION_PATCH})
 set(CPACK_VERBATIM_VARIABLES YES)
-set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/common/Description.txt")
-set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/common/Welcome.txt")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/Description.txt")
+set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/Welcome.txt")
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
@@ -367,7 +367,7 @@ if (NOT CPACK_PACKAGE_FILE_NAME)
     set(arch_tag "${Halide_CMAKE_TARGET}")
     list(REMOVE_DUPLICATES arch_tag)
     list(SORT arch_tag)
-    if (arch_tag MATCHES "arm-64-osx;x86-64-osx")
+    if (arch_tag MATCHES "arm-64-macos;x86-64-macos")
         set(arch_tag "universal2")
     endif ()
     string(REPLACE ";" "_" arch_tag "${arch_tag}")
@@ -401,7 +401,19 @@ cpack_add_component(
 )
 
 cpack_add_component(
+    Halide_PythonRuntime
+    DISPLAY_NAME "Python runtime bindings"
+    DESCRIPTION "Python bindings for Halide runtime types and AOT modules"
+)
+
+cpack_add_component(
     Halide_Documentation
     DISPLAY_NAME "Halide documentation"
     DESCRIPTION "Documentation for Halide"
+)
+
+cpack_add_component(
+    Halide_Doxygen
+    DISPLAY_NAME "Halide documentation website"
+    DESCRIPTION "Generated Sphinx documentation website, including the API reference and tutorial (WITH_DOCS)"
 )

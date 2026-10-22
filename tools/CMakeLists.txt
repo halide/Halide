@@ -95,6 +95,7 @@ target_sources(
     halide_image.h
     halide_image_info.h
     halide_malloc_trace.h
+    halide_trace_compression.h
     halide_trace_config.h
 )
 

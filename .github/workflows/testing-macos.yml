@@ -21,8 +21,8 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-macos.yml"
       - "packaging/**"
-      - "Makefile"
-      - "Makefile.inc"
+      - "**/Makefile"
+      - "apps/support/Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
 
@@ -83,6 +83,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Install wasm toolchain
+        if: matrix.arch == 'arm-64'
         run: brew install emscripten
 
       # AppleClang on Intel unconditionally injects /usr/local/include and
@@ -100,7 +101,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+          uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
@@ -163,14 +164,14 @@ jobs:
           build
         working-directory: apps/HelloiOS
 
-      # --- x86-64-osx correctness. No no-SSE4.1 variant: no real Intel Mac
+      # --- x86-64-macos correctness. No no-SSE4.1 variant: no real Intel Mac
       # lacks SSE4.1, and that hypothetical baseline is already exercised by
       # Linux/Windows CI, where it's an actually reachable target. ---
 
-      - name: Test (x86-64-osx, SSE4.1)
+      - name: Test (x86-64-macos, SSE4.1)
         if: matrix.arch == 'x86-64'
         run: |
-          cmake -S . -B build -DHalide_TARGET=x86-64-osx-sse41
+          cmake -S . -B build -DHalide_TARGET=x86-64-macos-sse41
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L correctness -j "$(sysctl -n hw.logicalcpu)"
@@ -212,9 +213,10 @@ jobs:
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600
 
-      # --- wasm (wabt JIT) ---
+      # --- wasm (wabt JIT), Apple Silicon only ---
 
       - name: Test (wasm_simd128, wabt JIT)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
           cmake --build build
@@ -222,6 +224,7 @@ jobs:
             -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Test (wasm_mvponly, wabt JIT)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_mvponly
           cmake --build build
@@ -229,6 +232,7 @@ jobs:
             -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Build (wasm_simd128 + wasm_threads, generator only)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
           cmake --build build --target build_generator
@@ -237,10 +241,12 @@ jobs:
       # it needs its own configure/build/test rather than riding along with
       # the "Configure/Build/Test apps" steps above.
       - name: Configure HelloWasm
+        if: matrix.arch == 'arm-64'
         run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
         working-directory: apps/HelloWasm
 
       - name: Build and test HelloWasm
+        if: matrix.arch == 'arm-64'
         run: |
           cmake --build build
           ctest --test-dir build --output-on-failure

@@ -19,10 +19,18 @@
 ################################################################################
 ## Halide-specific exclusions
 
-# Images only allowed in apps and directories named "images"
+# Images only allowed in apps, directories named "images", and Halidoscope's
+# icon set
 *.png
 !apps/**/*.png
 !**/images/**/*.png
+!tools/halidoscope/src-tauri/icons/*.png
+
+# Halidoscope is desktop-only; `tauri icon` also emits mobile (Android/iOS)
+# assets we don't want to commit.
+tools/halidoscope/src-tauri/icons/android/
+tools/halidoscope/src-tauri/icons/ios/
+
 
 # Pre-trained weights only allowed in autoscheduler directories
 *.weights
@@ -109,6 +117,8 @@ stdout.txt
 
 # Directories
 bin/
+!python_bindings/halide-bin/src/halide/bin/
+!python_bindings/halide-bin/src/halide/bin/__init__.py
 distrib/
 lib/
 lib64/
@@ -240,6 +250,7 @@ xcuserdata
 
 # NeoVim + clangd
 .cache
+.ccls-cache
 
 # Emacs
 tags
@@ -279,5 +290,6 @@ CLAUDE.local.md
 !src/autoschedulers/adams2019/included_schedule_file.schedule.h
 
 # TODO: these should become .cmake.in
-!packaging/common/HalideConfig.cmake
-!packaging/common/HalideCompilerConfig.cmake
+!packaging/HalideConfig.cmake
+!packaging/HalideCompilerConfig.cmake
+!packaging/HalideAutoschedulersConfig.cmake

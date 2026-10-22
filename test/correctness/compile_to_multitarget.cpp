@@ -2,6 +2,7 @@
 #include "halide_test_dirs.h"
 
 #include <cstdio>
+#include <string_view>
 
 using namespace Halide;
 
@@ -14,6 +15,27 @@ std::string leaf_name(const std::string &path) {
 
 std::string get_output_path_prefix(const std::string &base) {
     return Internal::get_test_tmp_dir() + "halide_test_correctness_compile_to_multitarget_" + base;
+}
+
+// Verify that the header declares an entrypoint for the wrapper (fn_name) as
+// well as for each subtarget (fn_name + suffix, suitably legalized into a
+// valid identifier), so that callers can bypass the runtime-dispatching
+// wrapper and call a specific subtarget directly.
+void check_header_declares_all_entrypoints(const std::string &header_path,
+                                           const std::string &fn_name,
+                                           const std::vector<std::string> &suffixes) {
+    auto header_data = Internal::read_entire_file(header_path);
+    std::string_view header{header_data.data(), header_data.size()};
+
+    std::vector<std::string> expected_names = {fn_name};
+    for (const auto &suffix : suffixes) {
+        expected_names.push_back(fn_name + "_" + Internal::c_print_name(suffix, false));
+    }
+    for (const auto &name : expected_names) {
+        std::string decl = "int " + name + "(";
+        internal_assert(header.find(decl) != std::string::npos)
+            << "Did not find expected declaration '" << decl << "' in " << header_path;
+    }
 }
 
 void test_compile_to_static_library(Func j) {
@@ -74,6 +96,8 @@ void test_compile_to_object_files(Func j) {
     for (auto f : files) {
         Internal::assert_file_exists(f);
     }
+
+    check_header_declares_all_entrypoints(filename_prefix + ".h", j.name(), target_strings);
 }
 
 void test_compile_to_object_files_no_runtime(Func j) {
@@ -216,6 +240,8 @@ void test_compile_to_everything(Func j, bool do_object) {
     for (auto f : files) {
         Internal::assert_file_exists(f);
     }
+
+    check_header_declares_all_entrypoints(filename_prefix + ".h", function_name, target_strings);
 }
 
 int main(int argc, char **argv) {

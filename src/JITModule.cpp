@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <set>
 #include <string>
@@ -447,6 +448,22 @@ void compile_module_impl(
     auto dtorRunner = std::make_unique<llvm::orc::CtorDtorRunner>(JIT->getMainJITDylib());
     dtorRunner->add(dtors);
 
+#ifdef _WIN32
+    // JIT code has no import table, so the process-wide search below can bind
+    // C runtime functions to any loaded CRT that exports them, e.g. the
+    // msvcrt.dll that advapi32.dll pulls in. Each CRT has its own state (the
+    // environment, FILE handles, the heap), so search the CRT that libHalide
+    // itself uses first.
+    const void *crt_function = (const void *)&::getenv;
+    HMODULE crt = nullptr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)crt_function, &crt)) {
+        JIT->getMainJITDylib().addGenerator(
+            std::make_unique<llvm::orc::DynamicLibrarySearchGenerator>(
+                llvm::sys::DynamicLibrary(crt), target_data_layout.getGlobalPrefix()));
+    }
+#endif
+
     // Resolve system symbols (like pthread, dl and others)
 #if defined(__GNUC__) && !defined(__clang__)
     // GCC's -Wuninitialized/-Wmaybe-uninitialized misfires on the move
@@ -677,6 +694,14 @@ void JITModule::reuse_device_allocations(bool b) const {
     }
 }
 
+void JITModule::set_trace_file(int fd) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_set_trace_file");
+    if (f != exports().end()) {
+        (reinterpret_bits<void (*)(void *, int)>(f->second.address))(nullptr, fd);
+    }
+}
+
 int JITModule::get_num_threads() const {
     std::map<std::string, Symbol>::const_iterator f =
         exports().find("halide_get_num_threads");
@@ -695,6 +720,15 @@ int JITModule::set_num_threads(int n) const {
     return 1;
 }
 
+int JITModule::thread_pool_keep_awake(bool keep_awake) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_thread_pool_keep_awake");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)(bool)>(f->second.address))(keep_awake);
+    }
+    return 0;
+}
+
 bool JITModule::compiled() const {
     return jit_module->JIT != nullptr;
 }
@@ -705,6 +739,13 @@ JITHandlers runtime_internal_handlers;
 JITHandlers default_handlers;
 JITHandlers active_handlers;
 int64_t default_cache_size;
+int default_trace_file = -1;
+
+// The number of references held through JITSharedRuntime::thread_pool_keep_awake,
+// and whether the MainShared runtime currently holds one reference on their
+// behalf. Guarded by shared_runtimes_mutex.
+int keep_awake_count = 0;
+bool keep_awake_applied = false;
 
 void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_print) {
@@ -745,6 +786,36 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     }
     if (addins.custom_cuda_get_stream) {
         base.custom_cuda_get_stream = addins.custom_cuda_get_stream;
+    }
+    if (addins.custom_opencl_acquire_context) {
+        base.custom_opencl_acquire_context = addins.custom_opencl_acquire_context;
+    }
+    if (addins.custom_opencl_release_context) {
+        base.custom_opencl_release_context = addins.custom_opencl_release_context;
+    }
+    if (addins.custom_metal_acquire_context) {
+        base.custom_metal_acquire_context = addins.custom_metal_acquire_context;
+    }
+    if (addins.custom_metal_release_context) {
+        base.custom_metal_release_context = addins.custom_metal_release_context;
+    }
+    if (addins.custom_d3d12compute_acquire_context) {
+        base.custom_d3d12compute_acquire_context = addins.custom_d3d12compute_acquire_context;
+    }
+    if (addins.custom_d3d12compute_release_context) {
+        base.custom_d3d12compute_release_context = addins.custom_d3d12compute_release_context;
+    }
+    if (addins.custom_vulkan_acquire_context) {
+        base.custom_vulkan_acquire_context = addins.custom_vulkan_acquire_context;
+    }
+    if (addins.custom_vulkan_release_context) {
+        base.custom_vulkan_release_context = addins.custom_vulkan_release_context;
+    }
+    if (addins.custom_webgpu_acquire_context) {
+        base.custom_webgpu_acquire_context = addins.custom_webgpu_acquire_context;
+    }
+    if (addins.custom_webgpu_release_context) {
+        base.custom_webgpu_release_context = addins.custom_webgpu_release_context;
     }
 }
 
@@ -839,6 +910,93 @@ int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **
         return context->handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
     } else {
         return active_handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    }
+}
+
+int opencl_acquire_context_handler(JITUserContext *context, void **cl_context_ptr, void **cl_command_queue_ptr, bool create) {
+    if (context && context->handlers.custom_opencl_acquire_context) {
+        return context->handlers.custom_opencl_acquire_context(context, cl_context_ptr, cl_command_queue_ptr, create);
+    } else {
+        return active_handlers.custom_opencl_acquire_context(context, cl_context_ptr, cl_command_queue_ptr, create);
+    }
+}
+
+int opencl_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_opencl_release_context) {
+        return context->handlers.custom_opencl_release_context(context);
+    } else {
+        return active_handlers.custom_opencl_release_context(context);
+    }
+}
+
+int metal_acquire_context_handler(JITUserContext *context, void **metal_device_ptr, void **metal_command_queue_ptr, bool create) {
+    if (context && context->handlers.custom_metal_acquire_context) {
+        return context->handlers.custom_metal_acquire_context(context, metal_device_ptr, metal_command_queue_ptr, create);
+    } else {
+        return active_handlers.custom_metal_acquire_context(context, metal_device_ptr, metal_command_queue_ptr, create);
+    }
+}
+
+int metal_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_metal_release_context) {
+        return context->handlers.custom_metal_release_context(context);
+    } else {
+        return active_handlers.custom_metal_release_context(context);
+    }
+}
+
+int d3d12compute_acquire_context_handler(JITUserContext *context, void **d3d12_device_ptr, void **d3d12_command_queue_ptr, bool create) {
+    if (context && context->handlers.custom_d3d12compute_acquire_context) {
+        return context->handlers.custom_d3d12compute_acquire_context(context, d3d12_device_ptr, d3d12_command_queue_ptr, create);
+    } else {
+        return active_handlers.custom_d3d12compute_acquire_context(context, d3d12_device_ptr, d3d12_command_queue_ptr, create);
+    }
+}
+
+int d3d12compute_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_d3d12compute_release_context) {
+        return context->handlers.custom_d3d12compute_release_context(context);
+    } else {
+        return active_handlers.custom_d3d12compute_release_context(context);
+    }
+}
+
+int vulkan_acquire_context_handler(JITUserContext *context, void **allocator_ptr, void **instance_ptr, void **device_ptr,
+                                   void **physical_device_ptr, void **queue_ptr, uint32_t *queue_family_index_ptr,
+                                   void **messenger_ptr, bool create) {
+    if (context && context->handlers.custom_vulkan_acquire_context) {
+        return context->handlers.custom_vulkan_acquire_context(context, allocator_ptr, instance_ptr, device_ptr,
+                                                               physical_device_ptr, queue_ptr, queue_family_index_ptr,
+                                                               messenger_ptr, create);
+    } else {
+        return active_handlers.custom_vulkan_acquire_context(context, allocator_ptr, instance_ptr, device_ptr,
+                                                             physical_device_ptr, queue_ptr, queue_family_index_ptr,
+                                                             messenger_ptr, create);
+    }
+}
+
+int vulkan_release_context_handler(JITUserContext *context, void *instance, void *device, void *queue, uint64_t messenger) {
+    if (context && context->handlers.custom_vulkan_release_context) {
+        return context->handlers.custom_vulkan_release_context(context, instance, device, queue, messenger);
+    } else {
+        return active_handlers.custom_vulkan_release_context(context, instance, device, queue, messenger);
+    }
+}
+
+int webgpu_acquire_context_handler(JITUserContext *context, void **instance_ptr, void **adapter_ptr,
+                                   void **device_ptr, void **staging_buffer_ptr, bool create) {
+    if (context && context->handlers.custom_webgpu_acquire_context) {
+        return context->handlers.custom_webgpu_acquire_context(context, instance_ptr, adapter_ptr, device_ptr, staging_buffer_ptr, create);
+    } else {
+        return active_handlers.custom_webgpu_acquire_context(context, instance_ptr, adapter_ptr, device_ptr, staging_buffer_ptr, create);
+    }
+}
+
+int webgpu_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_webgpu_release_context) {
+        return context->handlers.custom_webgpu_release_context(context);
+    } else {
+        return active_handlers.custom_webgpu_release_context(context);
     }
 }
 
@@ -1069,6 +1227,15 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 runtime.memoization_cache_set_size(default_cache_size);
             }
 
+            if (default_trace_file != -1) {
+                runtime.set_trace_file(default_trace_file);
+            }
+
+            if (keep_awake_count > 0) {
+                runtime.thread_pool_keep_awake(true);
+                keep_awake_applied = true;
+            }
+
             runtime.jit_module->name = "MainShared";
         } else {
             runtime.jit_module->name = "GPU";
@@ -1105,6 +1272,102 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 } else {
                     // The CUDA module has already been created.
                     runtime.add_dependency(shared_runtimes(CUDA));
+                }
+            }
+
+            // The same reasoning as for CUDA above applies to each of
+            // the other GPU backends: the debug and non-debug modules
+            // share a single set of context management handlers, and
+            // whichever module is created second declares a dependency
+            // on the first so things are destroyed in the correct order.
+
+            if (runtime_kind == OpenCL || runtime_kind == OpenCLDebug) {
+                if (!runtime_internal_handlers.custom_opencl_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_opencl_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_acquire_cl_context", opencl_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_opencl_release_context =
+                        hook_function(runtime.exports(), "halide_set_release_cl_context", opencl_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == OpenCL) {
+                    runtime.add_dependency(shared_runtimes(OpenCLDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(OpenCL));
+                }
+            }
+
+            if (runtime_kind == Metal || runtime_kind == MetalDebug) {
+                if (!runtime_internal_handlers.custom_metal_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_metal_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_metal_acquire_context", metal_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_metal_release_context =
+                        hook_function(runtime.exports(), "halide_set_metal_release_context", metal_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == Metal) {
+                    runtime.add_dependency(shared_runtimes(MetalDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(Metal));
+                }
+            }
+
+            if (runtime_kind == D3D12Compute || runtime_kind == D3D12ComputeDebug) {
+                if (!runtime_internal_handlers.custom_d3d12compute_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_d3d12compute_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_d3d12compute_acquire_context", d3d12compute_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_d3d12compute_release_context =
+                        hook_function(runtime.exports(), "halide_set_d3d12compute_release_context", d3d12compute_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == D3D12Compute) {
+                    runtime.add_dependency(shared_runtimes(D3D12ComputeDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(D3D12Compute));
+                }
+            }
+
+            if (runtime_kind == Vulkan || runtime_kind == VulkanDebug) {
+                if (!runtime_internal_handlers.custom_vulkan_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_vulkan_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_vulkan_acquire_context", vulkan_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_vulkan_release_context =
+                        hook_function(runtime.exports(), "halide_set_vulkan_release_context", vulkan_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == Vulkan) {
+                    runtime.add_dependency(shared_runtimes(VulkanDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(Vulkan));
+                }
+            }
+
+            if (runtime_kind == WebGPU || runtime_kind == WebGPUDebug) {
+                if (!runtime_internal_handlers.custom_webgpu_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_webgpu_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_webgpu_acquire_context", webgpu_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_webgpu_release_context =
+                        hook_function(runtime.exports(), "halide_set_webgpu_release_context", webgpu_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == WebGPU) {
+                    runtime.add_dependency(shared_runtimes(WebGPUDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(WebGPU));
                 }
             }
         }
@@ -1209,6 +1472,13 @@ void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, c
 void JITSharedRuntime::release_all() {
     std::scoped_lock lock(shared_runtimes_mutex);
 
+    // Compiled pipelines may keep the old runtime alive, so let its thread
+    // pool sleep. A new runtime picks up the reference when it's created.
+    if (keep_awake_applied) {
+        shared_runtimes(MainShared).thread_pool_keep_awake(false);
+        keep_awake_applied = false;
+    }
+
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
     }
@@ -1241,6 +1511,12 @@ void JITSharedRuntime::reuse_device_allocations(bool b) {
     shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
+void JITSharedRuntime::set_trace_file(int fd) {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    default_trace_file = fd;
+    shared_runtimes(MainShared).set_trace_file(fd);
+}
+
 int JITSharedRuntime::get_num_threads() {
     std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).get_num_threads();
@@ -1249,6 +1525,27 @@ int JITSharedRuntime::get_num_threads() {
 int JITSharedRuntime::set_num_threads(int n) {
     std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
+}
+
+int JITSharedRuntime::thread_pool_keep_awake(bool keep_awake) {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    // The MainShared runtime holds a single reference while keep_awake_count
+    // is positive, so that references can be acquired before it exists.
+    if (keep_awake) {
+        if (keep_awake_count++ == 0 && shared_runtimes(MainShared).compiled()) {
+            shared_runtimes(MainShared).thread_pool_keep_awake(true);
+            keep_awake_applied = true;
+        }
+    } else {
+        user_assert(keep_awake_count > 0)
+            << "JITSharedRuntime::thread_pool_keep_awake(false) called without a "
+            << "matching JITSharedRuntime::thread_pool_keep_awake(true).\n";
+        if (--keep_awake_count == 0 && keep_awake_applied) {
+            shared_runtimes(MainShared).thread_pool_keep_awake(false);
+            keep_awake_applied = false;
+        }
+    }
+    return keep_awake_count;
 }
 
 void *JITSharedRuntime::find_symbol(const Target &target, const std::string &name) {
@@ -1397,4 +1694,13 @@ void JITFuncCallContext::finalize(int exit_status) {
 }
 
 }  // namespace Internal
+
+ThreadPoolKeepAwake::ThreadPoolKeepAwake() {
+    Internal::JITSharedRuntime::thread_pool_keep_awake(true);
+}
+
+ThreadPoolKeepAwake::~ThreadPoolKeepAwake() {
+    Internal::JITSharedRuntime::thread_pool_keep_awake(false);
+}
+
 }  // namespace Halide

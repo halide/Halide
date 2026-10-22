@@ -114,7 +114,8 @@ struct FunctionContents {
     DeviceAPI extern_function_device_api = DeviceAPI::Host;
     Expr extern_proxy_expr;
 
-    bool trace_loads = false, trace_stores = false, trace_realizations = false;
+    bool trace_loads = false, trace_stores = false, trace_realizations = false,
+         trace_bounds_required = false;
     std::vector<string> trace_tags;
 
     bool no_profiling = false;
@@ -379,6 +380,7 @@ void Function::update_with_deserialization(const std::string &name,
                                            bool trace_loads,
                                            bool trace_stores,
                                            bool trace_realizations,
+                                           bool trace_bounds_required,
                                            const std::vector<std::string> &trace_tags,
                                            bool no_profiling,
                                            const std::string &profiler_display_name,
@@ -403,6 +405,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->trace_loads = trace_loads;
     contents->trace_stores = trace_stores;
     contents->trace_realizations = trace_realizations;
+    contents->trace_bounds_required = trace_bounds_required;
     contents->trace_tags = trace_tags;
     contents->no_profiling = no_profiling;
     contents->profiler_display_name = profiler_display_name;
@@ -544,6 +547,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
+    copy->trace_bounds_required = contents->trace_bounds_required;
     copy->trace_tags = contents->trace_tags;
     copy->no_profiling = contents->no_profiling;
     copy->profiler_display_name = contents->profiler_display_name;
@@ -705,6 +709,21 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     if (contents->output_buffers.empty()) {
         create_output_buffers(contents->output_types, (int)args.size());
     }
+}
+
+void Function::clear_definition() {
+    contents->output_types.clear();
+    contents->args.clear();
+    contents->func_schedule = FuncSchedule();
+    contents->init_def = Definition();
+    contents->updates.clear();
+    contents->output_buffers.clear();
+    contents->extern_arguments.clear();
+    contents->extern_function_name.clear();
+    contents->extern_mangling = NameMangling::Default;
+    contents->extern_function_device_api = DeviceAPI::Host;
+    contents->extern_proxy_expr = Expr();
+    contents->frozen = false;
 }
 
 void Function::create_output_buffers(const std::vector<Type> &types, int dims) const {
@@ -1190,6 +1209,9 @@ void Function::trace_stores() {
 void Function::trace_realizations() {
     contents->trace_realizations = true;
 }
+void Function::trace_bounds_required() {
+    contents->trace_bounds_required = true;
+}
 void Function::add_trace_tag(const std::string &trace_tag) {
     contents->trace_tags.push_back(trace_tag);
 }
@@ -1202,6 +1224,9 @@ bool Function::is_tracing_stores() const {
 }
 bool Function::is_tracing_realizations() const {
     return contents->trace_realizations;
+}
+bool Function::is_tracing_bounds_required() const {
+    return contents->trace_bounds_required;
 }
 const std::vector<std::string> &Function::get_trace_tags() const {
     return contents->trace_tags;

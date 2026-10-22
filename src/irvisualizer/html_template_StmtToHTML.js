@@ -228,6 +228,7 @@ function initToolbar() {
     make_toggler(document.getElementsByName("checkbox-show-ir-line-nums")[0], "data-show-line-nums", false);
     make_toggler(document.getElementsByName("checkbox-show-ir-costs")[0], "data-hide-cost", true);
     make_toggler(document.getElementsByName("checkbox-show-ir-wrap")[0], "data-wrap", false);
+    make_toggler(document.getElementsByName("checkbox-rainbow-parens")[0], "data-rainbow-parens", false);
 
     /* Hiding panes */
     make_toggler(document.getElementsByName("checkbox-show-ir")[0], "data-show-ir", false);

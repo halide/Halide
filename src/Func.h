@@ -18,6 +18,7 @@
 #include "Var.h"
 
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace Halide {
@@ -58,6 +59,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+class FuncVec;
 
 namespace Internal {
 struct AssociativeOp;
@@ -80,7 +82,7 @@ class Stage {
     void set_dim_type(const VarOrRVar &var, Internal::ForType t);
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
-               const Expr &factor, bool exact, TailStrategy tail);
+               const Expr &factor, const Expr &align, bool exact, TailStrategy tail);
     void remove(const std::string &var);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
@@ -210,11 +212,51 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
-    eager_inline(const Func &first, Args &&...args) {
-        std::vector<Func> collected_args{first, std::forward<Args>(args)...};
-        return eager_inline(collected_args);
-    }
+    eager_inline(const Func &first, Args &&...args);
     // @}
+
+    /** Hoist loop-invariant factors out of an associative reduction by applying
+     * the distributive law of a semiring. Like rfactor(), this must be called on
+     * an update definition; it splits the update into an intermediate that
+     * accumulates one factor-free outer term over all of the update's RVars and
+     * a write-back that applies the hoisted factors once. The intermediate Funcs
+     * are returned in a FuncVec. For tuple-valued reductions, they are ordered
+     * by tuple output index, then by outer-term order.
+     *
+     * A factor is hoistable if it does not depend on any RVar being reduced. It
+     * may be nested at any depth of an associative/commutative chain. The valid
+     * hoistings are:
+     *
+     *   Outer op    Inner combine   Law
+     *   ---------   -------------   ---
+     *   + (sum)     *               sum_k(s * x_k) = s * sum_k(x_k)
+     *   min         +               min_k(c + x_k) = c + min_k(x_k)
+     *   max         +               max_k(c + x_k) = c + max_k(x_k)
+     *   || (bool)   &&              or_k(p && x_k) = p && or_k(x_k)
+     *   && (bool)   ||              and_k(p || x_k) = p || and_k(x_k)
+     *
+     * For example, hoist_invariants() rewrites a pipeline like this:
+     * \code
+     * f(x) = 0;
+     * f(x) += a(x) * g(x, r) + b(x) * h(x, r);
+     * \endcode
+     * into a pipeline like this:
+     * \code
+     * f_intm0(x) = 0;
+     * f_intm0(x) += g(x, r);
+     * f_intm1(x) = 0;
+     * f_intm1(x) += h(x, r);
+     *
+     * f(x) = 0;
+     * f(x) += a(x) * f_intm0(x) + b(x) * f_intm1(x);
+     * \endcode
+     *
+     * This reduces the number of factor applications from |R| to one per pure
+     * point. Terms without a hoistable factor are still split into separate
+     * intermediates. It is an error if there is neither a distributable invariant
+     * factor nor more than one outer term to split.
+     */
+    FuncVec hoist_invariants();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
@@ -368,6 +410,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -522,47 +565,6 @@ public:
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
         return prefetch(image.parameter(), at, from, std::move(offset), strategy);
     }
-    // @}
-
-    /** Schedule this stage as one operation of the target's matrix unit,
-     * which computes on whole tiles held in MemoryType::Tile. There is one
-     * method per thing such a unit can do:
-     *
-     * - tile_init fills a tile with a value uniform across it, usually zero.
-     * - tile_load copies a tile in from more general memory.
-     * - tile_store copies a tile back out to more general memory. On targets
-     *   whose tiles live in general purpose registers this may also fold in
-     *   elementwise work whose other operands are uniform across the tile; on
-     *   targets whose tiles are a separate register file, such as x86, it
-     *   cannot, because no elementwise instruction can read a tile.
-     * - tile_matmul multiplies a pair of tiles into this one, taking the
-     *   reduction dimension first. Its operands come either from memory, in
-     *   which case they are staged into tiles implicitly, or from Funcs held
-     *   in MemoryType::Tile.
-     *
-     * The dimensions passed are the ones that make up a tile, innermost
-     * first. They are reordered into that order and vectorized. That is all
-     * these do: they are sugar over reorder and vectorize, plus atomic for the
-     * multiply, which is what permits a reduction dimension to be vectorized.
-     * Asking for it is asking to reassociate the sum, which a matrix unit does
-     * anyway, rather than asking for atomic memory operations.
-     *
-     * Which dimensions make up a tile, and their order, is fixed by the
-     * instruction rather than free to schedule, so these move them to be the
-     * innermost loops in the order given. The surrounding loops keep their
-     * relative order, and can be reordered separately either side of these
-     * calls. There is no need to name the tile dimensions in such a reorder.
-     *
-     * On CUDA these are warp-level, with an inner loop over the 32 lanes of a
-     * warp that the schedule does not name. That loop becomes the innermost
-     * GPU thread dimension, so schedule these outside the innermost thread
-     * loops of any other Func computed alongside them, and give those Funcs a
-     * 32-wide gpu_lanes loop of their own to match. */
-    // @{
-    Stage &tile_init(const VarOrRVar &x, const VarOrRVar &y);
-    Stage &tile_load(const VarOrRVar &x, const VarOrRVar &y);
-    Stage &tile_store(const VarOrRVar &x, const VarOrRVar &y);
-    Stage &tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y);
     // @}
 
     /** Get the Vars and RVars of this definition, from innermost out, with
@@ -837,6 +839,8 @@ class Func {
     /** Get the imaging pipeline that outputs this Func alone,
      * creating it (and freezing the Func) if necessary. */
     Pipeline pipeline();
+
+    friend class ProfilerScope;
 
     // Helper function for recursive reordering support
     Func &reorder_storage(const std::vector<Var> &dims, size_t start);
@@ -1563,6 +1567,41 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
+    /** A version of split() that additionally takes a runtime-valued
+     * 'align' Expr. This version anchors the inner-loop's iterations
+     * to absolute coordinates, instead of to Halide's inferred loop
+     * bounds.
+     *
+     * As such, in absolute coordinates, the inner-loop boundaries fall
+     * at ``align``, ``align + factor``, ``align + 2*factor``, and so on.
+     * The inner dimension still iterates over ``[0, factor-1]``, same as
+     * an unaligned split. The difference is how the original loop Var
+     * is reconstructed from the outer and inner loop Vars.
+     * This may increase the number of iterations over the outer
+     * loop by 1 compared to an unaligned split.
+     *
+     * This is useful when an algorithm selects between cases using an
+     * expression like ``(x - offset) % factor``, where 'offset' is a
+     * value only known at runtime (e.g. a Param). Passing that same
+     * 'offset' as 'align' makes ``(x - offset) % factor`` a
+     * compile-time constant on each unrolled iteration of the inner
+     * loop, so that a mux() indexed by it can be resolved statically
+     * instead of compiling to a runtime select:
+     \code
+     Var x, xo, xi;
+     Param<int> offset;
+     f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
+     f.aligned_split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+      .unroll(xi);
+     \endcode
+     * Without 'align', the compiler can't tell at compile time which of
+     * the four mux() cases applies to a given unrolled value of 'xi',
+     * because that depends on the runtime value of 'offset'. With it,
+     * ``(x - offset) % 4`` simplifies to a distinct compile-time
+     * constant for each unrolled value of 'xi', and each mux() call
+     * collapses to its selected case. */
+    Func &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions
      * given. The loop type (e.g. parallel, vectorized) of the resulting fused
@@ -1590,17 +1629,6 @@ public:
      * argument form. The variable to be vectorized should be the
      * innermost one. */
     Func &vectorize(const VarOrRVar &var);
-
-    /** Schedule this Func as one operation of the target's matrix unit. See
-     * Stage::tile_init. Everything but tile_store also sets this Func's
-     * memory type to MemoryType::Tile, since those are the ones that produce
-     * a tile; tile_store reads one and writes somewhere more general. */
-    // @{
-    Func &tile_init(const VarOrRVar &x, const VarOrRVar &y);
-    Func &tile_load(const VarOrRVar &x, const VarOrRVar &y);
-    Func &tile_store(const VarOrRVar &x, const VarOrRVar &y);
-    Func &tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y);
-    // @}
 
     /** Mark a dimension to be completely unrolled. The dimension
      * should have constant extent - e.g. because it is the inner
@@ -2254,6 +2282,35 @@ public:
     }
     // @}
 
+    /** Split a storage dimension into two sub-dimensions, analogous to
+     * how \ref Func::split splits a loop dimension. The storage axis
+     * "old" is replaced (in the storage nesting order) by "inner"
+     * (innermost) and "outer", where "inner" has extent "factor". The
+     * newly created axes are ordinary storage axes: they can be
+     * reordered relative to the other storage axes with
+     * reorder_storage, and bounded/aligned with bound_storage and
+     * align_storage.
+     *
+     * This lets you describe blocked/tiled storage layouts. For
+     * example, given foo(x, y), splitting x into (xo, xi) by 8 and then
+     * reordering to (xi, y, xo) lays foo out as a sequence of 8-wide
+     * column strips.
+     *
+     * Unlike a loop split there is no TailStrategy: the allocation is
+     * always rounded up so that the outer extent is
+     * ceil(old_extent / factor), over-allocating when the factor does
+     * not divide the extent.
+     *
+     * bound_storage, align_storage, and fold_storage settings must be
+     * applied to the split axes, not to "old" before it is split.
+     *
+     * split_storage is not supported for pipeline outputs, Funcs with
+     * an extern definition, Funcs consumed by an extern stage, or Funcs
+     * stored in MemoryType::GPUTexture. You may fold_storage the other
+     * (unsplit) axes of the same Func, but folding a split axis itself
+     * is not supported. */
+    Func &split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor);
+
     /** Pad the storage extent of a particular dimension of
      * realizations of this function up to be a multiple of the
      * specified alignment. This guarantees that the strides for the
@@ -2708,6 +2765,45 @@ public:
      */
     Func &compute_inline();
 
+    /** Change the type at which this Func computes and stores its values,
+     * subject to a reduction-aware safety check.
+     *
+     * This splits the Func in two: a new intermediate Func (returned) that
+     * copies this Func's definitions but accumulates at the requested type `t`
+     * (with the appropriate casts inserted, preferring integer forms such as
+     * widening_mul over float round-trips, and, for an unsafe float `t`, a
+     * fused multiply-add of a product whose factors `t` represents exactly),
+     * and this Func, which is rewritten in place into an inline wrapper that
+     * casts the intermediate's result back to the original type. Every
+     * existing consumer therefore keeps seeing the original type, while the
+     * returned intermediate can be scheduled to exploit the new type (e.g. an
+     * Int(32) accumulator eligible for dot-product instructions). Schedule the
+     * returned Func to control the retyped computation.
+     *
+     * The change is validated with the bounds machinery: for an integer or
+     * floating-point target, change_type() proves the accumulation cannot
+     * overflow (or, for a float target, lose precision) by combining the
+     * per-term value range with the reduction extent. A float target is
+     * checked against the largest integer it can represent exactly (e.g. 2048
+     * for float16), not its full dynamic range, so an integer accumulation
+     * retyped to it stays exact rather than merely finite. If it can only be
+     * guaranteed under a runtime precondition (e.g. the RDom extent isn't too
+     * wide), that precondition is injected into the pipeline's assertion block
+     * (and removed by the no_asserts target feature). If safety cannot be
+     * established, change_type() errors unless `unsafe` is true, which bypasses
+     * the check entirely.
+     *
+     * Translating a min/max identity that does not round-trip through `t`
+     * additionally requires the first update to be dense and unpredicated. Its
+     * reduction extents must be statically positive or satisfy an injected
+     * runtime precondition that they are positive.
+     *
+     * Currently supports single-output Funcs whose update definitions use a
+     * binary operator with one operand that is a direct call to the accumulator
+     * and one self-reference-free term. Difference reductions must have the
+     * accumulator as the left operand. */
+    Func change_type(Type t, bool unsafe = false);
+
     /** Immediately inline direct calls to each of the given Funcs into this
      * Func's initial (pure) definition. The Funcs are inlined in dependency
      * order regardless of the order they are passed, so if one inlined Func's
@@ -2745,6 +2841,23 @@ public:
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
 
+    /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu
+     * blocks becomes under a given number of registers per thread. A smaller
+     * budget allows more blocks to be resident on one of the GPU's processors
+     * at once, but constrains the compiler's instruction scheduling, and may
+     * make it spill values to memory.
+     *
+     * Leaving this unset does not mean no limit. It means the GPU driver picks
+     * a value automatically, so asking for more registers than it would have
+     * chosen is also a meaningful thing to do. Zero asks for that automatic
+     * choice, which is what an unscheduled Func gets.
+     *
+     * Only CUDA offers this level of control, so the device API must be given
+     * explicitly and must be DeviceAPI::CUDA; passing anything else warns and
+     * has no effect. Even for CUDA it only takes effect when the PTX version in
+     * use has the .maxnreg directive. */
+    Func &gpu_max_registers(DeviceAPI device_api, int n);
+
     /** Use non-temporal (streaming) loads for every direct read this Func's
      * pure (initial) definition makes of another Func. Equivalent to calling
      * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
@@ -2777,6 +2890,14 @@ public:
     /** Trace all realizations of this Func by emitting calls to
      * halide_trace. */
     Func &trace_realizations();
+
+    /** At each iteration of each loop containing a production of this Func,
+     * emit a halide_trace_bounds_required event giving the region of it
+     * that must be computed there. Values computed outside of that region
+     * (e.g. due to TailStrategy::RoundUp in a consumer) do not affect the
+     * output and may depend on uninitialized memory. If the Func is inlined,
+     * this has no effect. */
+    Func &trace_bounds_required();
 
     /** Add a string of arbitrary text that will be passed thru to trace
      * inspection code if the Func is realized in trace mode. (Funcs that are
@@ -2833,6 +2954,40 @@ public:
         return Stage(*this).get_schedule();
     }
 };
+
+/** A vector of Funcs with conveniences for constructing and consuming
+ * collections of Funcs. */
+class FuncVec : public std::vector<Func> {
+    using Base = std::vector<Func>;
+
+public:
+    using Base::Base;
+    using Base::operator=;
+
+    FuncVec() = default;
+    FuncVec(const Base &funcs)
+        : Base(funcs) {
+    }
+    FuncVec(Base &&funcs)
+        : Base(std::move(funcs)) {
+    }
+
+    /** Construct count undefined Funcs. A singleton is named base_name; otherwise
+     * the Funcs are named base_name + their index. suffix, if given, is appended
+     * after the name. */
+    FuncVec(const std::string &base_name, size_t count, const std::string &suffix = "");
+
+    /** Convert a singleton FuncVec to its sole Func. It is a user error if
+     * the FuncVec does not contain exactly one Func. */
+    operator Func() const;
+};
+
+template<typename... Args>
+HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
+Stage::eager_inline(const Func &first, Args &&...args) {
+    std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+    return eager_inline(collected_args);
+}
 
 namespace Internal {
 

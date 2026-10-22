@@ -85,8 +85,7 @@ class Strictify : public IRMutator {
     }
 
     Expr visit(const Cast *op) override {
-        if (op->value.type().is_float() &&
-            op->type.is_float()) {
+        if (op->value.type().is_float() || op->type.is_float()) {
             return Call::make(op->type, Call::strict_cast,
                               {mutate(op->value)}, Call::PureIntrinsic);
         } else {

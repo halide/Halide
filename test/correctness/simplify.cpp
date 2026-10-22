@@ -224,6 +224,7 @@ void check_algebra() {
     check(x * y + z * x, (y + z) * x);
     check(y * x + x * z, (y + z) * x);
     check(y * x + z * x, (y + z) * x);
+    check((0 - x) * 3 + x, x * -2);
     check((x - y) * z + (y * z + w), x * z + w);
     check((x - y) * z + (w + y * z), x * z + w);
     check((x - y) * z + (y * z - w), x * z - w);
@@ -312,9 +313,6 @@ void check_algebra() {
     check((x + 8) / 2, x / 2 + 4);
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
-
-    check(x * 3 + y * 9, (y * 3 + x) * 3);
-    check(x * 9 + y * 3, (x * 3 + y) * 3);
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
     check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
@@ -438,6 +436,15 @@ void check_algebra() {
     check((y - 8) % 4, y % 4);
     check((y - x * 8) % 4, y % 4);
     check((x * 8 - y) % 4, (-y) % 4);
+    check((x + 31) % 32 == 31, x % 32 == 0);
+    check((x - 1) % 32 == 31, x % 32 == 0);
+    // A remainder lies in [0, |c|), for negative divisors too
+    check((x + 3) % 14 == 1, x % 14 == 12);
+    check((x + 3) % -14 == 1, x % -14 == 12);
+    check((x + 3) % 14 == -1, f);
+    check((x + 3) % 14 == 20, f);
+    check((x + 3) % -14 == -1, f);
+    check((0 - (x % 2)) / 2 * 2 + (x % 2), 0 - (x % 2));
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
@@ -538,6 +545,10 @@ void check_algebra() {
     check(5 % x > 0, 5 % x != 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
+    // The two terms sharing that same coefficient do get collected into one
+    // multiply (sound: multiplication distributes over addition mod 2^32
+    // regardless of intermediate overflow), but the coefficient itself must
+    // survive untouched, in particular never negated -- that's not representable.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
           ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
 
@@ -567,6 +578,22 @@ void check_algebra() {
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
+
+    // Regrouping a shared addend
+    check(min(min(x, y + z), (w + z) + v), min(min(v + w, y) + z, x));
+    check(max(max(x, y + z), (w + z) + v), max(max(v + w, y) + z, x));
+
+    // A shared term that appears with both signs
+    check(min(x - y, x + z), x - max(0 - z, y));
+    check(max(x - y, x + z), x - min(0 - z, y));
+
+    // Clamped differences
+    check(min(min(x, y) - x, 0), min(y - x, 0));
+    check(max(max(x, y) - x, 0), max(y - x, 0));
+    check(min(min(x, 5) - min(y, 3), 2), min(x - min(y, 3), 2));
+    check(max(max(x, 3) - max(y, 5), 2), max(x - max(y, 5), 2));
+    check(max(min(x + (-3), y), x), x);
+    check(max(max((y + (-2)) / 4, x) * 4, y + 1), max(x * 4, y + 1));
 }
 
 void check_vectors() {
@@ -1133,7 +1160,26 @@ void check_bounds() {
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
+    // A select nested in a branch of a select on the same condition, under
+    // some affine arithmetic. The inner select's outcome is known.
+    check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));
+    check(select(x < y, select(x < y, w, x) + 3, z), select(x < y, w + 3, z));
+    check(select(x < y, z, 3 - select(x < y, w, x)), select(x < y, z, 3 - x));
+    check(select(x < y, z, (select(x < y, w, x) + 3) / 2), select(x < y, z, (x + 3) / 2));
+    check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
+    check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
+    check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
+    check(max(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, max(x / 2, z), max(z / 2, w)));
+
     check(min(x + 1, y) - min(x, y - 1), 1);
+
+    // A clamp at one bound and a shifted clamp at the same effective bound.
+    // The clamps coincide, so the shift can be pushed inside.
+    check(min(max(x, 3), max(y, -1) + 4), max(min(y + 4, x), 3));
+    check(max(min(x, 3), min(y, -1) + 4), min(max(y + 4, x), 3));
+    // The condition c0 == c1 + c2 is necessary; these must not fire.
+    check(min(max(x, 3), max(y, -1) + 5), min(max(x, 3), max(y, -1) + 5));
+    check(max(min(x, 3), min(y, -1) + 5), max(min(x, 3), min(y, -1) + 5));
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
     check(max(x + 1, y) - max(y - 1, x), 1);
@@ -1198,13 +1244,20 @@ void check_bounds() {
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
     check(min((x * 32 + y) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    check(min((x * 32 + y) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    check(min((x * 32 + y) * 4, x * 128 + 4), min(y, 1) * 4 + x * 128);
     check(min((y + x * 32) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    check(min((y + x * 32) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    check(min((y + x * 32) * 4, x * 128 + 4), min(y, 1) * 4 + x * 128);
     check(max((x * 32 + y) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    check(max((x * 32 + y) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    check(max((y + x * 32) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
+
+    // A clamp of x offset by a constant still cancels against a subtracted x.
+    check(min(z, min(x, 3) + 5) - x, min(min(z, 8) - x, 5));
+    check(min(min(x, 3) + 5, z) - x, min(min(z, 8) - x, 5));
+    check(max(z, max(x, 3) + 5) - x, max(max(z, 8) - x, 5));
+    check(max(max(x, 3) + 5, z) - x, max(max(z, 8) - x, 5));
+    check(min(z, min(x * 16 + 15, 1024)) - x * 16, min(min(z, 1024) - x * 16, 15));
 
     check((min(x + y, z) + w) - x, min(z - x, y) + w);
     check(min((x + y) + w, z) - x, min(z - x, w + y));
@@ -1501,6 +1554,12 @@ void check_boolean() {
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
 
+    // A comparison of a constant against a select of constants folds for
+    // any type, including unsigned ones (which don't satisfy no_overflow).
+    check(0 < select(x < 5, 4, 0), x < 5);
+    check(make_zero(UInt(32)) < select(x < 5, make_const(UInt(32), 4), make_const(UInt(32), 0)), x < 5);
+    check(select(x < 5, make_const(UInt(32), 0), make_const(UInt(32), 4)) < make_const(UInt(32), 1), x < 5);
+
     check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
     check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
 
@@ -1717,6 +1776,43 @@ void check_boolean() {
     check(ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4));
     check(ramp(x * 8 + 5, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 - 1, -1, 4) < broadcast(y * 8, 4), broadcast(x < y + 1, 4));
+
+    // A horizontal AND/OR of a single ramp/broadcast comparison collapses to
+    // a plain scalar comparison on the ramp's endpoints, for both orderings
+    // of ramp vs broadcast and both '<' and '<='.
+    check(VectorReduce::make(VectorReduce::And, ramp(x, y, 4) < broadcast(z, 4), 1),
+          max(y, 0) * 3 + x < z);
+    check(VectorReduce::make(VectorReduce::And, ramp(x, y, 4) <= broadcast(z, 4), 1),
+          max(y, 0) * 3 + x <= z);
+    check(VectorReduce::make(VectorReduce::And, broadcast(x, 4) < ramp(y, z, 4), 1),
+          x < min(z, 0) * 3 + y);
+    check(VectorReduce::make(VectorReduce::And, broadcast(x, 4) <= ramp(y, z, 4), 1),
+          x <= min(z, 0) * 3 + y);
+
+    check(VectorReduce::make(VectorReduce::Or, ramp(x, y, 4) < broadcast(z, 4), 1),
+          min(y, 0) * 3 + x < z);
+    check(VectorReduce::make(VectorReduce::Or, ramp(x, y, 4) <= broadcast(z, 4), 1),
+          min(y, 0) * 3 + x <= z);
+    check(VectorReduce::make(VectorReduce::Or, broadcast(x, 4) < ramp(y, z, 4), 1),
+          x < max(z, 0) * 3 + y);
+    check(VectorReduce::make(VectorReduce::Or, broadcast(x, 4) <= ramp(y, z, 4), 1),
+          x <= max(z, 0) * 3 + y);
+
+    // The "all lanes of a ramp lie within [lo, hi]" shape loop partitioning
+    // builds -- a lower-bound comparison ANDed with an upper-bound
+    // comparison, both against the same stride -- fuses to a plain And of
+    // two scalar comparisons, regardless of clause order.
+    {
+        Expr u = Var("u");
+        check(VectorReduce::make(VectorReduce::And,
+                                 (broadcast(x, 4) <= ramp(y, z, 4)) && (ramp(w, z, 4) <= broadcast(u, 4)),
+                                 1),
+              (x <= min(z, 0) * 3 + y) && (max(z, 0) * 3 + w <= u));
+        check(VectorReduce::make(VectorReduce::And,
+                                 (ramp(w, z, 4) <= broadcast(u, 4)) && (broadcast(x, 4) <= ramp(y, z, 4)),
+                                 1),
+              (max(z, 0) * 3 + w <= u) && (x <= min(z, 0) * 3 + y));
+    }
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
@@ -2004,6 +2100,21 @@ void check_boolean() {
         internal_assert(!can_prove(!likely(t)));
         internal_assert(!can_prove(!likely(x == 2)));
     }
+
+    // Comparing divisions with a rounded offset on both sides
+    check((x + 5) / 4 < (x + 2) / 4, f);
+    check(max((x + 5) / 4, y) < max((x + 2) / 4, y), f);
+
+    // Two equalities on the same variable, in different halves of a conjunction
+    check(((x == 1) && b1) && ((x == 2) && b2), f);
+
+    // Absorption through a negated conjunction
+    check(!(b1 && b2) || b2, t);
+    check((x < 5) || (x != 3), t);
+
+    // De Morgan collects negations into the smaller form
+    check(!b1 || !b2, !(b1 && b2));
+    check(!b1 && !b2, !(b1 || b2));
 }
 
 void check_math() {
@@ -2246,8 +2357,29 @@ void check_lets() {
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
-    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
-          LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
+    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Let::make("y", 10, x * x + y))),
+          LetStmt::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Evaluate::make(x * x + 10)));
+
+    // A let with a single use is substituted in, even when the value isn't of
+    // a shape that gets pushed inwards piecewise.
+    check(Let::make("a", min(x, y), a + 1), min(x, y) + 1);
+    // Values that get peeled apart are bound under a new name, and that name
+    // gets substituted too when it's only used once.
+    check(Let::make("a", min(x, y) * b, a + 1), min(x, y) * b + 1);
+
+    // Substituting can expose simplifications that were hidden behind the name
+    check(Let::make("a", min(x, y), (min(x, y) + 5) - a), 5);
+
+    // A let with more than one use is kept
+    check(Let::make("a", min(x, y), a * a), Let::make("a", min(x, y), a * a));
+
+    {
+        // Single-use LetStmts are not substituted in. Doing so would move the
+        // value's evaluation later, past whatever happens in between.
+        Expr t = Variable::make(Int(32), "t");
+        Stmt sink = Evaluate::make(Call::make(Int(32), "dummy", {t + 1}, Call::Extern));
+        check(LetStmt::make("t", min(x, y), sink), LetStmt::make("t", min(x, y), sink));
+    }
 }
 
 void check_inv(Expr before) {
@@ -2292,6 +2424,24 @@ void check_invariant() {
     }
 }
 
+void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
+    // The simplifier only learns facts in the form it produces itself, so
+    // simplify the assumptions first, as the compiler would have.
+    std::vector<Expr> simplified_assumptions;
+    for (const Expr &e : assumptions) {
+        simplified_assumptions.push_back(simplify(e));
+    }
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), simplified_assumptions);
+    if (!equal(simpler, b)) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
+        abort();
+    }
+}
+
 void check_unreachable() {
     Var x("x"), y("y");
 
@@ -2320,6 +2470,215 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
+void check_facts() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+
+    // Several assumptions at once each leave a record. The public simplify()
+    // keeps their scopes in a vector, so they end in the order they were made
+    // rather than in reverse, and each must pop only what is still its own.
+    check_with_assumptions(min(x, z) + max(x, y), x + y, {x < y, x < z});
+
+    // A fact stated in any comparison direction should let the simplifier pick
+    // the winning side of a max or min.
+    check_with_assumptions(max(x, y), x, {x > y});
+    check_with_assumptions(max(x, y), x, {y < x});
+    check_with_assumptions(max(x, y), y, {x < y});
+    check_with_assumptions(max(x, y), y, {y > x});
+    check_with_assumptions(min(x, y), y, {x > y});
+    check_with_assumptions(min(x, y), x, {x < y});
+
+    // A non-strict fact is enough to pick a side of a max or min, and a strict
+    // fact implies the non-strict one.
+    check_with_assumptions(max(x, y), x, {x >= y});
+    check_with_assumptions(max(x, y), y, {x <= y});
+    check_with_assumptions(min(x, y), x, {x <= y});
+    check_with_assumptions(min(x, y), y, {x >= y});
+
+    // Facts about compound expressions work too.
+    check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
+    check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
+
+    // Both branches of an if learn from the condition, in opposite directions.
+    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(max(x, y))),
+          IfThenElse::make(x < y, not_no_op(y), not_no_op(x)));
+
+    // A fact only applies where it holds.
+    check(Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(max(x, y)))),
+          Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(y))));
+
+    // A division can cancel a multiplication inside a max or min when we know
+    // which side wins after the division.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x >= y / 8});
+    check_with_assumptions(max(y, x * 8) / 8, x, {x >= y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x <= y / 8});
+    check_with_assumptions(min(y, x * 8) / 8, x, {x <= y / 8});
+
+    // The direction in which a fact is stated doesn't matter, on either side:
+    // both the facts and the conditions of can_prove predicates are looked up
+    // in the same canonical form.
+    check_with_assumptions(max(x * 8, y) / 8, x, {y / 8 <= x});
+    check_with_assumptions(max(x * 8, y) / 8, x, {!(x < y / 8)});
+    check_with_assumptions(min(x * 8, y) / 8, x, {y / 8 >= x});
+
+    // A strict fact settles a non-strict predicate too.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
+
+    // Coefficients are reduced to a coprime pair and a scale, so a fact and a
+    // query that differ only by an overall factor meet.
+    check_with_assumptions(max(x * 2, y), y, {x * 4 <= y * 2});
+    check_with_assumptions(min(x * 3, y * 6), x * 3, {x <= y * 2});
+
+    // Offsets peeled from under a factor are scaled by it on the way out, so
+    // the two spellings of the same affine term meet.
+    check_with_assumptions(max((x + 3) * 4, y), y, {x * 4 + 12 <= y});
+
+    // A fact over a division orders the multiplied-out terms, and vice versa:
+    // for c > 0, x <= y / c iff c * x <= y.
+    check_with_assumptions(min(x * 8, y), x * 8, {x <= y / 8});
+    check_with_assumptions(max(x, y / 8), y / 8, {x * 8 <= y});
+
+    // Large divisors peel too.
+    const int big = 1 << 24;
+    check_with_assumptions(min(x * big, y), x * big, {x <= y / big});
+    check_with_assumptions(max(x * big, y) / big, x, {x >= y / big});
+
+    // Denominators too large to represent stop the peeling, but a fact still
+    // settles a query spelled the same way. Within one term:
+    {
+        Expr x64 = Variable::make(Int(64), "x64"), y64 = Variable::make(Int(64), "y64");
+        Expr c40 = make_const(Int(64), int64_t(1) << 40);
+        Expr c30 = make_const(Int(64), int64_t(1) << 30);
+        Expr e = (x64 / c40) / c30;
+        check_with_assumptions(min(e, y64), e, {e <= y64});
+        // And across the two sides of the difference:
+        Expr a = x64 / c40, b = y64 / c30;
+        check_with_assumptions(min(a, b), a, {a <= b});
+        check_with_assumptions(min(a, b), min(a, b), {a <= b + 1});
+
+        // A bound that solves to INT64_MIN / -1. The else branch learns
+        // !(-3 * x < y / 3 - k), which peels to -9 * x - y >= INT64_MIN, i.e.
+        // 9 * x + y <= 2^63, which says nothing. It must not turn into a bound
+        // on 9 * x + y (x = y = 0 satisfies the fact but not the query).
+        Expr k = make_const(Int(64), (int64_t)3074457345618258602);  // (2^63 - 2) / 3
+        Expr cond = x64 * make_const(Int(64), -3) < y64 / make_const(Int(64), 3) - k;
+        cond = simplify(cond);
+        Expr q = x64 * make_const(Int(64), 9) + y64 <= make_const(Int(64), -5);
+        Stmt s = IfThenElse::make(cond, not_no_op(x64), not_no_op(q));
+        check(s, s);
+    }
+
+    // Divisions on both sides are peeled over a common denominator. The
+    // remainders they discard cost a little precision, but x <= y is a wide
+    // enough margin to survive it.
+    check_with_assumptions(max(x / 4, y / 4), y / 4, {x <= y});
+
+    // Coefficients that don't reduce to the same coprime pair don't match:
+    // 2 * x <= y says nothing about 3 * x against y.
+    check_with_assumptions(min(x * 3, y), min(x * 3, y), {x * 2 <= y});
+
+    // Comparing a sum or difference against a constant is a comparison
+    // between its two terms, so a fact about the pair settles it.
+    check_with_assumptions(max(x - y * 5, 0), x - y * 5, {x > y * 5});
+    check_with_assumptions(min(x - y * 5, 0), 0, {x > y * 5});
+    check_with_assumptions(max(x + y * 5, 0), y * 5 + x, {x > y * -5});
+
+    // The constant comes back as an offset, so it needn't be zero.
+    check_with_assumptions(max(x - y * 5, 3), x - y * 5, {x > y * 5 + 3});
+    check_with_assumptions(max(x - y * 5, -2), x - y * 5, {x >= y * 5});
+    check_with_assumptions(min(x - y * 5, 7), 7, {x > y * 5 + 7});
+
+    // The margin has to actually cover the constant.
+    check_with_assumptions(max(x - y * 5, 3), max(x - y * 5, 3), {x > y * 5});
+
+    // A difference only means what we take it to mean where the type cannot
+    // wrap. Given x >= y + 5 over uint8, y = 253 makes y + 5 equal 2, so x = 10
+    // satisfies it while sitting far below y: ordering the min from that would
+    // pick the wrong side. Only the types whose overflow is undefined, and so
+    // may be assumed not to happen, are eligible.
+    for (Type t : {UInt(8), Int(8), Int(16), UInt(32)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        Expr b = Variable::make(t, "wrap_b");
+        check_with_assumptions(min(a, b), min(a, b), {a >= b + cast(t, 5)});
+        check_with_assumptions(max(a, b), max(a, b), {a >= b + cast(t, 5)});
+    }
+    for (Type t : {Int(32), Int(64)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        Expr b = Variable::make(t, "wrap_b");
+        check_with_assumptions(min(a, b), b, {a >= b + cast(t, 5)});
+        check_with_assumptions(max(a, b), a, {a >= b + cast(t, 5)});
+    }
+
+    // Nor does a wrapping x + c sit c above x without any facts at all: for
+    // int8 x = 93, x + 49 wraps to -114.
+    for (Type t : {UInt(8), Int(8), Int(16), UInt(32)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        check(max(a + cast(t, 49), a), max(a + cast(t, 49), a));
+        check(min(a + cast(t, 49), a), min(a + cast(t, 49), a));
+    }
+
+    // A min is at most either of its operands and a max is at least either of
+    // them, which needs no facts at all. That only bounds the difference on one
+    // side, but knowing the two are unequal removes the endpoint, and the two
+    // together settle a comparison that neither settles alone.
+    check_with_assumptions(max(min(x, y) + 1, x), x, {min(x, y) != x});
+    check_with_assumptions(min(max(x, y) - 1, x), x, {max(x, y) != x});
+
+    // Neither ingredient is enough by itself: without the inequality the
+    // difference could still be zero, and without the shape there is no bound
+    // for the inequality to tighten.
+    check_with_assumptions(max(min(x, y) + 1, x), max(min(x, y) + 1, x), {z < z + 1});
+    check_with_assumptions(max(y + 1, x), max(y + 1, x), {y != x});
+
+    // Deeply nested mins and maxes must not make the work of proving the
+    // predicates of the rules above blow up.
+    Expr nest = x;
+    for (int i = 0; i < 24; i++) {
+        nest = min(max(nest + i, y - i), z * i);
+    }
+    // The result isn't interesting; what matters is that we get one at all.
+    (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
+
+    // can_prove-based rules (unlike the min_diff/max_diff ones above) recursively
+    // invoke the simplifier on their own predicate, and that predicate can be
+    // a freshly built expression rather than a piece of the original IR (e.g.
+    // min(x, y) - min(z, w) -> y - w, can_prove(x - y == z - w)) constructs a
+    // brand new subtraction). If the operands are themselves unsimplified
+    // instances of the same shape, this recurses; the depth limit must bound
+    // the work rather than let it explode.
+    Expr deep = min(Var("da"), Var("db")) - min(Var("dc"), Var("dd"));
+    for (int i = 0; i < 10; i++) {
+        Expr y = Var("dy" + std::to_string(i));
+        Expr z = Var("dz" + std::to_string(i));
+        Expr w = Var("dw" + std::to_string(i));
+        deep = min(deep, y) - min(z, w);
+    }
+    (void)simplify(deep);
+
+    // Constant offsets are peeled off both the facts and the queries, so a fact
+    // stated about a shifted operand still settles a predicate about the
+    // unshifted one, in either direction.
+    check_with_assumptions(max(x, y), y, {x + 1 <= y});
+    check_with_assumptions(max(x, y), x, {y <= x + 0});
+    check_with_assumptions(max(x + 3, y), y, {x + 4 <= y});
+    check_with_assumptions(min(x, y), x, {x + 1 <= y});
+
+    // But an offset that leaves the order undetermined still doesn't fire.
+    check_with_assumptions(max(x, y), max(x, y), {x <= y + 1});
+
+    // Without the fact, the division stays put.
+    check(max(x * 8, y) / 8, max(x * 8, y) / 8);
+
+    // Facts that don't strictly order the operands don't fire these rules.
+    check_with_assumptions(max(x, y), max(x, y), {x != y});
+
+    // A fact over a division is learned multiplied out, so it orders the
+    // operands as well as one spelled that way: x < y / 8 means 8 * x <= y - 8.
+    check_with_assumptions(max(x * 8, y) / 8, y / 8, {x < y / 8});
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2332,6 +2691,7 @@ int main(int argc, char **argv) {
     check_bitwise();
     check_lets();
     check_unreachable();
+    check_facts();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");

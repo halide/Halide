@@ -117,8 +117,12 @@ std::map<std::string, size_t> write_string_table(std::ostream &out,
             out.put('\x0A');
         }
         size_t final_offset = out.tellp();
+        // Flush explicitly so a buffered write failure sets the stream state
+        // before seeking; filebuf seek implementations may lose that error.
+        out.flush();
         out.seekp(start_offset - 12);
         emit_padded(out, member_end - start_offset, 10);
+        out.flush();
         out.seekp(final_offset);
     }
     return string_to_offset_map;
@@ -242,14 +246,17 @@ void write_symbol_table(std::ostream &out,
 
     // Patch the size of the symbol table.
     const size_t member_header_size = 60;
+    out.flush();
     out.seekp(symbol_table_size_offset);
     emit_padded(out, member_end - member_header_size - header_start_offset, 10);
 
     // Patch the number of symbols.
+    out.flush();
     out.seekp(symbol_count_offset);
     emit_u32(out, name_to_member_index.size());
 
     // Seek back to where we left off.
+    out.flush();
     out.seekp(final_offset);
 }
 
@@ -298,6 +305,7 @@ void write_coff_archive(std::ostream &out,
     for (auto &it : patchers) {
         size_t i = it.first;
         for (auto &patcher : it.second) {
+            out.flush();
             out.seekp(patcher.pos);
             patcher.emit_u32(out, member_offset.at(i));
         }
@@ -602,9 +610,11 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // the same as GNU ar format.
     if (Internal::get_triple_for_target(target).isWindowsMSVCEnvironment()) {
         std::ofstream f(dst_file, std::ios_base::trunc | std::ios_base::binary);
+        user_assert(f.is_open()) << "Failed to open archive for writing: " << dst_file << "\n";
         Internal::Archive::write_coff_archive(f, new_members);
         f.flush();
         f.close();
+        user_assert(f) << "Failed to write archive: " << dst_file << "\n";
         return;
     }
 

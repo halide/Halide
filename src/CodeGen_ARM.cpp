@@ -287,11 +287,13 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> wild_u64_));
     casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> wild_u64_));
 
-    // VCVTP/M
+    // VCVTP/M/A
     casts.emplace_back("fp_to_int_floor", i32(floor(wild_f32x_)));
     casts.emplace_back("fp_to_int_floor", u32(floor(wild_f32x_)));
     casts.emplace_back("fp_to_int_ceil", i32(ceil(wild_f32x_)));
     casts.emplace_back("fp_to_int_ceil", u32(ceil(wild_f32x_)));
+    casts.emplace_back("fp_to_int_round_half_away", i32(round_half_away(wild_f32x_)));
+    casts.emplace_back("fp_to_int_round_half_away", u32(round_half_away(wild_f32x_)));
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
     // TODO: We need to match rounding shift right, and negate the RHS.
@@ -440,6 +442,13 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
+    {"llvm.round", "llvm.round", Float(16, 4), "round_half_away", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round", "llvm.round", Float(32, 2), "round_half_away", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round", "llvm.round", Float(64, 2), "round_half_away", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.round.f16", "llvm.round.f16", Float(16), "round_half_away", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round.f32", "llvm.round.f32", Float(32), "round_half_away", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round.f64", "llvm.round.f64", Float(64), "round_half_away", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
     {"vabdu", "uabd", UInt(8, 8), "absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -529,6 +538,10 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "fcvtmu", UInt(32, 2), "fp_to_int_floor", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
     {nullptr, "fcvtps", Int(32, 2), "fp_to_int_ceil", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
     {nullptr, "fcvtms", Int(32, 2), "fp_to_int_floor", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtau", UInt(32, 4), "fp_to_int_round_half_away", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtas", Int(32, 4), "fp_to_int_round_half_away", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtau", UInt(32, 2), "fp_to_int_round_half_away", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtas", Int(32, 2), "fp_to_int_round_half_away", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
 
     // SMAX, UMAX, FMAX - Max
     {"vmaxs", "smax", Int(8, 8), "max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -1199,7 +1212,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     internal_assert(llvm_func);
     bool is_streaming_task = (f.attributes & LoweredFunc::Attribute::SME_STREAMING_TASK) && target.has_feature(Target::SME2);
 
-    if (target.os != Target::IOS && target.os != Target::OSX) {
+    if (target.os != Target::IOS && target.os != Target::MacOS) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
         // actually faster.
@@ -1240,7 +1253,10 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         // Workaround for https://github.com/halide/Halide/issues/9182
         // TODO: Revisit for a better solution of compiler-rt equivalent
         llvm_func->addFnAttr("no-builtins");
-    } else if (f.attributes & LoweredFunc::Attribute::SME_NONSTREAMING_TASK) {
+    } else if (f.attributes & (LoweredFunc::Attribute::SME_STREAMING_TASK |
+                               LoweredFunc::Attribute::SME_NONSTREAMING_TASK)) {
+        // A task can have its own vscale_range, which would be lost if it
+        // were inlined into its caller.
         llvm_func->addFnAttr(llvm::Attribute::NoInline);
     }
 
@@ -1322,6 +1338,14 @@ int CodeGen_ARM::check_feasible_vscale(int vector_bits,
 
 void CodeGen_ARM::visit(const Cast *op) {
     if (!simd_intrinsics_disabled() && op->type.is_vector()) {
+        if (target.bits == 64 && op->type.is_int_or_uint() && op->type.bits() < 32 &&
+            op->value.type().element_of() == Float(32) &&
+            Call::as_intrinsic(op->value, {Call::round_half_away})) {
+            // Narrow through a 32-bit integer so the conversion is one fcvtas.
+            value = codegen(Cast::make(op->type, Cast::make(op->type.with_bits(32), op->value)));
+            return;
+        }
+
         vector<Expr> matches;
         for (const Pattern &pattern : casts) {
             if (expr_match(pattern.pattern, op, matches)) {
@@ -1577,12 +1601,8 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     // First dig through let expressions
-    Expr rhs = op->value;
     vector<pair<string, Expr>> lets;
-    while (const Let *let = rhs.as<Let>()) {
-        rhs = let->body;
-        lets.emplace_back(let->name, let->value);
-    }
+    Expr rhs = peel_lets(op->value, &lets);
     const Shuffle *shuffle = rhs.as<Shuffle>();
 
     // Interleaving store instructions only exist for certain types.
@@ -1690,11 +1710,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // And we make sure the deinterleaved predicates are all the same.
 
             // Dig through let expressions
-            Expr rhs = op->predicate;
-            while (const Let *let = rhs.as<Let>()) {
-                rhs = let->body;
-                lets_pred.emplace_back(let->name, let->value);
-            }
+            Expr rhs = peel_lets(op->predicate, &lets_pred);
 
             Expr vpred_predicated_store;
             bool predicates_are_same = true;
@@ -2040,7 +2056,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     // load.
     int stride = op->slice_stride();
     const Load *load = op->vectors[0].as<Load>();
-    if (target.os != Target::IOS && target.os != Target::OSX &&
+    if (target.os != Target::IOS && target.os != Target::MacOS &&
         load &&
         op->vectors.size() == 1 &&
         op->is_slice() &&
@@ -2511,6 +2527,12 @@ void CodeGen_ARM::visit(const Call *op) {
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
             return;
         }
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        // As for round: frinta is only reliable on aarch64.
+        if (target.bits == 32) {
+            value = codegen(lower_round_half_away_from_zero(op->args[0]));
+            return;
+        }
     }
 
     if (op->type.is_vector()) {
@@ -2940,7 +2962,7 @@ string CodeGen_ARM::mcpu_target() const {
     } else {
         if (target.os == Target::IOS) {
             return "apple-a7";
-        } else if (target.os == Target::OSX) {
+        } else if (target.os == Target::MacOS) {
             return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
@@ -3019,7 +3041,7 @@ string CodeGen_ARM::mattrs() const {
         if (target.has_feature(Target::SME2)) {
             attrs.emplace_back("+sme2");
         }
-        if (target.os == Target::IOS || target.os == Target::OSX) {
+        if (target.os == Target::IOS || target.os == Target::MacOS) {
             attrs.emplace_back("+reserve-x18");
         }
     }

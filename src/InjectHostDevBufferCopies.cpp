@@ -6,6 +6,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include "Substitute.h"
 
 #include <map>
@@ -490,6 +491,12 @@ class InjectBufferCopies : public IRMutator {
 protected:
     using IRMutator::visit;
 
+    // Whether the pipeline is being profiled, so we know whether to emit
+    // allocation markers for device-only buffers whose host allocation we
+    // strip below (the profiler tracks memory at the host Allocate, which
+    // no longer carries a size for these).
+    bool profiling;
+
     // Inject the registration of a device destructor just after the
     // .buffer symbol is defined (which is safely before the first
     // device_malloc).
@@ -658,6 +665,25 @@ protected:
                 // references to it (e.g. the one in the make_buffer
                 // call) with NULL.
                 body = substitute(op->name, reinterpret(Handle(), make_zero(UInt(64))), body);
+                if (profiling) {
+                    // The storage still exists on the device, but with no
+                    // host Allocate size the profiler can't see it. Emit a
+                    // declare_allocation marker carrying the device
+                    // allocation's byte size so it gets billed to this Func.
+                    // A 0-dimensional allocation (empty extents) holds one
+                    // element, so start the product at the element size.
+                    Expr size_bytes = make_const(UInt(64), op->type.bytes());
+                    for (const Expr &extent : op->extents) {
+                        size_bytes *= cast<uint64_t>(extent);
+                    }
+                    size_bytes = simplify(size_bytes);
+                    Expr marker = Call::make(Int(32), Call::declare_allocation,
+                                             {Expr(op->name),
+                                              size_bytes,
+                                              make_const(Int(32), (int)op->memory_type)},
+                                             Call::Intrinsic);
+                    body = Block::make(Evaluate::make(marker), body);
+                }
             }
 
             return op->with(op->extents, condition, body);
@@ -673,6 +699,11 @@ protected:
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+public:
+    InjectBufferCopies(bool profiling)
+        : profiling(profiling) {
     }
 };
 
@@ -794,7 +825,8 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     }
 
     // Handle internal allocations
-    s = InjectBufferCopies()(s);
+    bool profiling = t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer);
+    s = InjectBufferCopies(profiling)(s);
 
     // Handle inputs and outputs
     FindOutermostProduce outermost;

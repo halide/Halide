@@ -12,7 +12,7 @@ to identify potential issues before rolling this into production.
 
 See [below](#current-status) for details.
 
-# Compiling Halide w/Vulkan Support
+## Compiling Halide w/Vulkan Support
 
 You'll need to configure Halide and enable the cmake option TARGET_VULKAN (which
 is now ON by default).
@@ -34,7 +34,7 @@ C:\> cmake --build build --config Release
 
 ```
 
-# Vulkan Runtime Environment:
+## Vulkan Runtime Environment:
 
 Halide has no direct dependency on Vulkan for code-generation, but the runtime
 requires a working Vulkan environment to run Halide generated code. Any valid
@@ -48,7 +48,7 @@ Specifically, you'll need:
 For AMD & NVIDIA & Intel devices, download and install the latest graphics
 driver for your platform. Vulkan support should be included.
 
-## Windows
+### Windows
 
 To build Halide AOT generators, you'll need the Vulkan SDK (specifically the
 Vulkan loader library and headers):
@@ -61,7 +61,7 @@ device. A few common ones are listed below.
 - [NVIDIA Vulkan Driver](https://developer.nvidia.com/vulkan-driver)
 - [INTEL Vulkan Driver](https://www.intel.com/content/www/us/en/download-center/home.html)
 
-## Linux
+### Linux
 
 The Vulkan SDK packages are now being maintained by LunarG. These include the
 Vulkan Loader library, as well as the Vulkan Tools packages. Instructions for
@@ -97,7 +97,7 @@ present. Specifically, the seemingly generic `mesa-vulkan-drivers` actually
 includes the AMD graphics driver, which can cause problems if installed on an
 NVIDIA-only system.
 
-## Mac
+### Mac
 
 You're better off using Halide's Metal backend instead, but it is possible to
 run Vulkan apps on a Mac via the MoltenVK library:
@@ -117,7 +117,7 @@ compatibility layer:
 $ brew install vulkan-loader molten-vk
 ```
 
-# Testing Your Vulkan Environment
+## Testing Your Vulkan Environment
 
 You can validate that everything is configured correctly by running the
 `vulkaninfo` app (bundled in the vulkan-utils package) to make sure your device
@@ -150,7 +150,7 @@ VK_LAYER_KHRONOS_profiles (Khronos Profiles layer) Vulkan version 1.3.224, layer
 
 Make sure everything looks correct before continuing!
 
-# Targeting Vulkan
+## Targeting Vulkan
 
 To generate Halide code for Vulkan, simply add the `vulkan` flag to your target
 as well as any other optional device specific features you wish to enable for
@@ -187,7 +187,7 @@ For JIT apps use the `HL_JIT_TARGET` environment variable:
 $ HL_JIT_TARGET=host-vulkan-vk_int8-vk_int16 ./tutorial/lesson_01_basics
 ```
 
-# Useful Runtime Environment Variables
+## Useful Runtime Environment Variables
 
 To modify the default behavior of the runtime, the following environment
 variables can be used to adjust the configuration of the Vulkan backend at
@@ -247,7 +247,7 @@ integer value. This is useful for architectures that require specific alignments
 for subregions allocated within a block. Default is 32 ... setting this to zero
 means no constraint.
 
-# Debug Environment Variables
+## Debug Environment Variables
 
 The following environment variables may be useful for tracking down potential
 issues related to Vulkan:
@@ -281,7 +281,7 @@ layers enabled like so:
 $ VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation HL_JIT_TARGET=host-vulkan-vk_int8-vk_int16-vk_int64-vk_float16-vk_float64-vk_v13-debug ./build/test/correctness/correctness_hello_gpu
 ```
 
-# Current Status
+## Current Status
 
 All correctness tests are now passing on tested configs for Linux & Windows
 using the target
@@ -297,7 +297,7 @@ platform specific Vulkan loader library.
 
 Android platform support is currently being worked on.
 
-# Caveats:
+## Caveats:
 
 - Other than 32-bit floats and integers, every other data type is optional per
   the Vulkan spec
@@ -307,7 +307,7 @@ Android platform support is currently being worked on.
   number of fixed sized allocation are supported (up to the maximum amount
   allowed by the device)
 
-# Known TODO:
+## Known TODO:
 
 - Performance tuning of CodeGen and Runtime
 - More platform support (Android is work-in-progress, RISC-V, etc)

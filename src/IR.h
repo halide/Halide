@@ -18,21 +18,12 @@
 #include "PrefetchDirective.h"
 #include "Reduction.h"
 #include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
 class Function;
-
-// The lambda-based IRVisitors and IRMutators use this helper to dispatch
-// to multiple lambdas via function overloading (of `operator()`).
-template<typename... Ts>
-struct LambdaOverloads : Ts... {
-    using Ts::operator()...;
-    explicit LambdaOverloads(Ts... ts)
-        : Ts(std::move(ts))... {
-    }
-};
 
 /** The actual IR nodes begin here. Remember that all the Expr nodes
  * also have a public "type" property. */
@@ -611,6 +602,11 @@ struct Block : public StmtNode<Block> {
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);
 
+    /** The inverse of the vector form of make. Unpacks a Stmt into the
+     * sequence of non-Block Stmts it runs. An undefined Stmt unpacks to an
+     * empty vector, and a non-Block Stmt unpacks to a vector of size one. */
+    static std::vector<Stmt> to_vector(const Stmt &s);
+
     static const IRNodeType _node_type = IRNodeType::Block;
 };
 
@@ -739,8 +735,29 @@ struct Call : public ExprNode<Call> {
         // allocations were packed together, for error messages.
         cuda_bypass_registers,
         debug_to_file,
+        // Emitted (when profiling) for a device-only allocation that has no
+        // host-side Allocate node: the buffer lives solely on the device, so
+        // InjectHostDevBufferCopies elides its host allocation. Lets the
+        // profiler, which tracks memory at host Allocate nodes, still see the
+        // allocation and bill its size to the Func.
+        // Args: (StringImm Func name, size in bytes, IntImm memory type).
+        declare_allocation,
+        // Declares that region required of a particular Func at this
+        // scope. Injected by ScheduleFunctions and used by the profiler.
+        declare_box_required_at_production,
+        declare_box_required_at_realization,
+        declare_box_required_at_root,
+        // One loop nest level further in than the current compute_at, if not
+        // already innermost. Used by the profiler to hint that a Func could be
+        // computed more aggressively inside its consumers.
+        declare_box_required_inwards,
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
+        // Declares that the following stmt computes a particular stage of
+        // a particular Func. Used by the profiler to bill points computed
+        // in the pure def separately from points computed in update defs.
+        // Args: (Variable<Handle> handle for the func, Int<32> stage_idx).
+        declare_stage,
         div_round_to_zero,
         // A shuffle operation with runtime-varying indices.
         dynamic_shuffle,
@@ -816,6 +833,9 @@ struct Call : public ExprNode<Call> {
         return_second,
         // Round a floating point value to nearest integer, with ties going to even
         round,
+        // Round a floating point value to nearest integer, with ties going away
+        // from zero (C's round)
+        round_half_away,
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
@@ -846,6 +866,13 @@ struct Call : public ExprNode<Call> {
         sliding_window_marker,
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
+        // Single string-literal arg uniquely identifying a specialize()
+        // branch. Injected by mark_specialization_branch()
+        // (ScheduleFunctions.cpp) so sibling branches that are still
+        // textually identical this early in lowering aren't merged by
+        // Simplify before they've had a chance to diverge; stripped by
+        // remove_specialization_branch_markers() (StorageFlattening.cpp).
+        specialization_branch_marker,
         // Emits a target-specific memory fence after a Stage that
         // contains non-temporal (streaming) stores.
         stream_store_fence,
@@ -866,12 +893,25 @@ struct Call : public ExprNode<Call> {
         strict_sub,
         // Convert a list of Exprs to a string
         stringify,
+        // Read one element of one field out of a struct-typed value.
+        // args = {struct value, field index as an IntImm, element index}.
+        // The field's name is resolved to its index eagerly; the element index
+        // is 0 for a scalar field.
+        struct_field_read,
+        // Construct a value of a struct type from its field elements, in
+        // declaration order, flattened element-by-element (an array field
+        // contributes array_extent args).
+        struct_pack,
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
         target_has_feature,
         target_natural_vector_size,
         target_os_is,
+        // Takes the trace id of the pipeline. Marks where bounds inference
+        // should emit the halide_trace_bounds_required events for the
+        // pipeline's outermost loop level.
+        trace_bounds_required_marker,
         // An undef is a magic value where storing it has no observable effect.
         undef,
         // Mark a code path as unreachable so that it can be dead-code eliminated.

@@ -47,8 +47,7 @@ target_include_directories(gaussian_blur_filter PRIVATE "${CMAKE_CURRENT_BINARY_
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} gray.png COPYONLY)
-    add_test(NAME gaussian_blur_filter COMMAND gaussian_blur_filter gray.png 10)
+    add_test(NAME gaussian_blur_filter COMMAND gaussian_blur_filter ${IMAGE} 10)
     set_tests_properties(
         gaussian_blur_filter
         PROPERTIES

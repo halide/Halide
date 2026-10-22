@@ -121,6 +121,7 @@ int fclose(void *);
 int close(int);
 size_t fwrite(const void *, size_t, size_t, void *);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int isatty(int fd);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
 char *strncpy(char *dst, const char *src, size_t n);
@@ -175,10 +176,13 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const char *const *func_names,
+                                        const char *const *func_ir_names,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
                                         const int *func_kinds,
                                         const int *func_buffer_func_ids,
+                                        const uint32_t *func_counters_approximated,
+                                        uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance);
 WEAK int halide_profiler_instance_end(void *user_context,
                                       halide_profiler_instance_state *instance);

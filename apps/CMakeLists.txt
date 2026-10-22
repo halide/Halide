@@ -56,7 +56,6 @@ add_app(gaussian_blur)
 add_app(hannk)
 add_app(harris)
 # add_app(HelloAndroid)  # don't build HelloAndroid here because it is driven by gradle
-# add_app(HelloAndroidCamera2)  # don't build HelloAndroidCamera2 here because it is driven by gradle
 # add_app(HelloBaremetal)  # cross-compiles for a bare-metal ARM target; see apps/HelloBaremetal/README.md
 # add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
 add_app(HelloPyTorch)
@@ -75,6 +74,7 @@ add_app(nl_means)
 add_app(onnx)
 add_app(resize)
 add_app(resnet_50)
+add_app(simplifier_rule_verifier)
 add_app(stencil_chain)
 add_app(unsharp)
 add_app(wavelet)

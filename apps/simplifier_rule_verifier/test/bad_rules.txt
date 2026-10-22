@@ -1,0 +1,9 @@
+# Rules that are false. z3 should find a counterexample for each.
+rewrite((x/2)*2, x)
+rewrite(min(x, y) + max(x, y), x + y + 1)
+
+# Rules that are true, but that don't obey the reduction order, so
+# they would make the simplifier loop forever.
+rewrite(x + y, y + x)
+rewrite(min(x, y), min(y, x))
+rewrite(min(x, y) - max(x, y), min(x - y, y - x))

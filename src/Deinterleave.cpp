@@ -21,11 +21,12 @@ class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
     const int store_stride, max_stores;
-    std::vector<Stmt> &let_stmts;
+    std::vector<std::pair<std::string, Expr>> &let_stmts;
     std::vector<Stmt> &stores;
 
     StoreCollector(const std::string &name, int stride, int ms,
-                   std::vector<Stmt> &lets, std::vector<Stmt> &ss)
+                   std::vector<std::pair<std::string, Expr>> &lets,
+                   std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
           let_stmts(lets), stores(ss) {
     }
@@ -59,7 +60,7 @@ private:
     // These are lets that we've encountered since the last collected
     // store. If we collect another store, these "potential" lets
     // become lets used by the collected stores.
-    std::vector<Stmt> potential_lets;
+    std::vector<std::pair<std::string, Expr>> potential_lets;
 
     Expr visit(const Load *op) override {
         if (!collecting) {
@@ -143,11 +144,7 @@ private:
 
         // If we're still collecting, we need to save the entire let chain as potential lets.
         if (collecting) {
-            Stmt body;
-            do {
-                potential_lets.emplace_back(op);
-                body = op->body;
-            } while ((op = body.as<LetStmt>()));
+            peel_lets(op, &potential_lets);
         }
         return stmt;
     }
@@ -168,7 +165,8 @@ private:
 };
 
 Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int stride, int max_stores,
-                            std::vector<Stmt> lets, std::vector<Stmt> &stores) {
+                            std::vector<std::pair<std::string, Expr>> lets,
+                            std::vector<Stmt> &stores) {
 
     return StoreCollector(name, stride, max_stores, lets, stores)(stmt);
 }
@@ -294,6 +292,13 @@ private:
         if (op->type.is_scalar()) {
             return op;
         } else {
+
+            // The lets below are defined by the mutator further down, which
+            // splits a vector let into exactly two halves or exactly three
+            // thirds. A partial extract doesn't correspond to any of them.
+            if (new_lanes * lane_stride != op->type.lanes()) {
+                return give_up_and_shuffle(op);
+            }
 
             Type t = op->type.with_lanes(new_lanes);
             if (external_lets.contains(op->name) &&
@@ -515,6 +520,17 @@ class Interleaver : public IRMutator {
         return visit_let(op);
     }
 
+    // The largest stride we'll deinterleave a ramp by. This is what decides
+    // whether a vectorized loop over a repeating pattern -- a sensor's colour
+    // filter array, say -- gets split into one slice per phase, so that each
+    // slice has a phase known at compile time. Bayer needs two and X-Trans
+    // needs six.
+    //
+    // It stops below eight because a permute with a period of eight is often
+    // better done as a single shuffle than as eight slices: on Hexagon, for
+    // instance, deinterleaving (x/8)*9 + x%8 displaces a single vdelta.
+    static constexpr int max_deinterleave_stride = 7;
+
     Expr visit(const Ramp *op) override {
         if (op->stride.type().is_vector() &&
             is_const_one(op->stride) &&
@@ -531,7 +547,7 @@ class Interleaver : public IRMutator {
 
     Expr visit(const Mod *op) override {
         const Ramp *r = op->a.as<Ramp>();
-        for (int i = 2; i <= 4; ++i) {
+        for (int i = 2; i <= max_deinterleave_stride; ++i) {
             if (r &&
                 is_const(op->b, i) &&
                 (r->type.lanes() % i) == 0) {
@@ -545,7 +561,7 @@ class Interleaver : public IRMutator {
 
     Expr visit(const Div *op) override {
         const Ramp *r = op->a.as<Ramp>();
-        for (int i = 2; i <= 4; ++i) {
+        for (int i = 2; i <= max_deinterleave_stride; ++i) {
             if (r &&
                 is_const(op->b, i) &&
                 (r->type.lanes() % i) == 0 &&
@@ -645,16 +661,9 @@ class Interleaver : public IRMutator {
     }
 
     HALIDE_NEVER_INLINE Stmt gather_stores(const Block *op) {
-        const LetStmt *let = op->first.as<LetStmt>();
-        const Store *store = op->first.as<Store>();
-
         // Gather all the let stmts surrounding the first.
-        std::vector<Stmt> let_stmts;
-        while (let) {
-            let_stmts.emplace_back(let);
-            store = let->body.as<Store>();
-            let = let->body.as<LetStmt>();
-        }
+        std::vector<std::pair<std::string, Expr>> let_stmts;
+        const Store *store = peel_lets(op->first, &let_stmts).as<Store>();
 
         // There was no inner store.
         if (!store) {
@@ -771,11 +780,7 @@ class Interleaver : public IRMutator {
         Stmt new_store = store->with(value, index, predicate, ModulusRemainder());
 
         // Rewrap the let statements we pulled off.
-        while (!let_stmts.empty()) {
-            const LetStmt *let = let_stmts.back().as<LetStmt>();
-            new_store = let->with(let->value, new_store);
-            let_stmts.pop_back();
-        }
+        new_store = rewrap_all_lets(new_store, let_stmts);
 
         // Continue recursively into the stuff that
         // collect_strided_stores didn't collect.

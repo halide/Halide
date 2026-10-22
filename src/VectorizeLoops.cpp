@@ -427,8 +427,48 @@ protected:
         if (value.same_as(op->value)) {
             return op;
         } else {
-            Type t = op->type.with_lanes(value.type().lanes());
-            return Reinterpret::make(t, value);
+            internal_assert(value.type().lanes() % op->value.type().lanes() == 0);
+            int widening = value.type().lanes() / op->value.type().lanes();
+            Type t = op->type.with_lanes(op->type.lanes() * widening);
+
+            // VectorSubs represents a vector-valued expression widened across
+            // a loop as one vector per original lane. A lane-changing
+            // reinterpret instead needs all source lanes for one loop
+            // iteration to be adjacent. Transpose to iteration-major order,
+            // reinterpret, then transpose the result back to the convention
+            // expected by the rest of vectorization.
+            if (widening > 1 && op->value.type().lanes() > 1) {
+                vector<Expr> source_lanes;
+                source_lanes.reserve(op->value.type().lanes());
+                for (int i = 0; i < op->value.type().lanes(); i++) {
+                    source_lanes.push_back(Shuffle::make_slice(value, i * widening, 1, widening));
+                }
+                value = Shuffle::make_interleave(source_lanes);
+            }
+
+            Expr result = Reinterpret::make(t, value);
+            if (widening > 1 && op->type.lanes() > 1) {
+                vector<int> indices;
+                indices.reserve(t.lanes());
+                for (int result_lane = 0; result_lane < op->type.lanes(); result_lane++) {
+                    for (int iteration = 0; iteration < widening; iteration++) {
+                        indices.push_back(iteration * op->type.lanes() + result_lane);
+                    }
+                }
+                result = Shuffle::make({result}, indices);
+            }
+            return result;
+        }
+    }
+
+    Expr visit(const Ramp *op) override {
+        Expr base = mutate(op->base);
+        Expr stride = mutate(op->stride);
+        if (base.same_as(op->base) && stride.same_as(op->stride)) {
+            return op;
+        } else {
+            int lanes = std::max(base.type().lanes(), stride.type().lanes());
+            return Ramp::make(widen(base, lanes), widen(stride, lanes), op->lanes);
         }
     }
 
@@ -547,6 +587,20 @@ protected:
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
+        // Profiler counter markers (declare_box_required_at_*) carry per-lane
+        // counter contributions encoded in their type's lane count, so they
+        // must be widened to the full lane count of the surrounding
+        // vectorized loop even when their args don't reference any
+        // vectorized vars.
+        if (op->is_intrinsic({Call::declare_box_required_at_realization,
+                              Call::declare_box_required_at_production,
+                              Call::declare_box_required_at_root})) {
+            max_lanes = 1;
+            for (const auto &vv : vectorized_vars) {
+                max_lanes *= vv.lanes;
+            }
+        }
+
         if (!changed && max_lanes <= 1) {
             return op;
         } else if (op->name == Call::trace) {
@@ -555,7 +609,8 @@ protected:
             if (*event == halide_trace_begin_realization ||
                 *event == halide_trace_end_realization ||
                 *event == halide_trace_begin_parallel_task ||
-                *event == halide_trace_end_parallel_task) {
+                *event == halide_trace_end_parallel_task ||
+                *event == halide_trace_bounds_required) {
                 // Call::trace vectorizes uniquely for begin/end scope events with min/extent pairs.
                 // We need to maintain the proper dimensionality count and instead aggregate the
                 // widened values into a single pair.
@@ -1359,9 +1414,7 @@ protected:
             s = SerializeLoops()(s);
         }
         // We'll need the original scalar versions of any containing lets.
-        for (const auto &[var, value] : reverse_view(containing_lets)) {
-            s = LetStmt::make(var, value, s);
-        }
+        s = rewrap_all_lets(s, containing_lets);
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
@@ -1608,12 +1661,7 @@ protected:
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
         Stmt new_body = lifter.mutate(op->body);
         new_body = op->with(new_body);
-        while (!lifter.lifted.empty()) {
-            auto p = lifter.lifted.back();
-            new_body = LetStmt::make(p.first, p.second, new_body);
-            lifter.lifted.pop_back();
-        }
-        return new_body;
+        return rewrap_all_lets(new_body, lifter.lifted);
     }
 
     const map<string, Function> &env;

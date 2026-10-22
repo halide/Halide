@@ -277,7 +277,7 @@ void test_simple_division_cases() {
     // Note: x + (x*2 - y)/2 == (x*4 - y)/2 for all integers (floor division);
     // the split form x*2 - y/2 is incorrect when y is odd.
     check_solve(x + (x * 2 - y) / 2, (x * 4 - y) / 2);
-    check_solve(x + (-(x * 2) / 2), x * 0 + 0);
+    check_solve(x + (-(x * 2) / 2), x * 0);
     check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
     check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
     check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,
@@ -420,6 +420,20 @@ void test_interval_solutions() {
 
     check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
     check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
+
+    // min/max of booleans are logical And/Or (and_condition_over_domain and the
+    // simplifier produce these). Solving must treat them as such so that Not
+    // distributes (De Morgan). Regression: !min(...) was solved like !a && !b
+    // instead of !a || !b.
+    // min(x<0, x<2) == (x<0), so !min(...) == (x>=0):
+    check_inner_interval(!min(x < 0, x < 2), 0, Interval::pos_inf());
+    check_outer_interval(!min(x < 0, x < 2), 0, Interval::pos_inf());
+    // max(x<0, x<2) == (x<2), so !max(...) == (x>=2):
+    check_inner_interval(!max(x < 0, x < 2), 2, Interval::pos_inf());
+    check_outer_interval(!max(x < 0, x < 2), 2, Interval::pos_inf());
+    // Non-negated forms: min(x<5,x<9) == (x<5); max(x<5,x<9) == (x<9):
+    check_outer_interval(min(x < 5, x < 9), Interval::neg_inf(), 4);
+    check_outer_interval(max(x < 5, x < 9), Interval::neg_inf(), 8);
 }
 
 void test_and_condition_over_domain() {
@@ -606,6 +620,57 @@ void test_outer_interval_max_min() {
     check_outer_interval(expr2, 2, Interval::pos_inf());
 }
 
+void test_solve_far_side_min_max() {
+    // Handle min/max on the far side of a comparison, as emitted by
+    // extent-clamped vector guards. Some decomposed terms no longer contain x.
+
+    // c <= min(a, b)  <=>  c <= a && c <= b
+    check_inner_interval(x * 8 + 7 <= min((x + 1) * 8, 100), Interval::neg_inf(), 11);
+    check_outer_interval(x * 8 + 7 <= min((x + 1) * 8, 100), Interval::neg_inf(), 11);
+
+    // c <= max(a, b)  <=>  c <= a || c <= b
+    check_inner_interval(x * 8 + 7 <= max((x - 1) * 8, 100), Interval::neg_inf(), 11);
+    check_outer_interval(x * 8 + 7 <= max((x - 1) * 8, 100), Interval::neg_inf(), 11);
+
+    // c >= min(a, b)  <=>  c >= a || c >= b
+    check_inner_interval(x * 8 >= min((x + 1) * 8, 100), 13, Interval::pos_inf());
+    check_outer_interval(x * 8 >= min((x + 1) * 8, 100), 13, Interval::pos_inf());
+
+    // c >= max(a, b)  <=>  c >= a && c >= b
+    check_inner_interval(x * 8 >= max((x - 1) * 8, 100), 13, Interval::pos_inf());
+    check_outer_interval(x * 8 >= max((x - 1) * 8, 100), 13, Interval::pos_inf());
+
+    // The same guard through a let binding.
+    Expr bound = Variable::make(Int(32), "b");
+    check_inner_interval(Let::make("b", min((x + 1) * 8, 100), x * 8 + 7 <= bound),
+                         Interval::neg_inf(), 11);
+    check_outer_interval(Let::make("b", min((x + 1) * 8, 100), x * 8 + 7 <= bound),
+                         Interval::neg_inf(), 11);
+}
+
+void test_solve_no_var_polarity() {
+    // A condition that doesn't mention the variable being solved for still has
+    // to respect the polarity we're solving for. Under a negation we want the
+    // region where the condition is false, so a provably-true subcondition
+    // contributes nothing rather than everything.
+    //
+    // All of these are tautologies, since a remainder mod 2 is always 0 or 1,
+    // so every value of x satisfies them.
+    Expr y = Variable::make(Int(32), "y");
+
+    // Only the outer interval is checked. An inner interval may always be
+    // conservatively empty, but an outer one that's empty claims the condition
+    // is nowhere true, which here would be wrong.
+    check_outer_interval(((y % 2) == 0) || ((y % 2) == 1),
+                         Interval::neg_inf(), Interval::pos_inf());
+
+    // The De Morgan dual of the above. The Not flips the polarity, and the
+    // comparisons underneath it are provable, so this used to come back as an
+    // empty interval.
+    check_outer_interval(!(((y % 2) != 1) && ((y % 2) != 0)),
+                         Interval::neg_inf(), Interval::pos_inf());
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -639,6 +704,8 @@ int main(int argc, char **argv) {
     test_float_mul_eq_zero_divisor_not_rewritten();
     test_float_select_condition_not_simplified();
     test_outer_interval_max_min();
+    test_solve_far_side_min_max();
+    test_solve_no_var_polarity();
     std::printf("Success!\n");
     return 0;
 }

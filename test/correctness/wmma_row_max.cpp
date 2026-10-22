@@ -63,21 +63,27 @@ int main(int argc, char **argv) {
         .store_in(MemoryType::GPUShared)
         .tile(x, y, mmxi, mmyi, tile, tile)
         .unroll(x)
-        .tile_store(mmxi, mmyi);
+        .vectorize(mmxi)
+        .vectorize(mmyi);
 
     prod.compute_at(staged, x)
+        .store_in(MemoryType::Tile)
         .tile(x, y, rxi, ryi, tile, tile)
         .unroll(x)
         .unroll(y)
-        .tile_init(rxi, ryi);
+        .vectorize(rxi)
+        .vectorize(ryi);
 
     prod.update()
         .tile(x, y, rxi, ryi, tile, tile)
         .split(k, rro, rri, tile)
-        .reorder(x, y, rro)
+        .reorder(rri, rxi, ryi, x, y, rro)
         .unroll(x)
         .unroll(y)
-        .tile_matmul(rri, rxi, ryi);
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
 
     Buffer<float> result = row_max.realize({M}, target);
 

@@ -18,6 +18,7 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHTML.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -368,6 +369,13 @@ LoweredFunc::LoweredFunc(const std::string &name,
     }
 }
 
+LinkageType linkage_for_target(LinkageType linkage, const Target &target) {
+    if (linkage == LinkageType::ExternalPlusMetadata && target.has_feature(Target::NoMetadata)) {
+        return LinkageType::External;
+    }
+    return linkage;
+}
+
 }  // namespace Internal
 
 using namespace Halide::Internal;
@@ -457,6 +465,7 @@ void Module::append(const Buffer<> &buffer) {
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+    contents->functions.back().linkage = Internal::linkage_for_target(function.linkage, target());
 }
 
 void Module::append(const Module &module) {
@@ -571,6 +580,15 @@ const Internal::Stmt &Module::get_conceptual_stmt() const {
 
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
+
+    if (target().has_feature(Target::NoMetadata) && !functions().empty()) {
+        for (auto t : {OutputFileType::python_extension, OutputFileType::registration}) {
+            user_assert(!contains(output_files, t))
+                << "The " << get_output_info(target()).at(t).name
+                << " output requires the _argv() and _metadata() entry points, "
+                << "which are not emitted for a Target with no_metadata: " << target() << "\n";
+        }
+    }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
@@ -887,6 +905,7 @@ void compile_multitarget(const std::string &fn_name,
 
     TemporaryFileDir temp_obj_dir;
     std::vector<Expr> wrapper_args;
+    std::vector<std::string> sub_fn_names;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
     MetadataNameMap metadata_name_map;
@@ -901,12 +920,13 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 10> must_match_features = {{
+        static const std::array<Target::Feature, 11> must_match_features = {{
             Target::ASAN,
             Target::CPlusPlusMangling,
             Target::Debug,
             Target::JIT,
             Target::MSAN,
+            Target::NoMetadata,
             Target::NoRuntime,
             Target::TSAN,
             Target::SanitizerCoverage,
@@ -921,7 +941,7 @@ void compile_multitarget(const std::string &fn_name,
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
         std::string suffix = suffix_for_entry(i);
-        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
+        std::string sub_fn_name = fn_name + (needs_wrapper ? c_print_name(suffix.substr(1), true) : "");
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
@@ -976,8 +996,9 @@ void compile_multitarget(const std::string &fn_name,
             runtime_features[i] &= cur_target_features[i];
         }
 
-        wrapper_args.push_back(can_use != 0);
+        wrapper_args.push_back(can_use);
         wrapper_args.emplace_back(sub_fn_name);
+        sub_fn_names.push_back(sub_fn_name);
     }
 
     // If we haven't specified "no runtime", build a runtime with the base target
@@ -1040,6 +1061,12 @@ void compile_multitarget(const std::string &fn_name,
     if (contains(output_files, OutputFileType::c_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        // Also declare each subtarget's entrypoint, so that callers can bypass
+        // the runtime-feature-detecting wrapper above and call a specific
+        // subtarget directly (e.g. for benchmarking purposes).
+        for (const std::string &sub_fn_name : sub_fn_names) {
+            header_module.append(LoweredFunc(sub_fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        }
         std::map<OutputFileType, std::string> header_out = {{OutputFileType::c_header, output_files.at(OutputFileType::c_header)}};
         debug(1) << "compile_multitarget: c_header " << header_out.at(OutputFileType::c_header) << "\n";
         header_module.compile(header_out);

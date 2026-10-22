@@ -198,6 +198,13 @@ Halide::Func encode_buffer_as_func(
 }
 
 #define BUILD_CONSTANT_EXPR(DataType, FieldName, NodeName)                 \
+    if (value.FieldName##_data_size() > 0 ?                                \
+            value.FieldName##_data_size() < num_elements :                 \
+            (int64_t)(value.raw_data().size() / sizeof(DataType)) <        \
+                num_elements) {                                            \
+        throw std::invalid_argument(                                       \
+            "Not enough data for constant tensor " + NodeName);            \
+    }                                                                      \
     Halide::Buffer<DataType> val(reversed_dims);                           \
     int constant_loc = 0;                                                  \
     val.for_each_value([&, constant_loc](DataType &v) mutable {            \
@@ -221,7 +228,14 @@ Tensor build_from_constant(
 
     // The onnx layout is the reverse of the halide layout.
     std::vector<int> dims;
+    int64_t num_elements = 1;
     for (int64_t dim : value.dims()) {
+        if (dim < 0 || dim > INT_MAX ||
+            (dim > 0 && num_elements > INT64_MAX / dim)) {
+            throw std::invalid_argument(
+                "Invalid dimension for constant tensor " + name);
+        }
+        num_elements *= dim;
         result.shape.push_back(static_cast<int>(dim));
         dims.push_back(dim);
     }
@@ -1850,7 +1864,7 @@ Node convert_concat_node(
     }
 
     Halide::Var concat_axis = tgt_indices[axis];
-    std::vector<Halide::Func> concat_funcs;
+    Halide::FuncVec concat_funcs;
     concat_funcs.resize(inputs.size());
     concat_funcs[0](tgt_indices) = inputs[0].rep(tgt_indices);
     Halide::Expr concat_offset = 0;

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
 # This file configures itself twice: once as a host build (to compile the
-# generator) and once as this target build (driven by AGP's
+# generators) and once as this target build (driven by AGP's
 # externalNativeBuild, under the NDK cross toolchain). See "Use
 # add_halide_generator" in doc/HalideCMakePackage.md.
 set(HelloAndroid-halide_generators_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.cxx-generators")
@@ -31,14 +31,22 @@ endif ()
 # Halide is a host-built config package, not part of the Android sysroot.
 find_package(Halide REQUIRED CMAKE_FIND_ROOT_PATH_BOTH)
 
-add_halide_generator(hello_generator SOURCES generators/hello_generator.cpp)
+add_halide_generator(deinterleave_generator SOURCES generators/deinterleave_generator.cpp)
+add_halide_generator(edge_detect_generator SOURCES generators/edge_detect_generator.cpp)
 
 if (NOT ANDROID)
     # We're just building the Halide generators.
     return()
 endif ()
 
-add_halide_library(hello FROM HelloAndroid::halide_generators::hello_generator)
+add_halide_library(deinterleave FROM HelloAndroid::halide_generators::deinterleave_generator)
+add_halide_library(edge_detect FROM HelloAndroid::halide_generators::edge_detect_generator)
 
-add_library(HelloAndroid SHARED hello_wrapper.cpp)
-target_link_libraries(HelloAndroid PRIVATE hello log android)
+add_library(
+    HelloAndroid SHARED
+    AndroidBufferUtilities.cpp
+    HalideFilters.cpp
+    LockedSurface.cpp
+    YuvBufferT.cpp
+)
+target_link_libraries(HelloAndroid PRIVATE deinterleave edge_detect log android atomic)

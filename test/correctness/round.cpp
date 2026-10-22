@@ -1,5 +1,8 @@
 #include "Halide.h"
+#include <cmath>
+#include <random>
 #include <stdio.h>
+#include <vector>
 
 using namespace Halide;
 
@@ -141,6 +144,52 @@ int main(int argc, char **argv) {
         ok = ok && test(floor(input(x)), "floor", N, input, floor_result);
         ok = ok && test(ceil(input(x)), "ceil", N, input, ceil_result);
         ok = ok && test(trunc(input(x)), "trunc", N, input, trunc_result);
+    }
+    {
+        // round_half_away matches C's round: ties away from zero, checked on
+        // the ties, their neighbors, and random floats.
+        std::vector<float> in;
+        for (float m = 1.0f; m <= 33554432.0f; m *= 2.0f) {
+            for (float v : {m - 0.5f, m + 0.5f, m + 1.5f, 0.5f / m}) {
+                for (float s : {-1.0f, 1.0f}) {
+                    in.push_back(s * v);
+                    in.push_back(std::nextafter(s * v, 0.0f));
+                    in.push_back(std::nextafter(s * v, s * INFINITY));
+                }
+            }
+        }
+        std::mt19937 rng(0);
+        for (int i = 0; i < 1000; i++) {
+            in.push_back(std::uniform_real_distribution<float>(-1000.0f, 1000.0f)(rng));
+        }
+        const int N = (int)in.size();
+        Buffer<float> input(N);
+        std::vector<float> result(N);
+        for (int i = 0; i < N; i++) {
+            input(i) = in[i];
+            result[i] = std::round(in[i]);
+        }
+        ok = ok && test(round_half_away(input(x)), "round_half_away", N, input, result.data());
+    }
+    {
+        std::vector<double> in;
+        for (double m = 1.0; m <= 18014398509481984.0; m *= 2.0) {
+            for (double v : {m - 0.5, m + 0.5, m + 1.5, 0.5 / m}) {
+                for (double s : {-1.0, 1.0}) {
+                    in.push_back(s * v);
+                    in.push_back(std::nextafter(s * v, 0.0));
+                    in.push_back(std::nextafter(s * v, s * INFINITY));
+                }
+            }
+        }
+        const int N = (int)in.size();
+        Buffer<double> input(N);
+        std::vector<double> result(N);
+        for (int i = 0; i < N; i++) {
+            input(i) = in[i];
+            result[i] = std::round(in[i]);
+        }
+        ok = ok && test(round_half_away(input(x)), "round_half_away", N, input, result.data());
     }
     {
         const int N = 24;

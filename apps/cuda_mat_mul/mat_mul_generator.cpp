@@ -26,20 +26,20 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // accumulator are less work.
 //
 //                             1024      2048      4096   ceiling
-//     Halide f32              6937     10199      7306     25960
-//     cublas f32             14688     16782     17545
+//     Halide f32             14083     16310     13764     25960
+//     cublas f32             14691     16855     17709
 //
-//     Halide f16 -> f32      40396     47019     49314     51541
-//     cublas f16 -> f32      42324     49596     51212
+//     Halide f16 -> f32      40808     46932     48387     51541
+//     cublas f16 -> f32      42480     49639     51242
 //
-//     Halide bf16 -> f32     40347     47007     49129     51541
-//     cublas bf16 -> f32     42315     49601     51179
+//     Halide bf16 -> f32     40854     47011     49459     51541
+//     cublas bf16 -> f32     42446     49678     50981
 //
-//     Halide f16 -> f16      60745     87075     86973     99626
-//     cublas f16 -> f16      73466     76443     90182
+//     Halide f16 -> f16      61608     80619     87447     99626
+//     cublas f16 -> f16      73770     76387     90089
 //
-//     Halide u8 -> i32       63588     83223     90390    100650
-//     cublas u8 -> i32      120109    128990    140195
+//     Halide u8 -> i32       64363     84745     90937    100650
+//     cublas u8 -> i32      120895    129015    140323
 //
 // The tensor core ceilings are measured, by issuing wmma instructions back to
 // back out of registers. The float one is 36 SMs times the 2817 MHz this part
@@ -47,9 +47,9 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // cores do. cublas is asked for a beta of zero, so that it writes its output
 // rather than accumulating onto it, which is what the filters here do.
 //
-// The tensor core schedules reach 87% to 96% of their ceilings, and beat
-// cublas at f16 -> f16 at 2048. Two rows fall short for reasons outside the
-// schedule.
+// At 4096 the tensor core schedules reach 88% to 96% of their ceilings, and
+// they beat cublas at f16 -> f16 at 2048. The u8 row falls short for a reason
+// outside the schedule.
 //
 // At eight bits cublas is 39% past the ceiling, so it is not using wmma, which
 // multiplies bytes no faster than it multiplies halves into halves. The mma
@@ -57,16 +57,17 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // ops per instruction. Reaching that needs mma's fragment layout, which this
 // schedule cannot express.
 //
-// The float row is at 28% because sharing a staged panel across a block needs
-// the reduction chunk loop above the thread loops and the accumulator below
-// them, living across it. Such an accumulator lands at block level, where a
-// Register allocation is sized for the whole block tile and spills. So it
-// stages per thread and shares nothing. The tensor core schedules only escape
-// this because a tile allocation at block level is already per-lane.
-//
 class MatMul : public Halide::Generator<MatMul> {
 public:
     GeneratorParam<int> size{"size", 1024};
+    // For the float schedule: the tile of the output one block computes, the
+    // piece of it one thread holds in registers, and how much of the reduction
+    // is staged at a time.
+    GeneratorParam<int> block_x{"block_x", 64};
+    GeneratorParam<int> block_y{"block_y", 64};
+    GeneratorParam<int> reg_x{"reg_x", 4};
+    GeneratorParam<int> reg_y{"reg_y", 8};
+    GeneratorParam<int> chunk{"chunk", 32};
 
     // How many tensor core tiles of accumulator each warp holds, and how many
     // warps per block in each dimension. Zero means use the measured shapes
@@ -156,26 +157,63 @@ public:
 private:
     // See the table above.
     void schedule_cuda() {
-        Var xi, yi, xii, yii;
+        const int bx = block_x, by = block_y, rx = reg_x, ry = reg_y, k = chunk;
+        const int tx = bx / rx, ty = by / ry;
 
-        out.tile(x, y, xi, yi, 64, 16)
-            .tile(xi, yi, xii, yii, 4, 8)
+        Var xi, yi, xii, yii;
+        RVar rxo, rxi;
+
+        // A block computes a block_x by block_y tile of the output with tx by
+        // ty threads, each holding a reg_x by reg_y tile of the accumulator in
+        // registers. The accumulator lives at block level so that the loop
+        // over the reduction can sit above the loop over threads, which lets
+        // one staged panel of each input serve every thread in the block.
+        out.tile(x, y, xi, yi, bx, by)
+            .tile(xi, yi, xii, yii, rx, ry)
             .gpu_blocks(x, y)
             .gpu_threads(xi, yi)
+            .vectorize(xii)
+            .unroll(yii);
+
+        prod.compute_at(out, x)
+            .store_in(MemoryType::Register)
+            .tile(x, y, xii, yii, rx, ry)
+            .gpu_threads(x, y)
             .unroll(xii)
             .unroll(yii);
 
-        prod.compute_at(out, xi)
-            .vectorize(x)
-            .unroll(y)
-            .update()
-            .reorder(x, y, r)
-            .vectorize(x)
-            .unroll(y)
-            .unroll(r, 8);
+        prod.update()
+            .split(r, rxo, rxi, k)
+            .tile(x, y, xii, yii, rx, ry)
+            .reorder(xii, yii, rxi, x, y, rxo)
+            .gpu_threads(x, y)
+            .unroll(xii)
+            .unroll(yii)
+            .unroll(rxi);
 
-        A.in().compute_at(prod, r).vectorize(_0).unroll(_1);
-        B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
+        prod.in().compute_at(out, xi).unroll(x).unroll(y);
+
+        // One panel of each input per block per step of the reduction, copied
+        // from global to shared by all the threads together. Each thread moves
+        // four floats at a time, which is the widest asynchronous copy the
+        // hardware has. Both panels are laid over the same grid of threads as
+        // the compute, so that no thread sits idle in either phase.
+        Var v("v"), t("t"), ti("ti"), tj("tj"), to("to");
+        auto stage = [&](Func f) {
+            f.compute_at(prod, rxo)
+                .store_in(MemoryType::GPUSharedAsync)
+                .split(_0, _0, v, 4)
+                .fuse(_0, _1, t)
+                .split(t, t, ti, tx)
+                .split(t, to, tj, ty)
+                .gpu_threads(ti, tj)
+                .reorder(to, ti, tj)
+                .unroll(to)
+                .vectorize(v);
+        };
+        stage(A.in());
+        stage(B.in());
+        A.in().compute_with(B.in(), ti);
     }
 
     // See the table above.
@@ -224,8 +262,8 @@ private:
         if (block_r) {
             br = block_r;
         }
-        const int block_x = tile * tx * wx;
-        const int block_y = tile * ty * wy;
+        const int block_w = tile * tx * wx;
+        const int block_h = tile * ty * wy;
 
         const int pa = pad_a ? (int)pad_a : 16 / A.type().bytes();
         const int pb = pad_b ? (int)pad_b : 16 / A.type().bytes();
@@ -237,38 +275,44 @@ private:
         Var mmx("mmx"), mmy("mmy");
         RVar ro("ro"), ri("ri"), mmr("mmr");
 
-        out.tile(x, y, xi, yi, block_x, block_y)
+        out.tile(x, y, xi, yi, block_w, block_h)
             .tile(xi, yi, xw, yw, xi, yi, tile * tx, tile * ty)
             .tile(xi, yi, mmx, mmy, tile, tile)
             .gpu_blocks(x, y)
             .gpu_threads(xw, yw)
             .unroll(xi)
             .unroll(yi)
-            .tile_store(mmx, mmy);
+            .vectorize(mmx)
+            .vectorize(mmy);
 
         // The accumulators live in tensor core registers for the whole
         // reduction, and are written out to memory once at the end. They sit
         // at block level so that the reduction loop can be above the loop over
         // warps, which lets every warp share one staged panel.
         prod.compute_at(out, x)
+            .store_in(MemoryType::Tile)
             .tile(x, y, xw, yw, xi, yi, tile * tx, tile * ty)
             .tile(xi, yi, mmx, mmy, tile, tile)
             .gpu_threads(xw, yw)
-            .tile_init(mmx, mmy)
             .unroll(xi)
-            .unroll(yi);
+            .unroll(yi)
+            .vectorize(mmx)
+            .vectorize(mmy);
 
         prod.update()
             .split(r, ro, ri, br)
             .split(ri, ri, mmr, tile)
             .tile(x, y, xw, yw, xi, yi, tile * tx, tile * ty)
             .tile(xi, yi, mmx, mmy, tile, tile)
-            .reorder(xi, yi, ri, xw, yw, ro)
+            .reorder(mmr, mmx, mmy, xi, yi, ri, xw, yw, ro)
             .gpu_threads(xw, yw)
             .unroll(xi)
             .unroll(yi)
             .unroll(ri)
-            .tile_matmul(mmr, mmx, mmy);
+            .atomic()
+            .vectorize(mmr)
+            .vectorize(mmx)
+            .vectorize(mmy);
 
         // Stage the operand panels into shared memory once per reduction step,
         // to be shared by every warp in the block. Each thread moves sixteen
@@ -293,13 +337,14 @@ private:
             .split(t, to, yw, wy)
             .gpu_lanes(ti)
             .gpu_threads(xw, yw)
+            .reorder(to, ti, xw, yw)
             .vectorize(kv);
 
         // A.in() is dense in x, which is its _0.
         A.in()
             .compute_at(prod, ro)
             .store_in(MemoryType::GPUSharedAsync)
-            .align_storage(_0, block_x + pb)
+            .align_storage(_0, block_w + pb)
             .split(_0, xo, xv, vec)
             .fuse(xo, _1, t)
             .split(t, t, ti, 32)
@@ -307,6 +352,7 @@ private:
             .split(t, to, yw, wy)
             .gpu_lanes(ti)
             .gpu_threads(xw, yw)
+            .reorder(to, ti, xw, yw)
             .vectorize(xv);
     }
 

@@ -25,6 +25,12 @@ struct CodeGen_GPU_Dev {
                             const std::string &name,
                             const std::vector<DeviceArgument> &args) = 0;
 
+    /** Cap the registers a thread of the next kernel added may use. Zero, the
+     * default, leaves it to the backend compiler. Only CUDA does anything with
+     * this; the other APIs offer no equivalent and ignore it. */
+    virtual void set_kernel_max_registers(int n) {
+    }
+
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
      * for a single pipeline. */
@@ -53,6 +59,13 @@ struct CodeGen_GPU_Dev {
      */
     virtual bool kernel_run_takes_types() const {
         return false;
+    }
+
+    /** Return the physical scalar type passed to the kernel_run routine.
+     * Backends may widen types that are not legal in their parameter storage.
+     */
+    virtual Type kernel_run_scalar_arg_type(Type type) const {
+        return type;
     }
 
     /** Checks if expr is block uniform, i.e. does not depend on a thread

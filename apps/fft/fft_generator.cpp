@@ -63,11 +63,9 @@ public:
     GeneratorParam<FFTNumberType> output_number_type{"output_number_type",
                                                      FFTNumberType::Real, fft_number_type_enum_map()};
 
-    // Size of first dimension, required to be greater than zero.
-    GeneratorParam<int32_t> size0{"size0", 1};
-    // Size of second dimension, may be zero for 1D FFT.
-    GeneratorParam<int32_t> size1{"size1", 0};
-    // TODO(zalman): Add support for 3D and maybe 4D FFTs
+    // Size of dimensions, required to be greater than one
+    GeneratorParam<int32_t> size0{"size0", 2};
+    GeneratorParam<int32_t> size1{"size1", 2};
 
     // The input buffer. Must be separate from the output.
     // Only Float(32) is supported.
@@ -85,7 +83,7 @@ public:
     Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
-        _halide_user_assert(size0 > 0) << "FFT must be at least 1D\n";
+        _halide_user_assert(size0 > 1 && size1 > 1) << "Both dimensions must be at least size 2\n";
 
         Fft2dDesc desc;
 

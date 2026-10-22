@@ -29,6 +29,13 @@ Stmt inject_tracing(Stmt, const std::string &pipeline_name,
                     const std::vector<Function> &outputs,
                     const Target &Target);
 
+/** Make a statement that emits a halide_trace_bounds_required event for the
+ * region of f described by the f.s0.<arg>.min/max symbols in scope, with the
+ * given parent event id. Returns an undefined Stmt if f's bounds required are
+ * not traced. */
+Stmt make_trace_bounds_required(const Function &f, const Expr &parent_id,
+                                const Target &t);
+
 }  // namespace Internal
 }  // namespace Halide
 

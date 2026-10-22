@@ -261,7 +261,11 @@ public:
 };
 
 const char *assert_string_valid(const char *name, const char *data, size_t size) {
-    internal_assert(data <= name && name + strlen(name) + 1 <= data + size);
+    // name is derived from an untrusted offset in the object. Confirm it points
+    // within the buffer and is nul-terminated inside it before anything reads
+    // it, without scanning past the end of the buffer to check.
+    internal_assert(data <= name && name < data + size) << "String offset out of bounds.\n";
+    internal_assert(memchr(name, 0, (data + size) - name) != nullptr) << "String not terminated within object.\n";
     return name;
 }
 
@@ -317,6 +321,7 @@ unsigned long elf_hash(const char *name) {
 
 template<typename T>
 std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
+    internal_assert(size >= sizeof(Ehdr<T>)) << "Object too small to contain an ELF header.\n";
     Ehdr<T> header = *(const Ehdr<T> *)data;
     internal_assert(memcmp(header.e_ident, elf_magic, sizeof(elf_magic)) == 0);
     internal_assert(header.e_type == Object::ET_REL || header.e_type == Object::ET_DYN);
