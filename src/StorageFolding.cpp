@@ -485,7 +485,7 @@ class VectorAccessOfFoldedDim : public IRVisitor {
     }
 
     void visit(const For *op) override {
-        ScopedBinding<> bind(op->for_type == ForType::Vectorized,
+        ScopedBinding<> bind(is_vectorized(op->for_type),
                              vector_vars, op->name);
         IRVisitor::visit(op);
     }

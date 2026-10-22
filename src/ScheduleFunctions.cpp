@@ -1380,7 +1380,7 @@ protected:
         // contains a single function to be lowered. Can't schedule extern things inside a vector for loop.
         if (funcs[0].has_extern_definition() &&
             funcs[0].schedule().compute_level().is_inlined() &&
-            for_loop->for_type == ForType::Vectorized &&
+            is_vectorized(for_loop->for_type) &&
             !function_is_already_realized_in_stmt(funcs[0], for_loop) &&
             function_is_used_in_stmt(funcs[0], for_loop)) {
 

@@ -54,7 +54,7 @@ protected:
         }
 
         if (op->for_type == ForType::Unrolled ||
-            op->for_type == ForType::Vectorized) {
+            is_vectorized(op->for_type)) {
             // Give it one last chance to simplify to an int
             Stmt body = op->body;
             const IntImm *e = extent.as<IntImm>();

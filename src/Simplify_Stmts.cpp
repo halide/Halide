@@ -221,7 +221,7 @@ Stmt Simplify::visit(const For *op) {
 
     ScopedValue<bool> old_in_vector_loop(in_vector_loop,
                                          (in_vector_loop ||
-                                          op->for_type == ForType::Vectorized));
+                                          is_vectorized(op->for_type)));
 
     Expr extent_positive = mutate(new_min <= new_max, nullptr);
     if (is_const_zero(extent_positive)) {

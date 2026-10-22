@@ -214,6 +214,8 @@ ForType Deserializer::deserialize_for_type(Serialize::ForType for_type) {
         return ForType::GPUThread;
     case Serialize::ForType::GPULane:
         return ForType::GPULane;
+    case Serialize::ForType::VectorizedGPR:
+        return ForType::VectorizedGPR;
     default:
         user_error << "unknown for type " << (int)for_type << "\n";
         return ForType::Serial;
