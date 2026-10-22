@@ -153,16 +153,6 @@ protected:
         return 0;
     }
 
-    /** The largest table (in elements of the given scalar type) that this
-     * target can profitably index with a Call::dynamic_shuffle, e.g. using
-     * a register table-lookup instruction. Small table lookups (see
-     * optimize_small_table_lookups) are only turned into dynamic_shuffle
-     * calls for tables up to this size. The default of zero disables that
-     * transformation. */
-    virtual int max_dynamic_shuffle_table_size(const Type &) const {
-        return 0;
-    }
-
     /** Return the type in which arithmetic should be done for the
      * given storage type. */
     virtual Type upgrade_type_for_arithmetic(const Type &) const;
@@ -549,15 +539,13 @@ protected:
                              bool is_reduction = false);
     // @}
 
-    /** Helper for lowering a Call::dynamic_shuffle to a table-lookup
-     * instruction. Codegens the table, zero-padded to table_lanes, and the
-     * index, cast to uint8, and then calls lookup(table, index_slice) on
-     * consecutive slices of slice_lanes lanes of the index (the last slice
-     * is zero-padded). The results are concatenated and trimmed to the
-     * lanes of the call. lookup must return a vector of slice_lanes
-     * elements. */
-    llvm::Value *codegen_dynamic_shuffle(const Call *op, int table_lanes, int slice_lanes,
-                                         const std::function<llvm::Value *(llvm::Value *, llvm::Value *)> &lookup);
+    /** Lower dynamic_shuffle using a table-lookup intrinsic. The table
+     * registers are already codegened and padded to the intrinsic's input
+     * widths. Replicate them alongside the uint8 indices so call_intrin can
+     * slice the arguments into calls returning intrin_lanes elements. */
+    llvm::Value *codegen_dynamic_shuffle(const Call *op, int intrin_lanes,
+                                         const std::string &intrin,
+                                         const std::vector<llvm::Value *> &tables);
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
      * if you ask for more lanes than the vector has. */

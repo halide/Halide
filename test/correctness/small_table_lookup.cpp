@@ -7,7 +7,8 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 // Vectorized lookups into small compile-time-constant tables (a mux of
-// constants) and into small embedded Buffers may be turned into
+// constants), small embedded Buffers, and fixed-size internal allocations
+// may be turned into
 // dynamic_shuffle calls, which are lowered to table lookup instructions on
 // some targets (ARM tbl, x86 pshufb/vpermb, WebAssembly i8x16.swizzle). Check
 // that all forms of such lookups give the right answer, including the ones
@@ -18,6 +19,79 @@ namespace {
 std::mt19937 rng(0);
 
 const int W = 263;
+
+bool has_dynamic_shuffle(const Stmt &s) {
+    bool found = false;
+    visit_with(s, [&](auto *self, const Call *op) {
+        found |= op->is_intrinsic(Call::dynamic_shuffle);
+        self->visit_base(op);
+    });
+    return found;
+}
+
+bool test_lowering() {
+    Target target("arm-64-linux");
+    Expr index = clamp(Variable::make(Int(32, 16), "index"), 0, 12);
+    auto allocation = [&](Expr extent, Expr idx, Expr new_expr = Expr()) {
+        Stmt body = Evaluate::make(Load::make(UInt(8, 16), "lut", idx));
+        return Allocate::make("lut", UInt(8), MemoryType::Stack, {extent},
+                              const_true(), body, new_expr);
+    };
+    auto check_lowering = [&](const Stmt &s, const Target &t, bool expected) {
+        Stmt lowered = optimize_small_table_lookups(s, t);
+        if (has_dynamic_shuffle(lowered) != expected) {
+            std::cerr << "Unexpected small-table lowering for " << t << ":\n"
+                      << lowered << "\n";
+            return false;
+        }
+        return true;
+    };
+    Stmt safe = allocation(13, index);
+    if (!check_lowering(safe, target, true) ||
+        !check_lowering(allocation(12, index), target, false) ||
+        !check_lowering(allocation(13, index - 1), target, false) ||
+        !check_lowering(allocation(Variable::make(Int(32), "size"), index), target, false) ||
+        !check_lowering(allocation(13, index, Variable::make(Handle(), "ptr")), target, false) ||
+        !check_lowering(Evaluate::make(Load::make(UInt(8, 16), "lut", index)), target, false) ||
+        !check_lowering(safe, target.with_feature(Target::NoNEON), false) ||
+        !check_lowering(safe, Target("arm-64-linux-sve2-vector_bits_256"), false) ||
+        !check_lowering(safe, Target("x86-64-linux"), false) ||
+        !check_lowering(safe, Target("x86-64-linux-sse41"), true) ||
+        !check_lowering(safe, Target("wasm-32-wasmrt"), false) ||
+        !check_lowering(safe, Target("wasm-32-wasmrt-wasm_simd128"), true)) {
+        return false;
+    }
+
+    // Check that normal lowering, before LLVM codegen, introduces the intrinsic
+    // and that the same lowered module can still be emitted as C++.
+    Var x;
+    Param<int> salt;
+    Buffer<uint8_t> embedded(13);
+    Func lut, out;
+    lut(x) = cast<uint8_t>(x * 37 + salt);
+    lut.compute_root();
+    std::vector<Expr> table;
+    for (int i = 0; i < 13; i++) {
+        table.push_back(cast<uint8_t>(i * 53 + 7));
+        embedded(i) = i * 29 + 3;
+    }
+    Expr idx = (x * x) % 13;
+    out(x) = lut(idx) + mux(idx, table) + embedded(idx);
+    out.vectorize(x, 16);
+    Module module = out.compile_to_module(out.infer_arguments(), "small_table_lowering", target);
+    if (!has_dynamic_shuffle(module.functions().back().body)) {
+        std::cerr << "Small-table lookups were not optimized during lowering\n";
+        return false;
+    }
+    std::ostringstream source;
+    CodeGen_C cg(source, target, CodeGen_C::CImplementation);
+    cg.compile(module);
+    if (source.str().find("using int32_t =") != std::string::npos) {
+        std::cerr << "C++ emission declared a scalar as a vector type\n";
+        return false;
+    }
+    return true;
+}
 
 template<typename T>
 T table_value(int i, int salt) {
@@ -70,11 +144,19 @@ bool test(int n, int vec, const Target &target) {
 
     Param<int> p;
     p.set(n - 1);
+    Param<int> salt;
+    salt.set(77);
 
     Var x;
+    Func internal, internal_offset;
+    internal(x) = cast<T>(x * 37 + salt - 100);
+    internal_offset(x) = cast<T>((x + 2) * 37 + salt - 100);
+    internal.compute_root();
+    internal_offset.compute_root();
+
     Expr u8_x = in_u8(x), i32_x = in_i32(x);
     Expr in_range = u8_x % n;
-    std::vector<Func> fs(8);
+    std::vector<Func> fs(10);
     // mux with an index proven to be in range.
     fs[0](x) = mux(in_range, table);
     // mux with an index of unknown range.
@@ -91,6 +173,9 @@ bool test(int n, int vec, const Target &target) {
     fs[6](x) = lut(clamp(cast<int>(u8_x), 0, p));
     // Two-dimensional embedded buffer.
     fs[7](x) = lut_2d(cast<int>(in_range) % 4, cast<int>(in_range) / 4);
+    // Fixed-size internal allocations, including a non-zero allocation min.
+    fs[8](x) = internal(cast<int>(in_range));
+    fs[9](x) = internal_offset(cast<int>(in_range) - 2);
 
     for (Func &f : fs) {
         f.vectorize(x, vec);
@@ -108,6 +193,8 @@ bool test(int n, int vec, const Target &target) {
         [&](int x) { return lut_offset(in_u8(x) % n - 2); },
         [&](int x) { return lut(std::min((int)in_u8(x), n - 1)); },
         [&](int x) { return lut_2d((in_u8(x) % n) % 4, (in_u8(x) % n) / 4); },
+        [&](int x) { return table_value<T>(in_u8(x) % n, 7); },
+        [&](int x) { return table_value<T>(in_u8(x) % n, 7); },
     };
 
     Pipeline pipeline(fs);
@@ -126,6 +213,8 @@ bool test(int n, int vec, const Target &target) {
     lut.for_each_element([&](int i) { lut(i) = table_value<T>(i, 3); });
     lut_offset.for_each_element([&](int i) { lut_offset(i) = table_value<T>(i, 4); });
     lut_2d.for_each_element([&](int i, int j) { lut_2d(i, j) = table_value<T>(i + 4 * j, 6); });
+    salt.set(88);
+    refs[8] = refs[9] = [&](int x) { return table_value<T>(in_u8(x) % n, 8); };
     r = pipeline.realize({W}, target);
     for (size_t i = 4; i < fs.size(); i++) {
         if (!check<T>(r[i], refs[i], ctx.str() + " case " + std::to_string(i) + " after update")) {
@@ -159,6 +248,10 @@ bool test_generic_dynamic_shuffle(const Target &target) {
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (!test_lowering()) {
+        return 1;
+    }
+
     Target host = get_jit_target_from_environment();
 
     std::vector<Target> targets = {host};
@@ -176,7 +269,7 @@ int main(int argc, char **argv) {
     }
 
     for (const Target &t : targets) {
-        for (int vec : {8, 16, 64}) {
+        for (int vec : {3, 8, 16, 17, 64}) {
             for (int n : {2, 13, 16, 17, 48, 64, 65}) {
                 if (!test<uint8_t>(n, vec, t) || !test<int8_t>(n, vec, t)) {
                     return 1;

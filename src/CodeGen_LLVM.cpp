@@ -26,7 +26,6 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "LowerParallelTasks.h"
-#include "OptimizeShuffles.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "StrictifyFloat.h"
@@ -986,15 +985,9 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
         }
     }
 
-    // Turn lookups into small tables into dynamic_shuffle calls if the
-    // target has a fast way to do them.
-    Stmt body = optimize_small_table_lookups(f.body, [&](const Type &t) {
-        return max_dynamic_shuffle_table_size(t);
-    });
-
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
-    body.accept(this);
+    f.body.accept(this);
 
     // Show one time warning and clear it.
     for (auto it = onetime_warnings.begin(); it != onetime_warnings.end(); it = onetime_warnings.erase(it)) {
@@ -5636,41 +5629,33 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
     return call;
 }
 
-Value *CodeGen_LLVM::codegen_dynamic_shuffle(const Call *op, int table_lanes, int slice_lanes,
-                                             const std::function<Value *(Value *, Value *)> &lookup) {
+Value *CodeGen_LLVM::codegen_dynamic_shuffle(const Call *op, int intrin_lanes,
+                                             const std::string &intrin, const std::vector<Value *> &tables) {
     internal_assert(op->is_intrinsic(Call::dynamic_shuffle) && op->args.size() == 4);
-    const Expr &table_expr = op->args[0];
-    internal_assert(table_expr.type().is_vector() && table_expr.type().lanes() <= table_lanes)
-        << "dynamic_shuffle table " << table_expr << " has more than " << table_lanes << " lanes\n";
-
-    // Take lanes [start, start + size) of a fixed vector, padding with zeros.
-    auto slice_or_zero = [&](Value *v, int start, int size) {
-        int lanes = get_vector_num_elements(v->getType());
-        if (start == 0 && size == lanes) {
-            return v;
+    llvm::Type *slice_type = get_vector_type(i8_t, intrin_lanes);
+    llvm::Function *fn = module->getFunction(intrin);
+    if (!fn) {
+        vector<llvm::Type *> arg_types;
+        arg_types.reserve(tables.size() + 1);
+        for (Value *table : tables) {
+            arg_types.push_back(table->getType());
         }
-        std::vector<int> indices(size);
-        for (int i = 0; i < size; i++) {
-            indices[i] = (start + i < lanes) ? start + i : lanes;
-        }
-        return shuffle_vectors(v, Constant::getNullValue(v->getType()), indices);
-    };
-
-    Value *table = slice_or_zero(codegen(table_expr), 0, table_lanes);
-
-    Expr index_expr = op->args[1];
-    const int lanes = op->type.lanes();
-    index_expr = cast(UInt(8, index_expr.type().lanes()), index_expr);
-    Value *index = codegen(index_expr);
-    if (!index->getType()->isVectorTy()) {
-        index = create_broadcast(index, 1);
+        arg_types.push_back(slice_type);
+        FunctionType *fn_type = FunctionType::get(slice_type, arg_types, false);
+        fn = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, intrin, module.get());
+        fn->setCallingConv(CallingConv::C);
     }
 
-    std::vector<Value *> results;
-    for (int i = 0; i < lanes; i += slice_lanes) {
-        results.push_back(lookup(table, slice_or_zero(index, i, slice_lanes)));
+    const int slices = (op->type.lanes() + intrin_lanes - 1) / intrin_lanes;
+    vector<Value *> args;
+    args.reserve(tables.size() + 1);
+    for (Value *table : tables) {
+        args.push_back(concat_vectors(vector<Value *>(slices, table)));
     }
-    return slice_vector(concat_vectors(results), 0, lanes);
+    Expr index = cast(UInt(8, op->args[1].type().lanes()), op->args[1]);
+    args.push_back(slice_vector(codegen(index), 0, slices * intrin_lanes));
+    Value *result = call_intrin(get_vector_type(i8_t, slices * intrin_lanes), intrin_lanes, fn, args);
+    return slice_vector(result, 0, op->type.lanes());
 }
 
 Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {

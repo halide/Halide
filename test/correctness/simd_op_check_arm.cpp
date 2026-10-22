@@ -50,7 +50,7 @@ public:
                 op += "*,";
             }
             op += "*}";
-            for (int w : {8, 16, 32}) {
+            for (int w : {3, 8, 16, 17, 32}) {
                 if (arm32 && w > 16) {
                     continue;
                 }
@@ -62,6 +62,10 @@ public:
                 check(op, w, mux(in_i32(x), i8_table));
                 check(op, w, lut(i32(idx)));
                 check(op, w, lut(clamp(in_i32(x), 0, n - 1)) * in_i8(x + 16));
+                Func internal;
+                internal(x) = in_i8(x);
+                internal.compute_root();
+                check(op, w, internal(i32(idx)));
             }
         }
     }
