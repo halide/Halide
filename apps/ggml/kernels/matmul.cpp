@@ -23,6 +23,9 @@ public:
     GeneratorParam<int> interleave{"interleave", 2};
     // vec_dot's sub-blocks across the vector lanes (see ggml::blocked)
     GeneratorParam<bool> sublanes{"sublanes", false};
+    // vec_dot's and the gemv tiles' sub-block scales decoded in GPRs (see
+    // ggml::blocked)
+    GeneratorParam<bool> gpr_scales{"gpr_scales", false};
 
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
@@ -161,9 +164,9 @@ public:
 
     void generate() {
         if (op == "vec_dot") {
-            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes);
+            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, gpr_scales);
         }
     }
 
