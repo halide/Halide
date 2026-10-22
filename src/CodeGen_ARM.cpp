@@ -41,61 +41,36 @@ namespace {
 // negative amounts, so this saves a shift. The mask may also be written as % 2^w.
 // Returns an undefined Expr if the pattern doesn't apply.
 Expr fuse_bit_field_shifts(const Call *op) {
+    using namespace IRMatcher;
+
     const Type &t = op->type;
     if (!op->is_intrinsic(Call::shift_left) || !t.is_vector() || t.bits() > 64) {
         return Expr();
     }
-    const int bits = t.bits();
 
-    // The bit pattern of a constant of either signedness.
-    auto const_bits = [](const Expr &e) -> std::optional<uint64_t> {
-        if (auto u = as_const_uint(e)) {
-            return u;
-        } else if (auto i = as_const_int(e)) {
-            return (uint64_t)*i;
+    Wild<0> x;
+    Wild<1> y;
+    WildConst<0> m;
+    WildConst<1> c;
+
+    auto canonicalize = rewriter(op, t);
+    // Halide's mod is Euclidean, so this also holds for signed inputs.
+    Expr e = canonicalize((x % m) << c, (x & fold(m - 1)) << c,
+                          m > 0 && (m & (m - 1)) == 0) ?
+                 canonicalize.result :
+                 Expr(op);
+
+    auto rewrite = rewriter(e, t);
+    auto as_signed = [&](auto &&e) { return cast(t.with_code(halide_type_int), e); };
+    if (rewrite(((x >> y) & m) << c,
+                (x << (as_signed(c) - as_signed(y))) & fold(m << c),
+                c >= 0 && c < t.bits() && !is_const(y))) {
+        ConstantInterval bounds = constant_integer_bounds(y.make(rewrite.state, t));
+        if (bounds.is_bounded() && bounds.min >= 0 && bounds.max < t.bits()) {
+            return simplify(rewrite.result);
         }
-        return std::nullopt;
-    };
-
-    // A negative signed c becomes a huge unsigned value here and is rejected.
-    auto c = const_bits(op->args[1]);
-    if (!c || *c >= (uint64_t)bits) {
-        return Expr();
     }
-
-    const Expr &field = op->args[0];
-    Expr shifted;
-    std::optional<uint64_t> mask;
-    if (const Mod *mod = field.as<Mod>()) {
-        // Halide's mod is Euclidean, so x % 2^w == x & (2^w - 1) for signed x too.
-        if (is_const_power_of_two_integer(mod->b)) {
-            shifted = mod->a;
-            mask = *const_bits(mod->b) - 1;
-        }
-    } else if (const Call *a = Call::as_intrinsic(field, {Call::bitwise_and})) {
-        shifted = a->args[0];
-        mask = const_bits(a->args[1]);
-    }
-    const Call *sr = Call::as_intrinsic(shifted, {Call::shift_right});
-    if (!mask || !sr) {
-        return Expr();
-    }
-
-    // A constant y is left to LLVM, which already combines constant shifts.
-    const Expr &x = sr->args[0];
-    const Expr &y = sr->args[1];
-    if (is_const(y)) {
-        return Expr();
-    }
-    ConstantInterval y_bounds = constant_integer_bounds(y);
-    if (!y_bounds.is_bounded() || y_bounds.min < 0 || y_bounds.max >= bits) {
-        return Expr();
-    }
-
-    Type amount_t = Int(bits, t.lanes());
-    Expr amount = simplify(make_const(amount_t, (int64_t)*c) - cast(amount_t, y));
-    Expr shifted_mask = make_const(t, *mask << *c);
-    return (x << amount) & shifted_mask;
+    return Expr();
 }
 
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4

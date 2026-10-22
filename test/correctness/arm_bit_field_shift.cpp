@@ -36,15 +36,16 @@ bool test_type() {
     Var x;
     for (int w : {1, 3}) {
         for (int c : {0, 1, bits / 2, bits - w, bits - 1}) {
-            for (int form = 0; form < 3; form++) {
+            for (int form = 0; form < 4; form++) {
                 for (int period : {8, bits}) {
                     Expr y = cast(t, x % period);
                     if (form == 2) {
                         y = amounts(x);
                     }
                     Expr field = in(x / 2) >> y;
-                    if (form == 1) {
-                        field = field % cast(t, 1 << w);
+                    if (form == 1 || form == 3) {
+                        // A non-power-of-two divisor must not become a mask.
+                        field = field % cast(t, (1 << w) + (form == 3));
                     } else {
                         field = field & cast(t, (1 << w) - 1);
                     }

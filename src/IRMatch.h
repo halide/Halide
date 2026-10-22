@@ -1470,6 +1470,8 @@ struct Intrin {
             return halving_sub(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::rounding_halving_add) {
             return rounding_halving_add(std::move(arg0), std::move(arg1));
+        } else if (intrin == Call::bitwise_and) {
+            return std::move(arg0) & std::move(arg1);
         } else if (intrin == Call::shift_left) {
             return std::move(arg0) << std::move(arg1);
         } else if (intrin == Call::shift_right) {
@@ -1497,16 +1499,17 @@ struct Intrin {
         bool overflow = false;
         halide_scalar_value_t arg1;
         // Assuming the args have the same type as the intrinsic is incorrect in
-        // general. But for the intrinsics we can fold (just shifts), the LHS
-        // has the same type as the intrinsic, and we can always treat the RHS
-        // as a signed int, because we're using 64 bits for it.
+        // general. But for the intrinsics we can fold, the LHS has the same type
+        // as the intrinsic. Shift amounts are interpreted as signed integers,
+        // regardless of the result type.
         overflow |= std::get<0>(args).make_folded_const(val, ty, state);
         Type signed_ty = ty.with_code(halide_type_int);
-        // We can just directly get the second arg here, because we only want to
-        // instantiate this method for shifts, which have two args.
+        // All foldable intrinsics here have two arguments.
         overflow |= std::get<1>(args).make_folded_const(arg1, signed_ty, state);
 
-        if (intrin == Call::shift_left) {
+        if (intrin == Call::bitwise_and) {
+            val.u.u64 &= arg1.u.u64;
+        } else if (intrin == Call::shift_left) {
             if (arg1.u.i64 < 0) {
                 if (ty.code() == halide_type_int) {
                     // Arithmetic shift
@@ -1602,12 +1605,40 @@ auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<Call::rounding_halvin
     return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto shift_left(A &&a, B &&b) noexcept -> Intrin<Call::shift_left, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto operator&(A &&a, B &&b) noexcept -> Intrin<Call::bitwise_and, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto shift_right(A &&a, B &&b) noexcept -> Intrin<Call::shift_right, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto bitwise_and(A &&a, B &&b) noexcept -> decltype(IRMatcher::operator&(a, b)) {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return IRMatcher::operator&(a, b);
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto operator<<(A &&a, B &&b) noexcept -> Intrin<Call::shift_left, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto shift_left(A &&a, B &&b) noexcept -> decltype(IRMatcher::operator<<(a, b)) {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return IRMatcher::operator<<(a, b);
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto operator>>(A &&a, B &&b) noexcept -> Intrin<Call::shift_right, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto shift_right(A &&a, B &&b) noexcept -> decltype(IRMatcher::operator>>(a, b)) {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return IRMatcher::operator>>(a, b);
 }
 template<typename A, typename B>
 auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<Call::rounding_shift_left, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
