@@ -14,6 +14,7 @@ set(RUNTIME_CPP
     cache
     can_use_target
     cuda
+    decompress_kernels
     destructors
     device_interface
     errors
@@ -96,6 +97,7 @@ set(RUNTIME_CPP
     windows_cuda
     windows_d3d12compute_arm
     windows_d3d12compute_x86
+    windows_decompress
     windows_get_symbol
     windows_io
     windows_opencl
@@ -106,6 +108,7 @@ set(RUNTIME_CPP
     windows_yield
     write_debug_image
     x86_cpu_features
+    zlib_decompress
     # keep-sorted end
 )
 

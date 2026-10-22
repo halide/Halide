@@ -484,6 +484,7 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
+  CompressKernels.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
@@ -686,6 +687,7 @@ HEADER_FILES = \
   CodeGen_Targets.h \
   CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
+  CompressKernels.h \
   ConciseCasts.h \
   ConstantBounds.h \
   ConstantInterval.h \
@@ -843,6 +845,7 @@ RUNTIME_CPP_COMPONENTS = \
   cache \
   can_use_target \
   cuda \
+  decompress_kernels \
   destructors \
   device_interface \
   errors \
@@ -924,6 +927,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_cuda \
   windows_d3d12compute_arm \
   windows_d3d12compute_x86 \
+  windows_decompress \
   windows_get_symbol \
   windows_io \
   windows_opencl \
@@ -934,6 +938,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_yield \
   write_debug_image \
   x86_cpu_features \
+  zlib_decompress \
 # keep-sorted end
 
 # keep-sorted start skip_lines=1

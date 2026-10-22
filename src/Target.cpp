@@ -659,6 +659,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"x86apx", Target::X86APX},
     {"simulator", Target::Simulator},
     {"no_metadata", Target::NoMetadata},
+    {"compress_kernels", Target::CompressKernels},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -1742,6 +1743,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     const std::vector<Feature> union_features = {{
         // These are true union features.
+        CompressKernels,
         CUDA,
         D3D12Compute,
         Metal,

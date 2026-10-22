@@ -107,6 +107,7 @@ tests(
     compile_to_bitcode.cpp
     compile_to_lowered_stmt.cpp
     compile_to_multitarget.cpp
+    compress_kernels.cpp
     compute_at_innermost.cpp
     compute_at_on_output.cpp
     compute_at_reordered_update_stage.cpp

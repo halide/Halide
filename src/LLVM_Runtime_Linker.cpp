@@ -120,6 +120,7 @@ DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_CPP_INITMOD(decompress_kernels)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
@@ -187,6 +188,7 @@ DECLARE_CPP_INITMOD(webgpu_dawn)
 DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(windows_decompress)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
@@ -195,6 +197,7 @@ DECLARE_CPP_INITMOD(windows_threads)
 DECLARE_CPP_INITMOD(windows_threads_tsan)
 DECLARE_CPP_INITMOD(windows_yield)
 DECLARE_CPP_INITMOD(write_debug_image)
+DECLARE_CPP_INITMOD(zlib_decompress)
 // keep-sorted end
 
 // Universal LL Initmods
@@ -1378,6 +1381,17 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
     }
 
+    // JIT-compiled code never has compressed kernels.
+    const bool decompress_kernels = module_type == ModuleAOT && t.has_feature(Target::CompressKernels);
+    if (decompress_kernels) {
+        modules.push_back(get_initmod_decompress_kernels(c, bits_64, debug));
+        if (t.os == Target::Windows) {
+            modules.push_back(get_initmod_windows_decompress(c, bits_64, debug));
+        } else {
+            modules.push_back(get_initmod_zlib_decompress(c, bits_64, debug));
+        }
+    }
+
     if (module_type == ModuleAOTNoRuntime ||
         module_type == ModuleJITInlined ||
         t.os == Target::NoOS) {
@@ -1385,6 +1399,22 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     }
 
     link_modules(modules, t);
+
+    if (decompress_kernels) {
+        // Where the object file format can carry it, make the runtime object
+        // pull in the library the decompressor uses by itself. Elsewhere, the
+        // user has to link against zlib.
+        const char *linker_option = nullptr;
+        if (t.os == Target::Windows) {
+            linker_option = "/DEFAULTLIB:cabinet.lib";
+        } else if (t.os == Target::MacOS || t.os == Target::IOS) {
+            linker_option = "-lz";
+        }
+        if (linker_option) {
+            llvm::NamedMDNode *options = modules[0]->getOrInsertNamedMetadata("llvm.linker.options");
+            options->addOperand(llvm::MDNode::get(*c, {llvm::MDString::get(*c, linker_option)}));
+        }
+    }
 
     if (t.os == Target::Windows &&
         t.bits == 32 &&
