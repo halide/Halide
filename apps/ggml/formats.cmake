@@ -104,7 +104,15 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # vectorizer packs the scalar grid-index arithmetic (shifts and masks of qh)
 # into vectors, each index then extracted lane by lane for its table load:
 # iq1_s's and iq1_m's loops twice the SIMD instructions, ~15-30% slower.
+# gpr_scales=true (vec_dot and the gemv tiles: the 6-bit sub-block scales
+# and mins decoded in GPRs, GGML's SWAR; not the gemm tiles, where they cost
+# q5_K's 20%): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
+# thread). An act of `*`: every act.
 set(GGML_SCHEDULE_PARAMS
+    "q4_K vec_dot * gpr_scales=true"
+    "q4_K mul_mat * gpr_scales=true"
+    "q5_K vec_dot * gpr_scales=true"
+    "q5_K mul_mat * gpr_scales=true"
     "q2_K vec_dot q8_K interleave=1 sublanes=true"
     "iq2_xs vec_dot q8_K interleave=1 sublanes=true"
     "q3_K vec_dot q8_K interleave=1"
@@ -196,7 +204,12 @@ foreach (row IN LISTS GGML_FORMATS)
             foreach (sp IN LISTS GGML_SCHEDULE_PARAMS)
                 separate_arguments(sp UNIX_COMMAND "${sp}")
                 list(POP_FRONT sp sp_type sp_op sp_act)
-                if (sp_type STREQUAL type AND sp_op STREQUAL op AND sp_act STREQUAL act)
+                if (
+                    sp_type STREQUAL type
+                    AND sp_op STREQUAL op
+                    AND (sp_act STREQUAL act
+                        OR sp_act STREQUAL "*")
+                )
                     list(APPEND params ${sp})
                 endif ()
             endforeach ()
