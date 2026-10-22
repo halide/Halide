@@ -175,6 +175,10 @@ struct MultiRamp {
     /** The multiramp as a nested series of ramps. */
     Expr to_expr() const;
 
+    /** Whether e is structurally equal to to_expr(), checked without
+     * constructing any IR. */
+    bool matches_expr(const Expr &e) const;
+
     /** Flatten the multiramp into a vector of 1D Ramps — one per outer
      * multi-index, each with inner_lanes = lanes[0] and stride =
      * strides[0]. Ramps are returned in this MultiRamp's lane order:
