@@ -120,6 +120,10 @@ public:
                     check("i8x16.swizzle", 16 * w, mux(u8_1 % 16, table));
                     check("i8x16.swizzle", 16 * w, mux(i32_1, table));
                     check("i8x16.swizzle", 16 * w, lut(i32(u8_1 % 16)));
+                    Func internal;
+                    internal(x) = in_i8(x);
+                    internal.compute_root();
+                    check("i8x16.swizzle", 16 * w, internal(i32(u8_1 % 16)));
                 }
 
                 // Integer addition

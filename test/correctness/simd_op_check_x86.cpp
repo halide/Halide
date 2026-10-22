@@ -83,6 +83,10 @@ public:
                 check(op, w, mux(in_i32(x), i8_table));
                 check(op, w, lut(i32(idx)));
                 check(op, w, lut(clamp(in_i32(x), 0, n - 1)) * in_u8(x + 16));
+                Func internal;
+                internal(x) = in_u8(x);
+                internal.compute_root();
+                check(op, w, internal(i32(idx)));
             }
         }
     }

@@ -16,6 +16,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Target.h"
 #include <utility>
 
 namespace Halide {
@@ -139,15 +140,14 @@ public:
 };
 
 class OptimizeSmallTableLookups : public IRMutator {
-    const std::function<int(const Type &)> &max_table_size;
+    const Target &target;
     Scope<ConstantInterval> bounds;
+    Scope<const Allocate *> allocations;
 
     using IRMutator::visit;
 
-    // The largest table of the given element type we may turn into a
-    // dynamic_shuffle. The index is narrowed to uint8, so at most 256.
     int max_entries(const Type &t) const {
-        return std::min(max_table_size(t.element_of()), 256);
+        return std::min(max_dynamic_shuffle_table_size(t.element_of(), target), 256);
     }
 
     template<typename LetOrLetStmt>
@@ -172,8 +172,36 @@ class OptimizeSmallTableLookups : public IRMutator {
         return visit_let(op);
     }
 
-    // Make a dynamic_shuffle that looks up index (already known to be in [0,
-    // table.lanes() - 1]) in table.
+    Stmt visit(const Allocate *op) override {
+        ScopedBinding<const Allocate *> bind(allocations, op->name, op);
+        return IRMutator::visit(op);
+    }
+
+    bool can_prove_index_span_safe_to_load(const Load *op, const ConstantInterval &ib) const {
+        if (!ib.is_bounded() || op->param.defined()) {
+            return false;
+        }
+        if (op->image.defined()) {
+            // Embedded buffer shapes are asserted on entry to the pipeline.
+            const halide_buffer_t *buf = op->image.raw_buffer();
+            const int64_t elem_bytes = buf->type.bytes();
+            const int64_t base = (int64_t)(buf->begin() - buf->host);
+            const int64_t end = (int64_t)(buf->end() - buf->host);
+            return elem_bytes == op->type.bytes() &&
+                   base % elem_bytes == 0 &&
+                   end % elem_bytes == 0 &&
+                   ib.min >= base / elem_bytes &&
+                   ib.max < end / elem_bytes;
+        }
+        if (const auto *alloc = allocations.find(op->name)) {
+            return (*alloc)->type == op->type.element_of() &&
+                   !(*alloc)->new_expr.defined() &&
+                   ib.min >= 0 &&
+                   ib.max < (*alloc)->constant_allocation_size();
+        }
+        return false;
+    }
+
     static Expr make_lookup(const Type &t, const Expr &table, const Expr &index) {
         int n = table.type().lanes();
         Expr idx = cast(UInt(8, index.type().lanes()), index);
@@ -184,7 +212,6 @@ class OptimizeSmallTableLookups : public IRMutator {
         if (!op->is_intrinsic(Call::mux) || !op->type.is_vector()) {
             return IRMutator::visit(op);
         }
-
         const int n = (int)op->args.size() - 1;
         const Expr &index = op->args[0];
         const Type &it = index.type();
@@ -222,8 +249,6 @@ class OptimizeSmallTableLookups : public IRMutator {
 
     Expr visit(const Load *op) override {
         if (!op->type.is_vector() ||
-            !op->image.defined() ||
-            op->param.defined() ||
             op->index.as<Ramp>() ||
             op->index.as<Broadcast>() ||
             !is_const_one(op->predicate)) {
@@ -236,26 +261,14 @@ class OptimizeSmallTableLookups : public IRMutator {
 
         Expr index = mutate(op->index);
         ConstantInterval ib = constant_integer_bounds(index, bounds);
-        if (ib.is_bounded() && ib.min < ib.max && ib.max - ib.min < max_n) {
-            // The shape of an embedded buffer is fixed at compile time (it
-            // is asserted on entry to the pipeline), so we know which
-            // flattened indices are safe to load from.
-            const halide_buffer_t *buf = op->image.raw_buffer();
-            const int64_t elem_bytes = buf->type.bytes();
-            const int64_t base = (int64_t)(buf->begin() - buf->host);
-            const int64_t end = (int64_t)(buf->end() - buf->host);
-            if (elem_bytes == op->type.bytes() &&
-                base % elem_bytes == 0 &&
-                end % elem_bytes == 0 &&
-                ib.min >= base / elem_bytes &&
-                ib.max < end / elem_bytes) {
-                int n = (int)(ib.max - ib.min + 1);
-                Expr table_base = make_const(index.type().element_of(), ib.min);
-                Expr table = op->with(Ramp::make(table_base, make_one(table_base.type()), n),
-                                      const_true(n), ModulusRemainder());
-                Expr idx = index - make_const(index.type(), ib.min);
-                return make_lookup(op->type, table, idx);
-            }
+        if (ib.is_bounded() && ib.min < ib.max && ib.max - ib.min < max_n &&
+            can_prove_index_span_safe_to_load(op, ib)) {
+            int n = (int)(ib.max - ib.min + 1);
+            Expr table_base = make_const(index.type().element_of(), ib.min);
+            Expr table = op->with(Ramp::make(table_base, make_one(table_base.type()), n),
+                                  const_true(n), ModulusRemainder());
+            Expr idx = index - make_const(index.type(), ib.min);
+            return make_lookup(op->type, table, idx);
         }
         if (index.same_as(op->index)) {
             return op;
@@ -264,8 +277,8 @@ class OptimizeSmallTableLookups : public IRMutator {
     }
 
 public:
-    OptimizeSmallTableLookups(const std::function<int(const Type &)> &max_table_size)
-        : max_table_size(max_table_size) {
+    explicit OptimizeSmallTableLookups(const Target &target)
+        : target(target) {
     }
 };
 
@@ -276,9 +289,40 @@ Stmt optimize_shuffles(Stmt s, int lut_alignment) {
     return s;
 }
 
-Stmt optimize_small_table_lookups(const Stmt &s,
-                                  const std::function<int(const Type &)> &max_table_size) {
-    return OptimizeSmallTableLookups(max_table_size)(s);
+int max_dynamic_shuffle_table_size(const Type &t, const Target &target) {
+    if (!t.is_int_or_uint() || t.bits() != 8) {
+        return 0;
+    }
+    switch (target.arch) {
+    case Target::ARM:
+        // TODO: Use SVE2 tbl/tbl2 for scalable vectors.
+        if (!target.features_any_of({Target::NoNEON, Target::SVE2, Target::SME2})) {
+            return target.bits == 64 ? 64 : 32;
+        }
+        break;
+    case Target::X86:
+        if (target.has_feature(Target::AVX512_Cannonlake)) {
+            return 64;
+        } else if (target.has_feature(Target::SSE41)) {
+            return 16;
+        }
+        break;
+    case Target::WebAssembly:
+        if (target.has_feature(Target::WasmSimd128)) {
+            return 16;
+        }
+        break;
+    default:
+        break;
+    }
+    return 0;
+}
+
+Stmt optimize_small_table_lookups(const Stmt &s, const Target &target) {
+    if (max_dynamic_shuffle_table_size(UInt(8), target) == 0) {
+        return s;
+    }
+    return OptimizeSmallTableLookups(target)(s);
 }
 
 }  // namespace Internal
