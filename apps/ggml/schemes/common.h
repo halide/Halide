@@ -521,6 +521,33 @@ struct Unblock {
     }
 };
 
+// A record's a x b elements transposed: (i + a * j, rest...) <-> (j + b * i,
+// rest...), i < a, j < b (e.g. a field's elements regrouped by their other
+// index before they are packed).
+struct Transpose {
+    int a, b;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func f("transposed");
+        Var y;
+        f(y, _) = in[0](y / b + a * (y % b), _);
+        return {f};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func f("untransposed");
+        Var x;
+        f(x, _) = e[0](x / a + b * (x % a), _);
+        return {f};
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        ApproximationPort i = in.empty() ? ApproximationPort("elements") : in[0];
+        return {{i}, {i}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
 // A record's elements in consecutive runs of the given sizes, each run its
 // own records, under its own name: (element, record, ...) <-> one output per
 // run, (element - start, record, ...) (GGML's block_tq1_0: runs of 160, 80
