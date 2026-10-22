@@ -64,4 +64,7 @@ if (NOT MSVC)
 
     # string_table.cpp
     halide_define_runtime_internal_test(string_table)
+
+    # to_string.cpp
+    halide_define_runtime_internal_test(to_string)
 endif ()

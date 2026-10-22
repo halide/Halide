@@ -1,0 +1,42 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "halidoscope"
+authors = [{ name = "Parker Ziegler", email = "pziegler@adobe.com" }]
+maintainers = [
+  { name = "The Halide team", email = "halide-dev@lists.csail.mit.edu" },
+]
+description = "An interactive GUI and CLI for working with Halide traces."
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["version"]
+keywords = ["halide", "trace", "profiling", "visualization", "gui"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Natural Language :: English",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Visualization",
+  "Topic :: Software Development :: Debuggers",
+]
+
+[project.urls]
+Homepage = "https://halide-lang.org"
+Documentation = "https://github.com/halide/Halide/blob/main/tools/halidoscope/README.md"
+Issues = "https://github.com/halide/Halide/issues"
+Repository = "https://github.com/halide/Halide.git"
+
+[tool.maturin]
+manifest-path = "src-tauri/Cargo.toml"
+bindings = "bin"
+strip = true
+# Without this, the release binary falls back to loading the frontend from
+# devUrl instead of embedding `dist/` -- see tauri/custom-protocol in
+# src-tauri's Cargo.toml dependency graph.
+features = ["tauri/custom-protocol"]
