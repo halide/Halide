@@ -95,8 +95,13 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # iteration of vec_dot and of mul_mat's gemv tiles, default 2) where measured
 # faster on Apple M3: a q8_K act's block is 292 bytes, so a second block's
 # loads fall outside ldur's immediate range and each needs its own address.
+# sublanes=true (vec_dot: the sub-blocks across the vector lanes, their
+# scales one vector multiply-add per 4 sub-blocks) where measured faster: it
+# also cuts q4_K-q6_K's loops by ~15% in instructions, not in time (latency
+# bound), and slows iq4_xs, iq2_s and iq1_m.
 set(GGML_SCHEDULE_PARAMS
-    "q2_K vec_dot q8_K interleave=1"
+    "q2_K vec_dot q8_K interleave=1 sublanes=true"
+    "iq2_xs vec_dot q8_K interleave=1 sublanes=true"
     "q3_K vec_dot q8_K interleave=1"
     "q4_K vec_dot q8_K interleave=1"
     "iq2_xxs vec_dot q8_K interleave=1"
