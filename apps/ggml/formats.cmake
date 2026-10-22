@@ -99,7 +99,11 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # sublanes=true (vec_dot: the sub-blocks across the vector lanes, their
 # scales one vector multiply-add per 4 sub-blocks) where measured faster: it
 # also cuts q4_K-q6_K's loops by ~15% in instructions, not in time (latency
-# bound), and slows iq4_xs, iq2_s and iq1_m.
+# bound), and slows iq4_xs, iq2_s and iq1_m. slp=false (not a GeneratorParam:
+# the generator runs with HL_LLVM_ARGS=-vectorize-slp=false) where LLVM's SLP
+# vectorizer packs the scalar grid-index arithmetic (shifts and masks of qh)
+# into vectors, each index then extracted lane by lane for its table load:
+# iq1_s's and iq1_m's loops twice the SIMD instructions, ~15-30% slower.
 set(GGML_SCHEDULE_PARAMS
     "q2_K vec_dot q8_K interleave=1 sublanes=true"
     "iq2_xs vec_dot q8_K interleave=1 sublanes=true"
@@ -107,13 +111,15 @@ set(GGML_SCHEDULE_PARAMS
     "q4_K vec_dot q8_K interleave=1"
     "iq2_xxs vec_dot q8_K interleave=1"
     "iq3_xxs vec_dot q8_K interleave=1"
-    "iq1_s vec_dot q8_K interleave=1"
+    "iq1_s vec_dot q8_K interleave=1 slp=false"
+    "iq1_m vec_dot q8_K slp=false"
     "iq4_xs vec_dot q8_K interleave=1"
     "iq2_xxs mul_mat q8_K interleave=1"
     "iq2_xxs mul_mat f32:q8_K interleave=1"
     "iq3_xxs mul_mat q8_K interleave=1"
     "iq3_xxs mul_mat f32:q8_K interleave=1"
-    "iq1_s mul_mat q8_K interleave=1"
+    "iq1_s mul_mat q8_K interleave=1 slp=false"
+    "iq1_m mul_mat q8_K slp=false"
     "iq1_s mul_mat f32:q8_K interleave=1"
     "iq4_xs mul_mat q8_K interleave=1"
     "iq4_xs mul_mat f32:q8_K interleave=1"
@@ -122,7 +128,8 @@ set(GGML_SCHEDULE_PARAMS
 set(GGML_HALIDE_LIBRARIES "")
 set(registry "")
 
-# Builds the checked and bench variants (`_ggml_variants`, if set: those).
+# Builds the checked and bench variants (`_ggml_variants`, if set: those),
+# the generator run with `_ggml_env` (VAR=value...), if set.
 function(_ggml_library name gen features)
     if (NOT _ggml_variants)
         set(_ggml_variants checked bench)
@@ -139,6 +146,7 @@ function(_ggml_library name gen features)
             GENERATOR ${gen}
             FEATURES ${features_${variant}}
             PARAMS ${ARGN}
+            ENVIRONMENT ${_ggml_env}
             USE_RUNTIME ggml_halide_runtime
         )
         list(APPEND GGML_HALIDE_LIBRARIES ${name}_${variant})
@@ -192,7 +200,13 @@ foreach (row IN LISTS GGML_FORMATS)
                     list(APPEND params ${sp})
                 endif ()
             endforeach ()
+            unset(_ggml_env)
+            if ("slp=false" IN_LIST params)
+                list(REMOVE_ITEM params "slp=false")
+                set(_ggml_env "HL_LLVM_ARGS=-vectorize-slp=false")
+            endif ()
             _ggml_library(${name} matmul ${features} weight=${type} act=${act} op=${op} ${params})
+            unset(_ggml_env)
             string(APPEND registry
                 "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
