@@ -15,7 +15,9 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Target.h"
 #include "Util.h"
+#include "VectorizeGPR.h"
 #include "VectorizeLoops.h"
 
 namespace Halide {
@@ -246,7 +248,7 @@ class SerializeLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->for_type == ForType::Vectorized) {
+        if (is_vectorized(op->for_type)) {
             return For::make(op->name, op->min, op->max,
                              ForType::Serial, op->partition_policy, op->device_api, mutate(op->body));
         }
@@ -364,7 +366,7 @@ public:
     }
 };
 
-Stmt vectorize_statement(const Stmt &stmt);
+Stmt vectorize_statement(const Stmt &stmt, const Target &target);
 
 struct VectorizedVar {
     string name;
@@ -776,7 +778,10 @@ protected:
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = true;
+            // Predicated loads and stores can't be done in
+            // general-purpose registers, so for GPR vectorization we
+            // scalarize instead.
+            bool vectorize_predicate = !in_gpr_loop;
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
@@ -822,7 +827,7 @@ protected:
                     // itself which we may want to handle. All the context is invalid though, so
                     // we just start anew for this specific statement.
                     Stmt scalarized = scalarize(without_likelies, false);
-                    scalarized = vectorize_statement(scalarized);
+                    scalarized = vectorize_statement(scalarized, target);
                     Stmt stmt =
                         IfThenElse::make(all_true,
                                          then_case,
@@ -891,7 +896,16 @@ protected:
             body = IfThenElse::make(likely(var <= max), body);
         }
 
-        if (op->for_type == ForType::Vectorized) {
+        if (is_vectorized(op->for_type)) {
+            const bool gpr = op->for_type == ForType::VectorizedGPR;
+            user_assert(gpr == in_gpr_loop)
+                << "Loop " << op->name << " is vectorized "
+                << (gpr ? "with VectorizeIn::GPR" : "with VectorizeIn::SIMD")
+                << ", but it is nested inside loop " << vectorized_vars.front().name
+                << ", which is vectorized "
+                << (in_gpr_loop ? "with VectorizeIn::GPR" : "with VectorizeIn::SIMD")
+                << ". Nested vectorized loops must all be vectorized in the same "
+                << "kind of register.\n";
             Expr extent = simplify((max - min) + 1);
             const IntImm *extent_int = extent.as<IntImm>();
             internal_assert(extent_int)
@@ -1451,8 +1465,14 @@ protected:
         }
     }
 
+    // Whether the outermost vectorized loop is vectorized with VectorizeIn::GPR.
+    const bool in_gpr_loop;
+
+    const Target &target;
+
 public:
-    VectorSubs(const VectorizedVar &vv) {
+    VectorSubs(const VectorizedVar &vv, bool in_gpr_loop, const Target &target)
+        : in_gpr_loop(in_gpr_loop), target(target) {
         vectorized_vars.push_back(vv);
         update_replacements();
     }
@@ -1631,9 +1651,20 @@ class VectorizeLoops : public IRMutator {
 protected:
     using IRMutator::visit;
 
+    const Target &target;
+
+    // The innermost enclosing loop that runs on a device other than the
+    // host, if any.
+    const For *device_loop = nullptr;
+
     Stmt visit(const For *for_loop) override {
         Stmt stmt;
-        if (for_loop->for_type == ForType::Vectorized) {
+        ScopedValue<const For *> old_device_loop(device_loop, device_loop);
+        if (for_loop->device_api != DeviceAPI::None &&
+            for_loop->device_api != DeviceAPI::Host) {
+            device_loop = for_loop;
+        }
+        if (is_vectorized(for_loop->for_type)) {
             Expr loop_extent = simplify(for_loop->extent());
             const IntImm *extent = loop_extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
@@ -1643,13 +1674,29 @@ protected:
                            << "constant extent > 1\n";
             }
 
+            const bool gpr = for_loop->for_type == ForType::VectorizedGPR;
+            if (gpr && device_loop) {
+                user_error << "Loop " << for_loop->name
+                           << " is vectorized with VectorizeIn::GPR, but it runs on device API "
+                           << device_loop->device_api << " (inside loop " << device_loop->name
+                           << "). VectorizeIn::GPR is only supported for code that runs on the host CPU.\n";
+            }
+
             VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
-            stmt = VectorSubs(vectorized_var)(for_loop->body);
+            stmt = VectorSubs(vectorized_var, gpr, target)(for_loop->body);
+            if (gpr) {
+                stmt = lower_gpr_vectors(stmt, for_loop->name, target);
+            }
         } else {
             stmt = IRMutator::visit(for_loop);
         }
 
         return stmt;
+    }
+
+public:
+    VectorizeLoops(const Target &target)
+        : target(target) {
     }
 };
 
@@ -1711,17 +1758,17 @@ protected:
     }
 };
 
-Stmt vectorize_statement(const Stmt &stmt) {
-    return VectorizeLoops()(stmt);
+Stmt vectorize_statement(const Stmt &stmt, const Target &target) {
+    return VectorizeLoops(target)(stmt);
 }
 
 }  // namespace
-Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
+Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env, const Target &target) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env)(stmt);
-    s = vectorize_statement(s);
+    s = vectorize_statement(s, target);
     s = RemoveUnnecessaryAtomics()(s);
     return s;
 }

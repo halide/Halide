@@ -2084,6 +2084,11 @@ Stage &Stage::vectorize(const VarOrRVar &var) {
     return *this;
 }
 
+Stage &Stage::vectorize(const VarOrRVar &var, VectorizeIn where) {
+    set_dim_type(var, where == VectorizeIn::GPR ? ForType::VectorizedGPR : ForType::Vectorized);
+    return *this;
+}
+
 Stage &Stage::unroll(const VarOrRVar &var) {
     set_dim_type(var, ForType::Unrolled);
     return *this;
@@ -2110,6 +2115,19 @@ Stage &Stage::vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy t
         Var tmp;
         split(var.var, var.var, tmp, factor, tail);
         vectorize(tmp);
+    }
+    return *this;
+}
+
+Stage &Stage::vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail) {
+    if (var.is_rvar) {
+        RVar tmp;
+        split(var.rvar, var.rvar, tmp, factor, tail);
+        vectorize(tmp, where);
+    } else {
+        Var tmp;
+        split(var.var, var.var, tmp, factor, tail);
+        vectorize(tmp, where);
     }
     return *this;
 }
@@ -3050,6 +3068,18 @@ Func &Func::parallel(const VarOrRVar &var, const Expr &factor, TailStrategy tail
 Func &Func::vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).vectorize(var, factor, tail);
+    return *this;
+}
+
+Func &Func::vectorize(const VarOrRVar &var, VectorizeIn where) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).vectorize(var, where);
+    return *this;
+}
+
+Func &Func::vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).vectorize(var, factor, where, tail);
     return *this;
 }
 
