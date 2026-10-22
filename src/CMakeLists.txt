@@ -228,6 +228,7 @@ target_sources(
     UnsafePromises.h
     Util.h
     Var.h
+    VectorizeGPR.h
     VectorizeLoops.h
     WasmExecutor.h
     # keep-sorted end
@@ -430,6 +431,7 @@ target_sources(
     UnsafePromises.cpp
     Util.cpp
     Var.cpp
+    VectorizeGPR.cpp
     VectorizeLoops.cpp
     WasmExecutor.cpp
     # keep-sorted end

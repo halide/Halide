@@ -95,6 +95,10 @@ void define_enums(py::module_ &m) {
         .value("RoundUpAndBlend", TailStrategy::RoundUpAndBlend)
         .value("Auto", TailStrategy::Auto);
 
+    py::enum_<VectorizeIn>(m, "VectorizeIn")
+        .value("SIMD", VectorizeIn::SIMD)
+        .value("GPR", VectorizeIn::GPR);
+
     // Predicate is deprecated in C++ (identical to GuardWithIf), but the
     // Python binding is kept for one release for backwards compatibility.
 #if defined(__clang__) || defined(__GNUC__)

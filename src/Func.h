@@ -418,6 +418,8 @@ public:
     Stage &unroll(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var, const Expr &task_size, TailStrategy tail = TailStrategy::Auto);
     Stage &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &vectorize(const VarOrRVar &var, VectorizeIn where);
+    Stage &vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &partition(const VarOrRVar &var, Partition partition_policy);
     Stage &never_partition_all();
@@ -1642,6 +1644,33 @@ public:
      * one. After this call, var refers to the outer dimension of the
      * split. 'factor' must be an integer. */
     Func &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+
+    /** Variants of vectorize that also choose which class of registers
+     * holds the lanes. VectorizeIn::SIMD is the same as the overloads
+     * above. VectorizeIn::GPR packs all the lanes of the vector into a
+     * single general-purpose integer register (32 or 64 bits wide,
+     * depending on the target) and implements lane-wise operations with
+     * ordinary integer instructions, masking off bits that would cross
+     * lane boundaries ("SIMD within a register"). This can be faster
+     * than SIMD vectorization for short vectors of narrow integers that
+     * are only loaded, shuffled with shifts and masks, and stored, where
+     * moving data between the general-purpose and SIMD register files
+     * would dominate. A common pattern is to split and unroll the outer
+     * dimension so that shift amounts and masks become uniform across
+     * the lanes of each word:
+     \code
+     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
+     \endcode
+     *
+     * GPR vectorization only applies to CPU targets. The vector must fit in
+     * one general-purpose register, its lanes must be integers, and every
+     * operation in the vectorized loop must be one that can be done
+     * lane-wise within an integer register (see VectorizeIn::GPR). Anything
+     * else is a compile-time error suggesting SIMD vectorization instead. */
+    // @{
+    Func &vectorize(const VarOrRVar &var, VectorizeIn where);
+    Func &vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail = TailStrategy::Auto);
+    // @}
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by
