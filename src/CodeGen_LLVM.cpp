@@ -1541,7 +1541,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
     }
     if (must_succeed) {
         debug(1) << "The following names are in scope:\n"
-                 << symbol_table;
+                 << symbol_table.names();
         internal_error << "Symbol not found: " << name;
     }
     return nullptr;

@@ -336,7 +336,7 @@ Stmt Simplify::visit(const Store *op) {
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
     if (is_const_one(op->predicate)) {
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->value.type().bytes() > alloc_info->bounds) {
                 in_unreachable = true;

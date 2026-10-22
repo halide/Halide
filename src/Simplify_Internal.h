@@ -393,6 +393,20 @@ public:
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
 
+    // Bounds and alignment of free variables, lazily copied into
+    // bounds_and_alignment_info on first lookup.
+    const Scope<Interval> *outer_bounds;
+    const Scope<ModulusRemainder> *outer_alignment;
+    const ExprInfo *find_outer_bounds_and_alignment_info(const std::string &name);
+
+    HALIDE_ALWAYS_INLINE
+    const ExprInfo *find_bounds_and_alignment_info(const std::string &name) {
+        if (const ExprInfo *info = bounds_and_alignment_info.find(name)) {
+            return info;
+        }
+        return find_outer_bounds_and_alignment_info(name);
+    }
+
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
