@@ -3787,7 +3787,7 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
 //
 // This constraint keeps the recurrence visible to the overflow proof.
 Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
-                  const FuncValueBounds &fvb) {
+                  const FuncValueBounds &fvb, bool unsafe) {
     auto retype_self_reference = [&](const Expr &expr) {
         if (const Call *c = expr.as<Call>(); c && c->call_type == Call::Halide && c->name == fname) {
             return Call::make(dst, c->args, c->value_index, /*follow_global_wrappers=*/false);
@@ -3814,6 +3814,21 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
         user_assert(e.node_type() != IRNodeType::Sub || a_is_self)
             << "change_type() only supports difference reductions of the form "
             << fname << "(...) - term.\n";
+        // Accumulating a product at a float type t (unsafe: rounding each
+        // step): when both factors are exactly representable in t, prefer
+        // fma(a, b, acc), rounding the step once rather than the product and
+        // then the sum (cf. the widening_mul preference in retype_leaf()).
+        // A safe retype's steps are exact, so there it would change nothing.
+        const Expr &term = a_is_self ? operands->second : operands->first;
+        if (const Mul *mul = term.as<Mul>();
+            unsafe && mul && e.node_type() == IRNodeType::Add && t.is_float() && !t.is_bfloat()) {
+            std::map<Expr, ConstantInterval, ExprCompare> cache;
+            Expr x = lossless_cast(t, mul->a, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+            Expr y = lossless_cast(t, mul->b, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+            if (x.defined() && y.defined()) {
+                return fma(x, y, retype_self_reference(a_is_self ? operands->first : operands->second));
+            }
+        }
         Expr a = a_is_self ? retype_self_reference(operands->first) : retype_leaf(operands->first, t, fvb);
         Expr b = b_is_self ? retype_self_reference(operands->second) : retype_leaf(operands->second, t, fvb);
         return make_binary_op(e.node_type(), a, b);
@@ -4199,7 +4214,7 @@ Func Func::change_type(Type t, bool unsafe) {
         vector<Expr> vals;
         vals.reserve(def.values().size());
         for (const Expr &v : def.values()) {
-            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds, unsafe));
         }
         typed.function().define_update(def.args(), vals);
         typed.function().update(u).schedule() = def.schedule().get_copy();
