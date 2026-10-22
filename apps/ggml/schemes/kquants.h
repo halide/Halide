@@ -257,10 +257,28 @@ inline Approximation q4_K_nibbles() {
 }
 
 // block_q4_K {f16 d, dmin; u8 scales[12]; u8 qs[128]}.
+// "8x8": GGML's repacked block_q4_Kx8 {f16 d[8], dmin[8]; u8 scales[96];
+// u8 qs[1024]} (repack.cpp make_block_q4_Kx8): 8 rows' qs interleaved in
+// 8-byte pieces, d and dmin per row, and per sub-block 12 bytes, the 8 rows'
+// scales and mins of it packed as one block_q4_K's 8 sub-blocks' are
+// (KScales over the rows): the 6-bit values interleaved as a 16-element
+// field (sub-block, then scale/min), transposed to (row, scale/min) per
+// sub-block, then packed.
 inline Approximation q4_K(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK_K, indexed}, q4_K_quant(), Parallel{{"codes", unsigned_codes(4)}},
-                   Parallel{{"codes", q4_K_nibbles()}, {"scales", KScales{}}, {"scale", fp16()}, {"min", fp16()}},
-                   layout(lay, {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qs", UInt(8), QK_K / 2}}, {"qs", "scales", "d", "dmin"})};
+    std::vector<std::string> logical = {"qs", "scales", "d", "dmin"};
+    auto head = [&](const Approximation &scales) {
+        return Compose{BlockReshape{QK_K, indexed}, q4_K_quant(), Parallel{{"codes", unsigned_codes(4)}},
+                       Parallel{{"codes", q4_K_nibbles()}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
+    };
+    if (lay == "8x8") {
+        const int rows = 8, sub = QK_K / 32;
+        Interleave il{rows, 8, {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 2 * sub}, {"qs", UInt(8), QK_K / 2}}, logical};
+        Type record = Type::Struct({{"d", Float(16), rows}, {"dmin", Float(16), rows}, {"scales", UInt(8), 12 * sub}, {"qs", UInt(8), rows * QK_K / 2}});
+        return Compose{head(Identity{}), il, Parallel{{"scales", Compose{Transpose{sub, 2 * rows}, BlockReshape{2 * rows}, KScales{}, Unblock{12}}}},
+                       StructLayout{record, logical}};
+    }
+    if (lay != "aos" && lay != "soa") throw std::invalid_argument("q4_K: no " + lay + " layout (GGML's repacked one is 8x8)");
+    return Compose{head(KScales{}), layout(lay, {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qs", UInt(8), QK_K / 2}}, logical)};
 }
 
 // block_q5_K {f16 d, dmin; u8 scales[12]; u8 qh[32]; u8 qs[128]}: q4_K's,
