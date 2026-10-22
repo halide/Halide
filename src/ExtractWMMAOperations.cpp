@@ -4,6 +4,7 @@
 #include "FindIntrinsics.h"
 #include "IREquality.h"
 #include "IRMutator.h"
+#include "IRPrinter.h"
 #include "IROperator.h"
 #include "MultiRamp.h"
 #include "Simplify.h"
@@ -471,8 +472,10 @@ class ExtractWMMAOperations : public IRMutator {
     // rewrite everything, which needs to know both.
     int pass = 0;
 
-    // The loops over GPU blocks, threads, and lanes we're inside of.
+    // The loops over GPU blocks, threads, and lanes we're inside of, and the
+    // device API of the innermost one.
     vector<string> gpu_loop_vars;
+    DeviceAPI device_api = DeviceAPI::Host;
 
     Fragment *find_fragment(const string &name) {
         for (const string &n : in_scope) {
@@ -649,20 +652,28 @@ class ExtractWMMAOperations : public IRMutator {
             return IRMutator::visit(op);
         }
         gpu_loop_vars.push_back(op->name);
+        ScopedValue<DeviceAPI> old(device_api, op->device_api);
         Stmt s = IRMutator::visit(op);
         gpu_loop_vars.pop_back();
         return s;
     }
 
     Stmt visit(const Allocate *op) override {
-        if (op->memory_type != MemoryType::Tile) {
+        if (op->memory_type != MemoryType::Tile || gpu_loop_vars.empty()) {
+            // Tile memory outside of GPU code belongs to the CPU's matrix unit.
             return IRMutator::visit(op);
         }
 
+        user_assert(device_api == DeviceAPI::CUDA)
+            << op->name << " is stored in Tile memory inside GPU code for "
+            << device_api << ", but tensor core tiles are only supported on CUDA.\n";
+
         user_assert(op->type == Float(32) || op->type == Float(16) ||
-                    op->type == Int(32))
-            << "Tensor core fragments must hold 32-bit or 16-bit floats, or "
-            << "32-bit integers, but " << op->name << " holds " << op->type << ".\n";
+                    op->type == BFloat(16) || op->type == Int(32) ||
+                    op->type == Int(8) || op->type == UInt(8))
+            << "Tensor core fragments must hold 32-bit or 16-bit floats, 16-bit brain "
+            << "floats, 32-bit integers, or 8-bit integers, but " << op->name
+            << " holds " << op->type << ".\n";
 
         Fragment &f = fragments[op->name];
         if (pass == 0) {

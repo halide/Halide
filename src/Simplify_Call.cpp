@@ -772,6 +772,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 if (auto f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_bool(fn(*f));
+                } else if (Expr e = lift_broadcast_out({arg}); e.defined()) {
+                    return e;
                 } else if (arg.same_as(op->args[0])) {
                     return op;
                 } else {
@@ -881,6 +883,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 if (f0 && f1) {
                     auto fn = it->second;
                     return make_const(arg0.type(), fn(*f0, *f1), info);
+                } else if (Expr e = lift_broadcast_out({arg0, arg1}); e.defined()) {
+                    return e;
                 } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
                     return Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
                 } else {

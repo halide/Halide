@@ -332,11 +332,12 @@ bool test_block_level_accumulator() {
 // Stage the operand tiles into fragment registers, so that each fragment
 // loaded feeds several multiplies. Where each staging happens says how much
 // reuse we get out of it.
-bool test_staged_operands() {
+bool test_staged_operands(Type operand, int tile_m, int tile_n) {
     const int M = 128, N = 128, K = 64;
-    const int tile = 16, tiles_x = 2, tiles_y = 2, bk = 32;
+    const int tile_k = 16, tiles_x = 2, tiles_y = 2, bk = 32;
+    const Type acc = operand.is_float() ? Float(32) : Int(32);
 
-    Buffer<float16_t> A(K, M), B(N, K);
+    Buffer<> A(operand, K, M), B(operand, N, K);
     fill(A);
     fill(B);
 
@@ -346,8 +347,8 @@ bool test_staged_operands() {
 
     Am(kk, yy) = A(kk, yy);
     Bm(xx, kk) = B(xx, kk);
-    prod(x, y) = 0.f;
-    prod(x, y) += cast<float>(Am(k, y)) * cast<float>(Bm(x, k));
+    prod(x, y) = cast(acc, 0);
+    prod(x, y) += cast(acc, Am(k, y)) * cast(acc, Bm(x, k));
     out(x, y) = prod(x, y);
 
     Var xi("xi"), yi("yi"), mmxi("mmxi"), mmyi("mmyi"), rxi("rxi"), ryi("ryi");
@@ -356,8 +357,8 @@ bool test_staged_operands() {
 
     out.bound(x, 0, N)
         .bound(y, 0, M)
-        .tile(x, y, xi, yi, tile * tiles_x, tile * tiles_y)
-        .tile(xi, yi, mmxi, mmyi, tile, tile)
+        .tile(x, y, xi, yi, tile_n * tiles_x, tile_m * tiles_y)
+        .tile(xi, yi, mmxi, mmyi, tile_n, tile_m)
         .gpu_blocks(x, y)
         .reorder(mmxi, mmyi, xi, yi, x, y)
         .unroll(xi)
@@ -367,7 +368,7 @@ bool test_staged_operands() {
 
     prod.compute_at(out, x)
         .store_in(MemoryType::Tile)
-        .tile(x, y, rxi, ryi, tile, tile)
+        .tile(x, y, rxi, ryi, tile_n, tile_m)
         .vectorize(rxi)
         .vectorize(ryi)
         .unroll(x)
@@ -376,8 +377,8 @@ bool test_staged_operands() {
     // Loop nest of the update, outermost first: ko, ki, y, x.
     prod.update()
         .split(k, ko, ki, bk)
-        .tile(x, y, rxi, ryi, tile, tile)
-        .split(ki, ki, rri, tile)
+        .tile(x, y, rxi, ryi, tile_n, tile_m)
+        .split(ki, ki, rri, tile_k)
         .reorder(rri, rxi, ryi, x, y, ki, ko)
         .unroll(x)
         .unroll(y)
@@ -390,8 +391,8 @@ bool test_staged_operands() {
     // One a fragment per row of tiles, live across the loop over columns.
     Am.compute_at(prod, y)
         .store_in(MemoryType::Tile)
-        .split(kk, kko, kki, tile)
-        .split(yy, yyo, yyi, tile)
+        .split(kk, kko, kki, tile_k)
+        .split(yy, yyo, yyi, tile_m)
         .reorder(kki, yyi, kko, yyo)
         .unroll(kko)
         .unroll(yyo)
@@ -401,28 +402,30 @@ bool test_staged_operands() {
     // All the b fragments at once, live across the loops over both.
     Bm.compute_at(prod, ki)
         .store_in(MemoryType::Tile)
-        .split(xx, xxo, xxi, tile)
-        .split(kk, kko, kki, tile)
+        .split(xx, xxo, xxi, tile_n)
+        .split(kk, kko, kki, tile_k)
         .reorder(xxi, kki, xxo, kko)
         .unroll(xxo)
         .unroll(kko)
         .vectorize(xxi)
         .vectorize(kki);
 
-    Buffer<float> result(N, M);
+    Buffer<> result(acc, N, M);
     out.realize(result);
     result.copy_to_host();
 
     for (int j = 0; j < M; j++) {
         for (int i = 0; i < N; i++) {
-            float ref = 0.f;
+            double ref = 0;
             for (int l = 0; l < K; l++) {
-                ref += (float)A(l, j) * (float)B(i, l);
+                ref += read(A, l, j) * read(B, i, l);
             }
-            if (std::abs(result(i, j) - ref) > 1e-2f * std::max(1.f, std::abs(ref))) {
+            if (read(result, i, j) != ref) {
                 std::cerr << "Mismatch at " << i << ", " << j << ": "
-                          << result(i, j) << " != " << ref << "\n"
-                          << "For operands staged in fragment registers\n";
+                          << read(result, i, j) << " != " << ref << "\n"
+                          << "For " << operand << " operands staged in "
+                          << tile_m << "x" << tile_n << "x" << tile_k
+                          << " fragment registers\n";
                 return false;
             }
         }
@@ -606,7 +609,11 @@ int main(int argc, char **argv) {
     }
 
     if (!test_block_level_accumulator() ||
-        !test_staged_operands() ||
+        !test_staged_operands(Float(16), 16, 16) ||
+        // Fragments of packed bytes, including one that is a single register.
+        !test_staged_operands(UInt(8), 16, 16) ||
+        !test_staged_operands(Int(8), 8, 32) ||
+        !test_staged_operands(BFloat(16), 32, 8) ||
         !test_operand_hoisted_out_of_loop()) {
         printf("Failed!\n");
         return 1;

@@ -2135,6 +2135,26 @@ void check_math() {
     check(Halide::ceil(ceil(x)), ceil(x));
 
     check(strict_float(strict_float(x)), strict_float(x));
+
+    // Pure calls of broadcasts are broadcasts of the call.
+    Expr fx = Variable::make(Float(32), "fx"), fy = Variable::make(Float(32), "fy");
+    auto call = [](const char *name, const std::vector<Expr> &args) {
+        return Call::make(args[0].type(), name, args, Call::PureExtern);
+    };
+    Expr bx = broadcast(fx, 4), by = broadcast(fy, 4);
+    check(call("floor_f32", {bx}), broadcast(Halide::floor(fx), 4));
+    check(call("sqrt_f32", {bx}), broadcast(Halide::sqrt(fx), 4));
+    check(call("pow_f32", {bx, by}), broadcast(call("pow_f32", {fx, fy}), 4));
+    check(Call::make(Bool(4), "is_nan_f32", {bx}, Call::PureExtern),
+          broadcast(Halide::is_nan(fx), 4));
+    check(call("fast_inverse_f32", {bx}), broadcast(call("fast_inverse_f32", {fx}), 4));
+    check(call("floor_f32", {call("sqrt_f32", {bx}) + 1.0f}),
+          broadcast(Halide::floor(Halide::sqrt(fx) + 1.0f), 4));
+    // But not if any argument varies across lanes, or the call isn't pure.
+    Expr fr = Cast::make(Float(32, 4), Ramp::make(Expr(x), 1, 4));
+    check(call("pow_f32", {bx, fr}), call("pow_f32", {bx, fr}));
+    Expr impure = Call::make(Float(32, 4), "impure", {bx}, Call::Extern);
+    check(impure, impure);
 }
 
 void check_overflow() {

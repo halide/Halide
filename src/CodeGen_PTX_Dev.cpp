@@ -1,5 +1,4 @@
 #include "CodeGen_PTX_Dev.h"
-
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
@@ -161,6 +160,7 @@ protected:
     llvm::Value *codegen_wmma_raw(const Call *op);
     void codegen_wmma_store(const Store *op);
     void split_fragment(const Expr &e, std::vector<llvm::Value *> &args);
+    void vector_to_fragment_regs(llvm::Value *v, Type t, std::vector<llvm::Value *> &regs);
     // @}
 
     /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
@@ -462,14 +462,55 @@ WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int r
     return result;
 }
 
-}  // namespace
-
 // The nvvm intrinsics take and return a fragment as 32-bit registers. Halide
 // represents half precision as llvm's half, which is what the intrinsics for
 // it take directly, but bfloat and the eight-bit integers have no llvm vector
 // type in the signature - those intrinsics take the lanes packed into an i32.
 bool wmma_reg_is_packed_i32(Type t) {
     return t.bits() < 32 && t.element_of() != Float(16);
+}
+
+// A fragment that is a single register comes back from an intrinsic as that
+// register rather than as a struct holding one of them.
+llvm::Value *wmma_result_reg(llvm::IRBuilderBase *builder, llvm::Value *result, int i) {
+    return result->getType()->isStructTy() ? builder->CreateExtractValue(result, i) : result;
+}
+
+// The element type the wmma intrinsic names use for a Halide type. The
+// hardware takes 16-bit floats or 8-bit integers as multiplicands, and
+// accumulates the first into 16 or 32-bit floats and the second into 32-bit
+// integers.
+std::string wmma_type_suffix(Type t) {
+    if (t == Float(16)) {
+        return "f16";
+    } else if (t == BFloat(16)) {
+        return "bf16";
+    } else if (t == Float(32)) {
+        return "f32";
+    } else if (t == Int(8)) {
+        return "s8";
+    } else if (t == UInt(8)) {
+        return "u8";
+    } else if (t == Int(32)) {
+        return "s32";
+    }
+    user_error << "There is no tensor core instruction for " << t << ".\n";
+    return "";
+}
+
+}  // namespace
+
+void CodeGen_PTX_Dev::vector_to_fragment_regs(Value *v, Type t, vector<Value *> &regs) {
+    const int lanes_per_reg = 32 / t.bits();
+    for (int i = 0; i < t.lanes() / lanes_per_reg; i++) {
+        Value *reg = lanes_per_reg == 1 ?
+                         builder->CreateExtractElement(v, i) :
+                         slice_vector(v, i * lanes_per_reg, lanes_per_reg);
+        if (wmma_reg_is_packed_i32(t)) {
+            reg = builder->CreateBitCast(reg, i32_t);
+        }
+        regs.push_back(reg);
+    }
 }
 
 void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
@@ -485,17 +526,7 @@ void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
             return;
         }
     }
-    Value *v = codegen(e);
-    const int lanes_per_reg = 32 / e.type().bits();
-    for (int i = 0; i < e.type().lanes() / lanes_per_reg; i++) {
-        Value *reg = lanes_per_reg == 1 ?
-                         builder->CreateExtractElement(v, i) :
-                         slice_vector(v, i * lanes_per_reg, lanes_per_reg);
-        if (wmma_reg_is_packed_i32(e.type())) {
-            reg = builder->CreateBitCast(reg, i32_t);
-        }
-        args.push_back(reg);
-    }
+    vector_to_fragment_regs(codegen(e), e.type(), args);
 }
 
 Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
@@ -514,12 +545,8 @@ void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
     // Reassemble the returned struct into a Halide vector.
     llvm::Type *result_type = llvm_type_of(op->type);
     const int num_regs = op->type.bits() * op->type.lanes() / 32;
-    // A fragment that is a single register comes back as that register rather
-    // than as a struct holding one of them.
     auto get_reg = [&](int i) {
-        return result->getType()->isStructTy() ?
-                   builder->CreateExtractValue(result, i) :
-                   result;
+        return wmma_result_reg(builder.get(), result, i);
     };
     if (op->type.bits() == 32) {
         value = UndefValue::get(result_type);
@@ -550,8 +577,13 @@ bool CodeGen_PTX_Dev::is_fragment_alloc(const std::string &name) {
 }
 
 llvm::Type *CodeGen_PTX_Dev::fragment_reg_type(Type t) {
-    return t.bits() == 32 ? llvm_type_of(t.element_of()) :
-                            get_vector_type(llvm_type_of(t.element_of()), 32 / t.bits());
+    if (t.bits() == 32) {
+        return llvm_type_of(t.element_of());
+    } else if (wmma_reg_is_packed_i32(t)) {
+        return i32_t;
+    } else {
+        return get_vector_type(llvm_type_of(t.element_of()), 32 / t.bits());
+    }
 }
 
 llvm::Value *CodeGen_PTX_Dev::fragment_reg_ptr(const std::string &name, Type t, int i) {
@@ -569,7 +601,7 @@ void CodeGen_PTX_Dev::codegen_fragment_store(const Store *op) {
         // returns, without ever making a vector of them.
         Value *result = codegen_wmma_raw(call);
         for (int i = 0; i < num_regs; i++) {
-            builder->CreateAlignedStore(builder->CreateExtractValue(result, i),
+            builder->CreateAlignedStore(wmma_result_reg(builder.get(), result, i),
                                         fragment_reg_ptr(op->name, t, i), llvm::Align(4));
         }
         return;
@@ -578,37 +610,13 @@ void CodeGen_PTX_Dev::codegen_fragment_store(const Store *op) {
     // Anything else (a zero-initialization, say) does become a vector, but it
     // is still written a register at a time so that the allocation only ever
     // sees register-sized accesses.
-    Value *v = codegen(op->value);
-    const int lanes_per_reg = 32 / t.bits();
+    vector<Value *> regs;
+    vector_to_fragment_regs(codegen(op->value), t, regs);
+    internal_assert((int)regs.size() == num_regs);
     for (int i = 0; i < num_regs; i++) {
-        Value *reg = lanes_per_reg == 1 ?
-                         builder->CreateExtractElement(v, i) :
-                         slice_vector(v, i * lanes_per_reg, lanes_per_reg);
-        internal_assert(reg->getType() == reg_type);
-        builder->CreateAlignedStore(reg, fragment_reg_ptr(op->name, t, i), llvm::Align(4));
+        internal_assert(regs[i]->getType() == reg_type);
+        builder->CreateAlignedStore(regs[i], fragment_reg_ptr(op->name, t, i), llvm::Align(4));
     }
-}
-
-// The element type the wmma intrinsic names use for a Halide type. The
-// hardware takes 16-bit floats or 8-bit integers as multiplicands, and
-// accumulates the first into 16 or 32-bit floats and the second into 32-bit
-// integers.
-std::string wmma_type_suffix(Type t) {
-    if (t == Float(16)) {
-        return "f16";
-    } else if (t == BFloat(16)) {
-        return "bf16";
-    } else if (t == Float(32)) {
-        return "f32";
-    } else if (t == Int(8)) {
-        return "s8";
-    } else if (t == UInt(8)) {
-        return "u8";
-    } else if (t == Int(32)) {
-        return "s32";
-    }
-    user_error << "There is no tensor core instruction for " << t << ".\n";
-    return "";
 }
 
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {

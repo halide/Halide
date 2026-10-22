@@ -165,6 +165,9 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
         // Just compile it to see if anything crashes
         result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s",
                                    {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids-no_asserts-no_runtime-no_bounds_query"});
+        // Tile memory on the host is still AMX when the target also has a GPU.
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul_cuda.s",
+                                   {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids-cuda-no_asserts-no_runtime-no_bounds_query"});
         return true;
     }
 
@@ -276,6 +279,7 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
     } else {
         // Just compile it to see if anything crashes
         result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul_cuda.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids-cuda"});
         return true;
     }
 

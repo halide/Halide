@@ -3,6 +3,7 @@
 
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
+#include "DeviceInterface.h"
 #include "IR.h"
 #include "IRMutator.h"
 #include "Substitute.h"
@@ -44,6 +45,10 @@ class CountGPUBlocksThreads : public IRVisitor {
     // same dimension, not a new one.
     bool in_lanes = false;
 
+    // The device API of the GPU loops being counted. Only CUDA turns a tile
+    // allocation into a loop over lanes.
+    DeviceAPI device_api;
+
     void visit(const For *op) override {
         // Figure out how much to increment each counter by based on the loop
         // type.
@@ -82,7 +87,8 @@ class CountGPUBlocksThreads : public IRVisitor {
         // extract_wmma_operations will wrap the statements that touch this
         // allocation in loops over the lanes of a warp, so count it as a lane
         // dimension.
-        const bool wmma = op->memory_type == MemoryType::Tile;
+        const bool wmma = op->memory_type == MemoryType::Tile &&
+                          device_api == DeviceAPI::CUDA;
         int dl = wmma && !in_lanes;
         ScopedValue<bool> old_in_lanes(in_lanes, in_lanes || wmma);
         nl += dl;
@@ -95,6 +101,10 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
+    CountGPUBlocksThreads(DeviceAPI device_api)
+        : device_api(device_api) {
+    }
+
     // The maximum values hit by the counters above, which tells us the nesting
     // depth of each type of loop within a Stmt.
     int nblocks = 0;
@@ -115,12 +125,22 @@ class CanonicalizeGPUVars : public IRMutator {
     // thread loops in here are one dimension further out than they look.
     bool in_wmma_alloc = false;
 
+    // The device API of the innermost enclosing GPU loop, if any, and the one
+    // a GPU loop with the default API will get.
+    DeviceAPI device_api = DeviceAPI::None;
+    DeviceAPI default_api;
+
+    DeviceAPI api_of(const For *op) const {
+        return op->device_api == DeviceAPI::Default_GPU ? default_api : op->device_api;
+    }
+
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         ScopedValue<bool> old(in_wmma_alloc,
                               in_wmma_alloc ||
-                                  op->memory_type == MemoryType::Tile);
+                                  (op->memory_type == MemoryType::Tile &&
+                                   device_api == DeviceAPI::CUDA));
         return IRMutator::visit(op);
     }
 
@@ -138,13 +158,18 @@ class CanonicalizeGPUVars : public IRMutator {
         std::string name = op->name;
         Expr min = mutate(op->min);
         Expr max = mutate(op->max);
-        Stmt body = mutate(op->body);
+        Stmt body;
+        {
+            ScopedValue<DeviceAPI> old(device_api,
+                                       is_gpu(op->for_type) ? api_of(op) : device_api);
+            body = mutate(op->body);
+        }
 
         if ((op->for_type == ForType::GPUBlock) ||
             (op->for_type == ForType::GPUThread) ||
             (op->for_type == ForType::GPULane)) {
 
-            CountGPUBlocksThreads counter;
+            CountGPUBlocksThreads counter(api_of(op));
             op->body.accept(&counter);
 
             if (op->for_type == ForType::GPUBlock) {
@@ -196,6 +221,11 @@ class CanonicalizeGPUVars : public IRMutator {
         } else {
             return IfThenElse::make(condition, then_case, else_case);
         }
+    }
+
+public:
+    CanonicalizeGPUVars(DeviceAPI default_api)
+        : default_api(default_api) {
     }
 };
 
@@ -408,9 +438,9 @@ class ValidateGPUSchedule : public IRVisitor {
 
 }  // anonymous namespace
 
-Stmt canonicalize_gpu_vars(Stmt s) {
+Stmt canonicalize_gpu_vars(Stmt s, const Target &t) {
     ValidateGPUSchedule()(s);
-    s = CanonicalizeGPUVars()(s);
+    s = CanonicalizeGPUVars(get_default_device_api_for_target(t))(s);
     return s;
 }
 
