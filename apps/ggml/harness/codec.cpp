@@ -423,7 +423,9 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     continue;
                 }
                 std::string name = fs.rows > 1 ? ggml_repack_live(t, aos.data(), live, R, K) : "";
-                if (check && name == fs.type + "_" + std::to_string(fs.rows) + "x" + std::to_string(fs.chunk)) {
+                // (GGML names q1_0's interleave in bits: its q1_0_4x8 is our q1_0.4x1)
+                int gchunk = t == GGML_TYPE_Q1_0 ? 8 * fs.chunk : fs.chunk;
+                if (check && name == fs.type + "_" + std::to_string(fs.rows) + "x" + std::to_string(gchunk)) {
                     // The transcription against GGML itself, where it picks this layout.
                     results.push_back({row.type, "repack", "ggml-repack", name, K, first_diff(ref.data(), live.data(), bytes, bytes / records), false, {}, R});
                 }
