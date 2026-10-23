@@ -1216,9 +1216,15 @@ struct Shuffle : public ExprNode<Shuffle> {
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
 
-    /** Convenience constructor for making a shuffle representing a
-     * broadcast of a vector. */
+    /** Convenience constructor for making a shuffle that repeats an entire
+     * vector the given number of times. For example, with a factor of 3, ABCD
+     * becomes ABCDABCDABCD. */
     static Expr make_broadcast(Expr vector, int factor);
+
+    /** Convenience constructor for making a shuffle that repeats each lane of
+     * a vector the given number of times. For example, with a factor of 3,
+     * ABCD becomes AAABBBCCCDDD. */
+    static Expr make_repeat_each_lane(Expr vector, int factor);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
@@ -1239,12 +1245,17 @@ struct Shuffle : public ExprNode<Shuffle> {
     bool is_transpose() const;
     int transpose_factor() const;
 
-    /** Check if this shuffle can be represented as a repeating pattern that
-     * repeats the same shuffle of the single input vector some number of times.
-     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
-     */
+    /** Check if this shuffle repeats an entire single vector of at least two
+     * lanes some number of times (at least two). For example: 0, 1, 2, 0, 1,
+     * 2, 0, 1, 2. The factor is the number of repeats. */
     bool is_broadcast() const;
     int broadcast_factor() const;
+
+    /** Check if this shuffle repeats each lane of a single vector of at least
+     * two lanes some number of times (at least two). For example: 0, 0, 0, 1,
+     * 1, 1, 2, 2, 2. The factor is the number of repeats. */
+    bool is_repeat_each_lane() const;
+    int repeat_each_lane_factor() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */

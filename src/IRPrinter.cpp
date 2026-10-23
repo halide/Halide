@@ -1467,7 +1467,14 @@ void IRPrinter::visit(const Shuffle *op) {
         openf("transpose_vector");
         print_list(op->vectors);
         stream << paren(", ") << imm_int(op->transpose_factor());
-
+    } else if (op->is_repeat_each_lane()) {
+        openf("repeat_each_lane");
+        print_list(op->vectors);
+        stream << paren(", ") << imm_int(op->repeat_each_lane_factor());
+    } else if (op->is_broadcast()) {
+        openf("broadcast");
+        print_list(op->vectors);
+        stream << paren(", ") << imm_int(op->broadcast_factor());
     } else {
         openf("shuffle");
         print_list(op->vectors);

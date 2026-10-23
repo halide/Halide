@@ -379,8 +379,7 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
         if (const Shuffle *shuff = x.as<Shuffle>()) {
             int factor = x.type().lanes() / ty.lanes();
             if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
-                                                                   shuff->indices.begin() + ty.lanes()));
+                x = Shuffle::make_broadcast(shuff->vectors[0], shuff->broadcast_factor() / factor);
             }
         }
     }
@@ -1271,16 +1270,16 @@ class VectorReducePatterns : public IRMutator {
 
             if (sig.flags & Signature::ScalarB) {
                 if (const Shuffle *shuff = b.as<Shuffle>()) {
-                    if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                        internal_assert(shuff->vectors.size() == 1);
-                        b = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
+                    if (shuff->is_broadcast() && factor % shuff->vectors[0].type().lanes() == 0) {
+                        const Expr &v = shuff->vectors[0];
+                        b = Shuffle::make_broadcast(v, factor / v.type().lanes());
                     }
                 } else if (const Shuffle *shuff = a.as<Shuffle>()) {
                     // If the types are equal, we can commute the ops.
                     if (a.type().element_of() == b.type().element_of() &&
-                        shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                        internal_assert(shuff->vectors.size() == 1);
-                        a = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
+                        shuff->is_broadcast() && factor % shuff->vectors[0].type().lanes() == 0) {
+                        const Expr &v = shuff->vectors[0];
+                        a = Shuffle::make_broadcast(v, factor / v.type().lanes());
                         std::swap(a, b);
                     }
                 }
