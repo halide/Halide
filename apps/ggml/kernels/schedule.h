@@ -547,6 +547,23 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     return integer ? codes.change_type(Int(32)) : codes;
 }
 
+// f's update with each cast of a widening_mul to a wider integer type the
+// product of the operands' casts (the same value: hoist_invariants then
+// splits it).
+inline void distribute_widening(Func f) {
+    using namespace Internal;
+    for (Expr &v : f.function().update(0).values()) {
+        v = mutate_with(v, [](auto *self, const Cast *op) -> Expr {
+            Expr x = self->mutate(op->value);
+            const auto *c = x.as<Call>();
+            if (c && c->is_intrinsic(Call::widening_mul) && op->type.is_int() && op->type.bits() > x.type().bits()) {
+                return Cast::make(op->type, c->args[0]) * Cast::make(op->type, c->args[1]);
+            }
+            return Cast::make(op->type, x);
+        });
+    }
+}
+
 // The definition s (a stage of f: an update, or a specialization of one) is.
 inline Internal::Definition stage_definition(Func f, const Stage &s) {
     Internal::Function fn = f.function();
@@ -588,6 +605,7 @@ inline Internal::Definition stage_definition(Func f, const Stage &s) {
 struct Sums {
     Func sums, blk, sum, part, pair;
     bool sub_sums = false;  // d.sum sums the act's sub-block sums (no part)
+    bool offsets = false;   // a constant code offset's (split_offsets())
 };
 inline bool derived_sums(Func out, int st, Func dot, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true) {
     d = Sums();
@@ -605,6 +623,7 @@ inline bool derived_sums(Func out, int st, Func dot, Stage &s, const RDom &r, co
         offsets = split_offsets(probe(s.value()), rs).defined();
     }
     if (!offsets && !affine(rs)) return false;
+    d.offsets = offsets;
     s.eager_inline(dec);
     if (offsets) stage_definition(dot, s).values()[0] = split_offsets(s.value(), rs);
     FuncVec parts = s.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
@@ -627,6 +646,9 @@ inline bool derived_sums(Func out, int st, Func dot, Stage &s, const RDom &r, co
         std::copy_if(dec.begin(), dec.end(), std::back_inserter(above), [&](const Func &f) { return !read.count(f.name()); });
         d.sum.update().eager_inline(above);
         d.sum = d.sum.change_type(Int(32));
+        // (an int8 weight factor, q6_K's scales: their product with the
+        // act's codes a widening_mul, which hoist_invariants can't split)
+        distribute_widening(d.sum);
         RVar rxt("rxt"), rxj("rxj"), rxh("rxh"), rxa("rxa");
         bool pairs = sub > act_sub;
         Stage ds = d.sum.update();
@@ -721,8 +743,18 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(rxt).unroll(u).unroll(n).unroll(m);
         if (d.sub_sums) return;
-        Var t = d.part.args().back();
-        regs(d.part.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
+        Var t = d.part.args().back(), to("to"), ti("ti");
+        d.part.compute_at(blocks).reorder_storage(t, u, n, m);
+        if (d.offsets) {
+            // an offset's factor (q6_K's int8 scales) times the act's int16
+            // sums, 8 lanes a step: sshll then smull / smull2 (not 16, whose
+            // high half's sign extend LLVM shuffles)
+            d.part.split(t, to, ti, 8);
+            d.part.update().split(t, to, ti, 8);
+            regs(d.part, {ti}, {to, u, n, m});
+        } else {
+            regs(d.part, {t}, {u, n, m});
+        }
         if (d.pair.defined()) {
             // the act's sums per weight sub-block (pairwise adds of its
             // port's), vectorized across them as d.part
@@ -1690,15 +1722,16 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // sdot), in tasks of up to 32 x 32 outputs (whole records: up to 128 rows),
 // fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
-// block (single rows for N = 1, or for weights decoded through tables), with
-// its `interleave`, `sublanes` and `gpr_scales` (per-format parameters). Edge
+// block (single rows for N = 1, for weights decoded through tables, or
+// without `row_pairs`), with its `interleave`, `sublanes` and `gpr_scales`
+// (per-format parameters). Edge
 // tiles shift inwards: any N, M at least the tile's. With act records of
 // r = fmt.act_rows > 1 rows, out's first update is the rows in whole records
 // (dots[1]) on gemm tiles starting on a record, its second the others
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
+                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
@@ -1833,7 +1866,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
     // A staged table's decode, per row pair, outweighs sharing the act's loads
-    if (staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
+    // (`row_pairs`: a per-format parameter)
+    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
 }
 
