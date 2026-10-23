@@ -2,8 +2,9 @@
 // Interleave layout (schemes/layouts.h):
 // - ggml_repack: a test-only transcription of make_block_q4_0x4,
 //   make_block_q4_0x8, make_block_q8_0x4, make_block_q4_Kx8,
-//   repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl and
-//   repack_q4_K_to_q4_K_8_bl from GGML v0.26's
+//   make_block_iq4_nlx4, repack_q4_0_to_q4_0_{4,8}_bl,
+//   repack_q8_0_to_q8_0_4_bl, repack_q4_K_to_q4_K_8_bl and
+//   repack_iq4_nl_to_iq4_nl_4_bl from GGML v0.26's
 //   src/ggml-cpu/repack.cpp (MIT License, Copyright (c) 2023-2024 The ggml
 //   authors), for every layout, including those GGML does not pick on this
 //   CPU;
@@ -128,6 +129,36 @@ block_q4_0xN<8> make_block_q4_0x8(block_q4_0 *in, unsigned int blck_size_interle
         memcpy(&elems, &in[src_id].qs[src_offset], sizeof(uint64_t));
         elems ^= xor_mask;
         memcpy(&out.qs[dst_offset], &elems, sizeof(uint64_t));
+    }
+    return out;
+}
+
+// block_iq4_nl {f16 d; u8 qs[16]}: one scale field (S) and q4_0's nibbles,
+// which make_block_iq4_nlx4 interleaves in 4-byte pieces as they are (no
+// xor).
+template<typename S>
+struct block_sq4 {
+    S d;
+    uint8_t qs[QK4_0 / 2];
+};
+template<typename S>
+struct block_sq4x4 {
+    S d[4];
+    uint8_t qs[QK4_0 * 2];
+};
+
+template<typename S>
+block_sq4x4<S> make_block_sq4x4(block_sq4<S> *in, unsigned int blck_size_interleave) {
+    block_sq4x4<S> out;
+    for (int i = 0; i < 4; i++) {
+        out.d[i] = in[i].d;
+    }
+    const int end = QK4_0 * 2 / blck_size_interleave;
+    for (int i = 0; i < end; ++i) {
+        int src_id = i % 4;
+        int src_offset = (i / 4) * blck_size_interleave;
+        int dst_offset = i * blck_size_interleave;
+        memcpy(&out.qs[dst_offset], &in[src_id].qs[src_offset], sizeof(uint32_t));
     }
     return out;
 }
@@ -263,7 +294,7 @@ void ggml_quantize_mat_q8_K_4x8_generic(const float *x, void *vy, int64_t k) {
 }
 
 // repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl,
-// repack_q4_K_to_q4_K_8_bl
+// repack_q4_K_to_q4_K_8_bl, repack_iq4_nl_to_iq4_nl_4_bl
 template<int R, typename B, typename F>
 void repack_rows(const B *src, uint8_t *out, int64_t nrow, int64_t nblocks, F make) {
     auto *dst = (decltype(make(nullptr)) *)out;
@@ -293,6 +324,10 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
     }
     if (t == GGML_TYPE_Q4_K && f.codes.empty() && f.rows == 8 && c == 8 && N % 8 == 0 && K % QK_K == 0) {
         repack_rows<8>((const block_q4_K *)src, dst, N, K / QK_K, [c](block_q4_K *in) { return make_block_q4_Kx8(in, c); });
+        return true;
+    }
+    if (t == GGML_TYPE_IQ4_NL && f.codes.empty() && f.rows == 4 && c == 4 && N % 4 == 0 && K % QK4_0 == 0) {
+        repack_rows<4>((const block_sq4<uint16_t> *)src, dst, N, K / QK4_0, [c](block_sq4<uint16_t> *in) { return make_block_sq4x4(in, c); });
         return true;
     }
     if (t != GGML_TYPE_Q4_0 || f.codes != "i4" || N % f.rows || K % QK4_0) return false;
