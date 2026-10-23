@@ -1568,7 +1568,7 @@ protected:
                 }
             }
         } else if (op->args.size() == 1 &&
-                   (op->is_intrinsic(Call::round) ||
+                   (op->is_intrinsic({Call::round, Call::round_half_away}) ||
                     op->name == "sqrt_f32" || op->name == "sqrt_f64" ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||

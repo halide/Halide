@@ -675,7 +675,15 @@ public:
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     using IRMutator::visit;
 
-    Scope<int> stored_to;
+    // Buffers stored to inside the if, at or before the current point.
+    Scope<> stored_to;
+
+    // Lets inside the if whose values depend on a store inside the
+    // if, so can't be computed before it.
+    Scope<> computed_inside;
+
+    // The lifted values, in an order in which each one only depends on
+    // the ones before it.
     vector<pair<string, Expr>> lifted_lets;
 
     Expr visit(const Call *op) override {
@@ -694,17 +702,30 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         Expr value = mutate(op->value);
+
+        // Anything lifted from the body comes after anything lifted
+        // from the value, and may depend on this let.
+        size_t first_lifted_from_body = lifted_lets.size();
+        bool depends_on_store = expr_uses_vars(value, stored_to) ||
+                                expr_uses_vars(value, computed_inside);
+        ScopedBinding<> bind_if(depends_on_store, computed_inside, op->name);
         auto body = mutate(op->body);
 
         // If any of the lifted expressions use this, we also need to
         // lift this.
         bool should_lift = false;
-        for (const auto &p : lifted_lets) {
-            should_lift |= expr_uses_var(p.second, op->name);
+        for (size_t i = first_lifted_from_body; i < lifted_lets.size(); i++) {
+            should_lift |= expr_uses_var(lifted_lets[i].second, op->name);
+        }
+
+        if (should_lift && depends_on_store) {
+            // A shuffle depends on a value that can't be computed until
+            // partway through the if, so we can't hoist it.
+            success = false;
         }
 
         if (should_lift) {
-            lifted_lets.push_back({op->name, value});
+            lifted_lets.insert(lifted_lets.begin() + first_lifted_from_body, {op->name, value});
             return body;
         } else {
             return LetOrLetStmt::make(op->name, value, body);
@@ -720,6 +741,12 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
+        // A load early in the loop body may read a value stored later
+        // in the body on a previous iteration.
+        visit_with(op->body, [&](auto *self, const Store *store) {
+            stored_to.push(store->name);
+            self->visit_base(store);
+        });
         Stmt body = mutate(op->body);
         bool fail = false;
         for (const auto &p : lifted_lets) {
@@ -727,7 +754,6 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         }
         if (fail) {
             // We can't hoist. We need to bail out here.
-            body = rewrap(body);
             success = false;
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
@@ -736,8 +762,10 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        stored_to.push(op->name, 0);
-        return IRMutator::visit(op);
+        // The value and index are computed before the store happens.
+        Stmt s = IRMutator::visit(op);
+        stored_to.push(op->name);
+        return s;
     }
 
 public:
@@ -755,8 +783,11 @@ class MoveIfStatementInwards : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Store *op) override {
-        // We've already hoisted warp shuffles out of stores
-        return IfThenElse::make(condition, op, Stmt());
+        // Compute any warp shuffles in the store just before it, so that
+        // all the lanes participate in them.
+        HoistWarpShufflesFromSingleIfStmt hoister;
+        Stmt store = hoister(Stmt(op));
+        return hoister.rewrap(IfThenElse::make(condition, store, Stmt()));
     }
 
     Expr condition;
@@ -779,14 +810,17 @@ class HoistWarpShuffles : public IRMutator {
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
 
-        HoistWarpShufflesFromSingleIfStmt hoister;
-        then_case = hoister(then_case);
-        else_case = hoister(else_case);
-        Stmt s = IfThenElse::make(op->condition, then_case, else_case);
-        if (hoister.success) {
-            return hoister.rewrap(s);
+        // Stores in one branch don't happen before loads in the other,
+        // so hoist from each separately.
+        HoistWarpShufflesFromSingleIfStmt then_hoister, else_hoister;
+        Stmt hoisted_then_case = then_hoister(then_case);
+        Stmt hoisted_else_case = else_hoister(else_case);
+        if (then_hoister.success && else_hoister.success) {
+            Stmt s = IfThenElse::make(op->condition, hoisted_then_case, hoisted_else_case);
+            return then_hoister.rewrap(else_hoister.rewrap(s));
         } else {
             // Need to move the ifstmt further inwards instead.
+            Stmt s = IfThenElse::make(op->condition, then_case, else_case);
             internal_assert(!else_case.defined()) << "Cannot hoist warp shuffle out of " << s << "\n";
             string pred_name = unique_name('p');
             s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name))(then_case);

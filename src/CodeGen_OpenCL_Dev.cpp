@@ -483,6 +483,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         // In OpenCL, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        // In OpenCL, round rounds ties away from zero
+        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
     }

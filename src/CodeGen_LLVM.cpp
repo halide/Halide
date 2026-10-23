@@ -153,19 +153,19 @@ llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, llvm::Type *gep_type,
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
 llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
-    // TODO(dsharlet): For some reason, marking internal functions as
-    // private linkage on OSX is causing some of the static tests to
-    // fail. Figure out why so we can remove this.
+    switch (t) {
+    case LinkageType::ExternalPlusArgv:
+    case LinkageType::ExternalPlusMetadata:
+    case LinkageType::External:
+        return llvm::GlobalValue::ExternalLinkage;
+    case LinkageType::Internal:
+        // Not PrivateLinkage: on Mach-O that emits an assembler-local label
+        // instead of a symbol, so the function would not get an atom of its
+        // own and the linker could strip or move it with its neighbor.
+        return llvm::GlobalValue::InternalLinkage;
+    }
+    internal_error << "Unknown LinkageType\n";
     return llvm::GlobalValue::ExternalLinkage;
-
-    // switch (t) {
-    // case LinkageType::ExternalPlusArgv:
-    // case LinkageType::ExternalPlusMetadata:
-    // case LinkageType::External:
-    //     return llvm::GlobalValue::ExternalLinkage;
-    // default:
-    //     return llvm::GlobalValue::PrivateLinkage;
-    // }
 }
 
 }  // namespace
@@ -1541,7 +1541,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
     }
     if (must_succeed) {
         debug(1) << "The following names are in scope:\n"
-                 << symbol_table;
+                 << symbol_table.names();
         internal_error << "Symbol not found: " << name;
     }
     return nullptr;

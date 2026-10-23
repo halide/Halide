@@ -132,7 +132,7 @@ public:
                 return containing_scope->get(name);
             } else {
                 internal_error << "Name not in Scope: " << name << "\n"
-                               << *this << "\n";
+                               << names();
             }
         }
         return iter->second.top();
@@ -145,7 +145,7 @@ public:
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             internal_error << "Name not in Scope: " << name << "\n"
-                           << *this << "\n";
+                           << names();
         }
         return iter->second.top_ref();
     }
@@ -240,7 +240,7 @@ public:
     void pop(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n"
-                                             << *this << "\n";
+                                             << names();
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
@@ -255,46 +255,14 @@ public:
         }
     }
 
-    /** Iterate through the scope. Does not capture any containing scope. */
-    class const_iterator {
-        typename std::map<std::string, SmallStack<T>>::const_iterator iter;
-
-    public:
-        explicit const_iterator(const typename std::map<std::string, SmallStack<T>>::const_iterator &i)
-            : iter(i) {
+    /** The names in this scope, one per line, for debugging. Does not include
+     * any containing scope. */
+    std::string names() const {
+        std::string result;
+        for (const auto &it : table) {
+            result += "  " + it.first + "\n";
         }
-
-        const_iterator() = default;
-
-        bool operator!=(const const_iterator &other) {
-            return iter != other.iter;
-        }
-
-        void operator++() {
-            ++iter;
-        }
-
-        const std::string &name() {
-            return iter->first;
-        }
-
-        const SmallStack<T> &stack() {
-            return iter->second;
-        }
-
-        template<typename T2 = T,
-                 typename = std::enable_if_t<!std::is_void_v<T2>>>
-        const T2 &value() {
-            return iter->second.top_ref();
-        }
-    };
-
-    const_iterator cbegin() const {
-        return const_iterator(table.begin());
-    }
-
-    const_iterator cend() const {
-        return const_iterator(table.end());
+        return result;
     }
 
     void swap(Scope<T> &other) noexcept {
@@ -302,17 +270,6 @@ public:
         std::swap(containing_scope, other.containing_scope);
     }
 };
-
-template<typename T>
-std::ostream &operator<<(std::ostream &stream, const Scope<T> &s) {
-    stream << "{\n";
-    typename Scope<T>::const_iterator iter;
-    for (iter = s.cbegin(); iter != s.cend(); ++iter) {
-        stream << "  " << iter.name() << "\n";
-    }
-    stream << "}";
-    return stream;
-}
 
 /** Helper class for pushing/popping Scope<> values, to allow
  * for early-exit in Visitor/Mutators that preserves correctness.

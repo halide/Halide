@@ -267,7 +267,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
 }
 
 Expr Simplify::visit(const Variable *op, ExprInfo *info) {
-    if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
+    if (const ExprInfo *b = find_bounds_and_alignment_info(op->name)) {
         if (info) {
             *info = *b;
         }
@@ -373,7 +373,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     // unreachable loads.
     if (is_const_one(op->predicate)) {
         string alloc_extent_name = op->name + ".total_extent_bytes";
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->type.bytes() > alloc_info->bounds) {
                 in_unreachable = true;
@@ -450,6 +450,14 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             op->with(mr.to_expr(), permuted_predicate, align);
         int B = op->type.lanes() / A;
         return mutate(Shuffle::make_transpose(permuted_load, B), info);
+    } else if (mr.dimensions() >= 1 &&
+               is_const_one(mr.strides[0]) &&
+               !mr.matches_expr(index)) {
+        // The index is a multiramp that is already dense innermost, but it's
+        // spelled some other way (e.g. with vector div and mod). Write it as
+        // nested ramps, which later become a concat of dense loads (or as a
+        // single dense ramp, if it has one dim).
+        return op->with(mr.to_expr(), predicate, align);
     } else {
         return op->with(index, predicate, align);
     }

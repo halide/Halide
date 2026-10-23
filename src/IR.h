@@ -767,6 +767,10 @@ struct Call : public ExprNode<Call> {
         extract_bits,
         // Extracts a single element from a mask vector
         extract_mask_element,
+        // fixed_to_float(x, k) reads the integer x as a fixed-point number with
+        // k fractional bits: float(x) * 2^-k, where k is a positive constant
+        // (broadcast to x's lanes).
+        fixed_to_float,
         // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
         get_runtime_streaming_vscale,
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
@@ -833,6 +837,9 @@ struct Call : public ExprNode<Call> {
         return_second,
         // Round a floating point value to nearest integer, with ties going to even
         round,
+        // Round a floating point value to nearest integer, with ties going away
+        // from zero (C's round)
+        round_half_away,
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,

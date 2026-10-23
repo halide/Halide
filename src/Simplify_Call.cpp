@@ -799,6 +799,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                          a = std::nearbyint(a);
                          return a;
                      }},
+                    {Call::get_intrinsic_name(Call::round_half_away), [](double a) -> double {
+                         return std::round(a);
+                     }},
                     {"trunc_f32", std::trunc},
                 };
             auto it = pure_externs_truncation.find(op->name);
