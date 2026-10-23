@@ -1605,6 +1605,17 @@ void CodeGen_ARM::visit(const Store *op) {
     Expr rhs = peel_lets(op->value, &lets);
     const Shuffle *shuffle = rhs.as<Shuffle>();
 
+    // Storing each lane of a vector repeated k times is a store of an
+    // interleaving of k copies of that vector. On AArch64, for k == 4 and
+    // narrow types a single tbl per output vector is cheaper than st4.
+    if (shuffle && shuffle->is_repeat_each_lane()) {
+        const int k = shuffle->repeat_each_lane_factor();
+        if (k <= 3 || (k == 4 && (target.bits == 32 || shuffle->type.bits() >= 32))) {
+            rhs = Shuffle::make_interleave(vector<Expr>(k, shuffle->vectors[0]));
+            shuffle = rhs.as<Shuffle>();
+        }
+    }
+
     // Interleaving store instructions only exist for certain types.
     bool type_ok_for_vst = false;
     Type intrin_type = Handle();
