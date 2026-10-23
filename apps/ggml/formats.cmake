@@ -33,7 +33,10 @@
 # vec_dot and mul_mat (kernels/matmul.cpp with weight=type op=<op>, one
 # library per act in `acts`). An act is <storage>[:<compute>]: f32:q8_0 takes
 # f32 activations and quantizes them to q8_0 inside the kernel (as GGML's CPU
-# paths do); its library is <type>_f32_to_q8_0_<op>. Each generated library
+# paths do); its library is <type>_f32_to_q8_0_<op>. A compute type with a
+# layout (f32:q8_0.4x8, f32:q8_K.4x8) quantizes the whole groups of rows to
+# its records, as GGML's repacked gemm does, and the rest to the AoS type (its
+# gemv). Each generated library
 # has a checked variant (default target: asserts and bounds queries on; used
 # by --check and tests) and a bench variant
 # (GGML_BENCH_FEATURES; what gets timed), both registered with the harness
@@ -74,7 +77,7 @@ set(GGML_FORMATS
     "q8_0.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q8_0.soa codec,mul_mat q8_0,f32:q8_0"
     "q8_K.4x8 codec"
-    "q4_K.8x8 codec,mul_mat q8_K,f32:q8_K"
+    "q4_K.8x8 codec,mul_mat q8_K,f32:q8_K,f32:q8_K.4x8"
     "qsi8cx codec,mul_mat qai8dx,f32:qai8dx"
     "qsi8cx.4x8 codec,mul_mat qai8dx,f32:qai8dx"
     "qai8dx codec"
