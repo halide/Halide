@@ -27,6 +27,9 @@ public:
     // vec_dot's and the gemv tiles' sub-block scales decoded in GPRs (see
     // ggml::blocked)
     GeneratorParam<bool> gpr_scales{"gpr_scales", false};
+    // where a weight's constant code offsets fold into the act's sub-block
+    // sums (see ggml::Fold)
+    GeneratorParam<ggml::Fold> fold_offsets{"fold_offsets", ggml::Fold::All, {{"none", ggml::Fold::None}, {"gemv", ggml::Fold::Gemv}, {"all", ggml::Fold::All}}};
 
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
@@ -165,9 +168,9 @@ public:
 
     void generate() {
         if (op == "vec_dot") {
-            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales);
+            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
         }
     }
 

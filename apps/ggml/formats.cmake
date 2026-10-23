@@ -123,8 +123,17 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # gpr_scales=true (vec_dot and the gemv tiles: the 6-bit sub-block scales
 # and mins decoded in GPRs, GGML's SWAR; not the gemm tiles, where they cost
 # q5_K's 20%): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
-# thread). An act of `*`: every act.
+# thread). fold_offsets (all by default: a weight's constant code offset,
+# tq2_0's -1, times the act's block sums, as GGML's vec_dot does, not
+# subtracted per value; tq2_0's gemm 1.4-1.5x, gemv 1.2-1.3x): =none where
+# GGML too subtracts per value (q3_K: the fold doubles its loops'
+# instructions), and q6_K's for now. An act of `*`: every act.
 set(GGML_SCHEDULE_PARAMS
+    "q3_K vec_dot * fold_offsets=none"
+    "q3_K mul_mat * fold_offsets=none"
+    "q6_K vec_dot * fold_offsets=none"
+    "q6_K mul_mat * fold_offsets=none"
+    "q6_K.8x8 mul_mat * fold_offsets=none"
     "q4_K vec_dot * gpr_scales=true"
     "q4_K mul_mat * gpr_scales=true"
     "q5_K vec_dot * gpr_scales=true"
@@ -133,6 +142,7 @@ set(GGML_SCHEDULE_PARAMS
     "iq2_xs vec_dot q8_K interleave=1 sublanes=true"
     "q3_K vec_dot q8_K interleave=1"
     "q4_K vec_dot q8_K interleave=1"
+    "tq2_0 vec_dot q8_K interleave=1"
     "iq2_xxs vec_dot q8_K interleave=1"
     "iq3_xxs vec_dot q8_K interleave=1"
     "iq1_s vec_dot q8_K interleave=1 slp=false"
