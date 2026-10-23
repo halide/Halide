@@ -1020,8 +1020,9 @@ inline bool merge_sums(Func dot, const Stage &ds, Sums &d, Func blk, Func codes,
 // (s = 2, 4; s = 6's, 192, doesn't: shifted as before), its sum shifted
 // right after (ssra; exact, every product a multiple of 2^s): a mask per
 // field, not a shift and a mask (tq2_0: 8 fewer SIMD instructions per
-// block). False (codes untouched) where no field's position varies so.
-inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per, LoopLevel at, int interleave) {
+// block). The codes' sum must be linear in the field. False (codes
+// untouched) where no field's position varies so, or it isn't linear.
+inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per, LoopLevel at, int interleave, Var n, Var m) {
     using namespace Internal;
     // the field's mask m and position s
     Expr e = remove_promises(remove_likelies(substitute_in_all_lets(codes.update_value())));
@@ -1128,8 +1129,8 @@ inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per
         }
         return mux(op->args.back(), parts);
     });
-    ch.compute_at(at).reorder_storage(lane, c).bound_storage(u, interleave);
-    regs(ch, {lane}, {c, u});
+    ch.compute_at(at).reorder_storage(lane, u, c, n, m).bound_storage(u, interleave);
+    regs(ch, {lane}, {c, u, n, m});
     ch.update().reorder(RVar("rxi"), lane, c, rcp, rco).atomic().vectorize(RVar("rxi")).unroll(rcp).unroll(rco);
     codes.update().unroll(rcg);
     return true;
@@ -1155,8 +1156,8 @@ inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per
 // general-purpose registers, 4 bytes a word (VectorizeIn::GPR: GGML's SWAR
 // decode of q4_K's 6-bit scales and mins). `merge` (vec_dot): a constant code
 // offset's sums merged into the codes' lanes (merge_sums()). `defer`
-// (vec_dot, no sub-blocks): the codes' bit fields' shifts deferred to their
-// sums (deferred_shifts()).
+// (vec_dot and gemv, no sub-blocks): the codes' bit fields' shifts
+// deferred to their sums (deferred_shifts()).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
                     int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false, bool fold_offsets = true,
@@ -1235,7 +1236,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     std::optional<int64_t> nchunk = bx ? std::optional<int64_t>(*bx / vec) : std::nullopt;
     for (Func f : {codes, rest}) {
         if (!f.defined() || sub) continue;
-        if (f.name() == codes.name() && defer && nchunk && integer && deferred_shifts(codes, rxc, (int)*nchunk, vec / per, per, LoopLevel(acc, ryo), ts.interleave)) continue;
+        if (f.name() == codes.name() && defer && nchunk && integer && deferred_shifts(codes, rxc, (int)*nchunk, vec / per, per, LoopLevel(acc, ryo), ts.interleave, n, m)) continue;
         f.update().atomic().vectorize(rxi).unroll(rxc);
     }
     // per block and sub-block, the tile's sub-block dots (inner), then their
@@ -2173,8 +2174,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     pairs.interleave = rows.interleave = interleave;
     // A staged table's decode, per row pair, outweighs sharing the act's loads
     // (`row_pairs`: a per-format parameter)
-    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
+    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
 }
 
 }  // namespace ggml
