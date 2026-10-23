@@ -1350,8 +1350,10 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
     bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
-    // Two-level records of several rows (q4_K_8x8): the rest on their gemv
-    bool recs = !whole && integer && fmt.rows > 1 && affine(rs);
+    // Two-level records of several rows (q4_K_8x8): the rest on their gemv;
+    // with i8mm, on whole act records too (q8_K.4x8), one record per tile
+    bool recs = integer && fmt.rows > 1 && affine(rs), rmmla = mmla_ok && recs;
+    Tiles rm{fmt.rows, 4, 1, 32, whole ? 128 : 32, 2};
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
@@ -1365,7 +1367,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     auto padded = [&](const Tiles &ts) { return (Mr + ts.mt - 1) / ts.mt * ts.mt; };
     Expr fewest = min(padded(t12), padded(t16), padded(t20)), odd_n = !fits(gemm, Mr);
     Chain tiles{{Mr == wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
-    if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
+    if (whole && rmmla) {  // N a multiple of the records' rows
+        dr.bound_extent(dr.args()[1], rm.mt);
+    } else if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
         blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, 2}, r, integer, rs, t);
         Expr mt = t12.mt;
         for (size_t i = tiles.size() - 1; i-- > 0;) {
@@ -1373,19 +1377,21 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
         dr.bound_extent(dr.args()[1], tiled ? select(odd_n, t16.mt, mt) : Expr(gemm.mt));
     }
-    if (whole && tiled) {
+    if (whole && tiled && !rmmla) {
         for (auto [c, ts] : tiles) {
             lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs);
         }
-    } else if (mmla_ok && recs) {
+    } else if (rmmla) {
         // whole records of rows (from 0 mod their rows: their addresses dense)
-        Tiles rm{fmt.rows, 4, 1, 32, 32, 2};
-        blocked_mmla(out, whole, dr, fits(rm, M), rm, r, rs, true, fmt.sub, fmt.act_sub, true);
+        // (dr's act is the last result: its derived ports, rs[1]'s for derived_sums)
+        std::vector<ApproximationResult> rr = rs;
+        if (whole) std::swap(rr[1], rr.back());
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true);
     } else if (mmla_ok) {
         blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
-    if (!recs && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub);
+    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub);
     // The rows past Mr (fewer than a record's): no tasks when there are none.
     Expr rest = whole ? M % fmt.act_rows != 0 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
