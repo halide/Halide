@@ -88,6 +88,15 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   (order statistics), `ci_pct` = CI width / median, GB/s, GOP/s.
 - macOS has no clock pinning: `ci_pct` is the noise report. Serialize timing
   runs machine-wide (`~/dev/Halide/.bench.lock`).
+- Layout sensitivity: at startup the bench reads one byte of every page of every
+  loaded image's `__TEXT` and `__DATA_CONST` (10-200 ms; `--no-pretouch` skips
+  it). A kernel that randomly indexes a constant table (Halide's q5_0/q5_1 qh
+  tables and iq grids, GGML's `table_b2b_*`) within ~3 KB of a 16 KB page
+  boundary whose neighbouring page was never touched pays a failed hardware page
+  walk per row (the invalid translation isn't cached), costing up to ~25% for
+  DRAM-streaming gemv. Whether that page was touched depends on link layout and
+  on which other kernels ran earlier in the process, so without the pretouch
+  timings of byte-identical kernels shift with unrelated code changes.
 
 ## Formats and codecs
 
