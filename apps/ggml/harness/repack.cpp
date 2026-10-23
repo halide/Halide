@@ -2,9 +2,10 @@
 // Interleave layout (schemes/layouts.h):
 // - ggml_repack: a test-only transcription of make_block_q4_0x4,
 //   make_block_q4_0x8, make_block_q8_0x4, make_block_q4_Kx8,
-//   make_block_iq4_nlx4, repack_q4_0_to_q4_0_{4,8}_bl,
-//   repack_q8_0_to_q8_0_4_bl, repack_q4_K_to_q4_K_8_bl and
-//   repack_iq4_nl_to_iq4_nl_4_bl from GGML v0.26's
+//   make_block_iq4_nlx4, make_block_mxfp4x4,
+//   repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl,
+//   repack_q4_K_to_q4_K_8_bl, repack_iq4_nl_to_iq4_nl_4_bl and
+//   repack_mxfp4_to_mxfp4_4_bl from GGML v0.26's
 //   src/ggml-cpu/repack.cpp (MIT License, Copyright (c) 2023-2024 The ggml
 //   authors), for every layout, including those GGML does not pick on this
 //   CPU;
@@ -133,9 +134,9 @@ block_q4_0xN<8> make_block_q4_0x8(block_q4_0 *in, unsigned int blck_size_interle
     return out;
 }
 
-// block_iq4_nl {f16 d; u8 qs[16]}: one scale field (S) and q4_0's nibbles,
-// which make_block_iq4_nlx4 interleaves in 4-byte pieces as they are (no
-// xor).
+// block_iq4_nl {f16 d; u8 qs[16]} and block_mxfp4 {u8 e; u8 qs[16]}: one
+// scale field (S) and q4_0's nibbles, which make_block_iq4_nlx4 and
+// make_block_mxfp4x4 interleave in 4-byte pieces as they are (no xor).
 template<typename S>
 struct block_sq4 {
     S d;
@@ -294,7 +295,8 @@ void ggml_quantize_mat_q8_K_4x8_generic(const float *x, void *vy, int64_t k) {
 }
 
 // repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl,
-// repack_q4_K_to_q4_K_8_bl, repack_iq4_nl_to_iq4_nl_4_bl
+// repack_q4_K_to_q4_K_8_bl, repack_iq4_nl_to_iq4_nl_4_bl,
+// repack_mxfp4_to_mxfp4_4_bl
 template<int R, typename B, typename F>
 void repack_rows(const B *src, uint8_t *out, int64_t nrow, int64_t nblocks, F make) {
     auto *dst = (decltype(make(nullptr)) *)out;
@@ -328,6 +330,10 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
     }
     if (t == GGML_TYPE_IQ4_NL && f.codes.empty() && f.rows == 4 && c == 4 && N % 4 == 0 && K % QK4_0 == 0) {
         repack_rows<4>((const block_sq4<uint16_t> *)src, dst, N, K / QK4_0, [c](block_sq4<uint16_t> *in) { return make_block_sq4x4(in, c); });
+        return true;
+    }
+    if (t == GGML_TYPE_MXFP4 && f.codes.empty() && f.rows == 4 && c == 4 && N % 4 == 0 && K % QK4_0 == 0) {
+        repack_rows<4>((const block_sq4<uint8_t> *)src, dst, N, K / QK4_0, [c](block_sq4<uint8_t> *in) { return make_block_sq4x4(in, c); });
         return true;
     }
     if (t != GGML_TYPE_Q4_0 || f.codes != "i4" || N % f.rows || K % QK4_0) return false;

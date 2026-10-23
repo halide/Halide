@@ -83,11 +83,16 @@ inline Approximation e2m1_codes() {
 // GGML's e8m0 scales: d = 2^(e - 128), half of e8m0's value (as
 // GGML_E8M0_TO_FP32_HALF): an e8m0 MiniFloat (OCP MX's: byte 0xFF NaN, so
 // 2^128 encodes to it) of 2d, and decoded GGML's way, with 0xFF as 2^127.
-// Lossless on the powers of two 2^-128 .. 2^127.
+// Lossless on the powers of two 2^-128 .. 2^127. The decode builds d's top
+// 16 bits in int16: (e - 1) << 7 (d's exponent field, e >= 2), else, as the
+// larger, (e + 1) << 5 (its subnormals 2^-128 and 2^-127, e < 2).
 inline Approximation e8m0_half() {
     MiniFloat f{8, 0, 127, false, MiniFloat::Specials::NaNOnly};
     return Pointwise{"e8m0_half", [=](const Expr &x) { return f.encode(x * 2.0f); },
-                     [=](const Expr &x) { return select(x == cast<uint8_t>(255), (float)std::ldexp(1.0, 127), f.decode(x) * 0.5f); }}
+                     [=](const Expr &x) {
+                         Expr e = cast<int16_t>(x), top = max((e - 1) << 7, (e + 1) << 5);
+                         return reinterpret<float>(cast<uint32_t>(cast<uint16_t>(top)) << 16);
+                     }}
         .with_types(Float(32), UInt(8))
         .with_lossless();
 }
