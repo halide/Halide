@@ -336,6 +336,121 @@ inline bool affine(const std::vector<ApproximationResult> &rs) {
     return std::any_of(ps.begin(), ps.end(), [](const ApproximationPort &p) { return p.tags && p.tags->count(tag::offset); });
 }
 
+// e as a sum of terms (Add and Sub nodes), each with its sign: its constant
+// terms summed into c, the rest into `terms`.
+inline void sum_terms(const Expr &e, int sign, std::vector<std::pair<Expr, int>> &terms, int64_t &c) {
+    if (const auto *a = e.as<Internal::Add>()) {
+        sum_terms(a->a, sign, terms, c);
+        sum_terms(a->b, sign, terms, c);
+    } else if (const auto *s = e.as<Internal::Sub>()) {
+        sum_terms(s->a, sign, terms, c);
+        sum_terms(s->b, -sign, terms, c);
+    } else if (auto k = Internal::as_const_int(e)) {
+        c += sign * *k;
+    } else if (auto k = Internal::as_const_uint(e)) {
+        c += sign * (int64_t)*k;
+    } else {
+        terms.emplace_back(e, sign);
+    }
+}
+
+// The weight's integer code decoders that add a constant (an offset: tq2_0's
+// field - 1, q6_K's high bits - 32).
+inline std::vector<Func> offset_decoders(const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> fs;
+    for (Func f : decoders(rs, only({tag::codes}), 0, 1)) {
+        const Internal::Function &fn = f.function();
+        if (fn.has_update_definition() || fn.outputs() != 1 || !fn.output_types()[0].is_int_or_uint()) continue;
+        std::vector<std::pair<Expr, int>> terms;
+        int64_t c = 0;
+        sum_terms(fn.definition().values()[0], 1, terms, c);
+        if (c && !terms.empty()) fs.push_back(f);
+    }
+    return fs;
+}
+
+// v (a stage's value) with each widening cast of a sum of the weight's codes
+// and a constant (cast<float>(int8(field) + -1), the offset decoders and the
+// code decoders between v and them inlined) split into the cast of the rest
+// plus the constant, where the decoded codes' bounds prove neither sum wraps
+// (so the value is unchanged, bit for bit): the constant's term then hoists
+// out of the codes' dot as an affine weight's min does (derived_sums()).
+// Undefined if none splits.
+inline Expr split_offsets(const Expr &v, const std::vector<ApproximationResult> &rs) {
+    using namespace Internal;
+    std::vector<Func> offs = offset_decoders(rs);
+    if (offs.empty()) return Expr();
+    std::vector<Func> codes = decoders(rs, only({tag::codes}), 0, 1), path = offs;
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (Func f : codes) {
+            if (std::any_of(path.begin(), path.end(), [&](const Func &p) { return p.name() == f.name(); })) continue;
+            const auto &vals = f.function().definition().values();
+            if (!f.function().has_update_definition() && std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, path); })) {
+                path.push_back(f);
+                grew = true;
+            }
+        }
+    }
+    auto inlined = [](const Expr &e, const std::vector<Func> &fs) {
+        Inliner in;
+        for (Func f : fs) {
+            if (!f.function().has_update_definition()) in.add(f.function());
+        }
+        return substitute_in_all_lets(in(e));
+    };
+    std::vector<Func> all = codes;
+    for (Func f : decoders(rs, only({tag::codes}), 0, 1, true)) {
+        all.push_back(f);
+    }
+    // bounds of a sum of terms, each partial sum within t: else undefined
+    auto fits = [&](const std::vector<std::pair<Expr, int>> &terms, int64_t c, Type t) {
+        ConstantInterval range = ConstantInterval::bounds_of_type(t), acc = ConstantInterval::single_point(0);
+        bool ok = true;
+        for (const auto &[e, sign] : terms) {
+            ConstantInterval b = constant_integer_bounds(simplify(inlined(e, all)));
+            sign > 0 ? acc += b : acc -= b;
+            ok &= range.contains(acc);
+        }
+        acc += c;
+        return ok && range.contains(acc);
+    };
+    bool split = false;
+    Expr e = mutate_with(inlined(v, path), [&](auto *self, const Cast *op) -> Expr {
+        Expr x = self->mutate(op->value);
+        Type t = op->type, xt = x.type();
+        bool exact = t.is_float() ? xt.bits() < t.bits() && xt.bits() <= 16 : t.is_int() && xt.bits() < t.bits();
+        std::vector<std::pair<Expr, int>> terms;
+        int64_t c = 0;
+        if (xt.is_int_or_uint() && exact) sum_terms(x, 1, terms, c);
+        if (!c || terms.empty() || !calls_any(x, codes)) return Cast::make(t, x);
+        // no node of the original wraps
+        bool ok = true;
+        std::function<void(const Expr &)> nodes = [&](const Expr &y) {
+            const auto *a = y.as<Add>();
+            const auto *s = y.as<Sub>();
+            if (!a && !s) return;
+            std::vector<std::pair<Expr, int>> ts;
+            int64_t k = 0;
+            sum_terms(y, 1, ts, k);
+            ok &= fits(ts, k, xt);
+            nodes(a ? a->a : s->a);
+            nodes(a ? a->b : s->b);
+        };
+        nodes(x);
+        // the rest, positive terms first
+        std::stable_partition(terms.begin(), terms.end(), [](const auto &p) { return p.second > 0; });
+        if (!ok || !fits(terms, 0, xt) || terms[0].second < 0) return Cast::make(t, x);
+        Expr rest = terms[0].first;
+        for (size_t i = 1; i < terms.size(); i++) {
+            rest = terms[i].second > 0 ? Add::make(rest, terms[i].first) : Sub::make(rest, terms[i].first);
+        }
+        split = true;
+        return Cast::make(t, rest) + make_const(t, c);
+    });
+    return split ? e : Expr();
+}
+
 // Does f's increment (a product) have a factor free of its RVars?
 inline bool invariant_factor(Func f) {
     Expr v = Internal::substitute_in_all_lets(f.update_value());
@@ -415,6 +530,23 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     return integer ? codes.change_type(Int(32)) : codes;
 }
 
+// The definition s (a stage of f: an update, or a specialization of one) is.
+inline Internal::Definition stage_definition(Func f, const Stage &s) {
+    Internal::Function fn = f.function();
+    Expr v = s.values()[0];
+    std::function<std::optional<Internal::Definition>(Internal::Definition &)> find = [&](Internal::Definition &d) -> std::optional<Internal::Definition> {
+        if (d.values()[0].same_as(v)) return d;
+        for (Internal::Specialization &sp : d.specializations()) {
+            if (auto r = find(sp.definition)) return r;
+        }
+        return std::nullopt;
+    };
+    for (size_t i = 0; i < fn.updates().size(); i++) {
+        if (auto r = find(fn.update((int)i))) return *r;
+    }
+    throw std::invalid_argument("stage_definition: " + s.name() + " is no stage of " + f.name());
+}
+
 // An affine weight's code-free terms, read from the act's derived port where
 // one is their act part: dot's increment (s, out's stage st tile under
 // `cond`) splits on the weight's codes (hoist_invariants) into `with`,
@@ -429,19 +561,35 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 // With `sub` (a multiple of act_sub): the weight's sub-blocks instead, each
 // min times the act's sum over it (d.pair), the sum of its act sub-blocks'
 // port values (as GGML's repacked q4_K gemv pair-sums q8_K's bsums).
-// Returns false (dot untouched) if the weight is not affine or the act has
-// no derived port.
+// A weight whose codes decode to a field plus a constant (tq2_0's field - 1,
+// q6_K's - 32: split_offsets()) is treated alike, the constant its min: the
+// act's sums are then times the constant (and any per-sub-block factor, q6_K's
+// scales), as GGML subtracts offset * bsums rather than the offset per value.
+// (`fold`: a per-format parameter, as GGML's q3_K subtracts its offset per
+// value.) Returns false (dot untouched) if the weight is neither affine nor
+// offset or the act has no derived port.
 struct Sums {
     Func sums, blk, sum, part, pair;
+    bool sub_sums = false;  // d.sum sums the act's sub-block sums (no part)
 };
-inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}) {
+inline bool derived_sums(Func out, int st, Func dot, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true) {
     d = Sums();
-    if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
+    if (rs.size() < 2 || rs[1].derived_ports().empty()) return false;
     std::vector<Func> dec;
     for (Func f : decoders(rs, all_but({tag::codes}), 0, 1)) {
         if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
     }
+    bool offsets = false;
+    if (fold && !offset_decoders(rs).empty()) {
+        Internal::Inliner probe;
+        for (Func f : dec) {
+            probe.add(f.function());
+        }
+        offsets = split_offsets(probe(s.value()), rs).defined();
+    }
+    if (!offsets && !affine(rs)) return false;
     s.eager_inline(dec);
+    if (offsets) stage_definition(dot, s).values()[0] = split_offsets(s.value(), rs);
     FuncVec parts = s.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
     if (!parts[1].defined()) throw std::invalid_argument("derived_sums: no terms free of the codes in " + s.name());
     Func with = parts[0];
@@ -473,7 +621,11 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
             ds.split(r.x, rxt, rxj, act_sub);
         }
         d.part = ds.rfactor(rxt, Var("t"));
-        Func term = d.part.update().hoist_invariants()[0], reader = d.part;
+        // (a constant offset's term, split_offsets(): no factor per act
+        // sub-block, so the block's sum is that of the port's values)
+        const std::vector<DerivedPort> &ports = rs[1].derived_ports();
+        bool factor = std::none_of(ports.begin(), ports.end(), [&](const DerivedPort &p) { return match_derived_port(d.part, p); });
+        Func term = factor ? d.part.update().hoist_invariants()[0] : d.part, reader = factor ? d.part : d.sum;
         if (pairs) {
             // the act's codes: two sub-blocks' sum fits int16, as the port
             d.pair = term.change_type(Int(16));
@@ -482,6 +634,10 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
         }
         if (!read_port(term, rs[1].derived_ports(), reader)) {
             throw std::invalid_argument("derived_sums: the act's sub-block sums in " + s.name() + " match none of its derived ports");
+        }
+        if (!factor) {
+            d.part = Func();
+            d.sub_sums = true;
         }
     } else if (read_port(d.sum, rs[1].derived_ports(), d.blk)) {
         d.sum = Func();
@@ -542,12 +698,13 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
                 d.pair.update().reorder(t, rxh, n).unroll(rxh);
             }
         }
-    } else if (d.part.defined()) {
+    } else if (d.part.defined() || d.sub_sums) {
         // per act sub-block, vectorized across them: its factor times its sum
-        Var t = d.part.args().back();
         RVar rxt("rxt"), rxj("rxj");
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(rxt).unroll(u).unroll(n).unroll(m);
+        if (d.sub_sums) return;
+        Var t = d.part.args().back();
         regs(d.part.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
         if (d.pair.defined()) {
             // the act's sums per weight sub-block (pairwise adds of its
@@ -692,7 +849,7 @@ inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDo
 // decode of q4_K's 6-bit scales and mins).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
-                    int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false) {
+                    int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false, bool fold_offsets = true) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
@@ -722,7 +879,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         gpr = scale_decoders(rs);
         dkept.insert(dkept.end(), gpr.begin(), gpr.end());
     }
-    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, dkept)) aff = false;
+    if (derived && derived_sums(out, st, dot, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, dkept, fold_offsets)) aff = false;
     if (aff) kept.clear();
     RVar rxl("rxl");  // (sl: the sub-block's lane)
     if (sl) {
@@ -961,7 +1118,7 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
     Sums d;
-    if (!sub || (affine(rs) && !derived_sums(out, st, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows_sub: two-level weights (affine: an act with derived sums)");
+    if (!sub || (affine(rs) && !derived_sums(out, st, dot, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows_sub: two-level weights (affine: an act with derived sums)");
     s.split(r.x, rxs, rxc, sub);
     Func blk = s.rfactor(ry, u);
     // the act's codes stay out of the inline (staged per sub-block, below)
@@ -1046,7 +1203,7 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // once per weight block, not per block.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
                          const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
-                         int per = 1) {
+                         int per = 1, bool fold_offsets = true) {
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi"), ryw("ryw"), ryp("ryp");
@@ -1055,7 +1212,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Sums d;
     // records: the sub-blocks' decoded scales (and mins) their own stage
     std::vector<Func> kept = records && sub ? scale_decoders(rs) : std::vector<Func>{};
-    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, records ? sub : 0, kept)) aff = false;
+    if (derived && derived_sums(out, st, dot, s, r, rs, d, act_sub, records ? sub : 0, kept, fold_offsets)) aff = false;
     sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
     Func wblk, win;
     Stage bs = s;  // the stage over the blocks (ry; per weight block, ryp)
@@ -1223,12 +1380,23 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
     }
 }
 
+// Where a weight's constant code offsets fold into the act's sub-block sums
+// (derived_sums()): vec_dot and every mul_mat tile, vec_dot and the gemv
+// tiles (GGML's repacked i8mm q6_K gemm subtracts its offset per value: the
+// sums' products with its sub-block scales cost the gemm tiles more), or
+// nowhere (a per-format parameter).
+enum class Fold {
+    None,
+    Gemv,
+    All,
+};
+
 // The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
 // pipeline (`staged`) are encoded once, up front. `interleave` blocks per
 // iteration (blocked weights; a per-format parameter, formats.cmake).
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false) {
+                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -1239,7 +1407,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales);
+    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
@@ -1513,7 +1681,7 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false) {
+                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
@@ -1525,6 +1693,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         metal_rows(out, dots[0], r, rs);
         return;
     }
+    bool fold_gemm = fold_offsets == Fold::All, fold_gemv = fold_offsets != Fold::None;
     if (fmt.rowwise) {
         rowwise_mul_mat(out, dots, r, fmt, rs, staged, t);
         return;
@@ -1614,12 +1783,12 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (dr's act is the last result: its derived ports, rs[1]'s for derived_sums)
         std::vector<ApproximationResult> rr = rs;
         if (whole) std::swap(rr[1], rr.back());
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true, whole);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true, whole, 1, fold_gemm);
     } else if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
-    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub);
+    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm);
     // The rows past Mr (fewer than a record's): no tasks when there are none.
     Expr rest = whole ? M % fmt.act_rows != 0 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
@@ -1647,8 +1816,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
     // A staged table's decode, per row pair, outweighs sharing the act's loads
-    if (staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales);
+    if (staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv);
 }
 
 }  // namespace ggml
