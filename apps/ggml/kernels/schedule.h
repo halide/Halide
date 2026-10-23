@@ -283,6 +283,20 @@ inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
     return false;
 }
 
+// The weight's decoded per-sub-block scales (and mins): its scale decoders
+// with the values' dimensions that no other scale decoder reads.
+inline std::vector<Func> scale_decoders(const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> sc = decoders(rs, only({tag::scale}), 0, 1), fs;
+    for (Func f : sc) {
+        bool read = std::any_of(sc.begin(), sc.end(), [&](const Func &g) {
+            const auto &vals = g.function().values();
+            return std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
+        });
+        if (f.dimensions() == 3 && !read) fs.push_back(f);
+    }
+    return fs;
+}
+
 // blk's per-block dot (r.y rfactored to a pure var) with the decoders inlined
 // and the scales hoisted: returns the dot of the codes (int32 if `integer`).
 // Affine weights first split on the weight's codes, the rest returned in
@@ -566,15 +580,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // the dot
     std::vector<Func> dkept = kept, gpr;
     if (!sl && gpr_scales) {
-        // (the decoded scales: the per-sub-block decoders no other reads)
-        std::vector<Func> sc = decoders(rs, only({tag::scale}), 0, 1);
-        for (Func f : sc) {
-            bool read = std::any_of(sc.begin(), sc.end(), [&](const Func &g) {
-                const auto &vals = g.function().values();
-                return std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
-            });
-            if (f.dimensions() == 3 && !read) gpr.push_back(f);
-        }
+        gpr = scale_decoders(rs);
         dkept.insert(dkept.end(), gpr.begin(), gpr.end());
     }
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, dkept)) aff = false;
@@ -893,11 +899,13 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
     Sums d;
-    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, records ? sub : 0)) aff = false;
+    // records: the sub-blocks' decoded scales (and mins) their own stage
+    std::vector<Func> kept = records && sub ? scale_decoders(rs) : std::vector<Func>{};
+    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, records ? sub : 0, kept)) aff = false;
     sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
     bool fsub = sub && !records && float_sub_scales(rs);
-    Func rest, mid, codes = block_dot(blk, rs, !fsub, rest, mid, aff);
+    Func rest, mid, codes = block_dot(blk, rs, !fsub, rest, mid, aff, aff ? std::vector<Func>{} : kept);
     // per sub-block (v): its scale times its codes' dot (inner), as blocked()
     Func part, inner;
     if (sub) {
@@ -921,6 +929,13 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         sub_tiles(part.update(), n, m, {nii, mii, nio, mio, v, u}).unroll(v).unroll(u);
         part.compute_at(codes, rxs);
         inner.compute_at(codes, rxs);
+        // the sub-block's scales, decoded once across the record's rows
+        for (Func k : kept) {
+            if (!calls_any(part.function().update(0).values()[0], {k})) continue;
+            Func ks = k.in(part);
+            ks.compute_at(codes, rxs).vectorize(ks.args()[2], ts.nt);
+            ks.unroll(ks.args()[0]).unroll(ks.args()[1]);
+        }
     }
     acc.compute_at(tile_at(out, st));
     sub_tiles(acc.update(), n, m, {nii, mii, nio, mio, bacc, ryo}).unroll(bacc);
