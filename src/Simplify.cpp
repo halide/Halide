@@ -14,39 +14,30 @@ using std::pair;
 using std::string;
 using std::vector;
 
-Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
+Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
+    : outer_bounds(bi), outer_alignment(ai) {
+}
+
+const Simplify::ExprInfo *Simplify::find_outer_bounds_and_alignment_info(const std::string &name) {
     // Only respect the constant bounds from the containing scope.
-    for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-        ExprInfo info;
-        if (auto i_min = as_const_int(iter.value().min)) {
+    ExprInfo info;
+    if (const Interval *in = outer_bounds->find(name)) {
+        if (auto i_min = as_const_int(in->min)) {
             info.bounds.min_defined = true;
             info.bounds.min = *i_min;
         }
-        if (auto i_max = as_const_int(iter.value().max)) {
+        if (auto i_max = as_const_int(in->max)) {
             info.bounds.max_defined = true;
             info.bounds.max = *i_max;
         }
-
-        if (const auto *a = ai->find(iter.name())) {
-            info.alignment = *a;
-        }
-
-        if (info.bounds.min_defined ||
-            info.bounds.max_defined ||
-            info.alignment.modulus != 1) {
-            bounds_and_alignment_info.push(iter.name(), info);
-        }
     }
-
-    for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
-        if (bounds_and_alignment_info.contains(iter.name())) {
-            // Already handled
-            continue;
-        }
-        ExprInfo info;
-        info.alignment = iter.value();
-        bounds_and_alignment_info.push(iter.name(), info);
+    if (const ModulusRemainder *a = outer_alignment->find(name)) {
+        info.alignment = *a;
+    } else if (!info.bounds.min_defined && !info.bounds.max_defined) {
+        return nullptr;
     }
+    bounds_and_alignment_info.push(name, info);
+    return bounds_and_alignment_info.find(name);
 }
 
 std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs) {
@@ -447,7 +438,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
 void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
     ExprInfo b;
     b.bounds = ConstantInterval::bounded_above(val);
-    if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+    if (const auto *info = simplify->find_bounds_and_alignment_info(v->name)) {
         b.intersect(*info);
     }
     simplify->bounds_and_alignment_info.push(v->name, b);
@@ -457,7 +448,7 @@ void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
 void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
     ExprInfo b;
     b.bounds = ConstantInterval::bounded_below(val);
-    if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+    if (const auto *info = simplify->find_bounds_and_alignment_info(v->name)) {
         b.intersect(*info);
     }
     simplify->bounds_and_alignment_info.push(v->name, b);
@@ -517,11 +508,11 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
 
                 // Cross-merge the expression info of both variables.
                 Simplify::ExprInfo expr_info;
-                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+                if (const auto *info = simplify->find_bounds_and_alignment_info(v->name)) {
                     // We already know something about the variable on the LHS
                     expr_info = *info;
                 }
-                if (const auto *info = simplify->bounds_and_alignment_info.find(vb->name)) {
+                if (const auto *info = simplify->find_bounds_and_alignment_info(vb->name)) {
                     // We already know something about the variable on the RHS
                     expr_info.intersect(*info);
                 }
@@ -536,7 +527,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 // TODO: Visiting it again is inefficient
                 Simplify::ExprInfo expr_info;
                 simplify->mutate(eq->b, &expr_info);
-                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+                if (const auto *info = simplify->find_bounds_and_alignment_info(v->name)) {
                     // We already know something about this variable and don't want to suppress it.
                     expr_info.intersect(*info);
                 }
@@ -552,7 +543,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             // TODO: Visiting it again is inefficient
             Simplify::ExprInfo expr_info;
             simplify->mutate(eq->a, &expr_info);
-            if (const auto *info = simplify->bounds_and_alignment_info.find(vb->name)) {
+            if (const auto *info = simplify->find_bounds_and_alignment_info(vb->name)) {
                 // We already know something about this variable and don't want to suppress it.
                 expr_info.intersect(*info);
             }
@@ -563,7 +554,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             Simplify::ExprInfo expr_info;
             expr_info.alignment.modulus = *modulus;
             expr_info.alignment.remainder = *remainder;
-            if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+            if (const auto *info = simplify->find_bounds_and_alignment_info(v->name)) {
                 // We already know something about this variable and don't want to suppress it.
                 expr_info.intersect(*info);
             }

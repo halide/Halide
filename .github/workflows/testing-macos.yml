@@ -83,6 +83,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Install wasm toolchain
+        if: matrix.arch == 'arm-64'
         run: brew install emscripten
 
       # AppleClang on Intel unconditionally injects /usr/local/include and
@@ -212,9 +213,10 @@ jobs:
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600
 
-      # --- wasm (wabt JIT) ---
+      # --- wasm (wabt JIT), Apple Silicon only ---
 
       - name: Test (wasm_simd128, wabt JIT)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
           cmake --build build
@@ -222,6 +224,7 @@ jobs:
             -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Test (wasm_mvponly, wabt JIT)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_mvponly
           cmake --build build
@@ -229,6 +232,7 @@ jobs:
             -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Build (wasm_simd128 + wasm_threads, generator only)
+        if: matrix.arch == 'arm-64'
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
           cmake --build build --target build_generator
@@ -237,10 +241,12 @@ jobs:
       # it needs its own configure/build/test rather than riding along with
       # the "Configure/Build/Test apps" steps above.
       - name: Configure HelloWasm
+        if: matrix.arch == 'arm-64'
         run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
         working-directory: apps/HelloWasm
 
       - name: Build and test HelloWasm
+        if: matrix.arch == 'arm-64'
         run: |
           cmake --build build
           ctest --test-dir build --output-on-failure

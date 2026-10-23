@@ -287,11 +287,13 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> wild_u64_));
     casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> wild_u64_));
 
-    // VCVTP/M
+    // VCVTP/M/A
     casts.emplace_back("fp_to_int_floor", i32(floor(wild_f32x_)));
     casts.emplace_back("fp_to_int_floor", u32(floor(wild_f32x_)));
     casts.emplace_back("fp_to_int_ceil", i32(ceil(wild_f32x_)));
     casts.emplace_back("fp_to_int_ceil", u32(ceil(wild_f32x_)));
+    casts.emplace_back("fp_to_int_round_half_away", i32(round_half_away(wild_f32x_)));
+    casts.emplace_back("fp_to_int_round_half_away", u32(round_half_away(wild_f32x_)));
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
     // TODO: We need to match rounding shift right, and negate the RHS.
@@ -440,6 +442,13 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
+    {"llvm.round", "llvm.round", Float(16, 4), "round_half_away", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round", "llvm.round", Float(32, 2), "round_half_away", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round", "llvm.round", Float(64, 2), "round_half_away", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.round.f16", "llvm.round.f16", Float(16), "round_half_away", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round.f32", "llvm.round.f32", Float(32), "round_half_away", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.round.f64", "llvm.round.f64", Float(64), "round_half_away", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
     {"vabdu", "uabd", UInt(8, 8), "absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -529,6 +538,10 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "fcvtmu", UInt(32, 2), "fp_to_int_floor", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
     {nullptr, "fcvtps", Int(32, 2), "fp_to_int_ceil", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
     {nullptr, "fcvtms", Int(32, 2), "fp_to_int_floor", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtau", UInt(32, 4), "fp_to_int_round_half_away", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtas", Int(32, 4), "fp_to_int_round_half_away", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtau", UInt(32, 2), "fp_to_int_round_half_away", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtas", Int(32, 2), "fp_to_int_round_half_away", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
 
     // SMAX, UMAX, FMAX - Max
     {"vmaxs", "smax", Int(8, 8), "max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -1240,7 +1253,10 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         // Workaround for https://github.com/halide/Halide/issues/9182
         // TODO: Revisit for a better solution of compiler-rt equivalent
         llvm_func->addFnAttr("no-builtins");
-    } else if (f.attributes & LoweredFunc::Attribute::SME_NONSTREAMING_TASK) {
+    } else if (f.attributes & (LoweredFunc::Attribute::SME_STREAMING_TASK |
+                               LoweredFunc::Attribute::SME_NONSTREAMING_TASK)) {
+        // A task can have its own vscale_range, which would be lost if it
+        // were inlined into its caller.
         llvm_func->addFnAttr(llvm::Attribute::NoInline);
     }
 
@@ -1322,6 +1338,14 @@ int CodeGen_ARM::check_feasible_vscale(int vector_bits,
 
 void CodeGen_ARM::visit(const Cast *op) {
     if (!simd_intrinsics_disabled() && op->type.is_vector()) {
+        if (target.bits == 64 && op->type.is_int_or_uint() && op->type.bits() < 32 &&
+            op->value.type().element_of() == Float(32) &&
+            Call::as_intrinsic(op->value, {Call::round_half_away})) {
+            // Narrow through a 32-bit integer so the conversion is one fcvtas.
+            value = codegen(Cast::make(op->type, Cast::make(op->type.with_bits(32), op->value)));
+            return;
+        }
+
         vector<Expr> matches;
         for (const Pattern &pattern : casts) {
             if (expr_match(pattern.pattern, op, matches)) {
@@ -2494,6 +2518,30 @@ void CodeGen_ARM::visit(const Call *op) {
         // We want these as left shifts with a negative b instead.
         value = codegen(op->args[0] << simplify(-op->args[1]));
         return;
+    } else if (op->is_intrinsic(Call::fixed_to_float)) {
+        // Neon's fixed-point converts (scvtf/ucvtf #k, vcvt.f32.s32 #k) take
+        // 32-bit lanes on both arm32 and arm64 and 64-bit lanes on arm64. SVE
+        // has no fixed-point form.
+        const Expr &x = op->args[0];
+        auto k = as_const_uint(op->args[1]);
+        const int bits = op->type.bits();
+        if (!simd_intrinsics_disabled() && target_vscale() == 0 && op->type.is_vector() && k &&
+            x.type().bits() == bits &&
+            (bits == 32 || (bits == 64 && target.bits == 64))) {
+            const int lanes = (op->type.lanes() * bits <= 64 ? 64 : 128) / bits;
+            const std::string name =
+                std::string(target.bits == 64 ? "llvm.aarch64" : "llvm.arm") + ".neon.vcvtfx" +
+                (x.type().is_int() ? "s" : "u") + "2fp." +
+                "v" + std::to_string(lanes) + "f" + std::to_string(bits) + "." +
+                "v" + std::to_string(lanes) + "i" + std::to_string(bits);
+            llvm::FunctionType *fn_type =
+                llvm::FunctionType::get(llvm_type_of(op->type.with_lanes(lanes)),
+                                        {llvm_type_of(x.type().with_lanes(lanes)), i32_t}, false);
+            llvm::Function *fn = llvm::cast<llvm::Function>(module->getOrInsertFunction(name, fn_type).getCallee());
+            value = call_intrin(llvm_type_of(op->type), lanes, fn,
+                                {codegen(x), llvm::ConstantInt::get(i32_t, *k)});
+            return;
+        }
     } else if (op->is_intrinsic(Call::round)) {
         // llvm's roundeven intrinsic reliably lowers to the correct
         // instructions on aarch64, but despite having the same instruction
@@ -2501,6 +2549,12 @@ void CodeGen_ARM::visit(const Call *op) {
         if (target.bits == 32) {
             // So let's call the fallback to make sure it's vectorizable.
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+            return;
+        }
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        // As for round: frinta is only reliable on aarch64.
+        if (target.bits == 32) {
+            value = codegen(lower_round_half_away_from_zero(op->args[0]));
             return;
         }
     }

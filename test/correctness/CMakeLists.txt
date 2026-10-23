@@ -159,6 +159,8 @@ tests(
     deinterleave4.cpp
     deinterleave_lets.cpp
     deinterleave_vector.cpp
+    deinterleave_vector_based_ramp.cpp
+    dense_multiramp_index.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
@@ -250,6 +252,8 @@ tests(
     gpu_free_sync.cpp
     gpu_give_input_buffers_device_allocations.cpp
     gpu_jit_explicit_copy_to_device.cpp
+    gpu_lanes_reduction.cpp
+    gpu_lanes_reduction_codegen.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
     gpu_max_registers.cpp
@@ -284,6 +288,7 @@ tests(
     growing_stack.cpp
     half_native_interleave.cpp
     halide_buffer.cpp
+    halidoscope.cpp
     handle.cpp
     heap_cleanup.cpp
     hello_gpu.cpp
@@ -323,6 +328,7 @@ tests(
     interleave.cpp
     interleave_rgb.cpp
     interleave_x.cpp
+    internal_linkage.cpp
     interval.cpp
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
@@ -451,6 +457,7 @@ tests(
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
     rfactor_inner_dim_non_commutative.cpp
+    rfactor_specialize_rvar_bounds.cpp
     round.cpp
     round_up_and_blend_race.cpp
     run_process.cpp
@@ -519,6 +526,7 @@ tests(
     strict_float_bounds.cpp
     strict_fma.cpp
     strided_load.cpp
+    struct_mixed_field_stores.cpp
     struct_nested_field_load.cpp
     struct_nested_field_store.cpp
     struct_type.cpp
@@ -536,6 +544,7 @@ tests(
     tracing_bounds_required.cpp
     tracing_broadcast.cpp
     tracing_errors.cpp
+    tracing_matched_events.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
@@ -601,6 +610,7 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     vulkan_bool_scalar_abi.cpp
+    warp_shuffle_hoisting.cpp
     widening_reduction.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
@@ -694,6 +704,7 @@ tests(
     vector_cast.cpp
     vector_math.cpp
     vector_reductions.cpp
+    vulkan_bool_minmax.cpp
     # keep-sorted end
 )
 
@@ -718,6 +729,10 @@ find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependenci
 target_include_directories(correctness_spirv_ir PRIVATE "${Halide_SOURCE_DIR}/src")
 target_link_libraries(correctness_spirv_ir PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
+
+target_include_directories(correctness_vulkan_bool_minmax PRIVATE "${Halide_SOURCE_DIR}/src")
+target_link_libraries(correctness_vulkan_bool_minmax PRIVATE SPIRV-Headers::SPIRV-Headers)
+target_compile_definitions(correctness_vulkan_bool_minmax PRIVATE WITH_SPIRV)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(
@@ -775,6 +790,7 @@ if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_halidoscope PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
 
 if (WITH_AUTOSCHEDULERS)

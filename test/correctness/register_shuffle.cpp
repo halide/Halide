@@ -5,10 +5,12 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
-    int cap = t.get_cuda_capability_lower_bound();
-    if (cap < 50) {
-        printf("[SKIP] CUDA with capability greater than or equal to 5.0 required, cap:%d\n", cap);
-        return 0;
+    if (!t.has_feature(Target::Metal)) {
+        int cap = t.get_cuda_capability_lower_bound();
+        if (cap < 50) {
+            printf("[SKIP] CUDA with capability greater than or equal to 5.0, or Metal, required, cap:%d\n", cap);
+            return 0;
+        }
     }
 
     {

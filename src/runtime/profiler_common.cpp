@@ -65,6 +65,7 @@ public:
 WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name,
                                                              int num_funcs,
                                                              const char *const *func_names,
+                                                             const char *const *func_ir_names,
                                                              const int *func_parents,
                                                              const int *func_canonical_ids,
                                                              const int *func_kinds,
@@ -100,6 +101,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].name = func_names[i];
+        p->funcs[i].ir_name = func_ir_names[i];
         p->funcs[i].parent = func_parents[i];
         p->funcs[i].canonical_id = func_canonical_ids[i];
         p->funcs[i].kind = (halide_profiler_func_kind)func_kinds[i];
@@ -250,6 +252,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const char *const *func_names,
+                                        const char *const *func_ir_names,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
                                         const int *func_kinds,
@@ -294,7 +297,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
         // Find or create the pipeline statistics for this pipeline.
         halide_profiler_pipeline_stats *p =
             find_or_create_pipeline(pipeline_name, num_funcs,
-                                    func_names, func_parents, func_canonical_ids,
+                                    func_names, func_ir_names, func_parents, func_canonical_ids,
                                     func_kinds, func_buffer_func_ids,
                                     func_counters_approximated);
         if (!p) {
@@ -1048,6 +1051,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             if (i == c) {
                 // Identity / non-summable fields come from the canonical entry.
                 dst.name = src.name;
+                dst.ir_name = src.ir_name;
                 dst.parent = src.parent;
                 dst.canonical_id = c;
                 dst.kind = src.kind;
@@ -1914,6 +1918,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     const halide_profiler_func_stats *fs = &pp->funcs[i];
                     json << "        {\n";
                     field_str("          ", "name", fs->name);
+                    field_str("          ", "ir_name", fs->ir_name);
                     field_i("          ", "parent", fs->parent);
                     field_i("          ", "canonical_id", fs->canonical_id);
                     field_i("          ", "kind", fs->kind);

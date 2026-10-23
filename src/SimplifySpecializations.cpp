@@ -7,7 +7,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
-#include <utility>
+#include <algorithm>
 
 namespace Halide {
 namespace Internal {
@@ -18,52 +18,57 @@ using std::vector;
 
 namespace {
 
-void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
-    for (Definition &def : definitions) {
-        for (auto &def_arg : def.args()) {
-            def_arg = simplify(substitute(var, value, def_arg));
-        }
-        for (auto &def_val : def.values()) {
-            def_val = simplify(substitute(var, value, def_val));
+template<typename Fn>
+void mutate_definition_exprs(Definition &def, Fn &&mutate_expr, bool include_rvars = true) {
+    for (Expr &def_arg : def.args()) {
+        def_arg = mutate_expr(def_arg);
+    }
+    for (Expr &def_val : def.values()) {
+        def_val = mutate_expr(def_val);
+    }
+    if (def.predicate().defined()) {
+        def.predicate() = mutate_expr(def.predicate());
+    }
+    if (include_rvars) {
+        for (ReductionVariable &rv : def.schedule().rvars()) {
+            if (rv.min.defined()) {
+                rv.min = mutate_expr(rv.min);
+            }
+            if (rv.extent.defined()) {
+                rv.extent = mutate_expr(rv.extent);
+            }
         }
     }
 }
 
-class SimplifyUsingFact : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-    Expr mutate(const Expr &e) override {
-        if (e.type().is_bool()) {
-            if (equal(fact, e) ||
-                can_prove(!fact || e)) {
-                // fact implies e
-                return const_true();
-            }
-            if (equal(fact, !e) ||
-                equal(!fact, e) ||
-                can_prove(!fact || !e)) {
-                // fact implies !e
-                return const_false();
-            }
-        }
-        return IRMutator::mutate(e);
+void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
+    for (Definition &def : definitions) {
+        mutate_definition_exprs(def, [&](const Expr &e) {
+            return simplify(substitute(var, value, e));
+        });
     }
-
-    Expr fact;
-    SimplifyUsingFact(Expr f)
-        : fact(std::move(f)) {
-    }
-};
+}
 
 void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
-        for (auto &def_arg : def.args()) {
-            def_arg = simplify(SimplifyUsingFact(fact).mutate(def_arg));
-        }
-        for (auto &def_val : def.values()) {
-            def_val = simplify(SimplifyUsingFact(fact).mutate(def_val));
-        }
+        mutate_definition_exprs(def, [&](const Expr &expr) {
+            return simplify(mutate_with(expr, [&](auto *self, const Expr &e) {
+                if (e.type().is_bool()) {
+                    if (equal(fact, e) ||
+                        can_prove(!fact || e)) {
+                        // fact implies e
+                        return const_true();
+                    }
+                    if (equal(fact, !e) ||
+                        equal(!fact, e) ||
+                        can_prove(!fact || !e)) {
+                        // fact implies !e
+                        return const_false();
+                    }
+                }
+                return self->mutate_base(e);
+            }));
+        });
     }
 }
 
@@ -106,10 +111,11 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         const Definition s_def = specializations.back().definition;
         specializations.pop_back();
 
-        // The values/args needs to be copied over since they might have
+        // The values/args/predicate need to be copied over since they might have
         // been simplified based on the predicate of the specialization.
         def.values() = s_def.values();
         def.args() = s_def.args();
+        def.predicate() = s_def.predicate();
 
         // Copy over the schedule.
         def.schedule() = s_def.schedule().get_copy();
@@ -153,13 +159,60 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     return result;
 }
 
+bool same_rvar(const ReductionVariable &a, const ReductionVariable &b) {
+    return a.var == b.var && equal(a.min, b.min) && equal(a.extent, b.extent);
+}
+
+bool no_rvars_differ(const vector<Definition> &defs) {
+    if (defs.size() <= 1) {
+        return true;
+    }
+    const auto &first = defs[0].schedule().rvars();
+    return std::all_of(defs.begin() + 1, defs.end(), [&](const Definition &d) {
+        const auto &other = d.schedule().rvars();
+        return std::equal(first.begin(), first.end(), other.begin(), other.end(), same_rvar);
+    });
+}
+
+void uniquify_specialization_rvars(vector<Definition> &defs) {
+    if (no_rvars_differ(defs)) {
+        return;
+    }
+
+    for (size_t i = 0; i < defs.size(); i++) {
+        Definition &d = defs[i];
+        if (d.schedule().rvars().empty()) {
+            continue;
+        }
+        vector<Split> rename_splits;
+        map<string, Expr> var_renames;
+        for (ReductionVariable &rv : d.schedule().rvars()) {
+            string old_var = rv.var;
+            string new_var = "s" + std::to_string(i) + "." + old_var;
+            rv.var = new_var;
+            var_renames[old_var] = Variable::make(Int(32), new_var);
+            rename_splits.push_back(
+                Split{new_var, old_var, "", 0, Expr(), true, TailStrategy::RoundUp, Split::RenameVar});
+        }
+        mutate_definition_exprs(
+            d, [&](const Expr &e) { return substitute(var_renames, e); }, /*include_rvars=*/false);
+        auto &splits = d.schedule().splits();
+        splits.insert(splits.begin(), rename_splits.begin(), rename_splits.end());
+    }
+}
+
+void simplify_stage_specializations(Definition &def, const string &name) {
+    vector<Definition> defs = propagate_specialization_in_definition(def, name);
+    uniquify_specialization_rvars(defs);
+}
+
 }  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
-    for (auto &iter : env) {
-        Function &func = iter.second;
-        if (func.definition().defined()) {
-            propagate_specialization_in_definition(func.definition(), func.name());
+    for (auto &[name, func] : env) {
+        simplify_stage_specializations(func.definition(), name);
+        for (size_t i = 0; i < func.updates().size(); i++) {
+            simplify_stage_specializations(func.update(i), name);
         }
     }
 }

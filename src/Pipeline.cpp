@@ -1002,6 +1002,33 @@ void Pipeline::trace_pipeline() {
     contents->trace_pipeline = true;
 }
 
+void Pipeline::halidoscope(std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope(nullptr, std::move(sizes), options, target);
+}
+
+void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope(nullptr, std::move(output), options, target);
+}
+
+void Pipeline::halidoscope(JITUserContext *context, std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    auto prepare = [&](Pipeline &p, const Target &t) {
+        return HalidoscopeRunner{[&p, t, &sizes](JITUserContext *c) { p.realize(c, sizes, t); },
+                                 std::make_unique<ProfilerScope>(p)};
+    };
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
+}
+
+void Pipeline::halidoscope(JITUserContext *context, RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    Realization r = output.r   ? *output.r :
+                    output.buf ? Realization(Buffer<>(*output.buf)) :
+                                 Realization(std::move(*output.buffer_list));
+    auto prepare = [&](Pipeline &p, const Target &t) {
+        return HalidoscopeRunner{[&p, t, &r](JITUserContext *c) { p.realize(c, r, t); },
+                                 std::make_unique<ProfilerScope>(p)};
+    };
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
+}
+
 ProfilerScope::ProfilerScope(Pipeline p)
     : source(std::move(p)) {
     user_assert(std::get<Pipeline>(source).defined()) << "Pipeline is undefined\n";

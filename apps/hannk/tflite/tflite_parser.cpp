@@ -23,6 +23,16 @@ class Parser {
     std::vector<TensorPtr> tensors_;
     std::vector<std::unique_ptr<OpGroup>> subgraphs_;
 
+    // Tensor indices come straight from the (untrusted) model, so reject any
+    // that fall outside the current subgraph's tensor list instead of indexing
+    // tensors_ out of bounds.
+    TensorPtr get_tensor(int index) {
+        HCHECK(index >= 0 && (size_t)index < tensors_.size())
+            << "tflite model refers to tensor index " << index
+            << ", but the current subgraph only has " << tensors_.size() << " tensors";
+        return tensors_[index];
+    }
+
 public:
     explicit Parser(const tflite::Model *model)
         : model_(model) {
@@ -117,6 +127,9 @@ public:
         }
 
         if (t->buffer() != 0) {
+            HCHECK(t->buffer() < model_->buffers()->size())
+                << "tflite model refers to buffer index " << t->buffer()
+                << ", but it only has " << model_->buffers()->size() << " buffers";
             const auto *tflite_buffer = model_->buffers()->Get(t->buffer())->data();
             if (tflite_buffer) {
                 // tflite_buffer->Data() points at read-only data in the flatbuffer.
@@ -138,9 +151,9 @@ public:
     }
 
     OpPtr parse_binary(const tflite::Operator *op, BinaryOp::Operator type, bool swap_operands = false) {
-        TensorPtr a = tensors_[op->inputs()->Get(0)];
-        TensorPtr b = tensors_[op->inputs()->Get(1)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr a = get_tensor(op->inputs()->Get(0));
+        TensorPtr b = get_tensor(op->inputs()->Get(1));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         if (swap_operands) {
             std::swap(a, b);
         }
@@ -150,9 +163,9 @@ public:
 // We can't do this with templates...
 #define PARSE_BINARY_WITH_ACTIVATION(op, Op) \
     make_op<BinaryOp>(                       \
-        tensors_[op->inputs()->Get(0)],      \
-        tensors_[op->inputs()->Get(1)],      \
-        tensors_[op->outputs()->Get(0)],     \
+        get_tensor(op->inputs()->Get(0)),    \
+        get_tensor(op->inputs()->Get(1)),    \
+        get_tensor(op->outputs()->Get(0)),   \
         BinaryOp::Op,                        \
         parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function()));
 
@@ -169,8 +182,8 @@ public:
         }};
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<Pool2DOp>(
             input, output, stride, filter_size, padding, reduce_op, activation);
     }
@@ -183,9 +196,9 @@ public:
         HCHECK(activation == ActivationFunction::None);
         std::vector<TensorPtr> inputs;
         for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
-            inputs.push_back(tensors_[*i]);
+            inputs.push_back(get_tensor(*i));
         }
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         int axis = options->axis();
         // Handle negative values, which are legal
         if (axis < 0) {
@@ -211,10 +224,10 @@ public:
             options->stride_w(),
             options->stride_h(),
         }};
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr filter = tensors_[op->inputs()->Get(1)];
-        TensorPtr bias = tensors_[op->inputs()->Get(2)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr filter = get_tensor(op->inputs()->Get(1));
+        TensorPtr bias = get_tensor(op->inputs()->Get(2));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<ConvOp>(input, filter, bias, output, stride,
                                dilation_factor, padding, activation);
     }
@@ -233,10 +246,10 @@ public:
             options->stride_w(),
             options->stride_h(),
         }};
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr filter = tensors_[op->inputs()->Get(1)];
-        TensorPtr bias = tensors_[op->inputs()->Get(2)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr filter = get_tensor(op->inputs()->Get(1));
+        TensorPtr bias = get_tensor(op->inputs()->Get(2));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         int depth_multiplier = output->extent(0) / input->extent(0);
         return make_op<DepthwiseConv2DOp>(
             input, filter, bias, output, depth_multiplier,
@@ -248,30 +261,30 @@ public:
             op->builtin_options_as_FullyConnectedOptions();
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr filter = tensors_[op->inputs()->Get(1)];
-        TensorPtr bias = tensors_[op->inputs()->Get(2)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr filter = get_tensor(op->inputs()->Get(1));
+        TensorPtr bias = get_tensor(op->inputs()->Get(2));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return lower_tflite_fullyconnected(input, filter, bias, output, activation);
     }
 
     OpPtr parse_pad(const tflite::Operator *op) {
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr padding = tensors_[op->inputs()->Get(1)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr padding = get_tensor(op->inputs()->Get(1));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<PadOp>(input, padding, output);
     }
 
     OpPtr parse_reshape(const tflite::Operator *op) {
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         // If there are two inputs, and the second is an int32 vector, it should
         // be used to specify the new shape (instead of ReshapeOptions).
         TensorPtr shape_tensor = nullptr;
         if (op->inputs()->size() == 2) {
-            shape_tensor = tensors_[op->inputs()->Get(1)];
+            shape_tensor = get_tensor(op->inputs()->Get(1));
         } else if (options) {
             size_t size = options->new_shape()->size();
             HalideBuffer<int32_t, 1> shape_data(size);
@@ -285,8 +298,8 @@ public:
     }
 
     OpPtr parse_shape(const tflite::Operator *op) {
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<ShapeOp>(input, output);
     }
 
@@ -295,9 +308,9 @@ public:
             op->builtin_options_as_GatherOptions();
         int axis = options->axis();
         int batch_dims = options->batch_dims();
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr indices = tensors_[op->inputs()->Get(1)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr indices = get_tensor(op->inputs()->Get(1));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         if (axis < 0) {
             axis += input->rank();
         }
@@ -309,8 +322,8 @@ public:
         const tflite::SpaceToDepthOptions *options =
             op->builtin_options_as_SpaceToDepthOptions();
         int block_size = options->block_size();
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<SpaceDepthOp>(input, output, block_size);
     }
 
@@ -318,22 +331,22 @@ public:
         const tflite::DepthToSpaceOptions *options =
             op->builtin_options_as_DepthToSpaceOptions();
         int block_size = options->block_size();
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<SpaceDepthOp>(input, output, -block_size);
     }
 
     OpPtr parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
         assert(axis_tensor_index < (int)op->inputs()->size());
-        TensorPtr axis_tensor = tensors_[op->inputs()->Get(axis_tensor_index)];
+        TensorPtr axis_tensor = get_tensor(op->inputs()->Get(axis_tensor_index));
         HCHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
         assert(input_tensor_index < (int)op->inputs()->size());
-        TensorPtr input = tensors_[op->inputs()->Get(input_tensor_index)];
+        TensorPtr input = get_tensor(op->inputs()->Get(input_tensor_index));
         std::vector<TensorPtr> outputs;
         for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
-            outputs.push_back(tensors_[*i]);
+            outputs.push_back(get_tensor(*i));
         }
         // Handle negative values, which are legal
         if (axis < 0) {
@@ -357,23 +370,23 @@ public:
         const tflite::SoftmaxOptions *options =
             op->builtin_options_as_SoftmaxOptions();
         float beta = options->beta();
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         const int axis = 0;  // In TFLite, normalization is always against the first axis.
         return make_op<SoftmaxOp>(input, output, beta, axis);
     }
 
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         const int axis = 0;  // In TFLite, normalization is always against the first axis.
         return make_op<L2NormalizationOp>(input, output, axis);
     }
 
     OpPtr parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr indices = tensors_[op->inputs()->Get(1)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr indices = get_tensor(op->inputs()->Get(1));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
 #ifndef NDEBUG
         const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
         const bool keep_dims = options ? options->keep_dims() : false;
@@ -385,22 +398,22 @@ public:
     }
 
     OpPtr parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<UnaryOp>(input, output, type);
     }
 
     OpPtr parse_lstm(const tflite::Operator *op) {
-        TensorPtr data_input = tensors_[op->inputs()->Get(0)];
-        TensorPtr prev_activ_input = tensors_[op->inputs()->Get(1)];
-        TensorPtr weights_input = tensors_[op->inputs()->Get(2)];
-        TensorPtr biases_input = tensors_[op->inputs()->Get(3)];
-        TensorPtr prev_state_input = tensors_[op->inputs()->Get(4)];
+        TensorPtr data_input = get_tensor(op->inputs()->Get(0));
+        TensorPtr prev_activ_input = get_tensor(op->inputs()->Get(1));
+        TensorPtr weights_input = get_tensor(op->inputs()->Get(2));
+        TensorPtr biases_input = get_tensor(op->inputs()->Get(3));
+        TensorPtr prev_state_input = get_tensor(op->inputs()->Get(4));
 
-        TensorPtr activ_output = tensors_[op->outputs()->Get(0)];
-        TensorPtr state_output = tensors_[op->outputs()->Get(1)];
-        TensorPtr concat_temp = tensors_[op->outputs()->Get(2)];
-        TensorPtr activ_temp = tensors_[op->outputs()->Get(3)];
+        TensorPtr activ_output = get_tensor(op->outputs()->Get(0));
+        TensorPtr state_output = get_tensor(op->outputs()->Get(1));
+        TensorPtr concat_temp = get_tensor(op->outputs()->Get(2));
+        TensorPtr activ_temp = get_tensor(op->outputs()->Get(3));
 
         // TODO: there is an activation function specified here but it's not clear
         // whether it's used in the LSTM reference implementation. Ignoring for now.
@@ -415,9 +428,9 @@ public:
     }
 
     OpPtr parse_transpose(const tflite::Operator *op) {
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr dims = tensors_[op->inputs()->Get(1)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        TensorPtr input = get_tensor(op->inputs()->Get(0));
+        TensorPtr dims = get_tensor(op->inputs()->Get(1));
+        TensorPtr output = get_tensor(op->outputs()->Get(0));
         return make_op<TransposeOp>(input, dims, output);
     }
 
@@ -524,11 +537,11 @@ public:
 
         std::vector<TensorPtr> inputs;
         for (int i : *subgraph->inputs()) {
-            inputs.push_back(tensors_[i]);
+            inputs.push_back(get_tensor(i));
         }
         std::vector<TensorPtr> outputs;
         for (int i : *subgraph->outputs()) {
-            outputs.push_back(tensors_[i]);
+            outputs.push_back(get_tensor(i));
         }
 
         std::swap(tensors_, old_tensors);

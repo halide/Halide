@@ -336,7 +336,7 @@ Stmt Simplify::visit(const Store *op) {
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
     if (is_const_one(op->predicate)) {
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->value.type().bytes() > alloc_info->bounds) {
                 in_unreachable = true;
@@ -415,6 +415,14 @@ Stmt Simplify::visit(const Store *op) {
             permuted_predicate = Shuffle::make_transpose(predicate, A);
         }
         return mutate(op->with(permuted_value, mr.to_expr(), permuted_predicate, align));
+    } else if (mr.dimensions() >= 1 &&
+               is_const_one(mr.strides[0]) &&
+               !mr.matches_expr(index)) {
+        // The index is a multiramp that is already dense innermost, but it's
+        // spelled some other way (e.g. with vector div and mod). Write it as
+        // nested ramps, which later become separate dense stores (or as a
+        // single dense ramp, if it has one dim).
+        return op->with(value, mr.to_expr(), predicate, align);
     } else if (predicate.same_as(op->predicate) &&
                value.same_as(op->value) &&
                index.same_as(op->index) &&
@@ -586,6 +594,7 @@ Stmt Simplify::visit(const Block *op) {
     } else if (store_first &&
                store_next &&
                store_first->name == store_next->name &&
+               store_first->value.type() == store_next->value.type() &&
                equal(store_first->index, store_next->index) &&
                equal(store_first->predicate, store_next->predicate) &&
                is_pure(store_first->index) &&
