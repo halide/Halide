@@ -309,8 +309,15 @@ int main() {
     check(scope, cast<uint8_t>(x + 5) & cast<uint8_t>(x + 3), u8(0), u8(13));
     check(scope, cast<int8_t>(x - 5) & cast<int8_t>(x + 3), i8(0), i8(13));
     check(scope, cast<int8_t>(2 * x - 5) & cast<int8_t>(x - 3), i8(-128), i8(15));
-    check(scope, cast<uint8_t>(x + 5) | cast<uint8_t>(x + 3), u8(5), u8(255));
-    check(scope, cast<int8_t>(x + 5) | cast<int8_t>(x + 3), i8(3), i8(127));
+    // Not tight (the true min is 6, at x = 1): the operands are correlated
+    // through x, which interval bounds don't track.
+    check(scope, cast<uint8_t>(x + 5) | cast<uint8_t>(x + 3), u8(5), u8(15));
+    check(scope, cast<int8_t>(x + 5) | cast<int8_t>(x + 3), i8(5), i8(15));
+    check(scope, cast<int8_t>(x - 5) | cast<int8_t>(x + 3), i8(-5), i8(127));  // LHS could be negative
+    check(scope, cast<uint8_t>(x + 5) ^ cast<uint8_t>(x + 3), u8(0), u8(15));
+    check(scope, cast<int8_t>(x + 5) ^ cast<int8_t>(x + 3), i8(0), i8(15));
+    check(scope, x | 1024, 1024, 2047);
+    check(scope, cast<uint16_t>(x) | (cast<uint16_t>(x) * make_const(UInt(16), 256)), u16(0), u16(4095));
     check(scope, ~cast<uint8_t>(x), u8(-11), u8(-1));
     check(scope, (cast<uint8_t>(x) >> make_one(UInt(8))), u8(0), u8(5));
     check(scope, (make_const(UInt(8), 10) >> make_one(UInt(8))), u8(5), u8(5));
