@@ -119,7 +119,7 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # scalar grid-index arithmetic (shifts and masks of qh) into vectors, each
 # index then extracted lane by lane for its table load: iq1_s's and iq1_m's
 # loops twice the SIMD instructions, ~15-30% slower (also with f32 acts,
-# quantized in the pipeline: iq1_s's gemv +18-28%).
+# quantized in the pipeline: gemv iq1_s +18-28%, iq1_m +6-10%).
 # gpr_scales=true (vec_dot and the gemv tiles: the 6-bit sub-block scales
 # and mins decoded in GPRs, GGML's SWAR; not the gemm tiles, where they cost
 # q5_K's 20%): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
@@ -146,6 +146,7 @@ set(GGML_SCHEDULE_PARAMS
     "iq3_xxs mul_mat f32:q8_K interleave=1"
     "iq1_s mul_mat q8_K interleave=1 slp=false"
     "iq1_m mul_mat q8_K slp=false"
+    "iq1_m mul_mat f32:q8_K slp=false"
     "iq1_s mul_mat f32:q8_K interleave=1 slp=false"
     "iq4_xs mul_mat q8_K interleave=1"
     "iq4_xs mul_mat f32:q8_K interleave=1"
