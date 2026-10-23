@@ -427,6 +427,15 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     // The transcription against GGML itself, where it picks this layout.
                     results.push_back({row.type, "repack", "ggml-repack", name, K, first_diff(ref.data(), live.data(), bytes, bytes / records), false, {}, R});
                 }
+                // x4 activations: the layout of q8_K's blocks against GGML's
+                // quantizer to it (transcribed, and its own)
+                std::vector<uint8_t> mat(bytes);
+                if (check && quantize_mat(fs, t, x.data(), mat.data(), R, K)) {
+                    results.push_back({row.type, "repack", "ggml", "quantize_mat_transcription", K, first_diff(ref.data(), mat.data(), bytes, bytes / records), false, {}, R});
+                    if (ggml_quantize_mat_live(fs, t, x.data(), mat.data(), R, K)) {
+                        results.push_back({row.type, "repack", "ggml-repack", "quantize_mat", K, first_diff(ref.data(), mat.data(), bytes, bytes / records), false, {}, R});
+                    }
+                }
             }
             std::vector<int64_t> xe{K}, qe{records};
             if (R > 1) xe.push_back(R), qe = {nb, R / fs.rows};

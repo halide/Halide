@@ -164,6 +164,12 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
 // The bytes GGML's CPU_REPACK buffer holds for the same weights; returns its
 // layout's name (e.g. q4_0_4x8), empty if it does not repack them.
 std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_t> &dst, int64_t N, int64_t K);
+// GGML's quantization of N f32 rows of K values to its x4 activations in f's
+// layout (q8_K.4x8: block_q8_Kx4), a transcription of its
+// quantize_mat_q8_K_4x8 (quantize_mat), or GGML's own (the _live one); false
+// if f is no such layout.
+bool quantize_mat(const FormatSpec &f, ggml_type t, const float *x, uint8_t *dst, int64_t N, int64_t K);
+bool ggml_quantize_mat_live(const FormatSpec &f, ggml_type t, const float *x, uint8_t *dst, int64_t N, int64_t K);
 
 // The importance matrix the harness quantizes weights of type t with, a
 // row's of K values (trusted.cpp): the synthetic one for types GGML requires

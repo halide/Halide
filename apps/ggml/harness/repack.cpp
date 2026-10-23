@@ -10,11 +10,18 @@
 // - ggml_repack_live: the bytes GGML itself repacks to, read back from its
 //   CPU_REPACK buffer (host memory; the buffer has no get_tensor), which
 //   cross-checks the transcription on the layout GGML picks here;
-// - relayout: those, AoS as is, or the planar (SoA) layout, which GGML lacks.
+// - relayout: those, AoS as is, or the planar (SoA) layout, which GGML lacks;
+// - GGML's x4 activations, which its repacked gemms quantize f32 rows to
+//   (GGML repacks no act blocks): quantize_mat, a transcription of
+//   ggml_quantize_mat_q8_K_4x8_generic (GGML's on Arm; same source), and
+//   ggml_quantize_mat_live, GGML's own (ggml_quantize_mat_t, exported); the
+//   layout of its block_q8_Kx4 from q8_K's blocks (make_block_q8_Kx4, the
+//   harness's, from its bsums index) is ggml_repack's for q8_K.
 #include "harness.h"
 
 #include "ggml-backend.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace gq {
@@ -181,6 +188,80 @@ block_q4_Kx8 make_block_q4_Kx8(block_q4_K *in, unsigned int blck_size_interleave
     return out;
 }
 
+struct block_q8_K {
+    float d;
+    int8_t qs[QK_K];
+    int16_t bsums[QK_K / 16];
+};
+struct block_q8_Kx4 {
+    float d[4];
+    int8_t qs[QK_K * 4];
+    int16_t bsums[QK_K / 4];
+};
+
+// quantize_mat_q8_K_4x8's layout of 4 q8_K blocks (as make_block_q8_0x4):
+// the qs in 8-byte pieces across the rows; the bsums in 4s per row, its
+// index (((j & 31) >> 3) << 2) + ((j >> 8) << 4) + ((j >> 6) & 3) of qs[j]
+block_q8_Kx4 make_block_q8_Kx4(block_q8_K *in, unsigned int blck_size_interleave) {
+    block_q8_Kx4 out;
+    for (int i = 0; i < 4; i++) {
+        out.d[i] = in[i].d;
+    }
+    const int end = QK_K * 4 / blck_size_interleave;
+    for (int i = 0; i < end; ++i) {
+        int src_id = i % 4;
+        int src_offset = (i / 4) * blck_size_interleave;
+        int dst_offset = i * blck_size_interleave;
+        memcpy(&out.qs[dst_offset], &in[src_id].qs[src_offset], blck_size_interleave);
+    }
+    for (int j = 0; j < QK_K / 4; j++) {
+        out.bsums[j] = in[j % 16 / 4].bsums[j / 16 * 4 + j % 4];
+    }
+    return out;
+}
+
+inline int nearest_int(float fval) {
+    float val = fval + 12582912.f;
+    int i;
+    memcpy(&i, &val, sizeof(int));
+    return (i & 0x007fffff) - 0x00400000;
+}
+
+void ggml_quantize_mat_q8_K_4x8_generic(const float *x, void *vy, int64_t k) {
+    const int nb = k / QK_K;
+    block_q8_Kx4 *y = (block_q8_Kx4 *)vy;
+    const int blck_size_interleave = 8;
+    float srcv[4][QK_K];
+    float iscale[4];
+    for (int i = 0; i < nb; i++) {
+        for (int row_iter = 0; row_iter < 4; row_iter++) {
+            float amax = 0.0f;
+            float max = 0;
+            for (int j = 0; j < QK_K; j++) {
+                srcv[row_iter][j] = x[row_iter * k + i * QK_K + j];
+                if (amax < fabsf(srcv[row_iter][j])) {
+                    amax = fabsf(srcv[row_iter][j]);
+                    max = srcv[row_iter][j];
+                }
+            }
+            iscale[row_iter] = amax ? -127.f / max : 0;
+            y[i].d[row_iter] = amax ? 1 / iscale[row_iter] : 0;
+        }
+        for (int j = 0; j < QK_K / 4; j++) {
+            y[i].bsums[j] = 0;
+        }
+        for (int j = 0; j < QK_K * 4; j++) {
+            int src_offset = (j / (4 * blck_size_interleave)) * blck_size_interleave;
+            int src_id = (j % (4 * blck_size_interleave)) / blck_size_interleave;
+            src_offset += (j % blck_size_interleave);
+            int index = (((j & 31) >> 3) << 2) + ((j >> 8) << 4) + ((j >> 6) & 3);
+            float x0 = srcv[src_id][src_offset] * iscale[src_id];
+            y[i].qs[j] = nearest_int(x0);
+            y[i].bsums[index] += y[i].qs[j];
+        }
+    }
+}
+
 // repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl,
 // repack_q4_K_to_q4_K_8_bl
 template<int R, typename B, typename F>
@@ -204,6 +285,10 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
     int c = f.chunk;
     if (t == GGML_TYPE_Q8_0 && f.codes.empty() && f.rows == 4 && (c == 4 || c == 8) && N % 4 == 0 && K % QK8_0 == 0) {
         repack_rows<4>((const block_q8_0 *)src, dst, N, K / QK8_0, [c](block_q8_0 *in) { return make_block_q8_0x4(in, c); });
+        return true;
+    }
+    if (t == GGML_TYPE_Q8_K && f.codes.empty() && f.rows == 4 && c == 8 && N % 4 == 0 && K % QK_K == 0) {
+        repack_rows<4>((const block_q8_K *)src, dst, N, K / QK_K, [c](block_q8_K *in) { return make_block_q8_Kx4(in, c); });
         return true;
     }
     if (t == GGML_TYPE_Q4_K && f.codes.empty() && f.rows == 8 && c == 8 && N % 8 == 0 && K % QK_K == 0) {
@@ -285,6 +370,30 @@ std::vector<std::unique_ptr<HBuf>> rowwise_ports(const halide_filter_metadata_t 
         bs.push_back(std::make_unique<HBuf>(mem.back().data(), t, e));
     }
     return bs;
+}
+
+bool quantize_mat(const FormatSpec &f, ggml_type t, const float *x, uint8_t *dst, int64_t N, int64_t K) {
+    if (t != GGML_TYPE_Q8_K || !f.codes.empty() || f.rows != 4 || f.chunk != 8 || N % 4 || K % QK_K) return false;
+    for (int64_t r = 0; r < N; r += 4) {
+        ggml_quantize_mat_q8_K_4x8_generic(x + r * K, dst + r / 4 * (K / QK_K) * sizeof(block_q8_Kx4), K);
+    }
+    return true;
+}
+
+}  // namespace gq
+
+// GGML's (src/ggml-cpu/repack.cpp: the gemm's act quantizer, by its chunk)
+template<int64_t INTER_SIZE, ggml_type PARAM_TYPE>
+void ggml_quantize_mat_t(const float *x, void *vy, int64_t nrow, int64_t n_per_row);
+
+namespace gq {
+
+bool ggml_quantize_mat_live(const FormatSpec &f, ggml_type t, const float *x, uint8_t *dst, int64_t N, int64_t K) {
+    if (t != GGML_TYPE_Q8_K || !f.codes.empty() || f.rows != 4 || f.chunk != 8 || N % 4 || K % QK_K) return false;
+    for (int64_t r = 0; r < N; r += 4) {
+        ggml_quantize_mat_t<8, GGML_TYPE_Q8_K>(x + r * K, dst + r / 4 * (K / QK_K) * sizeof(block_q8_Kx4), 4, K);
+    }
+    return true;
 }
 
 std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_t> &dst, int64_t N, int64_t K) {
