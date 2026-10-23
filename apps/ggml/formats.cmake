@@ -109,14 +109,16 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # iteration of vec_dot and of mul_mat's gemv tiles, default 2) where measured
 # faster on Apple M3: a q8_K act's block is 292 bytes, so a second block's
 # loads fall outside ldur's immediate range and each needs its own address.
-# sublanes=true (vec_dot: the sub-blocks across the vector lanes, their
-# scales one vector multiply-add per 4 sub-blocks) where measured faster: it
-# also cuts q4_K-q6_K's loops by ~15% in instructions, not in time (latency
-# bound), and slows iq4_xs, iq2_s and iq1_m. slp=false (not a GeneratorParam:
-# the generator runs with HL_LLVM_ARGS=-vectorize-slp=false) where LLVM's SLP
-# vectorizer packs the scalar grid-index arithmetic (shifts and masks of qh)
-# into vectors, each index then extracted lane by lane for its table load:
-# iq1_s's and iq1_m's loops twice the SIMD instructions, ~15-30% slower.
+# sublanes=true (vec_dot and mul_mat's gemv tiles: the sub-blocks across the
+# vector lanes, their scales one vector multiply-add per 4 sub-blocks) where
+# measured faster (iq2_xs's gemv +14-19%, with interleave=1: with two blocks
+# per iteration it spills): it also cuts q4_K-q6_K's loops by ~15% in
+# instructions, not in time (latency bound), and slows iq4_xs, iq2_s and
+# iq1_m. slp=false (not a GeneratorParam: the generator runs with
+# HL_LLVM_ARGS=-vectorize-slp=false) where LLVM's SLP vectorizer packs the
+# scalar grid-index arithmetic (shifts and masks of qh) into vectors, each
+# index then extracted lane by lane for its table load: iq1_s's and iq1_m's
+# loops twice the SIMD instructions, ~15-30% slower.
 # gpr_scales=true (vec_dot and the gemv tiles: the 6-bit sub-block scales
 # and mins decoded in GPRs, GGML's SWAR; not the gemm tiles, where they cost
 # q5_K's 20%): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
@@ -136,6 +138,8 @@ set(GGML_SCHEDULE_PARAMS
     "iq1_m vec_dot q8_K slp=false"
     "iq4_xs vec_dot q8_K interleave=1"
     "iq2_xxs mul_mat q8_K interleave=1"
+    "iq2_xs mul_mat q8_K interleave=1 sublanes=true"
+    "iq2_xs mul_mat f32:q8_K interleave=1 sublanes=true"
     "iq2_xxs mul_mat f32:q8_K interleave=1"
     "iq3_xxs mul_mat q8_K interleave=1"
     "iq3_xxs mul_mat f32:q8_K interleave=1"
