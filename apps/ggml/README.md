@@ -195,19 +195,22 @@ scales and mins are decoded once per tile as a vector across the record's rows
 (its scale factors one 16-lane shuffle of them), and the mins' products read the
 act's `bsums` (`derived_sums`: per weight sub-block, pairwise adds of whole
 `bsums` vectors, dense across the act's rows); the rest of M (up to 3 rows) runs
-the gemv. An in-kernel activation encoder runs first, parallel over activation
-rows when M > 1, and vectorized per encoded block (`encoder`: the block's
-reductions, e.g. its scale, across the block; per-value Funcs, e.g. the codes,
-across their values). Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
-`[K / block, N / rows or M]` records (struct types from the kernel's metadata),
-`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
-`checked`, assumed in `bench`): all mins 0, rows dense
-(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
-`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
-does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
-block count (the 2-block interleave keeps its guard) and no host alignment
-(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
-adapter.
+the gemv. `q5_K.8x8` is GGML's `q5_K_8x8` on the same recipes (`kx8_layout`,
+`schemes/kquants.h`: its `qh` interleaved as `qs`); its gemv unrolls all of a
+block's sub-blocks, not pairs, since its high bits' positions vary per sub-block
+(`bit_position_varies`: constant shifts). An in-kernel activation encoder runs
+first, parallel over activation rows when M > 1, and vectorized per encoded
+block (`encoder`: the block's reductions, e.g. its scale, across the block;
+per-value Funcs, e.g. the codes, across their values). Kernel ABI
+(`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N / rows or M]`
+records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
+kernel declares the whole contract (checked in `checked`, assumed in `bench`):
+all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
+`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
+promises no more than GGML does: K is a whole number of blocks (GGML asserts
+`n % QK == 0`), with no even block count (the 2-block interleave keeps its
+guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
+`vec_dot` goes through a GGML-ABI adapter.
 
 Affine formats (`q4_1`: codes * d + min) use the same algorithm and recipes. In
 each recipe, `block_dot` (`schedule.h`) inlines all but the codes' decode into
