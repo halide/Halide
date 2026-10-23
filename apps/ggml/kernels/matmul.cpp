@@ -30,6 +30,8 @@ public:
     // where a weight's constant code offsets fold into the act's sub-block
     // sums (see ggml::Fold)
     GeneratorParam<ggml::Fold> fold_offsets{"fold_offsets", ggml::Fold::All, {{"none", ggml::Fold::None}, {"gemv", ggml::Fold::Gemv}, {"all", ggml::Fold::All}}};
+    // mul_mat's gemv in tiles of two rows where N allows (else one)
+    GeneratorParam<bool> row_pairs{"row_pairs", true};
 
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
@@ -170,7 +172,7 @@ public:
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs);
         }
     }
 
