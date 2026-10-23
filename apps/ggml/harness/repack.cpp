@@ -2,10 +2,11 @@
 // Interleave layout (schemes/layouts.h):
 // - ggml_repack: a test-only transcription of make_block_q4_0x4,
 //   make_block_q4_0x8, make_block_q8_0x4, make_block_q4_Kx8,
-//   make_block_iq4_nlx4, make_block_mxfp4x4,
-//   repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl,
-//   repack_q4_K_to_q4_K_8_bl, repack_iq4_nl_to_iq4_nl_4_bl and
-//   repack_mxfp4_to_mxfp4_4_bl from GGML v0.26's
+//   make_block_iq4_nlx4, make_block_mxfp4x4, make_block_q1_0x4 (its
+//   8-bit interleave), repack_q4_0_to_q4_0_{4,8}_bl,
+//   repack_q8_0_to_q8_0_4_bl, repack_q4_K_to_q4_K_8_bl,
+//   repack_iq4_nl_to_iq4_nl_4_bl, repack_mxfp4_to_mxfp4_4_bl and
+//   repack_q1_0_to_q1_0_4_bl from GGML v0.26's
 //   src/ggml-cpu/repack.cpp (MIT License, Copyright (c) 2023-2024 The ggml
 //   authors), for every layout, including those GGML does not pick on this
 //   CPU;
@@ -164,6 +165,33 @@ block_sq4x4<S> make_block_sq4x4(block_sq4<S> *in, unsigned int blck_size_interle
     return out;
 }
 
+// block_q1_0 {f16 d; u8 qs[16]}: 128 1-bit codes. make_block_q1_0x4 with
+// blck_size_interleave 8 (bits, its q1_0_4x8) interleaves the 4 rows' qs a
+// byte at a time (its 4-bit interleave shuffles bits: no Interleave layout).
+constexpr int QK1_0 = 128;
+struct block_q1_0 {
+    uint16_t d;
+    uint8_t qs[QK1_0 / 8];
+};
+struct block_q1_0x4 {
+    uint16_t d[4];
+    uint8_t qs[QK1_0 / 2];
+};
+
+block_q1_0x4 make_block_q1_0x4(block_q1_0 *in) {
+    block_q1_0x4 out;
+    for (int i = 0; i < 4; i++) {
+        out.d[i] = in[i].d;
+    }
+    for (int byte_idx = 0; byte_idx < QK1_0 / 8; ++byte_idx) {
+        out.qs[byte_idx * 4 + 0] = in[0].qs[byte_idx];
+        out.qs[byte_idx * 4 + 1] = in[1].qs[byte_idx];
+        out.qs[byte_idx * 4 + 2] = in[2].qs[byte_idx];
+        out.qs[byte_idx * 4 + 3] = in[3].qs[byte_idx];
+    }
+    return out;
+}
+
 constexpr int QK_K = 256;
 struct block_q4_K {
     uint16_t d, dmin;
@@ -296,7 +324,7 @@ void ggml_quantize_mat_q8_K_4x8_generic(const float *x, void *vy, int64_t k) {
 
 // repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl,
 // repack_q4_K_to_q4_K_8_bl, repack_iq4_nl_to_iq4_nl_4_bl,
-// repack_mxfp4_to_mxfp4_4_bl
+// repack_mxfp4_to_mxfp4_4_bl, repack_q1_0_to_q1_0_4_bl
 template<int R, typename B, typename F>
 void repack_rows(const B *src, uint8_t *out, int64_t nrow, int64_t nblocks, F make) {
     auto *dst = (decltype(make(nullptr)) *)out;
@@ -334,6 +362,10 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
     }
     if (t == GGML_TYPE_MXFP4 && f.codes.empty() && f.rows == 4 && c == 4 && N % 4 == 0 && K % QK4_0 == 0) {
         repack_rows<4>((const block_sq4<uint8_t> *)src, dst, N, K / QK4_0, [c](block_sq4<uint8_t> *in) { return make_block_sq4x4(in, c); });
+        return true;
+    }
+    if (t == GGML_TYPE_Q1_0 && f.codes.empty() && f.rows == 4 && c == 1 && N % 4 == 0 && K % QK1_0 == 0) {
+        repack_rows<4>((const block_q1_0 *)src, dst, N, K / QK1_0, [](block_q1_0 *in) { return make_block_q1_0x4(in); });
         return true;
     }
     if (t != GGML_TYPE_Q4_0 || f.codes != "i4" || N % f.rows || K % QK4_0) return false;

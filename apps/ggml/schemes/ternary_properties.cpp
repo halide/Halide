@@ -34,7 +34,7 @@ int main() {
     // held: their bounds checked at them
     Approximation q = ggml::TernaryQuant{}, s = ggml::SignQuant{};
     const std::vector<std::tuple<std::string, Approximation, Approximation>> schemes = {
-        {"q1_0", s, Compose{BlockReshape{ggml::SignQuant::block}, s, Parallel{{"codes", ggml::multiples(1, -1, 2)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::BitPack{1}}}}},
+        {"q1_0", s, Compose{BlockReshape{ggml::SignQuant::block}, s, Parallel{{"codes", ggml::set_signs()}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::BitPack{1}}}}},
         {"tq2_0", q, Compose{BlockReshape{ggml::QK_K}, q, Parallel{{"codes", ggml::multiples(0, -1, 4)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::two_bit_planes()}}}},
         {"tq1_0", q, Compose{BlockReshape{ggml::QK_K}, q, Parallel{{"codes", ggml::multiples(0, -1, 3)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::Segments{{{"qs_lo", 160}, {"qs_hi", 80}, {"qh", 16}}}}}, Parallel{{"qs_lo", ggml::TritPack{32}}, {"qs_hi", ggml::TritPack{16}}, {"qh", ggml::TritPack{4, 4}}}}},
     };

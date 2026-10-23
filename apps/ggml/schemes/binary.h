@@ -38,10 +38,21 @@ struct SignQuant {
     }
 };
 
+// The codes -1, 1 <-> bits 0, 1 (sign_bits()' opposite): multiples(1, -1, 2), its decode a select
+// on the bit (a test and a select of two constants: cheaper than shifting
+// the bit into place).
+inline Approximation set_signs() {
+    return Pointwise{"set_signs", [](const Expr &x) { return cast<uint8_t>(x > cast<int8_t>(0)); },
+                     [](const Expr &x) { return select(x != cast<uint8_t>(0), cast<int8_t>(1), cast<int8_t>(-1)); }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(-1, 1), ApproximationRange(0, 1))
+        .with_lossless();
+}
+
 // block_q1_0 {f16 d; u8 qs[16]}: bit j set for the code 1, least
 // significant first.
 inline Approximation q1_0(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{SignQuant::block, indexed}, SignQuant{}, Parallel{{"codes", multiples(1, -1, 2)}, {"scale", fp16()}},
+    return Compose{BlockReshape{SignQuant::block, indexed}, SignQuant{}, Parallel{{"codes", set_signs()}, {"scale", fp16()}},
                    Parallel{{"codes", BitPack{1}}},
                    layout(lay, {{"d", Float(16)}, {"qs", UInt(8), SignQuant::block / 8}}, {"qs", "d"})};
 }
