@@ -198,7 +198,13 @@ act's `bsums` (`derived_sums`: per weight sub-block, pairwise adds of whole
 the gemv. `q5_K.8x8` is GGML's `q5_K_8x8` on the same recipes (`kx8_layout`,
 `schemes/kquants.h`: its `qh` interleaved as `qs`); its gemv unrolls all of a
 block's sub-blocks, not pairs, since its high bits' positions vary per sub-block
-(`bit_position_varies`: constant shifts). An in-kernel activation encoder runs
+(`bit_position_varies`: constant shifts). `q6_K.8x8` is GGML's `q6_K_8x8` (its
+16 int8 scales per row regrouped across the rows, a `Transpose` per 64-byte
+block); its gemv groups 8 sub-blocks (128 values: those sharing `ql`/`qh`
+bytes). With act records the gemm loops over such groups of sub-blocks (q4_K's
+pairs, q6_K's 128 values; fully unrolled, the codes' loads are scheduled early
+and spill), each unrolled with those reading the same bytes adjacent
+(`sharing_order`: q6_K's 0, 4, 2, 6, ...). An in-kernel activation encoder runs
 first, parallel over activation rows when M > 1, and vectorized per encoded
 block (`encoder`: the block's reductions, e.g. its scale, across the block;
 per-value Funcs, e.g. the codes, across their values). Kernel ABI
