@@ -60,6 +60,24 @@ inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, co
     return fs;
 }
 
+// Whether f's update reads a bit field at a position that varies with v
+// other than with v mod `period` (q5_K's high bits: sub-block s's in bit s
+// of its bytes; not q4_K's nibbles, by sub-block parity): a loop over v in
+// steps of `period` would shift by a variable amount, which Halide widens.
+inline bool bit_position_varies(Func f, Var v, int period) {
+    using namespace Internal;
+    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
+    bool varies = false;
+    visit_with(e, [&](auto *self, const Call *c) {
+        if ((c->is_intrinsic(Call::shift_right) || c->is_intrinsic(Call::shift_left)) && expr_uses_var(c->args[1], v.name())) {
+            Expr a = c->args[1], b = substitute(v.name(), Expr(v) + period, a);
+            varies |= !can_prove(a == b);
+        }
+        self->visit_base(c);
+    });
+    return varies;
+}
+
 // Every stage of f in registers: `vec` vectorized, `unrolled` unrolled, each
 // where the stage has it.
 inline Func regs(Func f, const std::vector<VarOrRVar> &vec, const std::vector<VarOrRVar> &unrolled) {
@@ -919,6 +937,9 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
     // loads are scheduled early and spill)
     RVar rxso("rxso"), rxsi("rxsi");
     codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, 2).unroll(rxsi);
+    // the pairs unrolled too where a bit field's position varies across them
+    // (q5_K's high bits: constant shifts)
+    if (bit_position_varies(quads, v, 2)) codes.update().unroll(rxso);
     LoopLevel per_sub(codes, rxsi);
     regs(part.compute_at(per_sub), {n}, {v, u, m});
     regs(inner.compute_at(per_sub), {n}, {v, u, m});
