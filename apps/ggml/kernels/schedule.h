@@ -196,12 +196,23 @@ inline bool use_tables(const Target &t) {
     return !t.has_gpu_feature();
 }
 
+// The table decoders that tables() stages: all but tables of one value per
+// index (nvfp4's scales), which stay inline: each read a scalar load where
+// it is used.
+inline std::vector<Func> staged_tables(const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> fs;
+    for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
+        if (table_of(f).dim(0).extent() != 1) fs.push_back(f);
+    }
+    return fs;
+}
+
 // The table decodes at `at` (per block group), each a copy for its calls from
 // `consumers` (a pipeline computes them per kernel): unrolled over all but
 // their first dimension, split by the table's rows, so each read of a row is
 // a dense load.
 inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at) {
-    for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
+    for (Func f : staged_tables(rs)) {
         std::vector<Func> cs;
         for (Func c : consumers) {
             if (!c.defined()) continue;
@@ -275,10 +286,13 @@ inline bool invariant_factor(Func f) {
 }
 
 // Has the weight a float scale per sub-block (a decoded scale port with
-// the values' dimensions: (sub-block, block, row))?
+// the values' dimensions: (sub-block, block, row); decoded or read from a
+// table)?
 inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
-    for (Func f : decoders(rs, only({tag::scale}), 0, 1)) {
-        if (f.type().is_float() && f.dimensions() == 3) return true;
+    for (bool tables : {false, true}) {
+        for (Func f : decoders(rs, only({tag::scale}), 0, 1, tables)) {
+            if (f.type().is_float() && f.dimensions() == 3) return true;
+        }
     }
     return false;
 }
@@ -549,6 +563,44 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
     return fs;
 }
 
+// blocked()'s two-level weights with a float scale per sub-block (nvfp4's)
+// whose blocks (the act's, the reduction's) hold `nsub` sub-blocks, fewer
+// than an sdot's lanes, on tiles of ts.interleave blocks that fill them: as
+// GGML's NEON nvfp4 vec_dot, the lanes are the (sub-block, block) of a block
+// group, each its sub-block's int32 dot of the codes, then its scale (the
+// weight's sub-block scale times the act's block scale) applied as one
+// vector multiply-add per group. A sub-block's dot: its codes in pieces of
+// `ql` quads, each piece of the block's sub-blocks one sdot (lanes: quad,
+// sub-block; the codes of a piece of every sub-block one dense run of the
+// record, as GGML's low and high nibbles), accumulated over the pieces, then
+// its quads summed (pairwise adds across the group's blocks).
+inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDom &r, const Tiles &ts, int sub, int nsub, int vec, int per,
+                              const std::vector<ApproximationResult> &rs) {
+    Var lane("lane"), u("u"), q("q"), bacc("bacc"), lu("lu"), qlv("ql");
+    RVar ry = r.y, rxs("rxs"), rxh("rxh"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
+    const int ql = vec / per / nsub;
+    s.split(r.x, rxs, rxc, sub).split(rxc, rxh, rxc, ql * per).split(rxc, rxo, rxi, per);
+    Func blk = s.rfactor({{rxs, lane}, {ry, u}});
+    blk.bound(lane, 0, nsub);
+    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, false);
+    Func quads = codes.update().rfactor(rxo, q);
+    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+    Func acc = sum_tree(s, {{{rxs, lane}, {ryi, bacc}}, {{rxs, lane}}}, tile_at(out, st), n, m, ryo, 2)[0];
+    s.atomic().vectorize(rxs).unroll(n).unroll(m);
+    // per block group: the scales and the sub-blocks' dots, a vector across
+    // (sub-block, block)
+    for (Func f : {blk, codes}) {
+        f.compute_at(acc, ryo).reorder_storage(lane, u, n, m).bound_storage(u, ts.interleave);
+        f.reorder(lane, u, n, m).fuse(lane, u, lu).vectorize(lu).unroll(n).unroll(m);
+    }
+    blk.update().reorder(lane, u, n, m).fuse(lane, u, lu).vectorize(lu).unroll(n).unroll(m);
+    codes.update().reorder(rxo, lane, u, n, m).fuse(lane, u, lu).atomic().vectorize(rxo).vectorize(lu).unroll(n).unroll(m);
+    quads.compute_at(acc, ryo).reorder_storage(q, lane, u, n, m).bound_storage(u, ts.interleave);
+    quads.reorder(q, lane, u, n, m).fuse(q, lane, qlv).vectorize(qlv).unroll(u).unroll(n).unroll(m);
+    quads.update().reorder(rxi, q, lane, rxh, u, n, m).fuse(q, lane, qlv).atomic().vectorize(rxi).vectorize(qlv).unroll(rxh).unroll(u).unroll(n).unroll(m);
+    tables(rs, {blk, codes, quads}, LoopLevel(acc, ryo));
+}
+
 // The weight quantized in blocks: per block (r.y) and output a dot of the
 // codes (when the activation is quantized alike, an int32 sdot: 4 products per
 // lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
@@ -576,6 +628,12 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
+    std::optional<int64_t> bx = Internal::as_const_int(r.x.extent());
+    int nsub = sub && bx ? (int)*bx / sub : 0;
+    if (nsub && integer && !sublanes && !gpr_scales && !affine(rs) && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {
+        blocked_sub_lanes(out, st, s, dot.args()[0], dot.args()[1], r, ts, sub, nsub, vec, per, rs);
+        return;
+    }
     bool sl = sub && sublanes;
     // sub-blocks across the lanes: their scales decoded per block, a vector
     // (derived_sums() leaves them too)
@@ -1425,8 +1483,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
-    // A table's decode, per row pair, outweighs sharing the act's loads
-    if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
+    // A staged table's decode, per row pair, outweighs sharing the act's loads
+    if (staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
 }
 

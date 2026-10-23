@@ -281,10 +281,13 @@ sequential float sum, kept serial by the encoder schedule). All six codecs are
 bit-exact against GGML's quantizers and dequantizers; their kernels are the
 existing one-level and two-level recipes, the q8_0 acts of iq4_nl, nvfp4 and
 q1_0 a divisor of the weight's block (nvfp4: 2 per block, q1_0: 4) and float
-sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block.
-`ggml_iq_properties`, `ggml_mxfp4_properties` (nvfp4) and
-`ggml_ternary_properties` (tq1_0, tq2_0, q1_0) check their bounds, ranges and
-closure.
+sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block. nvfp4's ue4m3
+scales decode through a table of each byte's (as clang compiles GGML's NEON
+vec_dot), and its vec_dot and gemv take GGML's lanes: one per (sub-block, act
+block) of a pair of act blocks, each a sub-block's sdot, then all four scaled by
+one vector multiply-add (`blocked_sub_lanes`). `ggml_iq_properties`,
+`ggml_mxfp4_properties` (nvfp4) and `ggml_ternary_properties` (tq1_0, tq2_0,
+q1_0) check their bounds, ranges and closure.
 
 The grid formats iq2_xxs, iq2_xs, iq2_s, iq3_xxs, iq3_s, iq1_s and iq1_m
 (`schemes/grid.h`) decode natively and encode by GGML's quantizer. Their decode
