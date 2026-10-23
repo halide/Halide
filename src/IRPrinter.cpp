@@ -186,8 +186,8 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::VTCM:
         out << "VTCM";
         break;
-    case MemoryType::AMXTile:
-        out << "AMXTile";
+    case MemoryType::Tile:
+        out << "Tile";
         break;
     }
     return out;

@@ -119,6 +119,7 @@ target_sources(
     Extern.h
     ExternFuncArgument.h
     ExtractTileOperations.h
+    ExtractWMMAOperations.h
     FastIntegerDivide.h
     FindCalls.h
     FindIntrinsics.h
@@ -305,6 +306,7 @@ target_sources(
     Error.cpp
     Expr.cpp
     ExtractTileOperations.cpp
+    ExtractWMMAOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
     FindIntrinsics.cpp

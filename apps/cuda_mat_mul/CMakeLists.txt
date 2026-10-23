@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.28)
 project(cuda_mat_mul)
 
+# These schedules are for CUDA - the half precision ones use tensor cores - and
+# the results are checked against cuBLAS, so there is nothing here to build for
+# any other device API. CI builds every app under each of its GPU targets, and
+# adding cuda on top of one of those emits the kernels for whichever API wins.
+if (NOT Halide_TARGET MATCHES "cuda")
+    message(STATUS "Skipping cuda_mat_mul: Halide_TARGET is not a CUDA target")
+    return()
+endif ()
+
 # This just checks whether CUDA is available ahead of time to allow
 # skipping this app when CUDA/cuBLAS are not installed on the system.
 find_package(CUDAToolkit)
@@ -27,12 +36,54 @@ find_package(Halide REQUIRED)
 # Generator
 add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 
-# Filters
-add_halide_library(mat_mul FROM mat_mul.generator FEATURES cuda cuda_capability_80 PARAMS size=1024)
+# Filters. The operand type picks the schedule: half precision gets the tensor
+# cores, and float gets a schedule that accumulates in ordinary registers. Both
+# stage their inputs with asynchronous copies, which need compute capability
+# 8.0 or above.
+add_halide_library(
+    mat_mul
+    FROM mat_mul.generator
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=float32 B.type=float32 out.type=float32
+)
+add_halide_library(
+    mat_mul_f16
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=float16 B.type=float16 out.type=float32
+)
+
+add_halide_library(
+    mat_mul_f16_acc16
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=float16 B.type=float16 out.type=float16
+)
+add_halide_library(
+    mat_mul_bf16
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=bfloat16 B.type=bfloat16 out.type=float32
+)
+add_halide_library(
+    mat_mul_u8
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=uint8 B.type=uint8 out.type=int32
+)
 
 # Main executable
 add_executable(runner runner.cpp)
-target_link_libraries(runner PRIVATE mat_mul Halide::Tools CUDA::cudart CUDA::cublas)
+target_link_libraries(
+    runner
+    PRIVATE
+    mat_mul mat_mul_f16 mat_mul_f16_acc16 mat_mul_bf16 mat_mul_u8 Halide::Halide Halide::Tools
+    CUDA::cudart CUDA::cublas
+)
 
 # Test that the app actually works!
 add_test(NAME mat_mul COMMAND runner)

@@ -7,6 +7,7 @@
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "ExtractWMMAOperations.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -15,12 +16,14 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 #include "ModulusRemainder.h"
+#include "MultiRamp.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
 
 #include <fstream>
+#include <set>
 
 namespace Halide {
 namespace Internal {
@@ -149,6 +152,32 @@ protected:
 
     /** Wait for every asynchronous copy issued so far to have landed. */
     void await_all_copies();
+
+    /** Emit calls to the nvvm warp-level matrix multiply-accumulate
+     * intrinsics that drive the tensor cores. */
+    // @{
+    void codegen_wmma(const Call *op);
+    llvm::Value *codegen_wmma_raw(const Call *op);
+    void codegen_wmma_store(const Store *op);
+    void split_fragment(const Expr &e, std::vector<llvm::Value *> &args);
+    void vector_to_fragment_regs(llvm::Value *v, Type t, std::vector<llvm::Value *> &regs);
+    // @}
+
+    /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
+     * that form all the way to and from its allocation matters, because NVPTX
+     * holds a wide float vector in pairs of registers, and packing and
+     * unpacking one around every tensor core instruction costs more
+     * instructions than the instructions themselves.
+     */
+    // @{
+    bool is_fragment_alloc(const std::string &name);
+    llvm::Type *fragment_reg_type(Type t);
+    llvm::Value *fragment_reg_ptr(const std::string &name, Type t, int i);
+    void codegen_fragment_store(const Store *op);
+    llvm::Value *call_wmma_intrinsic(const std::string &name,
+                                     const std::vector<llvm::Value *> &args,
+                                     const std::vector<llvm::Type *> &overloads);
+    // @}
 
     bool supports_atomic_add(const Type &t) const override;
 };
@@ -401,11 +430,304 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         return;
     }
 
+    if (is_wmma_intrinsic(op)) {
+        codegen_wmma(op);
+        return;
+    }
+
+    internal_assert(!op->is_intrinsic(Call::wmma_fragment_to_matrix_d) &&
+                    !op->is_intrinsic(Call::wmma_lane_owns))
+        << "A tensor core accumulator store was broken apart during lowering. "
+        << op->name << " only has meaning as part of one.\n";
+
     // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
     value = call_overloaded_intrin(op->type, op->name, op->args);
     if (!value) {
         CodeGen_LLVM::visit(op);
     }
+}
+
+namespace {
+
+WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int rows, int cols, const Expr &access = Expr()) {
+    WMMAMatrixLayout result;
+    user_assert(wmma_matrix_layout(mr, rows, cols, &result))
+        << "The memory a tensor core instruction moves a " << rows << "x" << cols
+        << " matrix of " << name << " to or from is not a dense tile by the time it "
+        << "reaches the backend. One cause is a shared memory allocation made inside "
+        << "the loop over GPU threads, which gets striped across them; compute it at "
+        << "a loop outside the threads instead. The addresses accessed are:\n"
+        << mr.to_expr() << "\nThe access is:\n"
+        << access << "\n";
+    return result;
+}
+
+// The nvvm intrinsics take and return a fragment as 32-bit registers. Halide
+// represents half precision as llvm's half, which is what the intrinsics for
+// it take directly, but bfloat and the eight-bit integers have no llvm vector
+// type in the signature - those intrinsics take the lanes packed into an i32.
+bool wmma_reg_is_packed_i32(Type t) {
+    return t.bits() < 32 && t.element_of() != Float(16);
+}
+
+// A fragment that is a single register comes back from an intrinsic as that
+// register rather than as a struct holding one of them.
+llvm::Value *wmma_result_reg(llvm::IRBuilderBase *builder, llvm::Value *result, int i) {
+    return result->getType()->isStructTy() ? builder->CreateExtractValue(result, i) : result;
+}
+
+// The element type the wmma intrinsic names use for a Halide type. The
+// hardware takes 16-bit floats or 8-bit integers as multiplicands, and
+// accumulates the first into 16 or 32-bit floats and the second into 32-bit
+// integers.
+std::string wmma_type_suffix(Type t) {
+    if (t == Float(16)) {
+        return "f16";
+    } else if (t == BFloat(16)) {
+        return "bf16";
+    } else if (t == Float(32)) {
+        return "f32";
+    } else if (t == Int(8)) {
+        return "s8";
+    } else if (t == UInt(8)) {
+        return "u8";
+    } else if (t == Int(32)) {
+        return "s32";
+    }
+    user_error << "There is no tensor core instruction for " << t << ".\n";
+    return "";
+}
+
+}  // namespace
+
+void CodeGen_PTX_Dev::vector_to_fragment_regs(Value *v, Type t, vector<Value *> &regs) {
+    const int lanes_per_reg = 32 / t.bits();
+    for (int i = 0; i < t.lanes() / lanes_per_reg; i++) {
+        Value *reg = lanes_per_reg == 1 ?
+                         builder->CreateExtractElement(v, i) :
+                         slice_vector(v, i * lanes_per_reg, lanes_per_reg);
+        if (wmma_reg_is_packed_i32(t)) {
+            reg = builder->CreateBitCast(reg, i32_t);
+        }
+        regs.push_back(reg);
+    }
+}
+
+void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
+    // One llvm value per 32-bit register.
+    const int num_regs = e.type().bits() * e.type().lanes() / 32;
+    if (const Load *load = e.as<Load>()) {
+        if (is_fragment_alloc(load->name)) {
+            llvm::Type *reg_type = fragment_reg_type(e.type());
+            for (int i = 0; i < num_regs; i++) {
+                args.push_back(builder->CreateAlignedLoad(
+                    reg_type, fragment_reg_ptr(load->name, e.type(), i), llvm::Align(4)));
+            }
+            return;
+        }
+    }
+    vector_to_fragment_regs(codegen(e), e.type(), args);
+}
+
+Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
+                                            const vector<Value *> &args,
+                                            const vector<llvm::Type *> &overloads) {
+    llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID(name);
+    internal_assert(id != llvm::Intrinsic::not_intrinsic)
+        << "Could not find the nvvm intrinsic " << name << "\n";
+    llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id, overloads);
+    return builder->CreateCall(fn, args);
+}
+
+void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
+    Value *result = codegen_wmma_raw(op);
+
+    // Reassemble the returned struct into a Halide vector.
+    llvm::Type *result_type = llvm_type_of(op->type);
+    const int num_regs = op->type.bits() * op->type.lanes() / 32;
+    auto get_reg = [&](int i) {
+        return wmma_result_reg(builder.get(), result, i);
+    };
+    if (op->type.bits() == 32) {
+        value = UndefValue::get(result_type);
+        for (int i = 0; i < num_regs; i++) {
+            value = builder->CreateInsertElement(value, get_reg(i), i);
+        }
+    } else {
+        vector<Value *> regs;
+        regs.reserve(num_regs);
+        for (int i = 0; i < num_regs; i++) {
+            Value *reg = get_reg(i);
+            if (wmma_reg_is_packed_i32(op->type)) {
+                reg = builder->CreateBitCast(
+                    reg, get_vector_type(llvm_type_of(op->type.element_of()),
+                                         32 / op->type.bits()));
+            }
+            regs.push_back(reg);
+        }
+        value = concat_vectors(regs);
+    }
+    internal_assert(value->getType() == result_type)
+        << "Unexpected result type from a tensor core instruction\n";
+}
+
+bool CodeGen_PTX_Dev::is_fragment_alloc(const std::string &name) {
+    const MemoryType *t = alloc_memory_type.find(name);
+    return t && *t == MemoryType::Tile;
+}
+
+llvm::Type *CodeGen_PTX_Dev::fragment_reg_type(Type t) {
+    if (t.bits() == 32) {
+        return llvm_type_of(t.element_of());
+    } else if (wmma_reg_is_packed_i32(t)) {
+        return i32_t;
+    } else {
+        return get_vector_type(llvm_type_of(t.element_of()), 32 / t.bits());
+    }
+}
+
+llvm::Value *CodeGen_PTX_Dev::fragment_reg_ptr(const std::string &name, Type t, int i) {
+    return codegen_buffer_pointer(name, t.element_of(), Expr(i * (32 / t.bits())));
+}
+
+void CodeGen_PTX_Dev::codegen_fragment_store(const Store *op) {
+    const Type t = op->value.type();
+    const int num_regs = t.bits() * t.lanes() / 32;
+    llvm::Type *reg_type = fragment_reg_type(t);
+
+    const Call *call = op->value.as<Call>();
+    if (call && is_wmma_intrinsic(call)) {
+        // Take the registers straight out of the struct the instruction
+        // returns, without ever making a vector of them.
+        Value *result = codegen_wmma_raw(call);
+        for (int i = 0; i < num_regs; i++) {
+            builder->CreateAlignedStore(wmma_result_reg(builder.get(), result, i),
+                                        fragment_reg_ptr(op->name, t, i), llvm::Align(4));
+        }
+        return;
+    }
+
+    // Anything else (a zero-initialization, say) does become a vector, but it
+    // is still written a register at a time so that the allocation only ever
+    // sees register-sized accesses.
+    vector<Value *> regs;
+    vector_to_fragment_regs(codegen(op->value), t, regs);
+    internal_assert((int)regs.size() == num_regs);
+    for (int i = 0; i < num_regs; i++) {
+        internal_assert(regs[i]->getType() == reg_type);
+        builder->CreateAlignedStore(regs[i], fragment_reg_ptr(op->name, t, i), llvm::Align(4));
+    }
+}
+
+llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
+    // The nvvm wmma intrinsics take and return fragments as a flat list of
+    // 32-bit registers, packaged up as a literal struct. We represent them in
+    // Halide IR as vectors, so most of the work here is repacking.
+    auto get_int_arg = [&](int i) {
+        auto v = as_const_int(op->args[i]);
+        internal_assert(v) << "Expected a constant integer argument to " << op->name << "\n";
+        return (int)*v;
+    };
+
+    const int M = get_int_arg(0), N = get_int_arg(1), K = get_int_arg(2);
+    const char *layouts[] = {"row", "col"};
+
+    std::ostringstream name;
+    name << "llvm.nvvm.wmma.m" << M << "n" << N << "k" << K << ".";
+
+    vector<Value *> args;
+    vector<llvm::Type *> overloads;
+
+    if (op->is_intrinsic(Call::wmma_mma)) {
+        // Half precision multiplicands name the instruction after the d and c
+        // operands, which for us are always the same type. Everything else
+        // names it after the multiplicands, which are in args 5 and 6.
+        const Type operand_type = op->args[5].type().element_of();
+        std::string signature;
+        if (operand_type == Float(16)) {
+            const std::string acc = wmma_type_suffix(op->type.element_of());
+            signature = acc + "." + acc;
+        } else {
+            signature = wmma_type_suffix(operand_type);
+        }
+        name << "mma." << layouts[get_int_arg(3)] << "." << layouts[get_int_arg(4)]
+             << "." << signature;
+        split_fragment(op->args[5], args);
+        split_fragment(op->args[6], args);
+        split_fragment(op->args[7], args);
+    } else {
+        // The a operand is M x K, the b operand is K x N, and the accumulator
+        // is M x N.
+        const bool is_a = op->is_intrinsic(Call::wmma_matrix_to_fragment_a);
+        const bool is_b = op->is_intrinsic(Call::wmma_matrix_to_fragment_b);
+        // The simplifier is free to have rewritten the load of the matrix into
+        // a dense load followed by a transpose, which is what happens to a
+        // column-major matrix. is_load_of_multiramp undoes that.
+        const Expr &arg = op->args[wmma_matrix_arg(op)];
+        MultiRamp mr;
+        const Load *matrix = is_load_of_multiramp(arg, Scope<Expr>::empty_scope(), &mr);
+        user_assert(matrix && matrix->type.element_of() == arg.type().element_of())
+            << "The matrix a tensor core instruction takes a fragment out of is not a "
+            << "load with an affine index by the time it reaches the backend.\n";
+        WMMAMatrixLayout mem = matrix_in_memory(matrix->name, mr,
+                                                is_b ? K : M, is_a ? K : N, arg);
+        const std::string type_suffix = wmma_type_suffix(op->type.element_of());
+        name << "load." << (is_a ? "a" : is_b ? "b" :
+                                                "c")
+             << "." << (mem.row_major ? "row" : "col") << ".stride." << type_suffix;
+
+        Value *ptr = codegen_buffer_pointer(matrix->name, matrix->type.element_of(), mem.base);
+        overloads.push_back(ptr->getType());
+        args.push_back(ptr);
+        args.push_back(codegen(cast(Int(32), mem.stride)));
+    }
+
+    return call_wmma_intrinsic(name.str(), args, overloads);
+}
+
+void CodeGen_PTX_Dev::codegen_wmma_store(const Store *op) {
+    // Each lane writes the entries of the matrix that it holds, which the
+    // predicate describes and which one wmma store instruction does for the
+    // whole warp.
+    // A store to a column-major matrix arrives as a dense store of the
+    // transpose of it, because the simplifier rewrites stores to make them
+    // dense. Undoing that gives back the store as the extraction pass wrote it,
+    // and the column-major layout falls out of the index as usual.
+    Expr index;
+    const Call *inflate = peel_store_permutations(op, &index).as<Call>();
+    internal_assert(inflate && inflate->args.size() == 5);
+    Expr predicate = op->predicate;
+    while (const Shuffle *shuffle = predicate.as<Shuffle>()) {
+        predicate = shuffle->vectors[0];
+    }
+    internal_assert(predicate.as<Call>() &&
+                    predicate.as<Call>()->is_intrinsic(Call::wmma_lane_owns))
+        << "A store of a tensor core accumulator lost its predicate\n";
+
+    auto get_int_arg = [&](int i) {
+        auto v = as_const_int(inflate->args[i]);
+        internal_assert(v);
+        return (int)*v;
+    };
+    const int M = get_int_arg(0), N = get_int_arg(1), K = get_int_arg(2);
+    const Expr &fragment = inflate->args[3];
+
+    MultiRamp mr;
+    internal_assert(is_multiramp(index, Scope<Expr>::empty_scope(), &mr));
+    WMMAMatrixLayout mem = matrix_in_memory(op->name, mr, M, N);
+
+    std::ostringstream name;
+    name << "llvm.nvvm.wmma.m" << M << "n" << N << "k" << K << ".store.d."
+         << (mem.row_major ? "row" : "col") << ".stride."
+         << wmma_type_suffix(fragment.type().element_of());
+
+    Value *ptr = codegen_buffer_pointer(op->name, op->value.type().element_of(), mem.base);
+    vector<Value *> args{ptr};
+    vector<llvm::Type *> overloads{ptr->getType()};
+    split_fragment(fragment, args);
+    args.push_back(codegen(cast(Int(32), mem.stride)));
+
+    call_wmma_intrinsic(name.str(), args, overloads);
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
@@ -483,7 +805,6 @@ void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Load *op) {
-
     // Do aligned 4-wide 32-bit loads as a single i128 load.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
@@ -731,10 +1052,20 @@ void CodeGen_PTX_Dev::await_all_copies() {
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
+    if (is_wmma_matrix_store(op)) {
+        codegen_wmma_store(op);
+        return;
+    }
+
     // Issue atomic store if we are inside an Atomic node.
     if (emit_atomic_stores) {
         user_assert(is_const_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
+    }
+
+    if (is_fragment_alloc(op->name)) {
+        codegen_fragment_store(op);
+        return;
     }
 
     // Asking for GPUSharedAsync memory is a promise that every store to the

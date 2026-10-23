@@ -116,7 +116,7 @@ enum MemoryType: byte {
     GPUTexture,
     LockedCache,
     VTCM,
-    AMXTile,
+    Tile,
     GPUSharedAsync,
 }
 
