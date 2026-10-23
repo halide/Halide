@@ -1205,6 +1205,8 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     if (guard_m) {
         // (a constant under cond; M = 1, the gemv, needs only its row)
         codes.bound_extent(m, select(out.output_buffer().dim(1).extent() > 1, ts.mt, 1));
+        // the guarded tail tile's rows, else a heap allocation per tile
+        dot.bound_storage(m, ts.mt);
     }
     Stage cu = codes.update();
     cu.split(rx, rxc, rxk, 8);
