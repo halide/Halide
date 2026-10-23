@@ -414,8 +414,9 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
 // the loop-carried chains).
 // `across_rows`: the sub-block sums too vectorized across the rows (n;
 // records of several rows), each act sub-block's (or d.pair's) sum
-// broadcast: by-element multiply-adds.
-inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, const Tiles &ts, const RDom &r, bool gemm, int vec, bool across_rows = false) {
+// broadcast: by-element multiply-adds. `act_records`: the act too in whole
+// records (its sums interleaved across its rows).
+inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, const Tiles &ts, const RDom &r, bool gemm, int vec, bool across_rows = false, bool act_records = false) {
     if (!d.sums.defined()) return;
     Var u("u"), v("v");
     RVar ry = r.y, ryo("ryo"), ryi("ryi");
@@ -444,8 +445,18 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
             // the act's sums per weight sub-block, one vector (pairwise adds
             // of its port's), each a lane: a by-element multiply-add
             RVar rxh("rxh");
-            regs(d.pair.compute_at(blocks).reorder_storage(t, n, u, m), {t}, {n, u, m});
-            d.pair.update().reorder(t, rxh, n).unroll(rxh);
+            if (act_records) {
+                // whole act records (q8_K.4x8): each weight sub-block's act
+                // sums dense across the record's rows (h, tl, m), so pairwise
+                // adds of whole bsums vectors (addp), not lane gathers
+                Var tg("tg"), tl("tl"), sg("sg"), sl("sl");
+                d.pair.compute_at(blocks).split_storage(t, sg, sl, 2).reorder_storage(sl, m, sg, n, u);
+                d.pair.split(t, tg, tl, 2).reorder(tl, m, tg, n, u).vectorize(tl).vectorize(m).unroll(tg).unroll(n).unroll(u);
+                d.pair.update().split(t, tg, tl, 2).reorder(rxh, tl, m, tg, n, u).atomic().vectorize(rxh).vectorize(tl).vectorize(m).unroll(tg).unroll(n).unroll(u);
+            } else {
+                regs(d.pair.compute_at(blocks).reorder_storage(t, n, u, m), {t}, {n, u, m});
+                d.pair.update().reorder(t, rxh, n).unroll(rxh);
+            }
         }
     } else if (d.part.defined()) {
         // per act sub-block, vectorized across them: its factor times its sum
@@ -892,8 +903,9 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // (split_storage), so the tile's accumulators stay in registers.
 // `records`: the weights in records of ts.nt rows (tiles from 0 mod ts.nt,
 // N a multiple), their mins across the rows (as blocked_rows_sub).
+// `act_records`: the act too in whole records (q8_K.4x8).
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
-                         const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false) {
+                         const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
@@ -926,7 +938,15 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     if (sub) {  // per block and sub-block: the tile's sub-block dots, then their scales
         sub_tiles(codes.update(), n, m, {nii, mii, nio, mio, rxs, u}).unroll(rxs).unroll(u);
-        sub_tiles(part.update(), n, m, {nii, mii, nio, mio, v, u}).unroll(v).unroll(u);
+        if (records) {
+            // the scales' factor one 16-lane vector per sub-block (2 x 2
+            // sub-tiles of the tile's columns): one shuffle of the decoded
+            // scales, not one per sub-tile
+            Var no("no"), ni("ni"), mo("mo"), mi("mi"), nm("nm"), nmo("nmo");
+            part.update().split(n, no, ni, 2, TailStrategy::RoundUp).split(m, mo, mi, 2, TailStrategy::RoundUp).reorder({ni, mi, no, mo, v, u}).fuse(ni, mi, nm).fuse(nm, no, nmo).vectorize(nmo).unroll(mo).unroll(v).unroll(u);
+        } else {
+            sub_tiles(part.update(), n, m, {nii, mii, nio, mio, v, u}).unroll(v).unroll(u);
+        }
         part.compute_at(codes, rxs);
         inner.compute_at(codes, rxs);
         // the sub-block's scales, decoded once across the record's rows
@@ -947,7 +967,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         regs(rest.compute_at(acc, ryo).bound_storage(u, ts.interleave), {n}, {m, u});
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
-    schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, records);
+    schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, records, act_records);
     tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo));
 }
 
@@ -1386,7 +1406,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (dr's act is the last result: its derived ports, rs[1]'s for derived_sums)
         std::vector<ApproximationResult> rr = rs;
         if (whole) std::swap(rr[1], rr.back());
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true, whole);
     } else if (mmla_ok) {
         blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub);
     }
