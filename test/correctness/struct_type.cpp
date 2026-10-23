@@ -128,13 +128,13 @@ void test_struct_type_ordering_consistent_with_equality() {
 // must treat a struct-typed Expr as having no known integer bounds -- it
 // isn't a number, so there's nothing to bound. bounds_helper's generic
 // fallback (for a node shape it doesn't specifically recognize, e.g. a
-// struct-typed Select) computes ConstantInterval::bounds_of_type(e.type())
+// struct_pack Call) computes ConstantInterval::bounds_of_type(e.type())
 // and asserts the result is representable by e.type(); can_represent()
 // rejects a struct outright, so bounds_of_type() must agree and report "no
-// known bounds" too. A Select (rather than the struct_pack Expr itself) is
-// used here because bounds_helper has no case for Select at all, so it's
-// guaranteed to hit that generic fallback rather than Call's own (more
-// specific) dispatch. Built via a raw struct_pack Call rather than the
+// known bounds" too. A Select of two struct_packs is used here so that both
+// the generic fallback (for the struct_pack values) and the Select case (the
+// union of its values' bounds, cast back to the struct type) are exercised.
+// Built via a raw struct_pack Call rather than the
 // pack_struct() front-end helper, since that helper validates one initializer
 // per declared field (with arrays swept via gather()/`_`) -- more machinery
 // than this Type/Expr-level test needs.

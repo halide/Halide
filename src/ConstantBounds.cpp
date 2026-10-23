@@ -44,6 +44,9 @@ ConstantInterval bounds_helper(const Expr &e,
             return min(recurse(op->a), recurse(op->b));
         } else if (const Max *op = e.as<Max>()) {
             return max(recurse(op->a), recurse(op->b));
+        } else if (const Select *op = e.as<Select>()) {
+            return ConstantInterval::make_union(recurse(op->true_value),
+                                                recurse(op->false_value));
         } else if (const Cast *op = e.as<Cast>()) {
             return recurse(op->value);
         } else if (const Broadcast *op = e.as<Broadcast>()) {
@@ -130,6 +133,9 @@ ConstantInterval bounds_helper(const Expr &e,
                 // We can't do much with the other bitwise ops, but we can treat
                 // bitwise_not as an all-ones bit pattern minus the argument.
                 return recurse(make_const(e.type(), -1) - op->args[0]);
+            } else if (op->is_intrinsic(Call::if_then_else) && op->args.size() == 3) {
+                return ConstantInterval::make_union(recurse(op->args[1]),
+                                                    recurse(op->args[2]));
             } else if (func_bounds && op->call_type == Call::Halide && op->type.is_int_or_uint()) {
                 auto it = func_bounds->find({op->name, op->value_index});
                 if (it != func_bounds->end()) {
