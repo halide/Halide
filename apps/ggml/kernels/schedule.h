@@ -1505,14 +1505,15 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // sdot), in tasks of up to 32 x 32 outputs (whole records: up to 128 rows),
 // fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
-// block (single rows for N = 1, or for weights decoded through tables). Edge
+// block (single rows for N = 1, or for weights decoded through tables), with
+// its `interleave`, `sublanes` and `gpr_scales` (per-format parameters). Edge
 // tiles shift inwards: any N, M at least the tile's. With act records of
 // r = fmt.act_rows > 1 rows, out's first update is the rows in whole records
 // (dots[1]) on gemm tiles starting on a record, its second the others
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool gpr_scales = false) {
+                    bool sublanes = false, bool gpr_scales = false) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
@@ -1646,8 +1647,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
     // A staged table's decode, per row pair, outweighs sharing the act's loads
-    if (staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
+    if (staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales);
 }
 
 }  // namespace ggml

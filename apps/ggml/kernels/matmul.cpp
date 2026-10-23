@@ -21,7 +21,8 @@ public:
     GeneratorParam<std::string> weight{"weight", "q4_0"}, act{"act", "q8_0"}, op{"op", "vec_dot"};
     // blocks per iteration of vec_dot and of mul_mat's gemv tiles
     GeneratorParam<int> interleave{"interleave", 2};
-    // vec_dot's sub-blocks across the vector lanes (see ggml::blocked)
+    // vec_dot's and the gemv tiles' sub-blocks across the vector lanes (see
+    // ggml::blocked)
     GeneratorParam<bool> sublanes{"sublanes", false};
     // vec_dot's and the gemv tiles' sub-block scales decoded in GPRs (see
     // ggml::blocked)
@@ -166,7 +167,7 @@ public:
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, gpr_scales);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales);
         }
     }
 
