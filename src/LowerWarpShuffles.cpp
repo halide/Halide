@@ -3,7 +3,6 @@
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LICM.h"
@@ -15,7 +14,7 @@
 #include <set>
 #include <utility>
 
-// In CUDA and Metal, allocations stored in registers and shared across lanes
+// On GPUs, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication
 // across lanes is possible. So while we model then as allocations
 // outside the loop over lanes, we need to codegen them as allocations
@@ -359,25 +358,36 @@ public:
     }
 };
 
-// Make a call to one of Metal's simd_shuffle functions (or
-// halide_metal_simd_shuffle_relative, which CodeGen_Metal_Dev expands
-// to simd_shuffle relative to the current SIMD-group lane id).
-Expr metal_shuffle(const string &name, Expr value, const Expr &arg) {
-    // Metal shuffles 16- and 32-bit scalars and vectors
-    // natively. Zero-extend narrower types to 32 bits.
+// Make a call to one of the gpu_shuffle intrinsics, which require
+// 32-bit scalars.
+Expr make_shuffle(Call::IntrinsicOp op, Expr value, const Expr &arg, int warp_size) {
     Type type = value.type();
-    Type shuffle_type = type;
-    if (type.bits() < 16) {
-        shuffle_type = UInt(32, type.lanes());
-        value = cast(shuffle_type, reinterpret(type.with_code(Type::UInt), value));
-    } else {
-        user_assert(type.bits() <= 32) << "Warp shuffles not supported for this type: " << type << "\n";
+    if (type.is_vector()) {
+        vector<Expr> elems;
+        elems.reserve(type.lanes());
+        for (int i = 0; i < type.lanes(); i++) {
+            elems.push_back(make_shuffle(op, extract_lane(value, i), arg, warp_size));
+        }
+        return Shuffle::make_concat(elems);
     }
-    // Shuffles must be executed by all participating lanes, so mark them
-    // as impure to stop later passes from moving them into lane-dependent
+
+    // Make 32-bit with a combination of reinterprets and zero extension
+    Type shuffle_type = type;
+    if (type.bits() < 32) {
+        shuffle_type = UInt(32);
+        value = cast(shuffle_type, reinterpret(type.with_code(Type::UInt), value));
+    } else if (type.bits() == 64) {
+        // TODO: separate shuffles of the low and high halves and then recombine.
+        user_error << "Warp shuffles of 64-bit types not yet implemented\n";
+    } else {
+        user_assert(type.bits() == 32) << "Warp shuffles not supported for this type: " << type << "\n";
+    }
+
+    // Shuffles must be executed by all participating lanes, so they are
+    // impure to stop later passes from moving them into lane-dependent
     // control flow (e.g. the if statements that guard stores done by
     // lane zero alone).
-    Expr shuffled = Call::make(shuffle_type, name, {value, arg}, Call::Extern);
+    Expr shuffled = Call::make(shuffle_type, op, {value, arg, warp_size}, Call::Intrinsic);
     if (shuffle_type != type) {
         // Narrow it back down
         shuffled = reinterpret(type, cast(type.with_code(Type::UInt), shuffled));
@@ -568,7 +578,7 @@ class LowerWarpReductions : public IRMutator {
             string name = unique_name('t');
             Expr var = Variable::make(t, name);
             lets.emplace_back(name, value);
-            value = combine(var, metal_shuffle("simd_shuffle_xor", var, make_const(UInt(16), k)));
+            value = combine(var, make_shuffle(Call::gpu_shuffle_xor, var, k, warp_size));
         }
         string name = unique_name('t');
         lets.emplace_back(name, value);
@@ -611,8 +621,7 @@ public:
 
 // Move allocations outside the loop over lanes into the loop over
 // lanes (using the striping described above), and rewrites
-// stores/loads to them as register shuffle intrinsics (CUDA shfl or
-// Metal simd_shuffle).
+// stores/loads to them as gpu_shuffle intrinsics.
 class LowerWarpShuffles : public IRMutator {
     using IRMutator::visit;
 
@@ -626,8 +635,6 @@ class LowerWarpShuffles : public IRMutator {
     };
     Scope<AllocInfo> allocation_info;
     Scope<Interval> bounds;
-    DeviceAPI device_api;
-    int cuda_cap;
 
     Stmt visit(const For *op) override {
         ScopedBinding<Interval>
@@ -659,17 +666,16 @@ class LowerWarpShuffles : public IRMutator {
 
             Stmt body = op->body;
 
-            if (device_api == DeviceAPI::Metal) {
-                std::set<string> warp_allocs;
-                for (const Stmt &s : allocations) {
-                    warp_allocs.insert(s.as<Allocate>()->name);
-                }
-                if (should_mask) {
-                    // The excess lanes are masked off below.
-                    body = IfThenElse::make(this_lane <= op->max, body);
-                }
-                body = LowerWarpReductions(op->name, (int)*as_const_int(warp_size), warp_allocs)(body);
+            if (should_mask) {
+                // Mask off the excess lanes in the warp
+                body = IfThenElse::make(this_lane <= op->max, body);
             }
+
+            std::set<string> warp_allocs;
+            for (const Stmt &s : allocations) {
+                warp_allocs.insert(s.as<Allocate>()->name);
+            }
+            body = LowerWarpReductions(op->name, (int)*as_const_int(warp_size), warp_allocs)(body);
 
             // Figure out the shrunken size of the hoisted allocations
             // and populate the scope.
@@ -693,11 +699,6 @@ class LowerWarpShuffles : public IRMutator {
             }
 
             body = mutate(body);
-
-            if (should_mask && device_api != DeviceAPI::Metal) {
-                // Mask off the excess lanes in the warp
-                body = IfThenElse::make(this_lane <= op->max, body, Stmt());
-            }
 
             // Wrap the hoisted warp-level allocations, at their new
             // reduced size.
@@ -786,15 +787,10 @@ class LowerWarpShuffles : public IRMutator {
         }
     }
 
-    // Metal shuffles address SIMD-group lanes. The gpu lanes loop is the
-    // innermost thread dimension, so each group of gpu lanes occupies
-    // consecutive SIMD-group lanes, and an offset in gpu lane index is
-    // the same offset in SIMD-group lane id. simd_shuffle_down/up require
-    // the offset to be uniform across the SIMD-group, so they are only
-    // used for constant offsets. Everything else is a general gather
-    // relative to the current SIMD-group lane id, which CodeGen_Metal_Dev
-    // emits as simd_shuffle.
-    Expr make_metal_shuffle(Type type, Expr base_val, Expr lane) {
+    // Read a value from the given lane. The relative shuffles require an
+    // offset that is the same in every lane, so they are only used for
+    // constant offsets. Everything else is a general gather.
+    Expr shuffle_from_lane(Expr value, Expr lane) {
         if (const Broadcast *b = lane.as<Broadcast>()) {
             lane = b->value;
         }
@@ -803,27 +799,26 @@ class LowerWarpShuffles : public IRMutator {
             // Each vector element comes from a different lane, so do
             // one shuffle per element.
             vector<Expr> elems;
-            elems.reserve(type.lanes());
-            for (int i = 0; i < type.lanes(); i++) {
-                elems.push_back(make_metal_shuffle(type.element_of(),
-                                                   extract_lane(base_val, i),
-                                                   extract_lane(lane, i)));
+            elems.reserve(lane.type().lanes());
+            for (int i = 0; i < lane.type().lanes(); i++) {
+                elems.push_back(shuffle_from_lane(extract_lane(value, i), extract_lane(lane, i)));
             }
             return Shuffle::make_concat(elems);
         }
 
+        int ws = (int)*as_const_int(warp_size);
         Expr delta = simplify(lane - this_lane, bounds);
         if (auto c = as_const_int(delta)) {
             if (*c == 0) {
-                return base_val;
+                return value;
             } else if (*c > 0) {
-                return metal_shuffle("simd_shuffle_down", base_val, make_const(UInt(16), *c));
+                return make_shuffle(Call::gpu_shuffle_down, value, (int)*c, ws);
             } else {
-                return metal_shuffle("simd_shuffle_up", base_val, make_const(UInt(16), -*c));
+                return make_shuffle(Call::gpu_shuffle_up, value, (int)-*c, ws);
             }
-        } else {
-            return metal_shuffle("halide_metal_simd_shuffle_relative", base_val, delta);
         }
+
+        return make_shuffle(Call::gpu_shuffle_idx, value, lane, ws);
     }
 
     Expr make_warp_load(Type type, const string &name, const Expr &idx, Expr lane) {
@@ -865,91 +860,7 @@ class LowerWarpShuffles : public IRMutator {
         // reduce the number of cases to check below.
         lane = solve_expression(lane, this_lane_name).result;
 
-        if (device_api == DeviceAPI::Metal) {
-            return make_metal_shuffle(type, base_val, lane);
-        }
-
-        // Make 32-bit with a combination of reinterprets and zero extension
-        Type shuffle_type = type;
-        if (type.bits() < 32) {
-            shuffle_type = UInt(32, type.lanes());
-            base_val = cast(shuffle_type, reinterpret(type.with_code(Type::UInt), base_val));
-        } else if (type.bits() == 64) {
-            // TODO: separate shuffles of the low and high halves and then recombine.
-            user_error << "Warp shuffles of 64-bit types not yet implemented\n";
-        } else {
-            user_assert(type.bits() == 32) << "Warp shuffles not supported for this type: " << type << "\n";
-        }
-
-        // We must add .sync after volta architecture:
-        // https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
-        string sync_suffix = "";
-        if (cuda_cap >= 70) {
-            sync_suffix = ".sync";
-        }
-
-        auto shfl_args = [&](const std::vector<Expr> &args) {
-            if (cuda_cap >= 70) {
-                return args;
-            }
-            return std::vector({args[1], args[2], args[3]});
-        };
-
-        string intrin_suffix;
-        if (shuffle_type.is_float()) {
-            intrin_suffix = ".f32";
-        } else {
-            intrin_suffix = ".i32";
-        }
-
-        Expr wild = Variable::make(Int(32), "*");
-        vector<Expr> result;
-        std::optional<int> bits;
-
-        Expr shuffled;
-        Expr membermask = (int)0xffffffff;
-        if (expr_match(this_lane + wild, lane, result)) {
-            // We know that 0 <= lane + wild < warp_size by how we
-            // constructed it, so we can just do a shuffle down.
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
-                                   shfl_args({membermask, base_val, result[0], 31}), Call::PureExtern);
-            shuffled = down;
-        } else if (expr_match((this_lane + wild) % wild, lane, result) &&
-                   (bits = is_const_power_of_two_integer(result[1])) &&
-                   *bits <= 5) {
-            result[0] = simplify(result[0] % result[1], bounds);
-            // Rotate. Mux a shuffle up and a shuffle down. Uses fewer
-            // intermediate registers than using a general gather for
-            // this.
-            Expr mask = (1 << *bits) - 1;
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
-                                   shfl_args({membermask, base_val, result[0], mask}), Call::PureExtern);
-            Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".up" + intrin_suffix,
-                                 shfl_args({membermask, base_val, (1 << *bits) - result[0], 0}), Call::PureExtern);
-            Expr cond = (this_lane >= (1 << *bits) - result[0]);
-            Expr equiv = select(cond, up, down);
-            shuffled = simplify(equiv, bounds);
-        } else {
-            // The format of the mask is a pain. The high bits tell
-            // you how large the a warp is for this instruction
-            // (i.e. is it a shuffle within groups of 8, or a shuffle
-            // within groups of 16?). The low bits serve as a clamp on
-            // the max value pulled from. We don't use that, but it
-            // could hypothetically be used for boundary conditions.
-            Expr mask = simplify(((31 & ~(warp_size - 1)) << 8) | 31);
-            // The idx variant can do a general gather. Use it for all other cases.
-            shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".idx" + intrin_suffix,
-                                  shfl_args({membermask, base_val, lane, mask}), Call::PureExtern);
-        }
-        // TODO: There are other forms, like butterfly and clamp, that
-        // don't need to use the general gather
-
-        if (shuffled.type() != type) {
-            user_assert(shuffled.type().bits() > type.bits());
-            // Narrow it back down
-            shuffled = reinterpret(type, cast(type.with_code(Type::UInt), shuffled));
-        }
-        return shuffled;
+        return shuffle_from_lane(base_val, lane);
     }
 
     Expr visit(const Load *op) override {
@@ -983,19 +894,13 @@ class LowerWarpShuffles : public IRMutator {
             return mutate(RemoveFree(op->name)(op->body));
         }
     }
-
-public:
-    LowerWarpShuffles(DeviceAPI device_api, int cuda_cap)
-        : device_api(device_api), cuda_cap(cuda_cap) {
-    }
 };
 
 bool is_warp_shuffle(const Call *op) {
-    return starts_with(op->name, "llvm.nvvm.shfl.") ||
-           op->name == "simd_shuffle_down" ||
-           op->name == "simd_shuffle_up" ||
-           op->name == "simd_shuffle_xor" ||
-           op->name == "halide_metal_simd_shuffle_relative";
+    return op->is_intrinsic({Call::gpu_shuffle_down,
+                             Call::gpu_shuffle_idx,
+                             Call::gpu_shuffle_up,
+                             Call::gpu_shuffle_xor});
 }
 
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
@@ -1130,8 +1035,6 @@ public:
 class HoistWarpShuffles : public IRMutator {
     using IRMutator::visit;
 
-    DeviceAPI device_api;
-
     // Variables that may differ across the lanes of a warp.
     Scope<> lane_dependent;
 
@@ -1169,8 +1072,7 @@ class HoistWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const IfThenElse *op) override {
-        if (device_api == DeviceAPI::Metal &&
-            !may_depend_on_lane(op->condition)) {
+        if (!may_depend_on_lane(op->condition)) {
             // All the lanes in a warp take the same branch, so they are
             // all active for any shuffles inside it.
             return IRMutator::visit(op);
@@ -1197,11 +1099,6 @@ class HoistWarpShuffles : public IRMutator {
             s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name))(then_case);
             return LetStmt::make(pred_name, op->condition, s);
         }
-    }
-
-public:
-    HoistWarpShuffles(DeviceAPI device_api)
-        : device_api(device_api) {
     }
 };
 
@@ -1237,8 +1134,8 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
                 << "gpu_lanes() is only supported for Metal on Apple GPUs (arm targets). "
                 << "Target: " << target << "\n";
             Stmt s = op;
-            s = LowerWarpShuffles(op->device_api, target.get_cuda_capability_lower_bound())(s);
-            s = HoistWarpShuffles(op->device_api)(s);
+            s = LowerWarpShuffles()(s);
+            s = HoistWarpShuffles()(s);
             return simplify(s);
         } else {
             return IRMutator::visit(op);

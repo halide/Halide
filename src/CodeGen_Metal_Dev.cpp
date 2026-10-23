@@ -376,15 +376,28 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         // In Metal, round rounds ties away from zero
         Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
         equiv.accept(this);
-    } else if (op->name == "halide_metal_simd_shuffle_relative") {
-        // Injected by LowerWarpShuffles: read the value from the
-        // SIMD-group lane at the given (possibly non-uniform) offset
-        // from this one.
-        internal_assert(op->args.size() == 2);
+    } else if (op->is_intrinsic({Call::gpu_shuffle_down, Call::gpu_shuffle_up,
+                                 Call::gpu_shuffle_xor, Call::gpu_shuffle_idx})) {
+        // LowerWarpShuffles checks that the SIMD-groups are 32 wide.
+        internal_assert(op->args.size() == 3);
+        auto width = as_const_int(op->args[2]);
+        internal_assert(width);
         string value = print_expr(op->args[0]);
-        string offset = print_expr(op->args[1]);
+        string x = print_expr(op->args[1]);
         ostringstream rhs;
-        rhs << "simd_shuffle(" << value << ", (ushort)(" << simd_lane_id_name << " + " << offset << "))";
+        if (op->is_intrinsic(Call::gpu_shuffle_idx)) {
+            rhs << "simd_shuffle(" << value << ", (ushort)(";
+            if (*width < 32) {
+                // The lane is relative to the start of this group of lanes.
+                rhs << "(" << simd_lane_id_name << " & " << ~(*width - 1) << ") | ";
+            }
+            rhs << x << "))";
+        } else {
+            rhs << (op->is_intrinsic(Call::gpu_shuffle_down) ? "simd_shuffle_down" :
+                    op->is_intrinsic(Call::gpu_shuffle_up)   ? "simd_shuffle_up" :
+                                                               "simd_shuffle_xor")
+                << "(" << value << ", (ushort)" << x << ")";
+        }
         print_assignment(op->type, rhs.str());
     } else {
         CodeGen_GPU_C::visit(op);
@@ -777,7 +790,10 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     // Emit the function prototype
     bool uses_simd_lane_id = false;
     visit_with(s, [&](auto *self, const Call *op) {
-        uses_simd_lane_id |= (op->name == "halide_metal_simd_shuffle_relative");
+        if (op->is_intrinsic(Call::gpu_shuffle_idx)) {
+            auto width = as_const_int(op->args[2]);
+            uses_simd_lane_id |= (!width || *width < 32);
+        }
         self->visit_base(op);
     });
 

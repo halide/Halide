@@ -1,13 +1,11 @@
 #include "Halide.h"
 
-// Check the Metal source generated for reductions across gpu lanes. This
-// cross-compiles, so it doesn't need a GPU. gpu_lanes_reduction.cpp runs
-// the same schedules.
+// Check the Metal and PTX source generated for reductions across gpu
+// lanes. This cross-compiles, so it doesn't need a GPU.
+// gpu_lanes_reduction.cpp runs the same schedules.
 
 using namespace Halide;
 using namespace Halide::Internal;
-
-namespace {
 
 // Find the GPU kernel source embedded in a compiled module.
 class FindGPUSource : public IRVisitor {
@@ -25,8 +23,10 @@ public:
     std::string source;
 };
 
-std::string metal_source(Func f) {
-    Target t("macos-arm-64-metal");
+const Target metal_target("macos-arm-64-metal");
+const Target cuda_target("x86-64-linux-cuda-cuda_capability_70");
+
+std::string gpu_source(Func f, const Target &t) {
     Module m = f.compile_to_module(f.infer_arguments(), f.name(), t);
     FindGPUSource finder;
     for (const auto &lf : m.functions()) {
@@ -113,36 +113,52 @@ Func lane_reduction(const Buffer<T> &in, Op op, int lanes, TailStrategy tail) {
     return out;
 }
 
-template<typename T>
-bool check_lane_reduction(Op op, int lanes, int width, int height) {
-    // Guard the rows with an if if they don't divide evenly into groups.
-    TailStrategy tail = height % 4 ? TailStrategy::GuardWithIf : TailStrategy::Auto;
-    Buffer<T> in(width, height);
-    std::string src = metal_source(lane_reduction(in, op, lanes, tail));
-    if (src.find("simd_shuffle_xor") == std::string::npos) {
-        std::cout << "Expected simd_shuffle_xor in Metal source for a reduction over "
-                  << lanes << " lanes of type " << type_of<T>() << ":\n"
+bool expect(const std::string &src, const std::string &pattern, const std::string &what) {
+    if (src.find(pattern) == std::string::npos) {
+        std::cout << "Expected " << pattern << " in the source for " << what << ":\n"
                   << src << "\n";
         return false;
     }
     return true;
 }
 
-}  // namespace
+template<typename T>
+bool check_lane_reduction(Op op, int lanes, int width, int height) {
+    // Guard the rows with an if if they don't divide evenly into groups.
+    TailStrategy tail = height % 4 ? TailStrategy::GuardWithIf : TailStrategy::Auto;
+    Buffer<T> in(width, height);
+    std::ostringstream what;
+    what << "a reduction over " << lanes << " lanes of type " << type_of<T>();
+
+    std::string metal = gpu_source(lane_reduction(in, op, lanes, tail), metal_target);
+    std::string ptx = gpu_source(lane_reduction(in, op, lanes, tail), cuda_target);
+    if (!expect(metal, "simd_shuffle_xor", what.str()) ||
+        !expect(ptx, "shfl.sync.bfly", what.str())) {
+        return false;
+    }
+    // Groups of lanes narrower than a warp may take different paths
+    // from the other groups in the same warp, so they must only
+    // synchronize with the lanes in their own group.
+    if (lanes < 32 && !expect(ptx, "%laneid", what.str())) {
+        return false;
+    }
+    return true;
+}
 
 int main(int argc, char **argv) {
     {
         const int lanes = 32;
         Buffer<float> in(lanes * 8, 64);
-        std::string src = metal_source(butterfly_reduction(in, lanes));
-        if (src.find("simd_shuffle_down") == std::string::npos) {
-            printf("Expected simd_shuffle_down in Metal source:\n%s\n", src.c_str());
+        if (!expect(gpu_source(butterfly_reduction(in, lanes), metal_target),
+                    "simd_shuffle_down", "a butterfly reduction") ||
+            !expect(gpu_source(butterfly_reduction(in, lanes), cuda_target),
+                    "shfl.sync.down", "a butterfly reduction")) {
             return 1;
         }
     }
 
     // Reductions across lanes expressed as an atomic update become
-    // butterfly reductions using simd_shuffle_xor.
+    // butterfly reductions using xor shuffles.
     for (int lanes : {32, 16, 8}) {
         // Also check sizes that don't divide evenly, so that there are
         // conditions inside and outside of the loop over lanes.
