@@ -423,6 +423,15 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
+    } else if (s_index &&
+               s_index->is_repeat_each_lane() &&
+               is_const_one(predicate)) {
+        // A load of a repeat of each lane of an index vector is a repeat of
+        // each lane of the load.
+        Expr new_index = s_index->vectors[0];
+        int new_lanes = new_index.type().lanes();
+        Expr load = op->with(new_index, const_true(new_lanes, nullptr), ModulusRemainder{});
+        return Shuffle::make_repeat_each_lane(mutate(load, info), s_index->repeat_each_lane_factor());
     } else if (MultiRamp mr;
                index.type().is_vector() &&
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
