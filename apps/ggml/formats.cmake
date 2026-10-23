@@ -9,8 +9,8 @@
 # `type`: <ggml type>[.<codes>][.<rows>x<chunk>]. The optional codes pick the
 # integer encoding (i4: two's-complement nibbles; default: GGML's offset
 # binary), the layout interleaves `rows` rows' records in `chunk`-byte pieces
-# (as GGML's repack q4_0_4x8, q8_0_4x4, q4_K_8x8, q5_K_8x8, iq4_nl_4x4 etc.; q1_0.4x1 is
-# GGML's q1_0_4x8, its interleave in bits; default: one row per record,
+# (as GGML's repack q4_0_4x8, q8_0_4x4, q4_K_8x8, q5_K_8x8, q6_K_8x8, iq4_nl_4x4 etc.;
+# q1_0.4x1 is GGML's q1_0_4x8, its interleave in bits; default: one row per record,
 # AoS); its weights are checked against GGML's repack (harness/repack.cpp).
 # q8_K.4x8 (GGML's block_q8_Kx4, an activation layout) is checked also
 # against GGML's quantize_mat_q8_K_4x8 (its transcription, and GGML's own
@@ -83,6 +83,7 @@ set(GGML_FORMATS
     "q8_K.4x8 codec"
     "q4_K.8x8 codec,mul_mat q8_K,f32:q8_K,f32:q8_K.4x8"
     "q5_K.8x8 codec,mul_mat q8_K,f32:q8_K,f32:q8_K.4x8"
+    "q6_K.8x8 codec,mul_mat q8_K,f32:q8_K,f32:q8_K.4x8"
     "qsi8cx codec,mul_mat qai8dx,f32:qai8dx"
     "qsi8cx.4x8 codec,mul_mat qai8dx,f32:qai8dx"
     "qai8dx codec"

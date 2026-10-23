@@ -410,12 +410,28 @@ struct Q6KQuant {
 // their low nibbles in ql (per 128 codes, 64 bytes: code i low, i + 64
 // high), their top two bits in qh (per 128 codes, 32 bytes: code i + 32 p in
 // bits 2p).
+// "8x8": GGML's repacked block_q6_Kx8 {f16 d[8]; i8 scales[128]; u8
+// ql[1024]; u8 qh[512]} (make_block_q6_Kx8): the 8 rows' ql and qh
+// interleaved in 8-byte pieces, their scales one byte at a time (sub-block,
+// then row: Interleave's 8-byte pieces of them, transposed per 64).
 inline Approximation q6_K(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK_K, indexed}, Q6KQuant{}, Parallel{{"codes", SumSplit{4}}},
-                   Parallel{{"low", Compose{BlockReshape{128}, PlanarFieldPack{4, 64}, Unblock{64}}},
-                            {"high", Compose{multiples(4, -32, 4), BlockReshape{128}, PlanarFieldPack{2, 32}, Unblock{32}}},
-                            {"scale", fp16()}},
-                   layout(lay, {{"ql", UInt(8), QK_K / 2}, {"qh", UInt(8), QK_K / 4}, {"scales", Int(8), QK_K / 16}, {"d", Float(16)}}, {"ql", "qh", "scales", "d"})};
+    std::vector<std::string> logical = {"ql", "qh", "scales", "d"};
+    std::vector<StructField> fields = {{"ql", UInt(8), QK_K / 2}, {"qh", UInt(8), QK_K / 4}, {"scales", Int(8), QK_K / 16}, {"d", Float(16)}};
+    Approximation head = Compose{BlockReshape{QK_K, indexed}, Q6KQuant{}, Parallel{{"codes", SumSplit{4}}},
+                                 Parallel{{"low", Compose{BlockReshape{128}, PlanarFieldPack{4, 64}, Unblock{64}}},
+                                          {"high", Compose{multiples(4, -32, 4), BlockReshape{128}, PlanarFieldPack{2, 32}, Unblock{32}}},
+                                          {"scale", fp16()}}};
+    if (lay == "8x8") {
+        const int rows = 8;
+        std::vector<StructField> mem = {fields[3], fields[2], fields[0], fields[1]}, recs;
+        for (const StructField &f : mem) {
+            recs.push_back({f.name, f.type, rows * f.array_extent.value_or(1)});
+        }
+        return Compose{head, Interleave{rows, 8, mem, logical}, Parallel{{"scales", Compose{BlockReshape{64}, Transpose{8, 8}, Unblock{64}}}},
+                       StructLayout{Type::Struct(recs), logical}};
+    }
+    if (lay != "aos" && lay != "soa") throw std::invalid_argument("q6_K: no " + lay + " layout (GGML's repacked one is 8x8)");
+    return Compose{head, layout(lay, fields, logical)};
 }
 
 // GGML's quantize_row_q3_K_ref. Per sub-block of 16: make_q3_quants(16, 4,

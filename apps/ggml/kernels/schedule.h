@@ -62,8 +62,9 @@ inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, co
 
 // Whether f's update reads a bit field at a position that varies with v
 // other than with v mod `period` (q5_K's high bits: sub-block s's in bit s
-// of its bytes; not q4_K's nibbles, by sub-block parity): a loop over v in
-// steps of `period` would shift by a variable amount, which Halide widens.
+// of its bytes; not q4_K's nibbles, by sub-block parity, for period 2): a
+// loop over v in steps of `period` would shift by a variable amount, which
+// Halide widens.
 inline bool bit_position_varies(Func f, Var v, int period) {
     using namespace Internal;
     Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
@@ -76,6 +77,56 @@ inline bool bit_position_varies(Func f, Var v, int period) {
         self->visit_base(c);
     });
     return varies;
+}
+
+// The bits of v below `group` (a power of 2), innermost first: those more of
+// f's bit fields' positions vary with first (ties: the lower). Sub-blocks
+// differing in such a bit read the same bytes (q6_K's 128 values: bit 2, a
+// byte's low and high nibbles, then bit 1, the high bits' pairs; q5_K's:
+// bit 0, then 1 and 2), so iterated innermost, their loads are reused while
+// live.
+inline std::vector<int> sharing_order(Func f, Var v, int group) {
+    using namespace Internal;
+    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
+    int bits = 0;
+    while ((1 << bits) < group)
+        bits++;
+    std::vector<int> count(bits, 0), order(bits);
+    // the shift at each value of f's update's (constant) reduction domain
+    std::vector<std::map<std::string, Expr>> points{{}};
+    for (const ReductionVariable &rv : f.function().update(0).schedule().rvars()) {
+        auto mn = as_const_int(simplify(rv.min)), ex = as_const_int(simplify(rv.extent));
+        if (!mn || !ex) continue;
+        std::vector<std::map<std::string, Expr>> next;
+        for (const auto &p : points) {
+            for (int64_t i = 0; i < *ex; i++) {
+                next.push_back(p);
+                next.back()[rv.var] = Expr((int)(*mn + i));
+            }
+        }
+        points.swap(next);
+    }
+    visit_with(e, [&](auto *self, const Call *c) {
+        if ((c->is_intrinsic(Call::shift_right) || c->is_intrinsic(Call::shift_left)) && expr_uses_var(c->args[1], v.name())) {
+            for (int b = 0; b < bits; b++) {
+                bool varies = false;
+                for (int x = 0; x < group && !varies; x++) {
+                    for (size_t p = 0; p < points.size() && !varies && !(x >> b & 1); p++) {
+                        Expr a = substitute(points[p], substitute(v.name(), x, c->args[1]));
+                        Expr a2 = substitute(points[p], substitute(v.name(), x | 1 << b, c->args[1]));
+                        varies = !can_prove(a == a2);
+                    }
+                }
+                count[b] += varies;
+            }
+        }
+        self->visit_base(c);
+    });
+    for (int b = 0; b < bits; b++) {
+        order[b] = b;
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return count[a] > count[b]; });
+    return order;
 }
 
 // Every stage of f in registers: `vec` vectorized, `unrolled` unrolled, each
@@ -895,22 +946,22 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m, mi, mo});
 }
 
-// blocked_rows() for affine two-level weights (q4_K's repacked block_q4_Kx8,
-// as GGML's ggml_gemv_q4_K_8x8_q8_K): per block and sub-block of `sub`
+// blocked_rows() for two-level weights (q4_K's repacked block_q4_Kx8, as
+// GGML's ggml_gemv_q4_K_8x8_q8_K; q5_K's and q6_K's): per block and sub-block of `sub`
 // values, the int32 dot of the codes vectorized across the record's rows and
 // each piece's quads (sdot, the act's piece broadcast to the rows), the
 // quads merged, times the sub-block's scales (a vector across the rows),
 // summed over the sub-blocks in int32, then times the rows' and act's
-// scales into f32 accumulators across the rows. The min term reads the
-// act's sub-block sums (`act_sub`: q8_K's bsums; derived_sums()), times
-// the rows' mins as a vector, alongside.
+// scales into f32 accumulators across the rows. An affine weight's min term
+// reads the act's sub-block sums (`act_sub`: q8_K's bsums; derived_sums()),
+// times the rows' mins as a vector, alongside.
 inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                              const std::vector<ApproximationResult> &rs, int sub, int act_sub) {
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
     Sums d;
-    if (!sub || !derived_sums(out, st, s, r, rs, d, act_sub, sub)) throw std::invalid_argument("blocked_rows_sub: affine two-level weights, an act with derived sums");
+    if (!sub || (affine(rs) && !derived_sums(out, st, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows_sub: two-level weights (affine: an act with derived sums)");
     s.split(r.x, rxs, rxc, sub);
     Func blk = s.rfactor(ry, u);
     // the act's codes stay out of the inline (staged per sub-block, below)
@@ -936,10 +987,15 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
     // nibbles), each pair unrolled, as GGML's (fully unrolled, the codes'
     // loads are scheduled early and spill)
     RVar rxso("rxso"), rxsi("rxsi");
-    codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, 2).unroll(rxsi);
-    // the pairs unrolled too where a bit field's position varies across them
-    // (q5_K's high bits: constant shifts)
-    if (bit_position_varies(quads, v, 2)) codes.update().unroll(rxso);
+    // Groups larger than pairs where a bit field's position varies across
+    // pairs, so its shifts are constants: as many as share its bytes (q6_K's
+    // 8 sub-blocks of 16 per 128 values) or all (q5_K's high bits: bit s of
+    // sub-block s).
+    auto bx = as_const_int(r.x.extent());
+    int subs = bx ? (int)*bx / sub : 2, group = 2;
+    while (group < subs && bit_position_varies(quads, v, group))
+        group *= 2;
+    codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, group).unroll(rxsi);
     LoopLevel per_sub(codes, rxsi);
     regs(part.compute_at(per_sub), {n}, {v, u, m});
     regs(inner.compute_at(per_sub), {n}, {v, u, m});
@@ -1044,7 +1100,46 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         sub_tiles(f.update(), n, m, f.name() == win.name() ? std::vector<VarOrRVar>{nii, mii, nio, mio, ryp, w} : std::vector<VarOrRVar>{nii, mii, nio, mio, w}).unroll(w);
     }
     if (sub) {  // per block and sub-block: the tile's sub-block dots, then their scales
-        sub_tiles(codes.update(), n, m, {nii, mii, nio, mio, rxs, u}).unroll(rxs).unroll(u);
+        // With the act's records, a loop over groups of sub-blocks whose bit
+        // fields' positions repeat (constant shifts), as blocked_rows_sub's
+        // (q4_K's pairs, q6_K's 128 values; fully unrolled, the codes' loads
+        // are scheduled early and spill: 4-7% slower), each unrolled, those
+        // reading the same bytes adjacent (sharing_order: q6_K's 0, 4, 2, 6)
+        Stage cu = codes.update();
+        auto bx = as_const_int(r.x.extent());
+        int subs = bx ? (int)*bx / sub : 2, group = act_records ? 2 : subs;
+        while (group < subs && bit_position_varies(inner, v, group))
+            group *= 2;
+        RVar rxso("rxso"), rxsi("rxsi"), g = rxs, at_sub;
+        if (group < subs) {
+            cu.split(rxs, rxso, rxsi, group);
+            g = rxsi;
+        }
+        std::vector<VarOrRVar> order{nii, mii, nio, mio};
+        std::vector<int> bits = act_records ? sharing_order(inner, v, group) : std::vector<int>{};
+        if (std::is_sorted(bits.begin(), bits.end())) {
+            order.push_back(at_sub = g);
+        } else {  // g's bits, each an RVar (the lowest first), in that order
+            std::vector<RVar> bv;
+            for (size_t b = 0; b + 1 < bits.size(); b++) {
+                RVar hi("rxsh" + std::to_string(b)), lo("rxsb" + std::to_string(b));
+                cu.split(g, hi, lo, 2);
+                bv.push_back(lo);
+                g = hi;
+            }
+            bv.push_back(g);
+            for (int b : bits) {
+                order.push_back(bv[b]);
+            }
+            at_sub = bv[bits[0]];
+        }
+        size_t unrolled = order.size();
+        if (group < subs) order.push_back(rxso);
+        order.push_back(u);
+        sub_tiles(cu, n, m, order).unroll(u);
+        for (size_t i = 4; i < unrolled; i++) {
+            cu.unroll(order[i]);
+        }
         if (records) {
             // the scales' factor one 16-lane vector per sub-block (2 x 2
             // sub-tiles of the tile's columns): one shuffle of the decoded
@@ -1054,13 +1149,13 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         } else {
             sub_tiles(part.update(), n, m, {nii, mii, nio, mio, v, u}).unroll(v).unroll(u);
         }
-        part.compute_at(codes, rxs);
-        inner.compute_at(codes, rxs);
+        part.compute_at(codes, at_sub);
+        inner.compute_at(codes, at_sub);
         // the sub-block's scales, decoded once across the record's rows
         for (Func k : kept) {
             if (!calls_any(part.function().update(0).values()[0], {k})) continue;
             Func ks = k.in(part);
-            ks.compute_at(codes, rxs).vectorize(ks.args()[2], ts.nt);
+            ks.compute_at(codes, at_sub).vectorize(ks.args()[2], ts.nt);
             ks.unroll(ks.args()[0]).unroll(ks.args()[1]);
         }
     }
@@ -1484,7 +1579,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
     // Two-level records of several rows (q4_K_8x8): the rest on their gemv;
     // with i8mm, on whole act records too (q8_K.4x8), one record per tile
-    bool recs = integer && fmt.rows > 1 && affine(rs), rmmla = mmla_ok && recs;
+    bool recs = integer && fmt.rows > 1 && fmt.sub, rmmla = mmla_ok && recs;
     Tiles rm{fmt.rows, 4, 1, 32, whole ? 128 : 32, 2};
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
@@ -1529,7 +1624,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
         Tiles rt{fmt.rows, 1, 2, 16, 0, 0, rest};
         // (a two-level record, 8 rows of q4_K: 1152 bytes, one per iteration)
-        if (affine(rs)) {
+        if (fmt.sub) {
             rt.interleave = 1;
             blocked_rows_sub(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, fmt.sub, fmt.act_sub);
             return;
