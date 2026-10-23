@@ -1012,6 +1012,129 @@ inline bool merge_sums(Func dot, const Stage &ds, Sums &d, Func blk, Func codes,
     return true;
 }
 
+// A block's codes (codes: their dot per lane, chunks rxc of `nchunk`, each
+// `per` values per lane, rxi) whose bit fields (x >> s) & m sit at a position s
+// that varies with the chunk (tq2_0's 2-bit fields: s = 0, 2, 4, 6 by pairs
+// of chunks): the chunks summed per position (an accumulator each: rfactor,
+// c), each field read in place, x & (m << s), as long as that fits int8
+// (s = 2, 4; s = 6's, 192, doesn't: shifted as before), its sum shifted
+// right after (ssra; exact, every product a multiple of 2^s): a mask per
+// field, not a shift and a mask (tq2_0: 8 fewer SIMD instructions per
+// block). False (codes untouched) where no field's position varies so.
+inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per, LoopLevel at, int interleave) {
+    using namespace Internal;
+    // the field's mask m and position s
+    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(codes.update_value())));
+    std::vector<std::pair<Expr, uint64_t>> fields;
+    auto field = [&](const Call *op, Expr &x, Expr &sh, uint64_t &mask) {
+        if (!op->is_intrinsic(Call::bitwise_and)) return false;
+        const Call *c = op->args[0].as<Call>();
+        auto k = as_const_uint(op->args[1]);
+        if (!c || !c->is_intrinsic(Call::shift_right) || !k || is_const(c->args[1])) return false;
+        x = c->args[0], sh = c->args[1], mask = *k;
+        return true;
+    };
+    visit_with(e, [&](auto *self, const Call *op) {
+        Expr x, sh;
+        uint64_t mask;
+        if (field(op, x, sh, mask) && expr_uses_var(sh, rxc.name())) fields.emplace_back(sh, mask);
+        self->visit_base(op);
+    });
+    if (fields.size() != 1) return false;
+    // the codes' sum linear in the field (it times 2^s: the sum times 2^s):
+    // only casts, shifts left by 0, products, sums between them (0: no field,
+    // 1: linear, -1: not)
+    std::function<int(const Expr &)> linear = [&](const Expr &x) -> int {
+        Expr f, sh;
+        uint64_t mask;
+        auto both = [&](const Expr &a, const Expr &b, bool product) {
+            int p = linear(a), q = linear(b);
+            if (p < 0 || q < 0 || (product && p && q) || (!product && p != q)) return -1;
+            return std::max(p, q);
+        };
+        if (const Call *c = x.as<Call>()) {
+            if (field(c, f, sh, mask)) return 1;
+            if (c->name == codes.name()) return 1;
+            if (c->is_intrinsic(Call::widening_mul)) return both(c->args[0], c->args[1], true);
+            if (c->is_intrinsic(Call::shift_left) && is_const_zero(c->args[1])) return linear(c->args[0]);
+        } else if (const Cast *c = x.as<Cast>()) {
+            if (c->type.is_int_or_uint() && c->value.type().is_int_or_uint()) return linear(c->value);
+        } else if (const Mul *m = x.as<Mul>()) {
+            return both(m->a, m->b, true);
+        } else if (const Add *a = x.as<Add>()) {
+            return both(a->a, a->b, false);
+        }
+        bool uses = false;
+        visit_with(x, [&](auto *self, const Call *c) {
+            uses |= field(c, f, sh, mask);
+            self->visit_base(c);
+        });
+        return uses ? -1 : 0;
+    };
+    if (linear(e) != 1) return false;
+    auto [sh, mask] = fields[0];
+    std::vector<int> pos;
+    for (int i = 0; i < nchunk; i++) {
+        std::optional<int64_t> p;
+        for (auto [l, x] : {std::pair{0, 0}, std::pair{lanes - 1, per - 1}}) {
+            auto q = as_const_int(simplify(substitute({{rxc.name(), Expr(i)}, {"lane", Expr(l)}, {"rxi", Expr(x)}}, sh)));
+            if (!q || (p && *p != *q)) return false;
+            p = q;
+        }
+        pos.push_back((int)*p);
+    }
+    // the positions by chunk: s(rxc) = s_c, c = rxc / runs mod classes (the
+    // fewest)
+    int runs = 0, classes = 0;
+    for (int g = 2; g <= nchunk && !runs; g++) {
+        for (int r = 1; r * g <= nchunk && !runs; r++) {
+            if (nchunk % (r * g)) continue;
+            bool ok = true;
+            for (int i = 0; i < nchunk; i++) {
+                ok &= pos[i] == pos[(i / r % g) * r];
+            }
+            if (ok) runs = r, classes = g;
+        }
+    }
+    if (!runs) return false;
+    std::vector<int> shift(classes);
+    for (int g = 0; g < classes; g++) {
+        int p = pos[g * runs];
+        shift[g] = p > 0 && (mask << p) <= 127 ? p : 0;
+    }
+    if (std::all_of(shift.begin(), shift.end(), [](int x) { return x == 0; })) return false;
+    RVar rxa("rxa"), rcp("rcp"), rco("rco"), rcg("rcg");
+    Var c("c"), lane("lane"), u("u");
+    codes.update().split(rxc, rxa, rcp, runs).split(rxa, rco, rcg, classes);
+    Func ch = codes.update().rfactor(rcg, c);
+    Definition cd = stage_definition(ch, ch.update());
+    cd.values()[0] = mutate_with(cd.values()[0], [&](auto *self, const Call *op) -> Expr {
+        Expr x, sh;
+        uint64_t mask;
+        if (!field(op, x, sh, mask)) return self->visit_base(op);
+        std::vector<Expr> d;
+        for (int g = 0; g < classes; g++) {
+            d.push_back(make_const(sh.type(), shift[g]));
+        }
+        Expr dc = mux(c, d);
+        return (x >> (sh - dc)) & (make_const(x.type(), mask) << dc);
+    });
+    Definition md = stage_definition(codes, codes.update());
+    md.values()[0] = mutate_with(md.values()[0], [&](auto *self, const Call *op) -> Expr {
+        if (op->name != ch.name()) return self->visit_base(op);
+        std::vector<Expr> parts;
+        for (int g = 0; g < classes; g++) {
+            parts.push_back(Expr(op) >> shift[g]);
+        }
+        return mux(op->args.back(), parts);
+    });
+    ch.compute_at(at).reorder_storage(lane, c).bound_storage(u, interleave);
+    regs(ch, {lane}, {c, u});
+    ch.update().reorder(RVar("rxi"), lane, c, rcp, rco).atomic().vectorize(RVar("rxi")).unroll(rcp).unroll(rco);
+    codes.update().unroll(rcg);
+    return true;
+}
+
 // The weight quantized in blocks: per block (r.y) and output a dot of the
 // codes (when the activation is quantized alike, an int32 sdot: 4 products per
 // lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
@@ -1031,14 +1154,13 @@ inline bool merge_sums(Func dot, const Stage &ds, Sums &d, Func blk, Func codes,
 // parameter): the sub-blocks' decoded scales (and mins), per block in
 // general-purpose registers, 4 bytes a word (VectorizeIn::GPR: GGML's SWAR
 // decode of q4_K's 6-bit scales and mins). `merge` (vec_dot): a constant code
-// offset's sums merged into the codes' lanes (merge_sums()). `chains` (a
-// per-format parameter, no sub-blocks): the block's sdots in that many
-// accumulators (rfactor), summed per block, as GGML's tq2_0 (two: the block's
-// 16 sdots two chains of 8, not one of 16).
+// offset's sums merged into the codes' lanes (merge_sums()). `defer`
+// (vec_dot, no sub-blocks): the codes' bit fields' shifts deferred to their
+// sums (deferred_shifts()).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
                     int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false, bool fold_offsets = true,
-                    bool merge = false, int chains = 1) {
+                    bool merge = false, bool defer = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r), ds = s;
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
@@ -1113,17 +1235,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     std::optional<int64_t> nchunk = bx ? std::optional<int64_t>(*bx / vec) : std::nullopt;
     for (Func f : {codes, rest}) {
         if (!f.defined() || sub) continue;
-        if (f.name() == codes.name() && chains > 1 && nchunk && *nchunk >= 2 * chains && *nchunk % chains == 0) {
-            RVar rco("rxco"), rci("rxci");
-            Var c("c");
-            f.update().split(rxc, rco, rci, chains);
-            Func ch = f.update().rfactor(rci, c);
-            ch.compute_at(acc, ryo).reorder_storage(lane, c, n, m).bound_storage(u, ts.interleave);
-            regs(ch, {lane}, {c, u, n, m});
-            ch.update().reorder(rxi, lane, c, rco).atomic().vectorize(rxi).unroll(rco);
-            f.update().unroll(rci);
-            continue;
-        }
+        if (f.name() == codes.name() && defer && nchunk && integer && deferred_shifts(codes, rxc, (int)*nchunk, vec / per, per, LoopLevel(acc, ryo), ts.interleave)) continue;
         f.update().atomic().vectorize(rxi).unroll(rxc);
     }
     // per block and sub-block, the tile's sub-block dots (inner), then their
@@ -1639,7 +1751,7 @@ enum class Fold {
 // iteration (blocked weights; a per-format parameter, formats.cmake).
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, int chains = 1) {
+                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -1650,7 +1762,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true, chains);
+    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true, true);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
