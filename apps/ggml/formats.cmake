@@ -133,8 +133,11 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # gemv 1.05-1.1x on one thread (row pairs spill), 0.85-0.95x on ten; q3_K's
 # gemv, with interleave=1 (as GGML's vec_dot, a row at a time: a row's block
 # 232 instructions, 149 SIMD, the bound on M3; ~260 in row pairs), 0.94-0.98x
-# of GGML's to 1.01-1.03x on one thread, 1.04-1.13x on ten. An act of `*`:
-# every act.
+# of GGML's to 1.01-1.03x on one thread, 1.04-1.13x on ten.
+# chains=2 (vec_dot: each block's sdots two accumulator chains, as GGML's
+# ggml_vec_dot_tq2_0_q8_K): tq2_0 vec_dot +3% (with its offset's sums merged
+# into the codes' lanes, ggml::merge_sums(); alone, no faster; tq1_0, its
+# loop bound by its trits' decode, no faster). An act of `*`: every act.
 set(GGML_SCHEDULE_PARAMS
     "q3_K vec_dot * fold_offsets=none"
     "q3_K mul_mat * fold_offsets=none"
@@ -154,7 +157,7 @@ set(GGML_SCHEDULE_PARAMS
     "q4_K vec_dot q8_K interleave=1"
     "q6_K vec_dot q8_K interleave=1"
     "tq1_0 vec_dot q8_K interleave=1"
-    "tq2_0 vec_dot q8_K interleave=1"
+    "tq2_0 vec_dot q8_K interleave=1 chains=2"
     "iq2_xxs vec_dot q8_K interleave=1"
     "iq3_xxs vec_dot q8_K interleave=1"
     "iq1_s vec_dot q8_K interleave=1 slp=false"
