@@ -60,14 +60,23 @@ inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, co
     return fs;
 }
 
+// Does e call any of fs?
+inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
+    bool found = false;
+    Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
+        found |= std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
+        self->visit_base(c);
+    });
+    return found;
+}
+
 // Whether f's update reads a bit field at a position that varies with v
 // other than with v mod `period` (q5_K's high bits: sub-block s's in bit s
 // of its bytes; not q4_K's nibbles, by sub-block parity, for period 2): a
 // loop over v in steps of `period` would shift by a variable amount, which
 // Halide widens.
-inline bool bit_position_varies(Func f, Var v, int period) {
+inline bool bit_position_varies(const Expr &e, Var v, int period) {
     using namespace Internal;
-    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
     bool varies = false;
     visit_with(e, [&](auto *self, const Call *c) {
         if ((c->is_intrinsic(Call::shift_right) || c->is_intrinsic(Call::shift_left)) && expr_uses_var(c->args[1], v.name())) {
@@ -79,33 +88,24 @@ inline bool bit_position_varies(Func f, Var v, int period) {
     return varies;
 }
 
+inline bool bit_position_varies(Func f, Var v, int period) {
+    return bit_position_varies(Internal::remove_promises(Internal::remove_likelies(Internal::substitute_in_all_lets(f.update_value()))), v, period);
+}
+
 // The bits of v below `group` (a power of 2), innermost first: those more of
 // f's bit fields' positions vary with first (ties: the lower). Sub-blocks
 // differing in such a bit read the same bytes (q6_K's 128 values: bit 2, a
 // byte's low and high nibbles, then bit 1, the high bits' pairs; q5_K's:
 // bit 0, then 1 and 2), so iterated innermost, their loads are reused while
 // live.
-inline std::vector<int> sharing_order(Func f, Var v, int group) {
+// (counts: per bit, how many of the bit fields' positions vary with it.)
+using Points = std::vector<std::map<std::string, Expr>>;
+inline std::vector<int> sharing_order(const Expr &e, const Points &points, Var v, int group, std::vector<int> *counts = nullptr) {
     using namespace Internal;
-    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
     int bits = 0;
     while ((1 << bits) < group)
         bits++;
     std::vector<int> count(bits, 0), order(bits);
-    // the shift at each value of f's update's (constant) reduction domain
-    std::vector<std::map<std::string, Expr>> points{{}};
-    for (const ReductionVariable &rv : f.function().update(0).schedule().rvars()) {
-        auto mn = as_const_int(simplify(rv.min)), ex = as_const_int(simplify(rv.extent));
-        if (!mn || !ex) continue;
-        std::vector<std::map<std::string, Expr>> next;
-        for (const auto &p : points) {
-            for (int64_t i = 0; i < *ex; i++) {
-                next.push_back(p);
-                next.back()[rv.var] = Expr((int)(*mn + i));
-            }
-        }
-        points.swap(next);
-    }
     visit_with(e, [&](auto *self, const Call *c) {
         if ((c->is_intrinsic(Call::shift_right) || c->is_intrinsic(Call::shift_left)) && expr_uses_var(c->args[1], v.name())) {
             for (int b = 0; b < bits; b++) {
@@ -126,7 +126,68 @@ inline std::vector<int> sharing_order(Func f, Var v, int group) {
         order[b] = b;
     }
     std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return count[a] > count[b]; });
+    if (counts) *counts = count;
     return order;
+}
+
+inline std::vector<int> sharing_order(Func f, Var v, int group, std::vector<int> *counts = nullptr) {
+    using namespace Internal;
+    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
+    // the shift at each value of f's update's (constant) reduction domain
+    Points points{{}};
+    for (const ReductionVariable &rv : f.function().update(0).schedule().rvars()) {
+        auto mn = as_const_int(simplify(rv.min)), ex = as_const_int(simplify(rv.extent));
+        if (!mn || !ex) continue;
+        Points next;
+        for (const auto &p : points) {
+            for (int64_t i = 0; i < *ex; i++) {
+                next.push_back(p);
+                next.back()[rv.var] = Expr((int)(*mn + i));
+            }
+        }
+        points.swap(next);
+    }
+    return sharing_order(e, points, v, group, counts);
+}
+
+// Whether some bit of a sub-block's index no bit field's position varies
+// with lies below one some do (counts: sharing_order's).
+inline bool bit_beneath(const std::vector<int> &counts) {
+    for (size_t b = 0; b < counts.size(); b++) {
+        for (size_t c = b + 1; c < counts.size(); c++) {
+            if (counts[b] == 0 && counts[c] > 0) return true;
+        }
+    }
+    return false;
+}
+
+// The values of x (in sub-blocks of `sub`, `subs` of them) over which f's
+// update's bit fields' positions (fs inlined) repeat, if within them
+// bit_beneath (q6_K's 128: bit 0, the 16-value halves of 32 a byte's codes
+// span, below the nibbles' and high bits' pairs, 2 and 1); else 0.
+inline int bit_period(Func f, const RVar &x, int sub, int subs, const std::vector<Func> &fs) {
+    using namespace Internal;
+    Expr e = f.update_value();
+    for (bool again = true; again;) {
+        again = false;
+        for (Func g : fs) {
+            if (!calls_any(e, {g})) continue;
+            e = inline_function(e, g.function());
+            again = true;
+        }
+    }
+    Var v("v"), y("y");
+    e = remove_promises(remove_likelies(substitute_in_all_lets(substitute(x.name(), v * sub + y, e))));
+    Points points;
+    for (int i = 0; i < sub; i++) {
+        points.push_back({{y.name(), i}});
+    }
+    int group = 2;
+    while (group < subs && bit_position_varies(e, v, group))
+        group *= 2;
+    std::vector<int> counts;
+    sharing_order(e, points, v, group, &counts);
+    return group < subs && bit_beneath(counts) ? group * sub : 0;
 }
 
 // Every stage of f in registers: `vec` vectorized, `unrolled` unrolled, each
@@ -245,16 +306,6 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
         (ts.busy.defined() ? s.specialize(ts.busy) : s).parallel(ts.cols ? t : VarOrRVar(nc));
     }
     return cond.defined() ? dot.update().specialize(cond) : dot.update();
-}
-
-// Does e call any of fs?
-inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
-    bool found = false;
-    Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
-        found |= std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
-        self->visit_base(c);
-    });
-    return found;
 }
 
 // Whether a kernel decodes bit fields through constant tables (Tabulate): on
@@ -1262,7 +1313,30 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // records: the sub-blocks' decoded scales (and mins) their own stage
     std::vector<Func> kept = records && sub ? scale_decoders(rs) : std::vector<Func>{};
     if (derived && derived_sums(out, st, dot, s, r, rs, d, act_sub, records ? sub : 0, kept, fold_offsets)) aff = false;
-    sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
+    // With the act's records: if, within the period over which the bit
+    // fields' positions repeat (bit_period: q6_K's 128 values), a bit of the
+    // sub-block's index that moves no field (q6_K's bit 0) lies beneath ones
+    // that do, r.x split by that period first, so that bit can be a loop
+    // inside the period's (the others unrolled): x then the period's multiple
+    // plus the loop's, which the simplifier reduces to dense loads (split in
+    // sub-blocks first, ((p * 8 + b) * 16 + c) % 128 stays: gathers).
+    auto bx = as_const_int(r.x.extent());
+    RVar rxp("rxp");
+    Var vp("vp");
+    int period = 0;
+    if (sub && act_records && bx) {
+        std::vector<Func> dec;
+        for (Func f : decoders(rs)) {
+            if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
+        }
+        period = bit_period(dot, r.x, sub, (int)*bx / sub, dec);
+    }
+    if (period) {
+        RVar rxx("rxx");
+        s.split(r.x, rxp, rxx, period).split(rxx, rxs, rxc, sub).split(rxc, rxc, rxk, 8);
+    } else {
+        sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
+    }
     Func wblk, win;
     Stage bs = s;  // the stage over the blocks (ry; per weight block, ryp)
     if (per > 1) {
@@ -1279,7 +1353,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // per sub-block (v): its scale times its codes' dot (inner), as blocked()
     Func part, inner;
     if (sub) {
-        part = codes.update().rfactor(rxs, v);
+        part = period ? codes.update().rfactor({{rxs, v}, {rxp, vp}}) : codes.update().rfactor(rxs, v);
         inner = part.update().hoist_invariants()[0];
         if (fsub) inner = inner.change_type(Int(32));
     }
@@ -1294,7 +1368,9 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             continue;
         }
         Var x = f.args()[2];  // x: bacc or u
-        std::vector<Var> outer = f.dimensions() > 3 ? std::vector<Var>{v, x} : std::vector<Var>{x};
+        std::vector<Var> outer{x};
+        if (f.dimensions() > 3) outer.insert(outer.begin(), v);
+        if (f.dimensions() > 4) outer.insert(outer.begin() + 1, vp);
         sub_tiles(sub_tile_storage(f, n, m, outer), n, m, {nii, mii, nio, mio, x}).unroll(x);
         // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
         if (x.name() == u.name()) f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
@@ -1310,10 +1386,16 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         // fields' positions repeat (constant shifts), as blocked_rows_sub's
         // (q4_K's pairs, q6_K's 128 values; fully unrolled, the codes' loads
         // are scheduled early and spill: 4-7% slower), each unrolled, those
-        // reading the same bytes adjacent (sharing_order: q6_K's 0, 4, 2, 6)
+        // reading the same bytes adjacent (sharing_order: q6_K's 0, 4, 2, 6).
+        // Per period, its bits that move no field loops inside the unrolled
+        // ones (q6_K's: 4 sub-blocks unrolled per loop iteration, pairs
+        // sharing the low bits' bytes, all 4 the high bits'; no stack
+        // round trips of the raw bytes 8 unrolled took, 865 -> 2 x 373
+        // instructions per 128 smmla).
         Stage cu = codes.update();
-        auto bx = as_const_int(r.x.extent());
-        int subs = bx ? (int)*bx / sub : 2, group = act_records ? 2 : subs;
+        int subs = bx ? (int)*bx / sub : 2;
+        if (period) subs = period / sub;
+        int group = act_records && !period ? 2 : subs;
         while (group < subs && bit_position_varies(inner, v, group))
             group *= 2;
         RVar rxso("rxso"), rxsi("rxsi"), g = rxs, at_sub;
@@ -1322,7 +1404,8 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             g = rxsi;
         }
         std::vector<VarOrRVar> order{nii, mii, nio, mio};
-        std::vector<int> bits = act_records ? sharing_order(inner, v, group) : std::vector<int>{};
+        std::vector<int> counts, bits = act_records ? sharing_order(inner, v, group, &counts) : std::vector<int>{};
+        size_t loops = 0;
         if (std::is_sorted(bits.begin(), bits.end())) {
             order.push_back(at_sub = g);
         } else {  // g's bits, each an RVar (the lowest first), in that order
@@ -1335,12 +1418,16 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             }
             bv.push_back(g);
             for (int b : bits) {
-                order.push_back(bv[b]);
+                if (!period || counts[b]) order.push_back(bv[b]);
+            }
+            for (int b : bits) {
+                if (period && !counts[b]) order.push_back(bv[b]), loops++;
             }
             at_sub = bv[bits[0]];
         }
-        size_t unrolled = order.size();
+        size_t unrolled = order.size() - loops;
         if (group < subs) order.push_back(rxso);
+        if (period) order.push_back(rxp);
         order.push_back(u);
         sub_tiles(cu, n, m, order).unroll(u);
         for (size_t i = 4; i < unrolled; i++) {
@@ -1352,16 +1439,20 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             // scales, not one per sub-tile
             Var no("no"), ni("ni"), mo("mo"), mi("mi"), nm("nm"), nmo("nmo");
             part.update().split(n, no, ni, 2, TailStrategy::RoundUp).split(m, mo, mi, 2, TailStrategy::RoundUp).reorder({ni, mi, no, mo, v, u}).fuse(ni, mi, nm).fuse(nm, no, nmo).vectorize(nmo).unroll(mo).unroll(v).unroll(u);
+            if (period) part.update().unroll(vp);
         } else {
             sub_tiles(part.update(), n, m, {nii, mii, nio, mio, v, u}).unroll(v).unroll(u);
         }
         part.compute_at(codes, at_sub);
         inner.compute_at(codes, at_sub);
-        // the sub-block's scales, decoded once across the record's rows
+        // the sub-block's scales, decoded once across the record's rows (per
+        // period, its sub-blocks', the rows innermost: dense in a looped
+        // sub-block, not gathered)
         for (Func k : kept) {
             if (!calls_any(part.function().update(0).values()[0], {k})) continue;
             Func ks = k.in(part);
-            ks.compute_at(codes, at_sub).vectorize(ks.args()[2], ts.nt);
+            if (period) ks.reorder_storage(ks.args()[2], ks.args()[0], ks.args()[1]);
+            ks.compute_at(codes, period ? rxp : at_sub).vectorize(ks.args()[2], ts.nt);
             ks.unroll(ks.args()[0]).unroll(ks.args()[1]);
         }
     }
