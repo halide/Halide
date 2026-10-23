@@ -14,8 +14,11 @@
 #include <sstream>
 
 #ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
 #include <pthread/qos.h>
 #include <sys/sysctl.h>
+#include <unistd.h>
 #endif
 
 namespace gq {
@@ -37,7 +40,7 @@ struct Options {
     std::string shapes = "smoke";
     int threads = 0, rounds = 15;
     double min_ms = 20;
-    bool check = false, json = false, cold = false;
+    bool check = false, json = false, cold = false, pretouch = true;
 };
 
 std::vector<std::string> split(const std::string &s) {
@@ -60,6 +63,8 @@ const char *usage =
     "  --check                  correctness only, exit 1 on any failure\n"
     "  --cold                   cycle >= 512 MiB of weight copies (cache-cold)\n"
     "  --no-keep-awake          let Halide's idle threads sleep during samples\n"
+    "  --no-pretouch            don't fault in every page of the loaded images' __TEXT and\n"
+    "                           __DATA_CONST at startup (see README: layout sensitivity)\n"
     "  --json                   JSON lines instead of CSV\n"
     "  --verbose                echo GGML's log\n";
 
@@ -130,6 +135,27 @@ struct Emitter {
     }
 };
 
+#ifdef __APPLE__
+// Read one byte of every page of an image's __TEXT and __DATA_CONST, so that all
+// of their pages have valid translations. A kernel that randomly indexes a
+// constant table (q5_0/q5_1 qh tables, iq grids) near a page boundary whose
+// neighbouring page was never touched otherwise pays a failed hardware page walk
+// per row, which slows DRAM-streaming kernels by up to ~25% depending on link
+// layout (README, "Benchmark methodology").
+void pretouch_image(const struct mach_header *mh, intptr_t slide) {
+    if (mh->magic != MH_MAGIC_64) return;
+    const auto *h = (const mach_header_64 *)mh;
+    const uint8_t *p = (const uint8_t *)(h + 1);
+    const uint64_t page = getpagesize();
+    for (uint32_t i = 0; i < h->ncmds; i++, p += ((const load_command *)p)->cmdsize) {
+        const auto *s = (const segment_command_64 *)p;
+        if (s->cmd != LC_SEGMENT_64 || (strcmp(s->segname, "__TEXT") && strcmp(s->segname, "__DATA_CONST"))) continue;
+        for (uint64_t a = s->vmaddr; a < s->vmaddr + s->vmsize; a += page)
+            (void)*(volatile const uint8_t *)(a + slide);
+    }
+}
+#endif
+
 std::string fmt(double x, const char *f = "%.4g") {
     char b[64];
     snprintf(b, sizeof(b), f, x);
@@ -183,6 +209,8 @@ int main(int argc, char **argv) {
             o.cold = true;
         } else if (a == "--no-keep-awake") {
             halide_keep_awake = false;
+        } else if (a == "--no-pretouch") {
+            o.pretouch = false;
         } else if (a == "--json") {
             o.json = true;
         } else if (a == "--verbose") {
@@ -193,6 +221,10 @@ int main(int argc, char **argv) {
         }
     }
     if (!o.threads) o.threads = perf_cores();
+#ifdef __APPLE__
+    // Also called for images loaded later (e.g. by the Metal backend).
+    if (o.pretouch) _dyld_register_func_for_add_image(pretouch_image);
+#endif
 
     register_ggml_providers();
     register_halide_providers();
