@@ -1508,8 +1508,23 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
         Tiles rt{fmt.rows, 1, 2, 16, 0, 0, rest};
         // (a two-level record, 8 rows of q4_K: 1152 bytes, one per iteration)
-        if (affine(rs)) rt.interleave = 1;
-        affine(rs) ? blocked_rows_sub(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, fmt.sub, fmt.act_sub) : blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs);
+        if (affine(rs)) {
+            rt.interleave = 1;
+            blocked_rows_sub(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, fmt.sub, fmt.act_sub);
+            return;
+        }
+        // Codes decoded from their field (packed or mapped, not q8_0's bytes):
+        // two records per tile where N allows, each act piece's broadcast
+        // serving both (on M3, the gemv of mxfp4.4x4 1.08-1.1x, q4_0.i4.4x8
+        // 1.04-1.1x, q1_0.4x1 1.02-1.05x; q8_0's, a load per piece, 0.85x at
+        // K = 14336: two weight streams)
+        std::vector<Func> cd = decoders(rs, only({tag::codes}), 0, 1);
+        if (!cd.empty() && cd.front().type() != cd.back().type()) {
+            Tiles r2 = rt;
+            r2.nt = 2 * fmt.rows;
+            blocked_rows(out, 2 * whole, dots[0], N % r2.nt == 0, r2, r, fmt.chunk, rs);
+        }
+        blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs);
         return;
     }
     pairs.busy = rows.busy = rest;
