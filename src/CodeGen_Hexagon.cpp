@@ -67,6 +67,7 @@ protected:
     void visit(const Call *) override;
     void visit(const Mul *) override;
     void visit(const Select *) override;
+    void visit(const Shuffle *) override;
     void visit(const Allocate *) override;
     ///@}
 
@@ -2187,6 +2188,17 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
 
     total_size = simplify(total_size);
     return codegen(total_size);
+}
+
+void CodeGen_Hexagon::visit(const Shuffle *op) {
+    if (op->is_repeat_each_lane()) {
+        // Hexagon's interleave_vectors uses vshuff, which is better than
+        // the generic lowering of a single shufflevector.
+        Value *v = codegen(op->vectors[0]);
+        value = interleave_vectors(std::vector<Value *>(op->repeat_each_lane_factor(), v));
+        return;
+    }
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Allocate *alloc) {
