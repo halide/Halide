@@ -369,6 +369,23 @@ inline std::vector<Func> offset_decoders(const std::vector<ApproximationResult> 
     return fs;
 }
 
+// constant_integer_bounds(e), through selects (the union of their values')
+inline Internal::ConstantInterval select_bounds(const Expr &e) {
+    using namespace Internal;
+    Scope<ConstantInterval> scope;
+    std::vector<std::string> names;
+    Expr x = mutate_with(e, [&](auto *self, const Select *op) -> Expr {
+        Expr t = self->mutate(op->true_value), f = self->mutate(op->false_value);
+        if (!op->type.is_int_or_uint()) return Select::make(op->condition, t, f);
+        ConstantInterval b = constant_integer_bounds(t, scope);
+        b.include(constant_integer_bounds(f, scope));
+        names.push_back(unique_name('s'));
+        scope.push(names.back(), b);
+        return Variable::make(op->type, names.back());
+    });
+    return constant_integer_bounds(x, scope);
+}
+
 // v (a stage's value) with each widening cast of a sum of the weight's codes
 // and a constant (cast<float>(int8(field) + -1), the offset decoders and the
 // code decoders between v and them inlined) split into the cast of the rest
@@ -408,7 +425,7 @@ inline Expr split_offsets(const Expr &v, const std::vector<ApproximationResult> 
         ConstantInterval range = ConstantInterval::bounds_of_type(t), acc = ConstantInterval::single_point(0);
         bool ok = true;
         for (const auto &[e, sign] : terms) {
-            ConstantInterval b = constant_integer_bounds(simplify(inlined(e, all)));
+            ConstantInterval b = select_bounds(simplify(inlined(e, all)));
             sign > 0 ? acc += b : acc -= b;
             ok &= range.contains(acc);
         }
