@@ -32,9 +32,6 @@ public:
     GeneratorParam<ggml::Fold> fold_offsets{"fold_offsets", ggml::Fold::All, {{"none", ggml::Fold::None}, {"gemv", ggml::Fold::Gemv}, {"all", ggml::Fold::All}}};
     // mul_mat's gemv in tiles of two rows where N allows (else one)
     GeneratorParam<bool> row_pairs{"row_pairs", true};
-    // vec_dot's blocks' codes dots in this many sdot chains (see
-    // ggml::blocked)
-    GeneratorParam<int> chains{"chains", 1};
 
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
@@ -173,7 +170,7 @@ public:
 
     void generate() {
         if (op == "vec_dot") {
-            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, chains);
+            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
         } else {
             ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs);
         }
