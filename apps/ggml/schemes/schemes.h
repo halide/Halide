@@ -7,7 +7,8 @@
 // "<rows>x<chunk>": Interleave; "soa": one array per field), chosen
 // independently. `block`: values per
 // record along a row; `rows`: rows per record (f32: no scheme, one value);
-// `chunk`: Interleave's bytes per row piece (0 for aos). A kernel may ask for
+// `chunk`: the consecutive codes of a row piece of Interleave's (its bytes;
+// 8 per byte for q1_0's bits; 0 for aos). A kernel may ask for
 // `scaled` codes: the same bytes, decoded to codes at 2^(8 - bits) times their
 // value (in the top bits of an int8) and scales divided alike (Type0Quant).
 // KleidiAI's qsi8cx (weights) and qai8dx (activations) scale per row
@@ -87,7 +88,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "iq4_xs" && codes.empty()) return sub_blocks({iq4_xs(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "tq2_0" && codes.empty()) return {tq2_0(lay, indexed), QK_K, rows, chunk};
     if (type == "tq1_0" && codes.empty()) return {tq1_0(lay, indexed), QK_K, rows, chunk};
-    if (type == "q1_0" && codes.empty()) return {q1_0(lay, indexed), SignQuant::block, rows, chunk};
+    if (type == "q1_0" && codes.empty()) return {q1_0(lay, indexed), SignQuant::block, rows, chunk * 8};
     if (type == "iq2_xxs" && codes.empty()) return sub_blocks({iq2_xxs(lay, indexed, tables), QK_K, rows, chunk}, 32);
     if (type == "iq2_xs" && codes.empty()) return sub_blocks({iq2_xs(lay, indexed, tables), QK_K, rows, chunk}, 16);
     if (type == "iq2_s" && codes.empty()) return sub_blocks({iq2_s(lay, indexed), QK_K, rows, chunk}, 16);
