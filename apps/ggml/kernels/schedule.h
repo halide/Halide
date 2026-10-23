@@ -111,6 +111,7 @@ struct Formats {
     int block = 1, rows = 1, chunk = 0, act_block = 1, act_rows = 1;
     bool rowwise = false;
     int sub = 0, act_sub = 0;
+    int per = 1;  // blocks per weight block (q1_0's 128 values on q8_0 acts: 4)
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
@@ -962,18 +963,34 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // `records`: the weights in records of ts.nt rows (tiles from 0 mod ts.nt,
 // N a multiple), their mins across the rows (as blocked_rows_sub).
 // `act_records`: the act too in whole records (q8_K.4x8).
+// `per` > 1: weight blocks of `per` blocks (scale-only weights, one level):
+// per weight block (w), its scale times the sum of its blocks' (win, each
+// the act's scale times the codes' dot), so the weight's scale multiplies
+// once per weight block, not per block.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
-                         const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false) {
+                         const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
+                         int per = 1) {
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
-    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc");
-    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
+    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
+    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi"), ryw("ryw"), ryp("ryp");
     bool aff = affine(rs);
+    if (per > 1 && (aff || derived || sub || records)) throw std::invalid_argument("blocked_mmla: weight blocks of several blocks, scale-only weights");
     Sums d;
     // records: the sub-blocks' decoded scales (and mins) their own stage
     std::vector<Func> kept = records && sub ? scale_decoders(rs) : std::vector<Func>{};
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub, records ? sub : 0, kept)) aff = false;
     sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
-    Func blk = s.rfactor(ry, u);
+    Func wblk, win;
+    Stage bs = s;  // the stage over the blocks (ry; per weight block, ryp)
+    if (per > 1) {
+        s.split(ry, ryw, ryp, per);
+        wblk = s.rfactor(ryw, w);
+        wblk.update().eager_inline(decoders(rs, all_but({tag::codes}), 0, 1));
+        win = wblk.update().hoist_invariants()[0];
+        if (win.name() == wblk.name()) throw std::invalid_argument("blocked_mmla: no weight scale per weight block in " + wblk.name());
+        bs = win.update();
+    }
+    Func blk = bs.rfactor(per > 1 ? ryp : ry, u);
     bool fsub = sub && !records && float_sub_scales(rs);
     Func rest, mid, codes = block_dot(blk, rs, !fsub, rest, mid, aff, aff ? std::vector<Func>{} : kept);
     // per sub-block (v): its scale times its codes' dot (inner), as blocked()
@@ -983,16 +1000,27 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         inner = part.update().hoist_invariants()[0];
         if (fsub) inner = inner.change_type(Int(32));
     }
-    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+    s.split(per > 1 ? ryw : ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
     s.vectorize(n, 2, TailStrategy::GuardWithIf).unroll(n).unroll(m);
     for (Func f : {acc, blk, codes, mid, part, inner}) {
         if (!f.defined()) continue;
+        if (per > 1 && f.name() != acc.name()) {  // (n, m, w, u): per block of win's
+            sub_tiles(sub_tile_storage(f, n, m, {u, w}), n, m, {nii, mii, nio, mio, u, w}).unroll(u).unroll(w);
+            f.compute_at(win, ryp).bound_storage(u, 1).bound_storage(w, 1);
+            continue;
+        }
         Var x = f.args()[2];  // x: bacc or u
         std::vector<Var> outer = f.dimensions() > 3 ? std::vector<Var>{v, x} : std::vector<Var>{x};
         sub_tiles(sub_tile_storage(f, n, m, outer), n, m, {nii, mii, nio, mio, x}).unroll(x);
         // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
         if (x.name() == u.name()) f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
+    }
+    for (Func f : {wblk, win}) {  // per weight block
+        if (!f.defined()) continue;
+        sub_tiles(sub_tile_storage(f, n, m, {w}), n, m, {nii, mii, nio, mio, w}).unroll(w);
+        f.compute_at(acc, ryo).bound_storage(w, ts.interleave);
+        sub_tiles(f.update(), n, m, f.name() == win.name() ? std::vector<VarOrRVar>{nii, mii, nio, mio, ryp, w} : std::vector<VarOrRVar>{nii, mii, nio, mio, w}).unroll(w);
     }
     if (sub) {  // per block and sub-block: the tile's sub-block dots, then their scales
         sub_tiles(codes.update(), n, m, {nii, mii, nio, mio, rxs, u}).unroll(rxs).unroll(u);
@@ -1017,10 +1045,13 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     acc.compute_at(tile_at(out, st));
     sub_tiles(acc.update(), n, m, {nii, mii, nio, mio, bacc, ryo}).unroll(bacc);
+    std::vector<VarOrRVar> wv = per > 1 ? std::vector<VarOrRVar>{w} : std::vector<VarOrRVar>{}, bo{nii, mii, nio, mio, u}, co{rxk, nii, mii, rxc, nio, mio, u};
+    bo.insert(bo.end(), wv.begin(), wv.end());
+    co.insert(co.end(), wv.begin(), wv.end());
     for (Func f : {blk, mid}) {
-        if (f.defined()) sub_tiles(f.update(), n, m, {nii, mii, nio, mio, u}).unroll(u);
+        if (f.defined()) sub_tiles(f.update(), n, m, bo).unroll(u);
     }
-    sub_tiles((sub ? inner : codes).update(), n, m, {rxk, nii, mii, rxc, nio, mio, u}).unroll(rxc).unroll(u).atomic().vectorize(rxk);
+    sub_tiles((sub ? inner : codes).update(), n, m, co).unroll(rxc).unroll(u).atomic().vectorize(rxk);
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
         regs(rest.compute_at(acc, ryo).bound_storage(u, ts.interleave), {n}, {m, u});
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
@@ -1459,7 +1490,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     if (whole && tiled && !rmmla) {
         for (auto [c, ts] : tiles) {
-            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs);
+            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs, false, 0, 0, false, false, fmt.sub ? 1 : fmt.per);
         }
     } else if (rmmla) {
         // whole records of rows (from 0 mod their rows: their addresses dense)
