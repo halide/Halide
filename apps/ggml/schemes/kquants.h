@@ -261,39 +261,56 @@ inline Approximation q4_K_nibbles() {
     return Compose{BlockReshape{64}, PlanarFieldPack{4, 32}, Unblock{32}};
 }
 
-// block_q4_K {f16 d, dmin; u8 scales[12]; u8 qs[128]}.
-// "8x8": GGML's repacked block_q4_Kx8 {f16 d[8], dmin[8]; u8 scales[96];
-// u8 qs[1024]} (repack.cpp make_block_q4_Kx8): 8 rows' qs interleaved in
-// 8-byte pieces, d and dmin per row, and per sub-block 12 bytes, the 8 rows'
-// scales and mins of it packed as one block_q4_K's 8 sub-blocks' are
-// (KScales over the rows): the 6-bit values interleaved as a 16-element
+// GGML's repacked records of 8 rows of q4_K or q5_K, `fields` (memory
+// order: block_q4_Kx8, block_q5_Kx8; make_block_q4_Kx8, make_block_q5_Kx8):
+// the 8 rows' bit fields interleaved in 8-byte pieces, d and dmin per row,
+// and per sub-block 12 bytes, the 8 rows' scales and mins of it packed as
+// one block_q4_K's 8 sub-blocks' are (KScales over the rows): the 6-bit
+// values (port "scales", from an Identity head) interleaved as a 16-element
 // field (sub-block, then scale/min), transposed to (row, scale/min) per
 // sub-block, then packed.
+inline Approximation kx8_layout(std::vector<StructField> fields, const std::vector<std::string> &logical) {
+    const int rows = 8, sub = QK_K / 32;
+    std::vector<StructField> recs;
+    for (StructField &f : fields) {
+        if (f.name == "scales") f.array_extent = 2 * sub;
+        recs.push_back({f.name, f.type, f.name == "scales" ? 12 * sub : rows * f.array_extent.value_or(1)});
+    }
+    Interleave il{rows, 8, fields, logical};
+    return Compose{il, Parallel{{"scales", Compose{Transpose{sub, 2 * rows}, BlockReshape{2 * rows}, KScales{}, Unblock{12}}}},
+                   StructLayout{Type::Struct(recs), logical}};
+}
+
+// block_q4_K {f16 d, dmin; u8 scales[12]; u8 qs[128]}.
+// "8x8": GGML's repacked block_q4_Kx8 {f16 d[8], dmin[8]; u8 scales[96];
+// u8 qs[1024]} (kx8_layout).
 inline Approximation q4_K(const std::string &lay, bool indexed = false) {
     std::vector<std::string> logical = {"qs", "scales", "d", "dmin"};
+    std::vector<StructField> fields = {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qs", UInt(8), QK_K / 2}};
     auto head = [&](const Approximation &scales) {
         return Compose{BlockReshape{QK_K, indexed}, q4_K_quant(), Parallel{{"codes", unsigned_codes(4)}},
                        Parallel{{"codes", q4_K_nibbles()}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
     };
-    if (lay == "8x8") {
-        const int rows = 8, sub = QK_K / 32;
-        Interleave il{rows, 8, {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 2 * sub}, {"qs", UInt(8), QK_K / 2}}, logical};
-        Type record = Type::Struct({{"d", Float(16), rows}, {"dmin", Float(16), rows}, {"scales", UInt(8), 12 * sub}, {"qs", UInt(8), rows * QK_K / 2}});
-        return Compose{head(Identity{}), il, Parallel{{"scales", Compose{Transpose{sub, 2 * rows}, BlockReshape{2 * rows}, KScales{}, Unblock{12}}}},
-                       StructLayout{record, logical}};
-    }
+    if (lay == "8x8") return Compose{head(Identity{}), kx8_layout(fields, logical)};
     if (lay != "aos" && lay != "soa") throw std::invalid_argument("q4_K: no " + lay + " layout (GGML's repacked one is 8x8)");
-    return Compose{head(KScales{}), layout(lay, {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qs", UInt(8), QK_K / 2}}, logical)};
+    return Compose{head(KScales{}), layout(lay, fields, logical)};
 }
 
 // block_q5_K {f16 d, dmin; u8 scales[12]; u8 qh[32]; u8 qs[128]}: q4_K's,
 // with 5-bit codes: their low nibbles in qs as q4_K's codes, their fifth
 // bits in qh (code i in bit i / 32 of byte i % 32).
+// "8x8": GGML's repacked block_q5_Kx8 {f16 d[8], dmin[8]; u8 scales[96];
+// u8 qh[256]; u8 qs[1024]} (kx8_layout).
 inline Approximation q5_K(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK_K, indexed}, q5_K_quant(), Parallel{{"codes", SumSplit{4}}},
-                   Parallel{{"low", q4_K_nibbles()}, {"high", Compose{multiples(4, 0, 2), PlanarFieldPack{1, 32}}}, {"scales", KScales{}}, {"scale", fp16()}, {"min", fp16()}},
-                   layout(lay, {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qh", UInt(8), QK_K / 8}, {"qs", UInt(8), QK_K / 2}},
-                          {"qs", "qh", "scales", "d", "dmin"})};
+    std::vector<std::string> logical = {"qs", "qh", "scales", "d", "dmin"};
+    std::vector<StructField> fields = {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qh", UInt(8), QK_K / 8}, {"qs", UInt(8), QK_K / 2}};
+    auto head = [&](const Approximation &scales) {
+        return Compose{BlockReshape{QK_K, indexed}, q5_K_quant(), Parallel{{"codes", SumSplit{4}}},
+                       Parallel{{"low", q4_K_nibbles()}, {"high", Compose{multiples(4, 0, 2), PlanarFieldPack{1, 32}}}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
+    };
+    if (lay == "8x8") return Compose{head(Identity{}), kx8_layout(fields, logical)};
+    if (lay != "aos" && lay != "soa") throw std::invalid_argument("q5_K: no " + lay + " layout (GGML's repacked one is 8x8)");
+    return Compose{head(KScales{}), layout(lay, fields, logical)};
 }
 
 // 2-bit fields <-> block_q2_K's and q3_K's qs: per 128, 32 bytes, field
