@@ -119,6 +119,7 @@ tests(
     compute_with_inlined.cpp
     computed_index.cpp
     concat.cpp
+    constant_blob_placement.cpp
     constant_expr.cpp
     constant_interval.cpp
     constant_type.cpp
