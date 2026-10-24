@@ -119,6 +119,7 @@ tests(
     compute_with_inlined.cpp
     computed_index.cpp
     concat.cpp
+    constant_blob_placement.cpp
     constant_expr.cpp
     constant_interval.cpp
     constant_type.cpp
@@ -447,6 +448,7 @@ tests(
     reduction_type_mismatch.cpp
     register_shuffle.cpp
     reorder_storage.cpp
+    repeat_each_element.cpp
     require.cpp
     require_fail.cpp
     reschedule.cpp
