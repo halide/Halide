@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <sstream>
 
@@ -698,6 +700,25 @@ void apply_runtime_prefixes_prefixes(llvm::Module &module,
     }
 }
 
+// Large constant lookup tables, which hot loops may index unpredictably, need
+// care on Apple's arm64 cores (16 KB pages): if more than about 16 cache lines
+// of such a table are in use, and they lie within ~1.5 KB of a page boundary
+// whose other side has never been touched (e.g. a not-yet-faulted-in page of
+// the binary's constant data), the hardware prefetcher keeps triggering
+// page-table walks that fail. Failed walks aren't cached, and the resulting
+// disruption to prefetching can slow memory-bound loops (e.g. quantized
+// matrix-vector products) by up to 20-40%, depending only on where the linker
+// happened to put the table. Tables of up to 1 KB were never affected in
+// measurements on an M3 Max. A table that crosses a page boundary itself is
+// fine, as it touches the pages on both sides.
+constexpr size_t lookup_table_page_size = 16384;
+constexpr size_t lookup_table_margin = 4096;
+constexpr size_t lookup_table_min_size = 1024;
+
+bool places_lookup_tables(const Target &t) {
+    return t.arch == Target::ARM && t.bits == 64 && (t.os == Target::MacOS || t.os == Target::IOS);
+}
+
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
@@ -710,6 +731,17 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
+    lookup_table_buffers.clear();
+    if (places_lookup_tables(target) && !input.buffers().empty()) {
+        for (const auto &f : input.functions()) {
+            visit_with(f.body, [&](auto *self, const Load *op) {
+                if (op->image.defined()) {
+                    lookup_table_buffers.insert(op->image.name());
+                }
+                self->visit_base(op);
+            });
+        }
+    }
     for (const auto &b : input.buffers()) {
         compile_buffer(b);
     }
@@ -848,6 +880,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         pipeline_functions.insert(names.metadata_name);
     }
     apply_runtime_prefixes_prefixes(*module, input.get_runtime_prefixes_map(), pipeline_functions, runtime_symbols);
+
+    place_lookup_tables();
 
     return finish_codegen();
 }
@@ -1097,15 +1131,28 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
 
     vector<char> data_blob((const char *)buf.data(), (const char *)buf.data() + buf.size_in_bytes());
 
+    Constant *host = nullptr;
+    if (constant && data_blob.size() > lookup_table_min_size && lookup_table_buffers.count(buf.name())) {
+        // A placeholder, until place_lookup_tables() puts the data in place.
+        ArrayRef<unsigned char> data_array((const unsigned char *)data_blob.data(), data_blob.size());
+        auto *placeholder = new GlobalVariable(*module, ArrayType::get(i8_t, data_blob.size()),
+                                               true, GlobalValue::PrivateLinkage,
+                                               ConstantDataArray::get(*context, data_array), buf.name() + ".data");
+        lookup_table_blobs.push_back(placeholder);
+        host = placeholder;
+    } else {
+        host = create_binary_blob(data_blob, buf.name() + ".data", constant);
+    }
+
     Constant *fields[] = {
-        ConstantInt::get(i64_t, 0),                                     // device
-        ConstantPointerNull::get(ptr_t),                                // device_interface
-        create_binary_blob(data_blob, buf.name() + ".data", constant),  // host
-        ConstantInt::get(i64_t, halide_buffer_flag_host_dirty),         // flags
-        ConstantStruct::get(type_t_type, type_fields),                  // type
-        ConstantInt::get(i32_t, buf.dimensions()),                      // dimensions
-        shape,                                                          // dim
-        ConstantPointerNull::get(ptr_t),                                // padding
+        ConstantInt::get(i64_t, 0),                              // device
+        ConstantPointerNull::get(ptr_t),                         // device_interface
+        host,                                                    // host
+        ConstantInt::get(i64_t, halide_buffer_flag_host_dirty),  // flags
+        ConstantStruct::get(type_t_type, type_fields),           // type
+        ConstantInt::get(i32_t, buf.dimensions()),               // dimensions
+        shape,                                                   // dim
+        ConstantPointerNull::get(ptr_t),                         // padding
     };
     Constant *buffer_struct = ConstantStruct::get(halide_buffer_t_type, fields);
 
@@ -4221,6 +4268,81 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     Constant *zeros[] = {zero, zero};
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
     return ptr;
+}
+
+void CodeGen_LLVM::place_lookup_tables() {
+    // Lay out the lookup tables in one page-aligned region, such that each
+    // table either keeps the margin from a page boundary or crosses it. This
+    // holds even for boundaries next to other tables in the region, as those
+    // may belong to pipelines that never run. Within a page, tables can be
+    // packed tightly, and whatever follows the region in the page of its last
+    // table is harmless. The region goes in its own section, because Mach-O
+    // linkers keep every atom of a section at its address modulo the
+    // section's alignment, so a page-aligned atom in __TEXT,__const would
+    // also scatter the module's other constants.
+    if (lookup_table_blobs.empty()) {
+        return;
+    }
+    const size_t page = lookup_table_page_size, margin = lookup_table_margin;
+    const size_t align = std::max<size_t>(32, native_vector_bits() / 8);
+    auto round_up = [](size_t x, size_t m) { return (x + m - 1) / m * m; };
+    auto size_of = [](GlobalVariable *g) { return (size_t)g->getValueType()->getArrayNumElements(); };
+
+    // First-fit, largest first.
+    std::stable_sort(lookup_table_blobs.begin(), lookup_table_blobs.end(),
+                     [&](GlobalVariable *a, GlobalVariable *b) { return size_of(a) > size_of(b); });
+    vector<std::pair<size_t, size_t>> extents;
+    size_t region_size = 0;
+    for (GlobalVariable *g : lookup_table_blobs) {
+        const size_t size = size_of(g);
+        vector<size_t> candidates;
+        for (size_t p = 0; p <= round_up(region_size, page); p += page) {
+            candidates.push_back(p + margin);
+            // Far enough into the page to end just past the end of a later page.
+            candidates.push_back(p + std::max(margin, round_up(page - size % page + 1, align)));
+        }
+        for (const auto &e : extents) {
+            candidates.push_back(round_up(e.second, align));
+        }
+        std::sort(candidates.begin(), candidates.end());
+        const size_t begin = *std::find_if(candidates.begin(), candidates.end(), [&](size_t b) {
+            const size_t e = b + size;
+            return b % page >= margin && (e - 1) % page < page - margin &&
+                   std::none_of(extents.begin(), extents.end(), [&](const auto &x) { return b < x.second && x.first < e; });
+        });
+        extents.emplace_back(begin, begin + size);
+        region_size = std::max(region_size, begin + size);
+    }
+
+    vector<size_t> order(extents.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return extents[a] < extents[b]; });
+    vector<llvm::Type *> types;
+    vector<Constant *> inits;
+    vector<unsigned> field(extents.size());
+    size_t pos = 0;
+    for (size_t i : order) {
+        if (extents[i].first > pos) {
+            types.push_back(ArrayType::get(i8_t, extents[i].first - pos));
+            inits.push_back(ConstantAggregateZero::get(types.back()));
+        }
+        field[i] = types.size();
+        types.push_back(lookup_table_blobs[i]->getValueType());
+        inits.push_back(lookup_table_blobs[i]->getInitializer());
+        pos = extents[i].second;
+    }
+
+    StructType *type = StructType::get(*context, types, /* isPacked */ true);
+    auto *region = new GlobalVariable(*module, type, true, GlobalValue::PrivateLinkage,
+                                      ConstantStruct::get(type, inits), "halide_lookup_tables");
+    region->setAlignment(llvm::Align(page));
+    region->setSection("__TEXT,__halide_const");
+    for (size_t i = 0; i < extents.size(); i++) {
+        Constant *indices[] = {ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, field[i])};
+        lookup_table_blobs[i]->replaceAllUsesWith(ConstantExpr::getInBoundsGetElementPtr(type, region, indices));
+        lookup_table_blobs[i]->eraseFromParent();
+    }
+    lookup_table_blobs.clear();
 }
 
 void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Value *error_code) {
