@@ -213,13 +213,14 @@ namespace {
 // MultiRamp, or false if the quotient/remainder isn't itself a multiramp.
 // Shared core of div_by and mod_by.
 //
-// Precondition: the base is a known multiple of k. Otherwise we return false.
+// Precondition: the base's residue r0 = base mod k is known (possibly via the
+// alignment callback). Otherwise we return false.
 //
 // Mental model
 // ------------
 // Picture the integers laid out in buckets of size k: [0, k), [k, 2k), ....
 // Dividing by k asks "which bucket?", modding by k asks "where inside the
-// bucket?". The base sits at the left edge of some bucket. We want every
+// bucket?". The base sits at position r0 of some bucket. We want every
 // lane of the result to remain an affine function of the multi-index — i.e.
 // a multiramp. Whether that's possible depends on how the input dims move
 // the lanes around relative to those buckets.
@@ -253,11 +254,11 @@ namespace {
 //
 // The budget
 // ----------
-// Because the base is a bucket boundary, every lane starts at position 0.
-// At the far corner of the iteration box each flex dim contributes r·(n-1)
-// to the position, and the positions have to stay ≤ k-1 everywhere. So the
-// flex dims share a single budget of k-1; each one spends r·(n-1) of it.
-// If they all fit, we're done.
+// Every lane starts at the base's position r0 within its bucket. At the far
+// corner of the iteration box each flex dim contributes r·(n-1) to the
+// position, and the positions have to stay ≤ k-1 everywhere. So the flex
+// dims share a single budget of k-1-r0; each one spends r·(n-1) of it. If
+// they all fit, we're done. The examples below use r0 = 0.
 //
 // Joint fit: base 0, strides [2, 3], lanes [2, 2], k = 6.
 //   Input values:  0, 2, 3, 5       (all in bucket [0, 6))
@@ -283,7 +284,7 @@ namespace {
 //
 // Algorithm
 // ---------
-// Walk input dims innermost-first, with budget = k-1. For each dim we only
+// Walk input dims innermost-first, with budget = k-1-r0. For each dim we only
 // need to know r = s mod k (not s itself) — so a symbolic stride is fine as
 // long as we can pin down its residue modulo k. If we can't, fail. For the
 // first case that applies, emit its output; if none, fail.
@@ -297,7 +298,7 @@ namespace {
 //                                          budget -= r·(p-1).
 //   (d) otherwise                      → return false.
 //
-// Output base is base/k for div, 0 for mod. For mod, emit r in place of
+// Output base is base/k for div, r0 for mod. For mod, emit r in place of
 // s/k and 0 in place of s·p/k; the shape is the same.
 //
 // Finally, collapse any adjacent output dims where the outer stride is
@@ -317,10 +318,12 @@ namespace {
 // base 3, stride 2, lanes 2, / 4:
 //   Input values:  3, 5
 //   / 4:           0, 1              (does happen to be a multiramp, but
-//                                     our algorithm requires an aligned
-//                                     base and skips this case)
-//   Return false before even looking at the dims.
-bool div_or_mod_impl(MultiRamp *self, const Expr &k_expr, bool is_div) {
+//                                     the base leaves a budget of 0, and
+//                                     p = 2 doesn't fit in 2 lanes)
+//   Return false. We only accept cases where the quotient is constant
+//   along flex dims, so a bucket boundary may not fall inside one.
+bool div_or_mod_impl(MultiRamp *self, const Expr &k_expr, bool is_div,
+                     const AlignmentLookup &alignment_of) {
     auto ck = as_const_int(k_expr);
     if (!ck || *ck <= 0) {
         return false;
@@ -328,19 +331,19 @@ bool div_or_mod_impl(MultiRamp *self, const Expr &k_expr, bool is_div) {
     int64_t k = *ck;
     Type t = self->base.type();
 
-    // Aligned-base assumption: require base to be a known multiple of k.
-    int64_t b_mod = 0;
-    if (!reduce_expr_modulo(self->base, k, &b_mod) || b_mod != 0) {
+    // We need to know the base's position within its k-bucket.
+    int64_t r0 = 0;
+    if (!reduce_expr_modulo(self->base, k, &r0, alignment_of)) {
         return false;
     }
 
     MultiRamp result;
-    result.base = is_div ? simplify(self->base / (int)k) : make_zero(t);
+    result.base = is_div ? simplify(self->base / (int)k) : make_const(t, r0);
 
-    // Residual budget: how much room is left inside the single k-bucket
-    // starting at the base. Starts at k-1 and shrinks as each non-pure-carry
-    // dim spends r·(lanes-1) of it.
-    int64_t budget = k - 1;
+    // Residual budget: how much room is left inside the k-bucket containing
+    // the base. Starts at k-1-r0 and shrinks as each non-pure-carry dim
+    // spends r·(lanes-1) of it.
+    int64_t budget = k - 1 - r0;
 
     for (size_t j = 0; j < self->strides.size(); j++) {
         const Expr &s = self->strides[j];
@@ -349,7 +352,7 @@ bool div_or_mod_impl(MultiRamp *self, const Expr &k_expr, bool is_div) {
         // Everything below only needs s mod k, never s itself. So it's fine
         // for s to be symbolic, as long as we can pin down its residue.
         int64_t r = 0;
-        if (!reduce_expr_modulo(s, k, &r)) {
+        if (!reduce_expr_modulo(s, k, &r, alignment_of)) {
             return false;
         }
 
@@ -416,12 +419,12 @@ bool div_or_mod_impl(MultiRamp *self, const Expr &k_expr, bool is_div) {
 
 }  // namespace
 
-bool MultiRamp::div(const Expr &k) {
-    return div_or_mod_impl(this, k, /*is_div=*/true);
+bool MultiRamp::div(const Expr &k, const AlignmentLookup &alignment_of) {
+    return div_or_mod_impl(this, k, /*is_div=*/true, alignment_of);
 }
 
-bool MultiRamp::mod(const Expr &k) {
-    return div_or_mod_impl(this, k, /*is_div=*/false);
+bool MultiRamp::mod(const Expr &k, const AlignmentLookup &alignment_of) {
+    return div_or_mod_impl(this, k, /*is_div=*/false, alignment_of);
 }
 
 namespace {
@@ -486,17 +489,18 @@ bool multiramp_of_constants(const std::vector<int> &idx, Type t, MultiRamp *resu
 // success. Recursive calls go through the public wrapper, so each branch
 // here can assume *result is either freshly initialized (on entry) or
 // freshly filled by a successful recursion.
-bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
+bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *result,
+                       const AlignmentLookup &alignment_of) {
     Type elem_t = e.type().element_of();
     if (e.type().is_scalar()) {
         result->base = e;
         return true;
     } else if (const Variable *v = e.as<Variable>()) {
         if (const Expr *e = scope.find(v->name)) {
-            return is_multiramp(*e, scope, result);
+            return is_multiramp(*e, scope, result, alignment_of);
         }
     } else if (const Broadcast *b = e.as<Broadcast>();
-               b && is_multiramp(b->value, scope, result)) {
+               b && is_multiramp(b->value, scope, result, alignment_of)) {
         result->strides.push_back(make_zero(elem_t));
         result->lanes.push_back(b->lanes);
         return true;
@@ -506,7 +510,7 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         // permutes them. This is the shape flatten_nested_ramps leaves a
         // strided load in, and what a transpose of a tile looks like.
         MultiRamp inner, perm;
-        if (is_multiramp(s->vectors[0], scope, &inner) &&
+        if (is_multiramp(s->vectors[0], scope, &inner, alignment_of) &&
             multiramp_of_constants(s->indices, inner.base.type(), &perm) &&
             inner.shuffle(perm)) {
             *result = inner;
@@ -515,7 +519,7 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         return false;
     } else if (const Ramp *r = e.as<Ramp>()) {
         if (auto stride = unbroadcast(r->stride)) {
-            if (is_multiramp(r->base, scope, result)) {
+            if (is_multiramp(r->base, scope, result, alignment_of)) {
                 result->strides.push_back(*stride);
                 result->lanes.push_back(r->lanes);
                 return true;
@@ -523,15 +527,15 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         }
     } else if (const Add *a = e.as<Add>()) {
         MultiRamp rb;
-        if (is_multiramp(a->a, scope, result) &&
-            is_multiramp(a->b, scope, &rb)) {
+        if (is_multiramp(a->a, scope, result, alignment_of) &&
+            is_multiramp(a->b, scope, &rb, alignment_of)) {
             return result->add(rb);
         }
     } else if (const Sub *s = e.as<Sub>()) {
         // Convert to Add to reuse logic above.
         MultiRamp rb;
-        if (is_multiramp(s->a, scope, result) &&
-            is_multiramp(s->b, scope, &rb)) {
+        if (is_multiramp(s->a, scope, result, alignment_of) &&
+            is_multiramp(s->b, scope, &rb, alignment_of)) {
             rb.mul(make_const(elem_t, -1));
             return result->add(rb);
         }
@@ -540,25 +544,25 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         // untouched-on-failure guarantee means a failed first attempt
         // leaves *result clean for the second.
         if (auto b = unbroadcast(m->b);
-            b && is_multiramp(m->a, scope, result)) {
+            b && is_multiramp(m->a, scope, result, alignment_of)) {
             result->mul(*b);
             return true;
         }
         if (auto a = unbroadcast(m->a);
-            a && is_multiramp(m->b, scope, result)) {
+            a && is_multiramp(m->b, scope, result, alignment_of)) {
             result->mul(*a);
             return true;
         }
     } else if (const Div *d = e.as<Div>()) {
         if (auto denom = unbroadcast(d->b)) {
-            if (is_multiramp(d->a, scope, result)) {
-                return result->div(*denom);
+            if (is_multiramp(d->a, scope, result, alignment_of)) {
+                return result->div(*denom, alignment_of);
             }
         }
     } else if (const Mod *m = e.as<Mod>()) {
         if (auto denom = unbroadcast(m->b)) {
-            if (is_multiramp(m->a, scope, result)) {
-                return result->mod(*denom);
+            if (is_multiramp(m->a, scope, result, alignment_of)) {
+                return result->mod(*denom, alignment_of);
             }
         }
     }
@@ -567,11 +571,12 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
 }
 }  // namespace
 
-bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
+bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result,
+                  const AlignmentLookup &alignment_of) {
     // Wrap the impl so that callers get a clean "untouched on failure"
     // contract regardless of how the impl leaves its scratch space.
     MultiRamp tmp;
-    if (is_multiramp_impl(e, scope, &tmp)) {
+    if (is_multiramp_impl(e, scope, &tmp, alignment_of)) {
         *result = std::move(tmp);
         return true;
     }

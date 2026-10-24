@@ -89,6 +89,52 @@ int fused_dims() {
     return 0;
 }
 
+int aligned_tiles() {
+    // Rows of 4 contiguous values, 32 apart, read in 2x2 tiles. With the
+    // output width a multiple of 4 but not 8, the 8-wide tiles shift inwards,
+    // so each tile starts at a let var known only to be a multiple of 4, and
+    // the unrolled 2-wide subtiles start at offsets 0, 2, 4 and 6 from it.
+    // The index of the ones at 2 and 6 is (ramp(4k + 2, 1, 2) % 4) + ..., which
+    // is dense, but only given the alignment of the let var.
+    ImageParam in(UInt(8), 2);
+    Param<int> n;
+    Func f;
+    Var x, y, xo, xi, xio, xii, yo, yi;
+    f(x, y) = in((x / 4) * 32 + x % 4, y) + 1;
+
+    OutputImageParam out = f.output_buffer();
+    out.dim(0).set_bounds(0, n * 4).dim(1).set_min(0);
+    in.dim(0).set_min(0).dim(1).set_min(0);
+    f.split(x, xo, xi, 8)
+        .split(xi, xio, xii, 2)
+        .split(y, yo, yi, 2)
+        .reorder(xii, yi, xio, xo, yo)
+        .vectorize(xii)
+        .vectorize(yi)
+        .unroll(xio);
+
+    if (!check_dense(f, "aligned_tiles")) {
+        return 1;
+    }
+
+    const int w = 12, h = 4;
+    Buffer<uint8_t> input((w / 4) * 32, h), output(w, h);
+    input.fill([](int x, int y) { return (uint8_t)(x * 7 + y * 13); });
+    in.set(input);
+    n.set(w / 4);
+    f.realize(output);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            uint8_t correct = input((x / 4) * 32 + x % 4, y) + 1;
+            if (output(x, y) != correct) {
+                printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 bool is_dense_ramp(const Expr &index) {
     const Ramp *r = index.as<Ramp>();
     return r && r->base.type().is_scalar() && is_const_one(r->stride);
@@ -148,10 +194,53 @@ int one_dim() {
     return 0;
 }
 
+int rfactor_lanes() {
+    // An rfactor intermediate summing 4 RVar lanes for each of 4 vectorized
+    // outputs, where output x reads at (x / 4) * 64 + (x % 4) * 4 + r. The
+    // 16 lanes for 4 consecutive outputs starting at a multiple of 4 are one
+    // dense run, which should be one dense load, also with rfactor()'s
+    // likely-tagged clamp on the RVar.
+    ImageParam in(Int(32), 1);
+    Func f;
+    Var x, u;
+    RVar ro, ri;
+    RDom r(0, 64);
+    f(x) = 0;
+    f(x) += in(r + (x % 4) * 4 + (x / 4) * 64);
+    f.update().split(r, ro, ri, 4);
+    Func intm = f.update().rfactor(ro, u);
+    f.vectorize(x, 4);
+    f.update().vectorize(x, 4);
+    intm.compute_at(f, x).vectorize(x);
+    intm.update().reorder(ri, x, u).atomic().vectorize(ri).vectorize(x);
+    f.output_buffer().dim(0).set_min(0);
+    in.dim(0).set_min(0);
+
+    if (!check_dense(f, "rfactor_lanes")) {
+        return 1;
+    }
+
+    Buffer<int> input(64 * 5), output(16);
+    input.fill([](int i) { return (i * 7) % 13 - 6; });
+    in.set(input);
+    f.realize(output);
+    for (int x = 0; x < 16; x++) {
+        int correct = 0;
+        for (int k = 0; k < 64; k++) {
+            correct += input(k + (x % 4) * 4 + (x / 4) * 64);
+        }
+        if (output(x) != correct) {
+            printf("output(%d) = %d instead of %d\n", x, output(x), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (fused_dims() || one_dim()) {
+    if (fused_dims() || aligned_tiles() || one_dim() || rfactor_lanes()) {
         return 1;
     }
     printf("Success!\n");
