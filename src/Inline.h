@@ -96,6 +96,10 @@ void inline_function(Definition &def, const Function &f);
  * above for how the batch is processed. */
 Stmt inline_functions(const Stmt &s, const std::vector<Function> &fs);
 
+/** Return the error for an illegal inline schedule, or an empty string.
+ * LoopLevels need not be locked. Does not emit warnings. */
+std::string inlined_function_schedule_error(const Function &f);
+
 /** Check if the schedule of an inlined function is legal, throwing an error
  * if it is not, and warning about directives that do not affect inlined calls.
  * LoopLevels need not be locked. The context describes how calls are inlined

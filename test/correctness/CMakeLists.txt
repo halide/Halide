@@ -14,6 +14,17 @@ tests(
     aligned_split_partition.cpp
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
+    approximate_by.cpp
+    approximation_codec.cpp
+    approximation_components.cpp
+    approximation_decode_funcs.cpp
+    approximation_derived_ports.cpp
+    approximation_parallel.cpp
+    approximation_signatures.cpp
+    approximation_tags.cpp
+    approximation_testing.cpp
+    approximation_trace.cpp
+    approximation_unit_forms.cpp
     argmax.cpp
     arm_bit_field_shift.cpp
     arm_cpu_detect.cpp

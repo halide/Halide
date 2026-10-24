@@ -403,6 +403,31 @@ _add_halide_aot_tests(
 _add_halide_libraries(all_type_names)
 _add_halide_aot_tests(all_type_names)
 
+# approximation_codec_aottest.cpp
+# approximation_codec_generator.cpp
+# Built multitarget where possible (like metadata_tester below), since that
+# runs configure() once per target in one process.
+if (${_USING_WASM})
+    set(_approximation_codec_targets ${Halide_TARGET})
+elseif (Halide_CMAKE_TARGET MATCHES ";")
+    set(_approximation_codec_targets cmake)
+else ()
+    set(_approximation_codec_targets cmake-no_bounds_query cmake)
+endif ()
+_add_halide_libraries(approximation_codec TARGETS ${_approximation_codec_targets})
+target_include_directories(approximation_codec.generator PRIVATE "${Halide_SOURCE_DIR}/tools")
+_add_halide_libraries(
+    approximation_codec_decode
+    FROM approximation_codec.generator
+    GENERATOR_NAME approximation_codec
+    PARAMS direction=decode
+    TARGETS ${_approximation_codec_targets}
+)
+_add_halide_aot_tests(
+    approximation_codec
+    HALIDE_LIBRARIES approximation_codec approximation_codec_decode
+)
+
 # argvcall_aottest.cpp
 # argvcall_generator.cpp
 _add_halide_libraries(argvcall)
