@@ -40,7 +40,7 @@ public:
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int test(bool gpu) {
     // A loop of eight elements whose first and last iterations are special,
     // and whose interior is periodic with period two. Unrolling the interior
     // by two turns the % into a constant, but only if the unrolled pairs line
@@ -63,41 +63,50 @@ int main(int argc, char **argv) {
                   200);
     f.bound(x, 0, 8);
     f.aligned_split(x, xo, xi, 2, 1, TailStrategy::GuardWithIf)
-        .always_partition(xo)
         .unroll(xi);
-
-    Module m = f.compile_to_module({}, "f");
-
-    LoopExtents loops;
-    CountMod mods;
-    for (const LoweredFunc &lf : m.functions()) {
-        lf.body.accept(&loops);
-        lf.body.accept(&mods);
+    if (gpu) {
+        f.gpu_blocks(xo);
+    } else {
+        f.always_partition(xo);
     }
 
-    printf("Loops:");
-    for (const Expr &e : loops.extents) {
-        std::cout << " " << e;
-    }
-    printf("\n");
+    // Loops over GPU blocks aren't partitioned, so on the GPU only the
+    // results are checked.
+    if (!gpu) {
+        Module m = f.compile_to_module({}, "f");
 
-    // The two peeled iterations are single elements, so they come out as
-    // straight-line code rather than loops. What's left is the steady state.
-    if (!check(loops.extents.size() == 1, "expected exactly one remaining loop")) {
-        return 1;
-    }
-    if (!check(is_const(loops.extents[0], 3),
-               "expected the steady-state loop to run three times (six "
-               "elements, unrolled by two)")) {
-        return 1;
-    }
+        LoopExtents loops;
+        CountMod mods;
+        for (const LoweredFunc &lf : m.functions()) {
+            lf.body.accept(&loops);
+            lf.body.accept(&mods);
+        }
 
-    // The whole point of unrolling the interior was to fold away the %.
-    if (!check(mods.count == 0, "expected the modulo to fold away")) {
-        return 1;
+        printf("Loops:");
+        for (const Expr &e : loops.extents) {
+            std::cout << " " << e;
+        }
+        printf("\n");
+
+        // The two peeled iterations are single elements, so they come out as
+        // straight-line code rather than loops. What's left is the steady state.
+        if (!check(loops.extents.size() == 1, "expected exactly one remaining loop")) {
+            return 1;
+        }
+        if (!check(is_const(loops.extents[0], 3),
+                   "expected the steady-state loop to run three times (six "
+                   "elements, unrolled by two)")) {
+            return 1;
+        }
+
+        // The whole point of unrolling the interior was to fold away the %.
+        if (!check(mods.count == 0, "expected the modulo to fold away")) {
+            return 1;
+        }
     }
 
     Buffer<int> out = f.realize({8});
+    out.copy_to_host();
     for (int i = 0; i < 8; i++) {
         int expected = 200;
         if (i <= 0) {
@@ -107,6 +116,19 @@ int main(int argc, char **argv) {
         }
         if (out(i) != expected) {
             printf("out(%d) = %d instead of %d\n", i, out(i), expected);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (test(false) != 0) {
+        return 1;
+    }
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Testing the GPU schedule\n");
+        if (test(true) != 0) {
             return 1;
         }
     }
