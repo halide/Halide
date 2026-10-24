@@ -149,7 +149,8 @@ enum class VectorizeIn {
      * Anything else is a compile-time error. Selects on conditions that
      * vary across the lanes at runtime, and loads and stores in vector
      * tails predicated by the tail strategy, are done one lane at a
-     * time. */
+     * time. Inside an enclosing SIMD-vectorized loop, each SIMD lane
+     * holds one such word. */
     GPR,
 };
 
