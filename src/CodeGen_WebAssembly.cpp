@@ -216,6 +216,10 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 }
 
 void CodeGen_WebAssembly::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     struct Pattern {
         std::string intrin;  ///< Name of the intrinsic
         Expr pattern;        ///< The pattern to match against

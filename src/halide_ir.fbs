@@ -424,6 +424,8 @@ table Call {
     image_name: string;
     param_name: string;
     type: Type;
+    // Absent in older files, meaning the call is unconditional.
+    predicate: Expr;
 }
 
 table ReductionVariable {

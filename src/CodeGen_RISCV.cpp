@@ -222,6 +222,10 @@ int CodeGen_RISCV::target_vscale() const {
 }
 
 void CodeGen_RISCV::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     const RISCVIntrinsic *intrinsic_def = MatchRISCVIntrisic(op);
 
     bool handled = (intrinsic_def != nullptr) &&

@@ -482,6 +482,50 @@ int predicated_atomic_store_test(const Target &t) {
     return 0;
 }
 
+class HidePredicatedLoadIndex : public IRMutator {
+public:
+    int load_count = 0;
+
+private:
+    using IRMutator::visit;
+
+    Expr visit(const Load *op) override {
+        if (op->type.is_vector() && !is_const_one(op->predicate)) {
+            load_count++;
+            // A vector variable forces index extraction instead of scalar ramp
+            // arithmetic. Inactive lanes must not access these invalid indices.
+            Expr index = select(op->predicate != make_zero(op->predicate.type()),
+                                op->index, make_const(op->index.type(), 1 << 28));
+            std::string name = unique_name("hidden_index");
+            Expr load = op->with(Variable::make(index.type(), name), op->predicate, ModulusRemainder());
+            return Let::make(name, index, load);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
+int scalarized_predicated_load_hidden_index_test(const Target &t) {
+    Buffer<int> input(5);
+    input.fill([](int x) { return x + 10; });
+    Func f;
+    Var x;
+    f(x) = input(2 * x);
+    f.vectorize(x, 4, TailStrategy::GuardWithIf);
+    if (t.has_feature(Target::HVX)) {
+        f.hexagon();
+    }
+    auto *hide_index = new HidePredicatedLoadIndex;
+    f.add_custom_lowering_pass(hide_index);
+    Buffer<int> result = f.realize({3}, t);
+    internal_assert(hide_index->load_count > 0) << "Expected a predicated vector load\n";
+    for (int i = 0; i < result.width(); i++) {
+        if (result(i) != input(2 * i)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -549,6 +593,11 @@ int main(int argc, char **argv) {
 
     printf("predicated atomic store test\n");
     if (predicated_atomic_store_test(t) != 0) {
+        return 1;
+    }
+
+    printf("Running scalarized predicated load with hidden index test\n");
+    if (scalarized_predicated_load_hidden_index_test(t) != 0) {
         return 1;
     }
 

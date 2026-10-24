@@ -364,6 +364,10 @@ void CodeGen_PTX_Dev::init_module() {
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::cuda_await_copies)) {
         internal_assert(op->args.size() == 1);
         auto group = as_const_int(op->args[0]);

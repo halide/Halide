@@ -361,7 +361,8 @@ private:
             // Beware of intrinsics for which this is not true!
             auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+                              op->func, op->value_index, op->image, op->param,
+                              mutate(op->predicate));
         }
     }
 

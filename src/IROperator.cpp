@@ -1665,11 +1665,17 @@ Expr print(const std::vector<Expr> &args) {
 }
 
 Expr print_when(Expr condition, const std::vector<Expr> &args) {
+    // print() produces return_second(halide_print(...), args[0]). Only the
+    // halide_print call needs to be conditional.
+    if (!condition.type().is_bool()) {
+        condition = condition != make_zero(condition.type());
+    }
     Expr p = print(args);
-    return Call::make(p.type(),
-                      Call::if_then_else,
-                      {std::move(condition), p, args[0]},
-                      Call::PureIntrinsic);
+    const Call *rs = Call::as_intrinsic(p, {Call::return_second});
+    internal_assert(rs && rs->args.size() == 2);
+    const Call *print_call = rs->args[0].as<Call>();
+    internal_assert(print_call);
+    return rs->with({print_call->with_additional_predicate(condition), rs->args[1]});
 }
 
 Expr require(Expr condition, const std::vector<Expr> &args) {
