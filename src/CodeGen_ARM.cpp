@@ -6,6 +6,7 @@
 #include "CodeGen_CPU.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "DecomposeVectorShuffle.h"
 #include "DistributeShifts.h"
@@ -34,6 +35,43 @@ using namespace llvm;
 #if defined(WITH_ARM) || defined(WITH_AARCH64)
 
 namespace {
+
+// Rewrite ((x >> y) & m) << c, with a varying y, as (x << (c - y)) & (m << c),
+// i.e. move the bit field at y straight to c. Neon's [us]shl shifts right for
+// negative amounts, so this saves a shift. The mask may also be written as % 2^w.
+// Returns an undefined Expr if the pattern doesn't apply.
+Expr fuse_bit_field_shifts(const Call *op) {
+    using namespace IRMatcher;
+
+    const Type &t = op->type;
+    if (!op->is_intrinsic(Call::shift_left) || !t.is_vector() || t.bits() > 64) {
+        return Expr();
+    }
+
+    Wild<0> x;
+    Wild<1> y;
+    WildConst<0> m;
+    WildConst<1> c;
+
+    auto canonicalize = rewriter(op, t);
+    // Halide's mod is Euclidean, so this also holds for signed inputs.
+    Expr e = canonicalize((x % m) << c, (x & fold(m - 1)) << c,
+                          m > 0 && (m & (m - 1)) == 0) ?
+                 canonicalize.result :
+                 Expr(op);
+
+    auto rewrite = rewriter(e, t);
+    auto as_signed = [&](auto &&e) { return cast(t.with_code(halide_type_int), e); };
+    if (rewrite(((x >> y) & m) << c,
+                (x << (as_signed(c) - as_signed(y))) & fold(m << c),
+                c >= 0 && c < t.bits() && !is_const(y))) {
+        ConstantInterval bounds = constant_integer_bounds(y.make(rewrite.state, t));
+        if (bounds.is_bounded() && bounds.min >= 0 && bounds.max < t.bits()) {
+            return simplify(rewrite.result);
+        }
+    }
+    return Expr();
+}
 
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
 // emission. These are commonly lifted as lets because they get used by multiple
@@ -2611,6 +2649,11 @@ void CodeGen_ARM::visit(const Call *op) {
             llvm::Function *fn = llvm::cast<llvm::Function>(module->getOrInsertFunction(name, fn_type).getCallee());
             value = call_intrin(llvm_type_of(op->type), lanes, fn,
                                 {codegen(x), llvm::ConstantInt::get(i32_t, *k)});
+            return;
+        }
+    } else if (op->is_intrinsic(Call::shift_left) && target_vscale() == 0 && !simd_intrinsics_disabled()) {
+        if (Expr e = fuse_bit_field_shifts(op); e.defined()) {
+            value = codegen(e);
             return;
         }
     } else if (op->is_intrinsic(Call::round)) {
