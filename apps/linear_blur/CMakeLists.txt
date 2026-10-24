@@ -42,11 +42,19 @@ add_halide_library(
     FROM simple_blur.generator
     PARAMS input.type=float32 input.dim=3 output.type=float32 output.dim=3
 )
-add_halide_library(linear_blur FROM linear_blur.generator AUTOSCHEDULER Halide::Mullapudi2016)
+add_halide_library(
+    linear_blur_pipeline
+    FROM linear_blur.generator
+    GENERATOR linear_blur
+    FUNCTION_NAME linear_blur
+    FILE_BASE_NAME linear_blur
+    AUTOSCHEDULER Halide::Mullapudi2016
+)
 
 # Main executable
 add_executable(linear_blur_process run_linear_blur.cpp)
-target_link_libraries(linear_blur_process PRIVATE Halide::ImageIO linear_blur simple_blur)
+target_link_libraries(linear_blur_process PRIVATE Halide::ImageIO linear_blur_pipeline simple_blur)
+add_custom_target(linear_blur DEPENDS linear_blur_process)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)

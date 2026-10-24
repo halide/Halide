@@ -19,7 +19,13 @@ add_halide_generator(
 )
 
 # Filters
-add_halide_library(compositing FROM compositing.generator)
+add_halide_library(
+    compositing_pipeline
+    FROM compositing.generator
+    GENERATOR compositing
+    FUNCTION_NAME compositing
+    FILE_BASE_NAME compositing
+)
 add_halide_library(
     compositing_auto_schedule
     FROM compositing.generator
@@ -34,9 +40,10 @@ target_link_libraries(
     compositing_process
     PRIVATE
     Halide::ImageIO
-    compositing
+    compositing_pipeline
     compositing_auto_schedule
 )
+add_custom_target(compositing DEPENDS compositing_process)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)

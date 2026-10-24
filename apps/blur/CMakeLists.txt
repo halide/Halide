@@ -19,10 +19,10 @@ add_halide_generator(blur.generator SOURCES halide_blur_generator.cpp)
 add_halide_library(halide_blur FROM blur.generator)
 
 # Main executable
-add_executable(blur_test test.cpp)
-target_compile_options(blur_test PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>)
+add_executable(blur test.cpp)
+target_compile_options(blur PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>)
 target_link_libraries(
-    blur_test
+    blur
     PRIVATE
     Halide::Tools
     halide_blur
@@ -30,7 +30,7 @@ target_link_libraries(
 )
 
 # Test that the app actually works!
-add_test(NAME blur_app COMMAND blur_test)
+add_test(NAME blur_app COMMAND blur)
 set_tests_properties(
     blur_app
     PROPERTIES
