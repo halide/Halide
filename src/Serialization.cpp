@@ -160,6 +160,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::VTCM;
     case MemoryType::AMXTile:
         return Serialize::MemoryType::AMXTile;
+    case MemoryType::GPR:
+        return Serialize::MemoryType::GPR;
     default:
         user_error << "Unsupported memory type\n";
         return Serialize::MemoryType::Auto;

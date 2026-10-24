@@ -452,6 +452,17 @@ enum class MemoryType {
      * global buffer, because that is all the hardware can do. On GPU APIs with
      * no such instruction this is ordinary shared memory. */
     GPUSharedAsync,
+
+    /** General-purpose (scalar integer) registers of the host CPU. Like
+     * Stack, this is allocated using alloca and requires a constant
+     * size, so that the allocation can be promoted into registers.
+     * Vectorized loops that store to such an allocation are lowered as
+     * "SIMD within a register": the lanes of each vector are packed into
+     * one general-purpose integer register, and lane-wise operations
+     * become ordinary integer instructions, instead of using the SIMD
+     * register file. See Func::store_in. Only supported for Funcs
+     * computed on the host CPU, not on GPUs or other devices. */
+    GPR,
 };
 
 /** Whether a MemoryType places an allocation in GPU shared memory. */

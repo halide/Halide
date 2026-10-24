@@ -189,6 +189,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::AMXTile:
         out << "AMXTile";
         break;
+    case MemoryType::GPR:
+        out << "GPR";
+        break;
     }
     return out;
 }
