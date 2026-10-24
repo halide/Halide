@@ -3968,6 +3968,23 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
         value = codegen(lower_mux(op));
+    } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
+        // Targets with table-lookup instructions handle this
+        // themselves. This fallback is correct for any table and index
+        // type, but slow: it does one variable extractelement per lane.
+        internal_assert(op->args.size() == 4);
+        Value *table = codegen(op->args[0]);
+        Value *index = codegen(op->args[1]);
+        if (op->type.is_scalar()) {
+            value = builder->CreateExtractElement(table, index);
+        } else {
+            value = PoisonValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < op->type.lanes(); i++) {
+                Value *idx = builder->CreateExtractElement(index, (uint64_t)i);
+                Value *elem = builder->CreateExtractElement(table, idx);
+                value = builder->CreateInsertElement(value, elem, (uint64_t)i);
+            }
+        }
     } else if (op->is_intrinsic(Call::extract_bits)) {
         value = codegen(lower_extract_bits(op));
     } else if (op->is_intrinsic(Call::concat_bits)) {
@@ -5610,6 +5627,35 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
     CallInst *call = builder->CreateCall(intrin, arg_values);
     return call;
+}
+
+Value *CodeGen_LLVM::codegen_dynamic_shuffle(const Call *op, int intrin_lanes,
+                                             const std::string &intrin, const std::vector<Value *> &tables) {
+    internal_assert(op->is_intrinsic(Call::dynamic_shuffle) && op->args.size() == 4);
+    llvm::Type *slice_type = get_vector_type(i8_t, intrin_lanes);
+    llvm::Function *fn = module->getFunction(intrin);
+    if (!fn) {
+        vector<llvm::Type *> arg_types;
+        arg_types.reserve(tables.size() + 1);
+        for (Value *table : tables) {
+            arg_types.push_back(table->getType());
+        }
+        arg_types.push_back(slice_type);
+        FunctionType *fn_type = FunctionType::get(slice_type, arg_types, false);
+        fn = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, intrin, module.get());
+        fn->setCallingConv(CallingConv::C);
+    }
+
+    const int slices = (op->type.lanes() + intrin_lanes - 1) / intrin_lanes;
+    vector<Value *> args;
+    args.reserve(tables.size() + 1);
+    for (Value *table : tables) {
+        args.push_back(concat_vectors(vector<Value *>(slices, table)));
+    }
+    Expr index = cast(UInt(8, op->args[1].type().lanes()), op->args[1]);
+    args.push_back(slice_vector(codegen(index), 0, slices * intrin_lanes));
+    Value *result = call_intrin(get_vector_type(i8_t, slices * intrin_lanes), intrin_lanes, fn, args);
+    return slice_vector(result, 0, op->type.lanes());
 }
 
 Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {

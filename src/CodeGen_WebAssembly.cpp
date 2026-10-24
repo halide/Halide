@@ -7,6 +7,7 @@
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "OptimizeShuffles.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -241,6 +242,14 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
         {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
     };
+
+    if (op->is_intrinsic(Call::dynamic_shuffle) &&
+        op->type.is_vector() &&
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of(), target)) {
+        llvm::Value *table = slice_vector(codegen(op->args[0]), 0, 16);
+        value = codegen_dynamic_shuffle(op, 16, "llvm.wasm.swizzle", {table});
+        return;
+    }
 
     if (op->type.is_vector()) {
         std::vector<Expr> matches;
