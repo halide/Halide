@@ -1,9 +1,30 @@
 #include "PyStage.h"
 
 #include "PyScheduleMethods.h"
+#include "PyTuple.h"
 
 namespace Halide {
 namespace PythonBindings {
+
+namespace {
+
+py::tuple stage_values(const Stage &stage) {
+    return to_python_tuple(stage.values());
+}
+
+std::vector<Func> hoist_invariants_of_funcs(Stage &stage, const std::vector<Func> &funcs) {
+    std::vector<std::vector<Func>> groups;
+    for (const Func &f : funcs) {
+        groups.push_back({f});
+    }
+    return stage.hoist_invariants(groups);
+}
+
+std::vector<Func> hoist_invariants_of_groups(Stage &stage, const std::vector<std::vector<Func>> &groups) {
+    return stage.hoist_invariants(groups);
+}
+
+}  // namespace
 
 void define_stage(py::module &m) {
     auto stage_class =
@@ -13,6 +34,8 @@ void define_stage(py::module &m) {
 
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)
+            .def("value", &Stage::value)
+            .def("values", &stage_values)
 
             .def("stream_stores", &Stage::stream_stores)
             .def("stream_loads", static_cast<Stage &(Stage::*)()>(&Stage::stream_loads))
@@ -23,6 +46,8 @@ void define_stage(py::module &m) {
                  py::arg("preserved"))
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
+            .def("hoist_invariants", &hoist_invariants_of_funcs, py::arg("funcs"))
+            .def("hoist_invariants", &hoist_invariants_of_groups, py::arg("groups"))
             .def("hoist_invariants", [](Stage &stage) {
                 return std::vector<Func>(stage.hoist_invariants());
             })

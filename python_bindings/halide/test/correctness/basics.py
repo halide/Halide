@@ -657,6 +657,75 @@ def test_split_storage():
         h.split_storage(x, x, x, 4)
 
 
+def test_stage_value():
+    x = hl.Var("x")
+    r = hl.RDom([(0, 8)], "r")
+    p = hl.Param(hl.Bool(), "p")
+    g = hl.Func("g")
+    g[x] = x * 3
+    f = hl.Func("f")
+    f[x] = 0
+    f[x] += g[r] * x
+
+    assert str(hl.Stage(f).value()) == str(f.value())
+    assert str(f.update().value()) == str(f.update_value())
+
+    # A specialization's definition is its own.
+    s = f.update().specialize(p)
+    s.eager_inline([g])
+    call = g.name() + "("
+    assert call not in str(s.value())
+    assert call in str(f.update().value())
+    assert call in str(f.update_value())
+    assert len(s.values()) == 1
+
+
+def test_hoist_invariants_funcs():
+    x = hl.Var("x")
+    r = hl.RDom([(0, 8)], "r")
+    q = hl.Func("q")
+    q[x] = x - 3
+    p = hl.Func("p")
+    p[x] = 2 * x + 1
+    d = hl.Param(hl.Int(32), "d", 3)
+    e = hl.Param(hl.Int(32), "e", -2)
+    m = hl.Param(hl.Int(32), "m", 5)
+    ref = sum((3 * (i - 3) + 5) * (-2 * (2 * i + 1)) for i in range(8))
+
+    f = hl.Func("f")
+    f[x] = 0
+    f[x] += (d * q[r] + m) * (e * p[r])
+    intms = f.update().hoist_invariants([q, p])
+    assert len(intms) == 3
+    assert intms[0].defined() and intms[1].defined() and not intms[2].defined()
+    assert q.name() + "(" in str(intms[0].update_value())
+    assert d.name() not in str(intms[0].update_value())
+    assert q.name() + "(" not in str(intms[1].update_value())
+    assert f.realize([1])[0] == ref
+
+    # A group of Funcs makes one part.
+    g = hl.Func("g")
+    g[x] = 0
+    g[x] += (d * q[r] + m) * (e * p[r]) + q[r]
+    intms = g.update().hoist_invariants([[p, q]])
+    assert len(intms) == 2 and not intms[1].defined()
+    assert g.realize([1])[0] == ref + sum(i - 3 for i in range(8))
+
+    # If every term calls the only group, the update is left as it is.
+    k = hl.Func("k")
+    k[x] = 0
+    k[x] += d * q[r]
+    intms = k.update().hoist_invariants([q])
+    assert len(intms) == 2
+    assert intms[0].name() == k.name() and not intms[1].defined()
+
+    h = hl.Func("h")
+    h[x] = 0
+    h[x] += p[r]
+    with assert_throws(hl.HalideError, "no term of the update calls"):
+        h.update().hoist_invariants([q])
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -683,3 +752,5 @@ if __name__ == "__main__":
     test_print_ir()
     test_split_vars()
     test_split_storage()
+    test_stage_value()
+    test_hoist_invariants_funcs()
