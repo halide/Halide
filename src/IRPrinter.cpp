@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
@@ -102,19 +103,16 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
     return stream;
 }
 
-ostream &operator<<(ostream &stream, const Module &m) {
-    for (const auto &s : m.submodules()) {
-        stream << s << "\n";
-    }
+namespace Internal {
+namespace {
+void print_module(ostream &stream, const Module &m,
+                  vector<IRPrinterLocation> *locations,
+                  vector<uint32_t> *function_starts);
+}  // namespace
+}  // namespace Internal
 
-    // The module retains implied features, but print it in minimal form.
-    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
-    for (const auto &b : m.buffers()) {
-        stream << b << "\n";
-    }
-    for (const auto &f : m.functions()) {
-        stream << f << "\n";
-    }
+ostream &operator<<(ostream &stream, const Module &m) {
+    Internal::print_module(stream, m, nullptr, nullptr);
     return stream;
 }
 
@@ -416,7 +414,24 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
     return stream;
 }
 
-ostream &operator<<(ostream &stream, const LoweredFunc &function) {
+namespace {
+
+// An IRPrinter that prints without colors, so that byte offsets map directly
+// to columns, and records where every node goes.
+class SourceMapPrinter : public IRPrinter {
+public:
+    SourceMapPrinter(ostream &s, vector<IRPrinterLocation> *locations)
+        : IRPrinter(s) {
+        ansi = false;
+        ansi_hl = ansi_dim = ansi_kw = ansi_imm_int = ansi_imm_float = "";
+        ansi_imm_str = ansi_var = ansi_buf = ansi_fn = ansi_type = "";
+        ansi_reset_col = ansi_reset = "";
+        recorded_locations = locations;
+    }
+};
+
+void print_lowered_func(ostream &stream, const LoweredFunc &function,
+                        vector<IRPrinterLocation> *locations) {
     stream << function.linkage << " func " << function.name << " (";
     for (size_t i = 0; i < function.args.size(); i++) {
         stream << function.args[i].name;
@@ -425,9 +440,109 @@ ostream &operator<<(ostream &stream, const LoweredFunc &function) {
         }
     }
     stream << ") {\n";
-    stream << function.body;
+    if (locations && function.body.defined()) {
+        SourceMapPrinter p(stream, locations);
+        p.print(function.body);
+    } else {
+        stream << function.body;
+    }
     stream << "}\n\n";
+}
+
+void print_module(ostream &stream, const Module &m,
+                  vector<IRPrinterLocation> *locations,
+                  vector<uint32_t> *function_starts) {
+    for (const auto &s : m.submodules()) {
+        // Submodules are compiled separately, so their nodes need no
+        // locations, but they must not be printed with colors either.
+        vector<IRPrinterLocation> ignored;
+        print_module(stream, s, locations ? &ignored : nullptr, nullptr);
+        stream << "\n";
+    }
+
+    // The module retains implied features, but print it in minimal form.
+    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
+    for (const auto &b : m.buffers()) {
+        stream << b << "\n";
+    }
+    for (const auto &f : m.functions()) {
+        if (function_starts) {
+            function_starts->push_back((uint32_t)stream.tellp());
+        }
+        print_lowered_func(stream, f, locations);
+        stream << "\n";
+    }
+}
+
+}  // namespace
+
+ostream &operator<<(ostream &stream, const LoweredFunc &function) {
+    print_lowered_func(stream, function, nullptr);
     return stream;
+}
+
+StmtSourceMap print_with_source_map(const Module &m) {
+    std::ostringstream stream;
+    vector<IRPrinterLocation> recorded;
+    vector<uint32_t> function_starts;
+    print_module(stream, m, &recorded, &function_starts);
+
+    StmtSourceMap result;
+    result.text = std::move(stream).str();
+    const string &text = result.text;
+
+    vector<uint32_t> line_starts{0};
+    for (uint32_t i = 0; i < (uint32_t)text.size(); i++) {
+        if (text[i] == '\n') {
+            line_starts.push_back(i + 1);
+        }
+    }
+
+    // Offsets usually sit on indentation or on the space in front of an
+    // operator. Point at the first thing actually printed instead.
+    auto line_and_column = [&](uint32_t offset, uint32_t &line, uint32_t &column) {
+        while (offset < text.size() && (text[offset] == ' ' || text[offset] == '\n')) {
+            offset++;
+        }
+        auto it = std::upper_bound(line_starts.begin(), line_starts.end(), offset);
+        line = (uint32_t)(it - line_starts.begin());
+        column = offset - *(it - 1) + 1;
+    };
+
+    result.locations.resize(recorded.size());
+    for (size_t i = 0; i < recorded.size(); i++) {
+        StmtSourceMap::Location &l = result.locations[i];
+        l.node = recorded[i].node;
+        l.start = recorded[i].start;
+        line_and_column(recorded[i].anchor, l.line, l.column);
+    }
+    std::sort(result.locations.begin(), result.locations.end(),
+              [](const StmtSourceMap::Location &a, const StmtSourceMap::Location &b) {
+                  return a.node != b.node ? std::less<>()(a.node, b.node) : a.start < b.start;
+              });
+
+    result.functions.resize(function_starts.size());
+    for (size_t i = 0; i < function_starts.size(); i++) {
+        uint32_t column;
+        result.functions[i].name = m.functions()[i].name;
+        result.functions[i].start = function_starts[i];
+        line_and_column(function_starts[i], result.functions[i].line, column);
+    }
+    return result;
+}
+
+const StmtSourceMap::Location *StmtSourceMap::find(const IRNode *node, uint32_t parent_start) const {
+    auto it = std::lower_bound(locations.begin(), locations.end(), parent_start,
+                               [&](const Location &l, uint32_t start) {
+                                   return l.node != node ? std::less<>()(l.node, node) : l.start < start;
+                               });
+    if (it != locations.end() && it->node == node) {
+        return &*it;
+    }
+    if (it != locations.begin() && (it - 1)->node == node) {
+        return &*(it - 1);
+    }
+    return nullptr;
 }
 
 std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
@@ -686,21 +801,40 @@ Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
 
 void IRPrinter::print(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, false);
+    ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
 }
 
 void IRPrinter::print_no_parens(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, true);
+    ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
 }
 
 void IRPrinter::print(const Stmt &ir) {
+    ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
 }
 
 void IRPrinter::print_summary(const Stmt &ir) {
     ScopedValue<bool> old(is_summary, true);
+    ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
+}
+
+int IRPrinter::record_location(const IRNode *node) {
+    if (!recorded_locations) {
+        return -1;
+    }
+    uint32_t at = (uint32_t)stream.tellp();
+    recorded_locations->push_back({node, at, at});
+    return (int)recorded_locations->size() - 1;
+}
+
+void IRPrinter::anchor() {
+    if (recorded_locations && current_location >= 0) {
+        (*recorded_locations)[current_location].anchor = (uint32_t)stream.tellp();
+    }
 }
 
 void IRPrinter::print_list(const std::vector<Expr> &exprs) {
@@ -815,6 +949,7 @@ void IRPrinter::visit(const Variable *op) {
             stream << typep(op->type);
         }
     }
+    anchor();
     stream << var(op->name);
 }
 
@@ -850,6 +985,7 @@ void IRPrinter::closef() {
 void IRPrinter::visit(const Add *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" + ");
     print(op->b);
     close();
@@ -858,6 +994,7 @@ void IRPrinter::visit(const Add *op) {
 void IRPrinter::visit(const Sub *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" - ");
     print(op->b);
     close();
@@ -866,6 +1003,7 @@ void IRPrinter::visit(const Sub *op) {
 void IRPrinter::visit(const Mul *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren("*");
     print(op->b);
     close();
@@ -874,6 +1012,7 @@ void IRPrinter::visit(const Mul *op) {
 void IRPrinter::visit(const Div *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren("/");
     print(op->b);
     close();
@@ -882,6 +1021,7 @@ void IRPrinter::visit(const Div *op) {
 void IRPrinter::visit(const Mod *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" % ");
     print(op->b);
     close();
@@ -906,6 +1046,7 @@ void IRPrinter::visit(const Max *op) {
 void IRPrinter::visit(const EQ *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" == ");
     print(op->b);
     close();
@@ -914,6 +1055,7 @@ void IRPrinter::visit(const EQ *op) {
 void IRPrinter::visit(const NE *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" != ");
     print(op->b);
     close();
@@ -922,6 +1064,7 @@ void IRPrinter::visit(const NE *op) {
 void IRPrinter::visit(const LT *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" < ");
     print(op->b);
     close();
@@ -930,6 +1073,7 @@ void IRPrinter::visit(const LT *op) {
 void IRPrinter::visit(const LE *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" <= ");
     print(op->b);
     close();
@@ -938,6 +1082,7 @@ void IRPrinter::visit(const LE *op) {
 void IRPrinter::visit(const GT *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" > ");
     print(op->b);
     close();
@@ -946,6 +1091,7 @@ void IRPrinter::visit(const GT *op) {
 void IRPrinter::visit(const GE *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" >= ");
     print(op->b);
     close();
@@ -954,6 +1100,7 @@ void IRPrinter::visit(const GE *op) {
 void IRPrinter::visit(const And *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" && ");
     print(op->b);
     close();
@@ -962,6 +1109,7 @@ void IRPrinter::visit(const And *op) {
 void IRPrinter::visit(const Or *op) {
     open();
     print(op->a);
+    anchor();
     stream << paren(" || ");
     print(op->b);
     close();
@@ -995,6 +1143,7 @@ void IRPrinter::visit(const Load *op) {
         stream << typep(op->type);
     }
     paren_depth++;
+    anchor();
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
@@ -1039,18 +1188,21 @@ void IRPrinter::visit(const Call *op) {
     if (op->is_intrinsic(Call::bitwise_or)) {
         open();
         print(op->args[0]);
+        anchor();
         stream << paren(" | ");
         print(op->args[1]);
         close();
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         open();
         print(op->args[0]);
+        anchor();
         stream << paren(" & ");
         print(op->args[1]);
         close();
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         open();
         print(op->args[0]);
+        anchor();
         stream << paren(" ^ ");
         print(op->args[1]);
         close();
@@ -1071,6 +1223,7 @@ void IRPrinter::visit(const Call *op) {
                 stream << typep(op->type);
             }
         }
+        anchor();
         openf(op->name.c_str());
         print_list(op->args);
         closef();
@@ -1158,6 +1311,7 @@ void IRPrinter::visit(const Acquire *op) {
 }
 
 void IRPrinter::print_lets(const Let *let) {
+    ScopedValue<int> loc(current_location, record_location(let));
     stream << get_indent();
     ScopedBinding<> bind(known_type, let->name);
     stream << kw("let ") << var(let->name) << kw(" = ");

@@ -54,6 +54,8 @@ struct ExternSignature;
 
 namespace Internal {
 
+struct StmtSourceMap;
+
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
  * for taking a Halide Stmt and producing llvm bitcode, machine
@@ -64,6 +66,14 @@ class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
     static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
+
+    ~CodeGen_LLVM() override;
+
+    /** For targets with the DebugSymbols feature: the printed Module that
+     * debug info should point into, which must be a printing of the Module
+     * passed to compile(). If null, compile() prints the Module itself, and
+     * the debug info refers to a file named after the Module. */
+    const StmtSourceMap *debug_source = nullptr;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
@@ -187,6 +197,15 @@ protected:
 
     bool in_strict_float = false;
     bool any_strict_float = false;
+
+    /** Debug info state for targets with the DebugSymbols feature. Null
+     * otherwise, and outside of compile(). */
+    struct DebugInfo;
+    std::unique_ptr<DebugInfo> debug_info;
+
+    /** Describe a named value to the debugger, if there is debug info. An
+     * arg_no above zero makes it the arg_no-th parameter of the function. */
+    void add_debug_variable(const std::string &name, const Type &type, llvm::Value *value, unsigned arg_no = 0);
 
     /** Emit any target-specific fence required after non-temporal stores. */
     virtual void emit_streaming_store_fence();
@@ -804,9 +823,11 @@ private:
 
 }  // namespace Internal
 
-/** Given a Halide module, generate an llvm::Module. */
+/** Given a Halide module, generate an llvm::Module. See
+ * CodeGen_LLVM::debug_source for debug_source. */
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
-                                           llvm::LLVMContext &context);
+                                           llvm::LLVMContext &context,
+                                           const Internal::StmtSourceMap *debug_source = nullptr);
 
 }  // namespace Halide
 

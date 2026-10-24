@@ -14,7 +14,10 @@
  * These operators are implemented using \ref Halide::Internal::IRPrinter
  */
 
+#include <cstdint>
 #include <ostream>
+#include <string>
+#include <vector>
 
 #include "IRVisitor.h"
 #include "Module.h"
@@ -137,6 +140,61 @@ std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
     return out;
 }
 
+/** Where an IRPrinter printed an IR node, as byte offsets into its stream. */
+struct IRPrinterLocation {
+    const IRNode *node;
+    /** Where printing of the node began. */
+    uint32_t start;
+    /** The node's most telling character, e.g. the operator of a binary
+     * op. Equal to start for most nodes. */
+    uint32_t anchor;
+};
+
+/** The text of a Module exactly as operator<< prints it (minus any ANSI
+ * colors), together with where each IR node of its functions' bodies ended up
+ * in that text. Debug info uses this to point into the .stmt output. */
+struct StmtSourceMap {
+    struct Location {
+        const IRNode *node;
+        /** Byte offset at which printing of the node began. A node shared by
+         * several parents is printed once per parent, this tells the copies
+         * apart. */
+        uint32_t start;
+        /** 1-based line and column of the node's anchor. */
+        uint32_t line, column;
+    };
+
+    struct Function {
+        std::string name;
+        /** Byte offset of the function header. */
+        uint32_t start;
+        /** 1-based line of the function header. */
+        uint32_t line;
+    };
+
+    std::string text;
+
+    /** The file debug info refers to. The text is expected to be written
+     * there by whoever sets it. */
+    std::string path;
+
+    /** Sorted by node, then by start. */
+    std::vector<Location> locations;
+
+    /** In Module::functions() order. */
+    std::vector<Function> functions;
+
+    /** Find the printed copy of node that sits under a parent which began
+     * printing at parent_start: the first copy at or after parent_start, or
+     * the last copy before it if there is none. Returns nullptr if the node
+     * was never printed. */
+    const Location *find(const IRNode *node, uint32_t parent_start) const;
+};
+
+/** Print a Module the same way operator<< does, without colors, and record
+ * where all IR nodes of its functions went. */
+StmtSourceMap print_with_source_map(const Module &m);
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
@@ -186,6 +244,21 @@ protected:
 
     bool ansi = false;
     int paren_depth = 0;
+
+    /** If set, every node printed through print() or print_lets() gets an
+     * entry here. */
+    std::vector<IRPrinterLocation> *recorded_locations = nullptr;
+
+    /** The index in recorded_locations of the node being printed, or -1. */
+    int current_location = -1;
+
+    /** Add an entry for the given node to recorded_locations, starting at the
+     * current stream position. Returns its index, or -1 if not recording. */
+    int record_location(const IRNode *node);
+
+    /** Mark the current stream position as the anchor of the node being
+     * printed. */
+    void anchor();
 
     const char *ansi_hl = "";
     const char *ansi_dim = "";

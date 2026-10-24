@@ -495,6 +495,7 @@ We have more documentation in `doc/`, the following links might be helpful:
 | --------------------------------------------- | ------------------------------------------------------------------------- |
 | [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
 | [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
+| [Debug symbols](doc/DebugSymbols.md)          | How to step through compiled pipelines in a debugger, line by line.       |
 | [Generator cache](doc/GeneratorCache.md)      | How to speed up rebuilds with the opt-in generator compile cache.         |
 | [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
 | [Python](doc/Python.md)                       | Documentation for the Python bindings.                                    |

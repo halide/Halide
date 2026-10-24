@@ -4,6 +4,7 @@
 #include <fstream>
 #include <future>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "CodeGen_C.h"
@@ -12,6 +13,7 @@
 #include "Debug.h"
 #include "HexagonOffload.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
@@ -634,11 +636,37 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
     }
 
+    // Debug info points into the stmt output. If that isn't requested, it
+    // points to where it would go if it were: next to the compiled code.
+    std::optional<Internal::StmtSourceMap> debug_source;
+    if (target().has_feature(Target::DebugSymbols)) {
+        debug_source = Internal::print_with_source_map(*this);
+        if (contains(output_files, OutputFileType::stmt)) {
+            debug_source->path = output_files.at(OutputFileType::stmt);
+        } else {
+            const auto info = get_output_info(target());
+            for (OutputFileType t : {OutputFileType::object, OutputFileType::static_library,
+                                     OutputFileType::assembly, OutputFileType::bitcode,
+                                     OutputFileType::llvm_assembly}) {
+                if (contains(output_files, t)) {
+                    std::string path = output_files.at(t);
+                    const std::string &extension = info.at(t).extension;
+                    if (ends_with(path, extension)) {
+                        path.resize(path.size() - extension.size());
+                    }
+                    debug_source->path = path + info.at(OutputFileType::stmt).extension;
+                    break;
+                }
+            }
+        }
+    }
+
     if (contains(output_files, OutputFileType::object) || contains(output_files, OutputFileType::assembly) ||
         contains(output_files, OutputFileType::bitcode) || contains(output_files, OutputFileType::llvm_assembly) ||
         contains(output_files, OutputFileType::static_library) || !assembly_path.empty()) {
         llvm::LLVMContext context;
-        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
+        std::unique_ptr<llvm::Module> llvm_module(
+            compile_module_to_llvm_module(*this, context, debug_source ? &*debug_source : nullptr));
 
         if (contains(output_files, OutputFileType::object)) {
             const auto &f = output_files.at(OutputFileType::object);
@@ -688,7 +716,11 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::stmt)) {
         debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
         std::ofstream file(output_files.at(OutputFileType::stmt));
-        file << *this;
+        if (debug_source) {
+            file << debug_source->text;
+        } else {
+            file << *this;
+        }
     }
     if (contains(output_files, OutputFileType::conceptual_stmt)) {
         debug(1) << "Module.compile(): conceptual_stmt " << output_files.at(OutputFileType::conceptual_stmt) << "\n";

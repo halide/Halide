@@ -25,10 +25,15 @@ struct Target;
 
 namespace Internal {
 typedef llvm::raw_pwrite_stream LLVMOStream;
-}
+struct StmtSourceMap;
+}  // namespace Internal
 
-/** Generate an LLVM module. */
-std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context);
+/** Generate an LLVM module. For targets with the DebugSymbols feature, the
+ * debug info points into debug_source, which must be a printing of the module
+ * (see print_with_source_map). If it is null, the module is printed here, and
+ * the debug info refers to a file named after the module. */
+std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context,
+                                                            const Internal::StmtSourceMap *debug_source = nullptr);
 
 /** Construct an llvm output stream for writing to files. */
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename);

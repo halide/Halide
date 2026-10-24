@@ -38,8 +38,10 @@
 
 namespace Halide {
 
-std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
+std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context,
+                                           const Internal::StmtSourceMap *debug_source) {
     std::unique_ptr<Internal::CodeGen_LLVM> cg(Internal::CodeGen_LLVM::new_for_target(module.target(), context));
+    cg->debug_source = debug_source;
     return cg->compile(module);
 }
 
@@ -169,6 +171,178 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 }
 
 }  // namespace
+
+struct CodeGen_LLVM::DebugInfo {
+    // The printed Module, if compile() had to print it itself.
+    StmtSourceMap own_source;
+    const StmtSourceMap *source = nullptr;
+
+    std::unique_ptr<DIBuilder> builder;
+    DICompileUnit *unit = nullptr;
+    DIFile *file = nullptr;
+    unsigned pointer_bits = 64;
+
+    // The source map entry of the function compile() is generating.
+    const StmtSourceMap::Function *function = nullptr;
+
+    // The innermost scope of the code being generated: the current function,
+    // or a loop within it. Null outside of functions from the source map.
+    DIScope *scope = nullptr;
+
+    // The location new instructions get, and where printing of the IR node
+    // it belongs to began.
+    DILocation *location = nullptr;
+    uint32_t location_start = 0;
+
+    std::vector<std::pair<Type, DIType *>> types;
+    DIType *buffer_ptr_type = nullptr;
+
+    struct Saved {
+        DILocation *location = nullptr;
+        uint32_t start = 0;
+    };
+
+    // Move the location to the given node, if it was printed. Nodes made
+    // after printing, e.g. by codegen itself, keep the location of the
+    // nearest printed node they are generated within.
+    Saved enter(const IRNode *node, IRBuilderBase &b) {
+        Saved saved{location, location_start};
+        if (scope) {
+            if (const StmtSourceMap::Location *l = source->find(node, location_start)) {
+                location = DILocation::get(scope->getContext(), l->line, l->column, scope);
+                location_start = l->start;
+            }
+            // Also undoes any change made by moving the insertion point.
+            b.SetCurrentDebugLocation(location);
+        }
+        return saved;
+    }
+
+    void leave(const Saved &saved, IRBuilderBase &b) {
+        location = saved.location;
+        location_start = saved.start;
+        if (scope) {
+            b.SetCurrentDebugLocation(location);
+        }
+    }
+
+    // Null for types a debugger can't show.
+    DIType *type_of(const Type &t) {
+        for (const auto &[k, v] : types) {
+            if (k == t) {
+                return v;
+            }
+        }
+        DIType *result = nullptr;
+        if (t.is_handle()) {
+            result = builder->createPointerType(nullptr, pointer_bits);
+        } else if (t.is_vector()) {
+            DIType *element = t.is_bool() ? nullptr : type_of(t.element_of());
+            if (element) {
+                Metadata *lanes = builder->getOrCreateSubrange(0, t.lanes());
+                result = builder->createVectorType((uint64_t)t.bits() * t.lanes(), 0, element,
+                                                   builder->getOrCreateArray({lanes}));
+            }
+        } else if (t.is_bool()) {
+            result = builder->createBasicType("bool", 8, dwarf::DW_ATE_boolean);
+        } else if (t.is_int() || t.is_uint() || (t.is_float() && !t.is_bfloat())) {
+            unsigned encoding = t.is_int()  ? dwarf::DW_ATE_signed :
+                                t.is_uint() ? dwarf::DW_ATE_unsigned :
+                                              dwarf::DW_ATE_float;
+            std::ostringstream name;
+            name << t;
+            result = builder->createBasicType(name.str(), t.bits(), encoding);
+        }
+        types.emplace_back(t, result);
+        return result;
+    }
+
+    static std::unique_ptr<DebugInfo> make(llvm::Module &m, const Module &input, const Target &target,
+                                           const StmtSourceMap *source,
+                                           StructType *buffer_t, StructType *type_t, StructType *dimension_t) {
+        auto d = std::make_unique<DebugInfo>();
+        if (source) {
+            d->source = source;
+        } else {
+            d->own_source = print_with_source_map(input);
+            d->own_source.path = input.name() + ".stmt";
+            d->source = &d->own_source;
+        }
+        internal_assert(d->source->functions.size() == input.functions().size())
+            << "The debug source of a Module must be a printing of that Module\n";
+
+        const bool codeview = target.os == Target::Windows;
+        if (!m.getModuleFlag("Debug Info Version")) {
+            m.addModuleFlag(llvm::Module::Warning, "Debug Info Version", DEBUG_METADATA_VERSION);
+        }
+        if (codeview) {
+            if (!m.getModuleFlag("CodeView")) {
+                m.addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+            }
+        } else if (!m.getModuleFlag("Dwarf Version")) {
+            // Version 5 could carry the text of the .stmt in the object, but
+            // LLVM then describes many optimized variables with typed DWARF
+            // expressions that gdb can't evaluate.
+            m.addModuleFlag(llvm::Module::Max, "Dwarf Version", 4);
+        }
+
+        SmallString<256> path(d->source->path);
+        sys::fs::make_absolute(path);
+        MD5 md5;
+        md5.update(d->source->text);
+        SmallString<32> checksum;
+        MD5::MD5Result digest = md5.final();
+        MD5::stringifyResult(digest, checksum);
+
+        d->builder = std::make_unique<DIBuilder>(m);
+        d->file = d->builder->createFile(sys::path::filename(path), sys::path::parent_path(path),
+                                         DIFile::ChecksumInfo<StringRef>(DIFile::CSK_MD5, checksum));
+        d->unit = d->builder->createCompileUnit(dwarf::DW_LANG_C99, d->file, "Halide",
+                                                /* isOptimized */ true, "", 0);
+        d->pointer_bits = target.bits;
+
+        // Describe halide_buffer_t, so that the debugger can show buffers.
+        const DataLayout &dl = m.getDataLayout();
+        auto make_struct = [&](const char *name, StructType *st,
+                               const std::vector<std::pair<const char *, DIType *>> &fields) -> DIType * {
+            if (!st || st->getNumElements() != fields.size()) {
+                return nullptr;
+            }
+            const StructLayout *layout = dl.getStructLayout(st);
+            std::vector<Metadata *> members;
+            for (size_t i = 0; i < fields.size(); i++) {
+                if (!fields[i].second) {
+                    return nullptr;
+                }
+                members.push_back(d->builder->createMemberType(
+                    d->unit, fields[i].first, d->file, 0, fields[i].second->getSizeInBits(), 0,
+                    (uint64_t)layout->getElementOffsetInBits(i), DINode::FlagZero, fields[i].second));
+            }
+            return d->builder->createStructType(d->unit, name, d->file, 0, (uint64_t)layout->getSizeInBits(), 0,
+                                                DINode::FlagZero, nullptr, d->builder->getOrCreateArray(members));
+        };
+        DIType *u8 = d->type_of(UInt(8)), *u16 = d->type_of(UInt(16));
+        DIType *i32 = d->type_of(Int(32)), *u32 = d->type_of(UInt(32)), *u64 = d->type_of(UInt(64));
+        DIType *ptr = d->type_of(Handle());
+        DIType *type = make_struct("halide_type_t", type_t, {{"code", u8}, {"bits", u8}, {"lanes", u16}});
+        DIType *dim = make_struct("halide_dimension_t", dimension_t,
+                                  {{"min", i32}, {"extent", i32}, {"stride", i32}, {"flags", u32}});
+        DIType *dim_ptr = dim ? d->builder->createPointerType(dim, d->pointer_bits) : nullptr;
+        DIType *buffer = make_struct("halide_buffer_t", buffer_t,
+                                     {{"device", u64},
+                                      {"device_interface", ptr},
+                                      {"host", d->builder->createPointerType(u8, d->pointer_bits)},
+                                      {"flags", u64},
+                                      {"type", type},
+                                      {"dimensions", i32},
+                                      {"dim", dim_ptr},
+                                      {"padding", ptr}});
+        d->buffer_ptr_type = buffer ? d->builder->createPointerType(buffer, d->pointer_bits) : ptr;
+        return d;
+    }
+};
+
+CodeGen_LLVM::~CodeGen_LLVM() = default;
 
 CodeGen_LLVM::CodeGen_LLVM(const Target &t)
     : builder(nullptr),
@@ -708,6 +882,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
+    if (target.has_feature(Target::DebugSymbols)) {
+        debug_info = DebugInfo::make(*module, input, target, debug_source,
+                                     halide_buffer_t_type, type_t_type, dimension_t_type);
+    }
+
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
     for (const auto &b : input.buffers()) {
@@ -826,6 +1005,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Define all functions
     int idx = 0;
     for (const auto &f : input.functions()) {
+        if (debug_info) {
+            debug_info->function = &debug_info->source->functions[idx];
+        }
         const auto &names = function_names[idx++];
 
         run_with_large_stack([&]() {
@@ -855,6 +1037,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
     llvm::for_each(*module, set_function_attributes_from_halide_target_options);
 
+    if (debug_info) {
+        debug_info->builder->finalize();
+        debug_info.reset();
+    }
+
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
@@ -880,6 +1067,24 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     }
 
     debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
+
+    if (debug_info && debug_info->function) {
+        DebugInfo &d = *debug_info;
+        std::vector<Metadata *> signature{d.type_of(Int(32))};
+        for (const auto &arg : args) {
+            signature.push_back(arg.is_buffer() ? d.buffer_ptr_type : d.type_of(arg.type));
+        }
+        DISubprogram *subprogram = d.builder->createFunction(
+            d.file, name, extern_name, d.file, d.function->line,
+            d.builder->createSubroutineType(d.builder->getOrCreateTypeArray(signature)),
+            d.function->line, DINode::FlagPrototyped,
+            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized);
+        function->setSubprogram(subprogram);
+        d.scope = subprogram;
+        d.location = DILocation::get(*context, d.function->line, 1, subprogram);
+        d.location_start = d.function->start;
+        builder->SetCurrentDebugLocation(d.location);
+    }
 
     // Null out the destructor block.
     destructor_block = nullptr;
@@ -907,6 +1112,14 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
             i++;
         }
     }
+
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
+            add_debug_variable(args[i].name + ".buffer", Handle(), sym_get(args[i].name + ".buffer"), i + 1);
+        } else {
+            add_debug_variable(args[i].name, args[i].type, sym_get(args[i].name), i + 1);
+        }
+    }
 }
 
 void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
@@ -919,6 +1132,14 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
         } else {
             sym_pop(arg.name);
         }
+    }
+
+    if (debug_info && debug_info->scope) {
+        debug_info->builder->finalizeSubprogram(function->getSubprogram());
+        debug_info->function = nullptr;
+        debug_info->scope = nullptr;
+        debug_info->location = nullptr;
+        builder->SetCurrentDebugLocation(DebugLoc());
     }
 
     bool valid = !verifyFunction(*function, &llvm::errs());
@@ -953,7 +1174,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
 
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
-    f.body.accept(this);
+    codegen(f.body);
 
     // Show one time warning and clear it.
     for (auto it = onetime_warnings.begin(); it != onetime_warnings.end(); it = onetime_warnings.erase(it)) {
@@ -977,7 +1198,7 @@ std::vector<llvm::Constant *> get_constants(llvm::Type *t, It begin, It end) {
 BasicBlock *CodeGen_LLVM::get_destructor_block() {
     if (!destructor_block) {
         // Create it if it doesn't exist.
-        IRBuilderBase::InsertPoint here = builder->saveIP();
+        IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
         destructor_block = BasicBlock::Create(*context, "destructor_block", function);
         builder->SetInsertPoint(destructor_block);
         // The first instruction in the destructor block is a phi node
@@ -988,9 +1209,6 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
 
         // The last instruction is the return op that returns it.
         builder->CreateRet(error_code);
-
-        // Jump back to where we were.
-        builder->restoreIP(here);
     }
     internal_assert(destructor_block->getParent() == function);
     return destructor_block;
@@ -1016,7 +1234,7 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
 
     // Switch to the destructor block, and add code that cleans up
     // this object if the contents of the stack slot is not nullptr.
-    IRBuilderBase::InsertPoint here = builder->saveIP();
+    IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
     BasicBlock *dtors = get_destructor_block();
 
     builder->SetInsertPoint(dtors->getFirstNonPHIIt());
@@ -1042,9 +1260,6 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     internal_assert(should_call);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
-
-    // Switch back to the original location
-    builder->restoreIP(here);
 
     // Return the stack slot so that it's possible to cleanup the object early.
     return stack_slot;
@@ -1534,6 +1749,31 @@ void CodeGen_LLVM::sym_pop(const string &name) {
     symbol_table.pop(name);
 }
 
+void CodeGen_LLVM::add_debug_variable(const string &name, const Type &type, llvm::Value *value, unsigned arg_no) {
+    if (!debug_info || !debug_info->scope || !value || !builder->GetInsertBlock()) {
+        return;
+    }
+    DebugInfo &d = *debug_info;
+    DIType *t = (type.is_handle() && ends_with(name, ".buffer")) ? d.buffer_ptr_type : d.type_of(type);
+    llvm::Type *value_type = value->getType();
+    if (!t || isa<ScalableVectorType>(value_type)) {
+        return;
+    }
+    // A bool is an i1 in a register, but a byte to the debugger.
+    if (!value_type->isIntegerTy(1) &&
+        module->getDataLayout().getTypeSizeInBits(value_type) != t->getSizeInBits()) {
+        return;
+    }
+    const unsigned line = d.location->getLine();
+    DILocalVariable *var =
+        arg_no ?
+            d.builder->createParameterVariable(d.scope, name, arg_no, d.file, line, t, /* AlwaysPreserve */ true) :
+            d.builder->createAutoVariable(d.scope, name, d.file, line, t, /* AlwaysPreserve */ true);
+    d.builder->insertDbgValueIntrinsic(value, var, d.builder->createExpression(),
+                                       DILocation::get(*context, line, d.location->getColumn(), d.scope),
+                                       builder->GetInsertPoint());
+}
+
 llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const {
     // look in the symbol table
     if (const auto *v = symbol_table.find(name)) {
@@ -1554,8 +1794,15 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 Value *CodeGen_LLVM::codegen(const Expr &e) {
     internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
+    DebugInfo::Saved debug_location;
+    if (debug_info) {
+        debug_location = debug_info->enter(e.get(), *builder);
+    }
     value = nullptr;
     e.accept(this);
+    if (debug_info) {
+        debug_info->leave(debug_location, *builder);
+    }
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n"
                            << e;
 
@@ -1601,8 +1848,15 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
 void CodeGen_LLVM::codegen(const Stmt &s) {
     internal_assert(s.defined());
     debug(4) << "Codegen: " << s << "\n";
+    DebugInfo::Saved debug_location;
+    if (debug_info) {
+        debug_location = debug_info->enter(s.get(), *builder);
+    }
     value = nullptr;
     s.accept(this);
+    if (debug_info) {
+        debug_info->leave(debug_location, *builder);
+    }
 }
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
@@ -3934,7 +4188,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             FunctionType *func_t = FunctionType::get(i32_t, {}, false);
             fn = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, op->name, module.get());
             llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
-            IRBuilderBase::InsertPoint here = builder->saveIP();
+            IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
+            // This code belongs to another function, with no debug info.
+            builder->SetCurrentDebugLocation(DebugLoc());
             builder->SetInsertPoint(block);
             Value *ret = builder->CreateVScale(i32_t);
             builder->CreateRet(ret);
@@ -3943,7 +4199,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             fn->addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(*context, 1, 16));
             fn->addFnAttr(llvm::Attribute::NoInline);
             internal_assert(!verifyFunction(*fn, &llvm::errs()));
-            builder->restoreIP(here);
         }
         value = builder->CreateCall(fn, {});
     } else if (op->is_intrinsic()) {
@@ -4172,13 +4427,17 @@ void CodeGen_LLVM::visit(const Prefetch *op) {
 }
 
 void CodeGen_LLVM::visit(const Let *op) {
-    sym_push(op->name, codegen(op->value));
+    Value *v = codegen(op->value);
+    sym_push(op->name, v);
+    add_debug_variable(op->name, op->value.type(), v);
     value = codegen(op->body);
     sym_pop(op->name);
 }
 
 void CodeGen_LLVM::visit(const LetStmt *op) {
-    sym_push(op->name, codegen(op->value));
+    Value *v = codegen(op->value);
+    sym_push(op->name, v);
+    add_debug_variable(op->name, op->value.type(), v);
     codegen(op->body);
     sym_pop(op->name);
 }
@@ -4326,6 +4585,18 @@ void CodeGen_LLVM::visit(const For *op) {
         // Within the loop, the variable is equal to the phi value
         sym_push(op->name, phi);
 
+        // The loop variable only exists in the debugger within the loop,
+        // which includes the code that steps it, like a C for loop.
+        DIScope *outer_scope = debug_info ? debug_info->scope : nullptr;
+        if (outer_scope) {
+            DebugInfo &d = *debug_info;
+            const unsigned line = d.location->getLine(), column = d.location->getColumn();
+            d.scope = d.builder->createLexicalBlock(outer_scope, d.file, line, column);
+            d.location = DILocation::get(*context, line, column, d.scope);
+            builder->SetCurrentDebugLocation(d.location);
+        }
+        add_debug_variable(op->name, Int(32), phi);
+
         // Emit the loop body
         codegen(op->body);
 
@@ -4343,6 +4614,9 @@ void CodeGen_LLVM::visit(const For *op) {
 
         // Pop the loop variable from the scope
         sym_pop(op->name);
+        if (outer_scope) {
+            debug_info->scope = outer_scope;
+        }
     } else {
         internal_error << "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen.\n";
     }
@@ -5126,7 +5400,7 @@ void CodeGen_LLVM::visit(const Atomic *op) {
 }
 
 Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_initialize, const string &name) {
-    IRBuilderBase::InsertPoint here = builder->saveIP();
+    IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
     BasicBlock *entry = &builder->GetInsertBlock()->getParent()->getEntryBlock();
     if (entry->empty()) {
         builder->SetInsertPoint(entry);
@@ -5154,7 +5428,6 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
             builder->CreateMemSet(ptr, Constant::getNullValue(t), n, llvm::Align(align));
         }
     }
-    builder->restoreIP(here);
     return ptr;
 }
 
