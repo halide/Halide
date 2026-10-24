@@ -1666,7 +1666,17 @@ public:
      * one general-purpose register, its lanes must be integers, and every
      * operation in the vectorized loop must be one that can be done
      * lane-wise within an integer register (see VectorizeIn::GPR). Anything
-     * else is a compile-time error suggesting SIMD vectorization instead. */
+     * else is a compile-time error suggesting SIMD vectorization instead.
+     *
+     * A loop vectorized with VectorizeIn::GPR may be nested inside a loop
+     * vectorized with VectorizeIn::SIMD (in the same Func, or in a Func
+     * computed inside the SIMD loop). Each lane of the SIMD vectors then
+     * holds one word of packed lanes, so the SIMD loop runs several words
+     * side by side. For example, to decode four blocks at once:
+     \code
+     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR).vectorize(b, 4);
+     \endcode
+     * The reverse nesting, a SIMD loop inside a GPR loop, is an error. */
     // @{
     Func &vectorize(const VarOrRVar &var, VectorizeIn where);
     Func &vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail = TailStrategy::Auto);

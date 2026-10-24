@@ -211,6 +211,11 @@ protected:
     Expr mutate_index(const string &a, Expr index) {
         index = mutate(index);
         if (a == alloc) {
+            if (const Ramp *r = index.as<Ramp>()) {
+                // Keep dense vector accesses (e.g. by words of packed lanes
+                // of a VectorizeIn::GPR loop) recognizable as ramps.
+                return Ramp::make(r->base * lanes + var, r->stride * lanes, r->lanes);
+            }
             return index * lanes + var;
         } else {
             return index;
@@ -401,10 +406,29 @@ protected:
 
     // Widen an expression to the given number of lanes.
     Expr widen(Expr e, int lanes) {
-        if (e.type().lanes() == lanes) {
+        const int old_lanes = e.type().lanes();
+        if (old_lanes == lanes) {
             return e;
-        } else if (lanes % e.type().lanes() == 0) {
-            return Broadcast::make(e, lanes / e.type().lanes());
+        } else if (old_lanes == 1) {
+            return Broadcast::make(e, lanes);
+        } else if (lanes % old_lanes == 0) {
+            // A vector widened across a loop is one vector per original lane
+            // (see visit(Reinterpret)), so repeat each lane in place.
+            const int factor = lanes / old_lanes;
+            if (const Broadcast *b = e.as<Broadcast>(); b && b->value.type().is_scalar()) {
+                return Broadcast::make(b->value, lanes);
+            } else if (const Ramp *r = e.as<Ramp>(); r && r->base.type().is_scalar()) {
+                return Ramp::make(Broadcast::make(r->base, factor),
+                                  Broadcast::make(r->stride, factor), r->lanes);
+            }
+            vector<int> indices;
+            indices.reserve(lanes);
+            for (int i = 0; i < old_lanes; i++) {
+                for (int j = 0; j < factor; j++) {
+                    indices.push_back(i);
+                }
+            }
+            return Shuffle::make({std::move(e)}, indices);
         } else {
             internal_error << "Mismatched vector lanes in VectorSubs " << e.type().lanes()
                            << " " << lanes << "\n";
@@ -898,14 +922,15 @@ protected:
 
         if (is_vectorized(op->for_type)) {
             const bool gpr = op->for_type == ForType::VectorizedGPR;
-            user_assert(gpr == in_gpr_loop)
-                << "Loop " << op->name << " is vectorized "
-                << (gpr ? "with VectorizeIn::GPR" : "with VectorizeIn::SIMD")
-                << ", but it is nested inside loop " << vectorized_vars.front().name
-                << ", which is vectorized "
-                << (in_gpr_loop ? "with VectorizeIn::GPR" : "with VectorizeIn::SIMD")
-                << ". Nested vectorized loops must all be vectorized in the same "
-                << "kind of register.\n";
+            internal_assert(in_gpr_loop || !gpr)
+                << "Loop " << op->name << " vectorized with VectorizeIn::GPR should have been "
+                << "lowered before the enclosing SIMD loop " << vectorized_vars.front().name << "\n";
+            user_assert(gpr || !in_gpr_loop)
+                << "Loop " << op->name << " is vectorized with VectorizeIn::SIMD, but it is "
+                << "nested inside loop " << vectorized_vars.front().name << ", which is "
+                << "vectorized with VectorizeIn::GPR. A loop vectorized in SIMD registers can't "
+                << "be nested inside one vectorized in a general-purpose register. (The reverse "
+                << "is allowed: each SIMD lane then holds a word of packed lanes.)\n";
             Expr extent = simplify((max - min) + 1);
             const IntImm *extent_int = extent.as<IntImm>();
             internal_assert(extent_int)
@@ -1657,6 +1682,10 @@ protected:
     // host, if any.
     const For *device_loop = nullptr;
 
+    // Only vectorize loops vectorized with VectorizeIn::GPR, leaving SIMD
+    // loops (but not the GPR loops within them) to an enclosing pass.
+    const bool only_gpr;
+
     Stmt visit(const For *for_loop) override {
         Stmt stmt;
         ScopedValue<const For *> old_device_loop(device_loop, device_loop);
@@ -1664,7 +1693,9 @@ protected:
             for_loop->device_api != DeviceAPI::Host) {
             device_loop = for_loop;
         }
-        if (is_vectorized(for_loop->for_type)) {
+        if (only_gpr && for_loop->for_type == ForType::Vectorized) {
+            stmt = IRMutator::visit(for_loop);
+        } else if (is_vectorized(for_loop->for_type)) {
             Expr loop_extent = simplify(for_loop->extent());
             const IntImm *extent = loop_extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
@@ -1682,8 +1713,17 @@ protected:
                            << "). VectorizeIn::GPR is only supported for code that runs on the host CPU.\n";
             }
 
+            Stmt body = for_loop->body;
+            if (!gpr) {
+                // GPR loops nested within a SIMD loop are lowered first,
+                // to scalar words of packed lanes, which this loop then
+                // vectorizes like any other scalars: each SIMD lane holds
+                // one word ("SWAR within a vector register").
+                body = VectorizeLoops(target, true, device_loop)(body);
+            }
+
             VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
-            stmt = VectorSubs(vectorized_var, gpr, target)(for_loop->body);
+            stmt = VectorSubs(vectorized_var, gpr, target)(body);
             if (gpr) {
                 stmt = lower_gpr_vectors(stmt, for_loop->name, target);
             }
@@ -1695,8 +1735,8 @@ protected:
     }
 
 public:
-    VectorizeLoops(const Target &target)
-        : target(target) {
+    VectorizeLoops(const Target &target, bool only_gpr = false, const For *device_loop = nullptr)
+        : target(target), device_loop(device_loop), only_gpr(only_gpr) {
     }
 };
 

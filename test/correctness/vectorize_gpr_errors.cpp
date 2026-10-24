@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
         f.compile_jit();
     });
 
-    ok &= expect_user_error("nested_simd_in_gpr", "Nested vectorized loops must all be vectorized in the same kind of register", [] {
+    ok &= expect_user_error("nested_simd_in_gpr", "can't be nested inside one vectorized in a general-purpose register", [] {
         Func f("f");
         Var x("x"), y("y");
         f(x, y) = cast<uint8_t>(x + y);

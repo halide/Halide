@@ -122,6 +122,122 @@ public:
     }
 };
 
+// For a Func vectorized with VectorizeIn::GPR inside a SIMD loop, look
+// for vector arithmetic on the narrow lanes in its producer. Each SIMD
+// lane should instead hold a word of packed narrow lanes, so the only
+// narrow vectors allowed are loads (including lane-by-lane predicated
+// loads), shuffles and reinterprets of them, comparisons that pick lanes
+// for blends, and casts of per-word scalars.
+class FindNarrowVectorOps : public IRVisitor {
+    using IRVisitor::visit;
+
+    const std::string &func;
+    const int lane_bits, word_bits;
+    int in_producer = 0;
+
+    void check(const Expr &e) {
+        const Type t = e.type();
+        if (!in_producer || !t.is_vector()) {
+            return;
+        }
+        if (t.bits() == lane_bits && !t.is_bool()) {
+            if (narrow_ops.empty()) {
+                std::cout << "Found narrow vector op in producer of " << func << ":\n  " << e << "\n";
+            }
+            narrow_ops.push_back(e);
+        } else if (t.bits() == word_bits) {
+            found_word_vectors = true;
+        }
+    }
+
+    void visit(const ProducerConsumer *op) override {
+        if (op->is_producer && op->name == func) {
+            in_producer++;
+            found_producer = true;
+            IRVisitor::visit(op);
+            in_producer--;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+#define CHECK(T)                       \
+    void visit(const T *op) override { \
+        check(op);                     \
+        IRVisitor::visit(op);          \
+    }
+    CHECK(Add)
+    CHECK(Sub)
+    CHECK(Mul)
+    CHECK(Div)
+    CHECK(Mod)
+    CHECK(Min)
+    CHECK(Max)
+    CHECK(Select)
+#undef CHECK
+
+    void visit(const Call *op) override {
+        // Lanes of predicated loads are loaded one at a time, guarded by
+        // if_then_else, before being packed into a word.
+        if (!op->is_intrinsic(Call::if_then_else)) {
+            check(op);
+        }
+        IRVisitor::visit(op);
+    }
+
+    // A narrowing cast of a per-word scalar (e.g. the base of a ramp, to be
+    // splatted across the word) is legitimate, so casts only count as words.
+    void visit(const Cast *op) override {
+        if (in_producer && op->type.is_vector() && op->type.bits() == word_bits) {
+            found_word_vectors = true;
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    std::vector<Expr> narrow_ops;
+    bool found_producer = false, found_word_vectors = false;
+
+    FindNarrowVectorOps(const std::string &func, int lane_bits, int word_bits)
+        : func(func), lane_bits(lane_bits), word_bits(word_bits) {
+    }
+};
+
+class FindNarrowVectorOpsPass : public IRMutator {
+public:
+    std::string func;
+    int lane_bits, word_bits;
+    bool ok = false;
+
+    using IRMutator::mutate;
+    Stmt mutate(const Stmt &s) override {
+        FindNarrowVectorOps finder(func, lane_bits, word_bits);
+        s.accept(&finder);
+        ok = finder.found_producer && finder.narrow_ops.empty() && finder.found_word_vectors;
+        if (!finder.found_producer) {
+            printf("Did not find the producer of %s\n", func.c_str());
+        } else if (!finder.found_word_vectors) {
+            printf("Found no SIMD vectors of %d-bit words in the producer of %s\n", word_bits, func.c_str());
+        }
+        return s;
+    }
+
+    FindNarrowVectorOpsPass(const std::string &func, int lane_bits, int word_bits)
+        : func(func), lane_bits(lane_bits), word_bits(word_bits) {
+    }
+};
+
+// Compile the pipeline, checking that the producer of gpr_func, vectorized
+// with VectorizeIn::GPR inside a SIMD loop, computes on SIMD vectors of
+// words of packed lanes rather than on SIMD vectors of the lanes.
+bool check_words_in_simd(Pipeline p, const Func &gpr_func, int lane_bits, int word_bits) {
+    FindNarrowVectorOpsPass checker(gpr_func.name(), lane_bits, word_bits);
+    p.add_custom_lowering_pass(&checker, nullptr);
+    p.compile_jit();
+    p.clear_custom_lowering_passes();
+    return checker.ok;
+}
+
 class FindVectorsPass : public IRMutator {
 public:
     std::vector<std::string> funcs;
@@ -387,6 +503,60 @@ bool test_update_and_sibling() {
     return check_equal("update_and_sibling", result, ref);
 }
 
+// The decode of several blocks at once, one block per SIMD lane, each
+// lane a word of four packed bytes ("SWAR within a vector register").
+bool test_kscales_simd_blocks(int simd_lanes) {
+    const int nb = 37;
+    Buffer<uint8_t> in = random_buffer<uint8_t>({12, nb});
+
+    Func in_f("in_f"), f("kscales");
+    Var k("k"), b("b"), j("j"), i("i");
+    in_f(i, b) = in(i, b);
+    f(k, b) = kscales_decode(in_f, k, b);
+    f.bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR).vectorize(b, simd_lanes);
+
+    if (!check_words_in_simd(Pipeline(f), f, 8, 32)) {
+        printf("  in test kscales_simd_blocks with %d SIMD lanes\n", simd_lanes);
+        return false;
+    }
+    Buffer<uint8_t> out = f.realize({16, nb});
+    return check_equal("kscales_simd_blocks", out, kscales_reference(in));
+}
+
+// A GPR producer computed inside a SIMD-vectorized loop of its consumer.
+bool test_kscales_in_simd_consumer() {
+    const int nb = 23;
+    Buffer<uint8_t> in = random_buffer<uint8_t>({12, nb});
+    Buffer<int16_t> bs = random_buffer<int16_t>({8, nb});
+
+    Func in_f("in_f"), f("kscales"), g("g");
+    Var k("k"), b("b"), bo("bo"), bi("bi"), j("j"), i("i");
+    in_f(i, b) = in(i, b);
+    f(k, b) = kscales_decode(in_f, k, b);
+    g(k, b) = cast<int32_t>(f(k + 8, b)) * cast<int32_t>(bs(k, b));
+
+    g.bound(k, 0, 8).split(b, bo, bi, 4).reorder(bi, k, bo).vectorize(bi);
+    f.compute_at(g, bi).bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
+
+    if (!check_words_in_simd(Pipeline(g), f, 8, 32)) {
+        printf("  in test kscales_in_simd_consumer\n");
+        return false;
+    }
+    Buffer<int32_t> out = g.realize({8, nb});
+    Buffer<uint8_t> scales = kscales_reference(in);
+    Buffer<int32_t> ref(8, nb);
+    for (int bb = 0; bb < nb; bb++) {
+        for (int kk = 0; kk < 8; kk++) {
+            ref(kk, bb) = (int32_t)scales(kk + 8, bb) * (int32_t)bs(kk, bb);
+        }
+    }
+    return check_equal("kscales_in_simd_consumer", out, ref);
+}
+
+// The number of SIMD lanes of words test_elementwise vectorizes across, in
+// a SIMD loop around the GPR loop, or 1 for no SIMD loop.
+int simd_lanes = 1;
+
 // Check a GPR-vectorized Func against the same Func computed without
 // vectorization. The definition is given the Var to vectorize and the
 // inputs.
@@ -405,16 +575,27 @@ bool test_elementwise(const char *name, int lanes,
     Func f(std::string(name) + "_gpr"), ref(std::string(name) + "_ref");
     f(x) = def(x, a, c);
     ref(x) = def(x, a, c);
-    f.vectorize(x, lanes, VectorizeIn::GPR, tail);
-
-    if (!check_no_vectors(Pipeline(f), f)) {
-        printf("  in test %s with %d lanes\n", name, lanes);
-        return false;
+    if (simd_lanes > 1) {
+        Var xo("xo"), xw("xw"), y("y"), xi("xi");
+        f.split(x, xw, xi, lanes, tail)
+            .split(xw, xo, y, simd_lanes, TailStrategy::GuardWithIf)
+            .vectorize(xi, VectorizeIn::GPR)
+            .vectorize(y);
+        if (!check_words_in_simd(Pipeline(f), f, sizeof(T) * 8, sizeof(T) * 8 * lanes)) {
+            printf("  in test %s with %d lanes in %d SIMD lanes\n", name, lanes, simd_lanes);
+            return false;
+        }
+    } else {
+        f.vectorize(x, lanes, VectorizeIn::GPR, tail);
+        if (!check_no_vectors(Pipeline(f), f)) {
+            printf("  in test %s with %d lanes\n", name, lanes);
+            return false;
+        }
     }
     Buffer<T> out = f.realize({size});
     Buffer<T> expected = ref.realize({size});
     if (!check_equal(name, out, expected)) {
-        printf("  in test %s with %d lanes\n", name, lanes);
+        printf("  in test %s with %d lanes in %d SIMD lanes\n", name, lanes, simd_lanes);
         return false;
     }
     return true;
@@ -447,6 +628,10 @@ int main(int argc, char **argv) {
     ok = ok && test_kscales_consumer(true);
     ok = ok && test_kscales_wrapper();
     ok = ok && test_update_and_sibling();
+    // SIMD loops around GPR loops.
+    ok = ok && test_kscales_simd_blocks(4);
+    ok = ok && test_kscales_simd_blocks(8);
+    ok = ok && test_kscales_in_simd_consumer();
 
     std::vector<int> u8_lanes = {2, 4};
     std::vector<int> u16_lanes = {2};
@@ -455,67 +640,71 @@ int main(int argc, char **argv) {
         u16_lanes.push_back(4);
     }
 
-    for (int lanes : u8_lanes) {
-        // Lane-wise adds and subtracts, which must not carry or borrow into
-        // the neighboring lane.
-        ok = ok && test_elementwise<uint8_t>("add", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); });
-        ok = ok && test_elementwise<uint8_t>("add_const", lanes, [](Var x, Func a, Func c) { return a(x) + (uint8_t)7; });
-        ok = ok && test_elementwise<uint8_t>("add_big_const", lanes, [](Var x, Func a, Func c) { return a(x) + (uint8_t)200; });
-        ok = ok && test_elementwise<uint8_t>("sub", lanes, [](Var x, Func a, Func c) { return a(x) - c(x); });
-        ok = ok && test_elementwise<uint8_t>("sub_const", lanes, [](Var x, Func a, Func c) { return (uint8_t)3 - a(x); });
-        // Bitwise operations and shifts.
-        ok = ok && test_elementwise<uint8_t>("shl", lanes, [](Var x, Func a, Func c) { return a(x) << 3; });
-        ok = ok && test_elementwise<uint8_t>("shr", lanes, [](Var x, Func a, Func c) { return a(x) >> 5; });
-        ok = ok && test_elementwise<uint8_t>("xor", lanes, [](Var x, Func a, Func c) { return a(x) ^ c(x); });
-        ok = ok && test_elementwise<uint8_t>("not", lanes, [](Var x, Func a, Func c) { return ~a(x); });
-        ok = ok && test_elementwise<uint8_t>("mix", lanes, [](Var x, Func a, Func c) {
-                 return ((a(x) << 2) | (c(x) >> 6)) ^ ~(a(x) & (uint8_t)0x5a);
-             });
-        // Multiplication, division and modulo by powers of two.
-        ok = ok && test_elementwise<uint8_t>("mul_div_mod", lanes, [](Var x, Func a, Func c) {
-                 return a(x) * 4 + c(x) / 8 + a(x) % 16;
-             });
-        // Signed lanes: arithmetic shifts and floor division.
-        ok = ok && test_elementwise<int8_t>("signed", lanes, [](Var x, Func a, Func c) {
-                 return (a(x) >> 2) + c(x) / 4 + a(x) % 8 - (c(x) << 1);
-             });
-        // Broadcasts and ramps of runtime values.
-        ok = ok && test_elementwise<uint8_t>("ramp", lanes, [](Var x, Func a, Func c) {
-                 return (a(x) ^ uniform_value) + cast<uint8_t>(x * 3);
-             });
-        // Selects on a condition that is uniform across the lanes.
-        ok = ok && test_elementwise<uint8_t>("uniform_select", lanes, [](Var x, Func a, Func c) {
-                 return select(uniform_cond > 0, a(x), c(x));
-             });
-        // Selects on a condition that varies across the lanes, which is
-        // evaluated one lane at a time.
-        ok = ok && test_elementwise<uint8_t>("varying_select", lanes, [](Var x, Func a, Func c) {
-                 return select(a(x) < c(x) || x % 3 == 0, a(x), c(x) ^ (uint8_t)0x55);
-             });
-        // Uniform shifts by a runtime amount.
-        ok = ok && test_elementwise<uint8_t>("uniform_shift", lanes, [](Var x, Func a, Func c) {
-                 return (a(x) >> uniform_shift) ^ (c(x) << uniform_shift);
-             });
-        ok = ok && test_elementwise<int8_t>("uniform_signed_shift", lanes, [](Var x, Func a, Func c) {
-                 return (a(x) >> uniform_signed_shift) + (c(x) << (-uniform_signed_shift));
-             });
-        // Tails.
-        ok = ok && test_elementwise<uint8_t>("tail_shift_inwards", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37);
-        ok = ok && test_elementwise<uint8_t>("tail_guard_with_if", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::GuardWithIf);
-        ok = ok && test_elementwise<uint8_t>("tail_predicate_stores", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::PredicateStores);
-        ok = ok && test_elementwise<uint8_t>("tail_predicate_loads", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::PredicateLoads);
-        ok = ok && test_elementwise<uint8_t>("tail_round_up_and_blend", lanes, [](Var x, Func a, Func c) { return a(x) ^ c(x); }, 37, TailStrategy::RoundUpAndBlend);
-    }
+    // Each GPR loop on its own, then inside a SIMD loop.
+    for (int simd : {1, 4}) {
+        simd_lanes = simd;
+        for (int lanes : u8_lanes) {
+            // Lane-wise adds and subtracts, which must not carry or borrow into
+            // the neighboring lane.
+            ok = ok && test_elementwise<uint8_t>("add", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); });
+            ok = ok && test_elementwise<uint8_t>("add_const", lanes, [](Var x, Func a, Func c) { return a(x) + (uint8_t)7; });
+            ok = ok && test_elementwise<uint8_t>("add_big_const", lanes, [](Var x, Func a, Func c) { return a(x) + (uint8_t)200; });
+            ok = ok && test_elementwise<uint8_t>("sub", lanes, [](Var x, Func a, Func c) { return a(x) - c(x); });
+            ok = ok && test_elementwise<uint8_t>("sub_const", lanes, [](Var x, Func a, Func c) { return (uint8_t)3 - a(x); });
+            // Bitwise operations and shifts.
+            ok = ok && test_elementwise<uint8_t>("shl", lanes, [](Var x, Func a, Func c) { return a(x) << 3; });
+            ok = ok && test_elementwise<uint8_t>("shr", lanes, [](Var x, Func a, Func c) { return a(x) >> 5; });
+            ok = ok && test_elementwise<uint8_t>("xor", lanes, [](Var x, Func a, Func c) { return a(x) ^ c(x); });
+            ok = ok && test_elementwise<uint8_t>("not", lanes, [](Var x, Func a, Func c) { return ~a(x); });
+            ok = ok && test_elementwise<uint8_t>("mix", lanes, [](Var x, Func a, Func c) {
+                     return ((a(x) << 2) | (c(x) >> 6)) ^ ~(a(x) & (uint8_t)0x5a);
+                 });
+            // Multiplication, division and modulo by powers of two.
+            ok = ok && test_elementwise<uint8_t>("mul_div_mod", lanes, [](Var x, Func a, Func c) {
+                     return a(x) * 4 + c(x) / 8 + a(x) % 16;
+                 });
+            // Signed lanes: arithmetic shifts and floor division.
+            ok = ok && test_elementwise<int8_t>("signed", lanes, [](Var x, Func a, Func c) {
+                     return (a(x) >> 2) + c(x) / 4 + a(x) % 8 - (c(x) << 1);
+                 });
+            // Broadcasts and ramps of runtime values.
+            ok = ok && test_elementwise<uint8_t>("ramp", lanes, [](Var x, Func a, Func c) {
+                     return (a(x) ^ uniform_value) + cast<uint8_t>(x * 3);
+                 });
+            // Selects on a condition that is uniform across the lanes.
+            ok = ok && test_elementwise<uint8_t>("uniform_select", lanes, [](Var x, Func a, Func c) {
+                     return select(uniform_cond > 0, a(x), c(x));
+                 });
+            // Selects on a condition that varies across the lanes, which is
+            // evaluated one lane at a time.
+            ok = ok && test_elementwise<uint8_t>("varying_select", lanes, [](Var x, Func a, Func c) {
+                     return select(a(x) < c(x) || x % 3 == 0, a(x), c(x) ^ (uint8_t)0x55);
+                 });
+            // Uniform shifts by a runtime amount.
+            ok = ok && test_elementwise<uint8_t>("uniform_shift", lanes, [](Var x, Func a, Func c) {
+                     return (a(x) >> uniform_shift) ^ (c(x) << uniform_shift);
+                 });
+            ok = ok && test_elementwise<int8_t>("uniform_signed_shift", lanes, [](Var x, Func a, Func c) {
+                     return (a(x) >> uniform_signed_shift) + (c(x) << (-uniform_signed_shift));
+                 });
+            // Tails.
+            ok = ok && test_elementwise<uint8_t>("tail_shift_inwards", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37);
+            ok = ok && test_elementwise<uint8_t>("tail_guard_with_if", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::GuardWithIf);
+            ok = ok && test_elementwise<uint8_t>("tail_predicate_stores", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::PredicateStores);
+            ok = ok && test_elementwise<uint8_t>("tail_predicate_loads", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::PredicateLoads);
+            ok = ok && test_elementwise<uint8_t>("tail_round_up_and_blend", lanes, [](Var x, Func a, Func c) { return a(x) ^ c(x); }, 37, TailStrategy::RoundUpAndBlend);
+        }
 
-    for (int lanes : u16_lanes) {
-        ok = ok && test_elementwise<uint16_t>("add_u16", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); });
-        ok = ok && test_elementwise<uint16_t>("sub_u16", lanes, [](Var x, Func a, Func c) { return a(x) - c(x); });
-        ok = ok && test_elementwise<uint16_t>("bits_u16", lanes, [](Var x, Func a, Func c) {
-                 return ((a(x) >> 3) & (uint16_t)0x0f0f) | (c(x) << 9) | ~(a(x) ^ c(x));
-             });
-        ok = ok && test_elementwise<int16_t>("signed_u16", lanes, [](Var x, Func a, Func c) {
-                 return (a(x) >> 7) - c(x) / 16;
-             });
+        for (int lanes : u16_lanes) {
+            ok = ok && test_elementwise<uint16_t>("add_u16", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); });
+            ok = ok && test_elementwise<uint16_t>("sub_u16", lanes, [](Var x, Func a, Func c) { return a(x) - c(x); });
+            ok = ok && test_elementwise<uint16_t>("bits_u16", lanes, [](Var x, Func a, Func c) {
+                     return ((a(x) >> 3) & (uint16_t)0x0f0f) | (c(x) << 9) | ~(a(x) ^ c(x));
+                 });
+            ok = ok && test_elementwise<int16_t>("signed_u16", lanes, [](Var x, Func a, Func c) {
+                     return (a(x) >> 7) - c(x) / 16;
+                 });
+        }
     }
 
     if (!ok) {
