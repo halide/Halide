@@ -474,6 +474,127 @@ int test12(const Target &t) {
     return 0;
 }
 
+int test13(const Target &t) {
+    // A prefetch of a struct-typed buffer prefetches its records' bytes.
+    Type record = Type::Struct({{"d", Float(16)}, {"qs", Int(8), 32}});
+    ImageParam in(record, 2, "in");
+    Func f("f");
+    Var x("x"), y("y");
+    RDom r(0, 32);
+
+    f(x, y) = 0;
+    f(x, y) += cast<int>(field(in(x, y), "qs")[r]);
+    f.update().prefetch(in, y, y, 1, PrefetchBoundStrategy::NonFaulting);
+
+    Module m = f.compile_to_module({in}, "", t);
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    vector<vector<Expr>> expected;
+    if (!t.has_feature(Target::HVX)) {
+        expected.push_back({Variable::make(Handle(), in.name()), wild<int>(), 1, get_stride(t, 1)});
+    } else {
+        // The records' bytes, contiguous within the row.
+        expected.push_back({Variable::make(Handle(), in.name()), wild<int>(), wild<int>(), 1, 1, wild<int>()});
+    }
+    if (!check(expected, collect.prefetches)) {
+        return 1;
+    }
+    return 0;
+}
+
+// The extents of the prefetches' row loops, with the lets between the
+// prefetch and the loop whose name ends in 'outer' substituted.
+class CollectPrefetchRows : public IRVisitor {
+    using IRVisitor::visit;
+    const std::string outer;
+    vector<const LetStmt *> lets;
+    bool inside = false;
+
+    void visit(const LetStmt *op) override {
+        if (inside) {
+            lets.push_back(op);
+        }
+        IRVisitor::visit(op);
+        if (inside) {
+            lets.pop_back();
+        }
+    }
+
+    void visit(const For *op) override {
+        if (ends_with(op->name, outer)) {
+            loop = op->name;
+            inside = true;
+            IRVisitor::visit(op);
+            inside = false;
+            return;
+        }
+        if (inside && starts_with(op->name, "prefetch_reduce_")) {
+            Expr e = op->max - op->min + 1;
+            for (auto it = lets.rbegin(); it != lets.rend(); ++it) {
+                e = substitute((*it)->name, (*it)->value, e);
+            }
+            extents.push_back(e);
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    vector<Expr> extents;
+    std::string loop;
+    CollectPrefetchRows(const std::string &outer)
+        : outer(outer) {
+    }
+};
+
+int test14(const Target &t) {
+    // Lets that depend on the prefetch's loop, between the loop and the
+    // prefetch (here bounds inference's, of g's realization in a tail-guarded
+    // tile), must be evaluated at the prefetched iteration, too.
+    ImageParam in(Int(32), 2, "in");
+    Func f("f"), g("g");
+    Var x("x"), y("y"), yo("yo"), yi("yi");
+    RDom r(0, 3);
+
+    g(x, y) = in(x, y) * 2;
+    f(x, y) = 0;
+    f(x, y) += g(x, y + r);
+    f.update().split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+    g.compute_at(f, yo);
+    f.update().prefetch(in, yo, yo, 1, PrefetchBoundStrategy::NonFaulting);
+
+    if (t.has_feature(Target::HVX)) {
+        // HVX prefetches 2D boxes: no row loops to check.
+        return 0;
+    }
+
+    Module m = f.compile_to_module({in}, "", t);
+    CollectPrefetchRows collect(".s1.y.yo");
+    m.functions()[0].body.accept(&collect);
+
+    // A tile of 4 rows of f reads 6 rows of g (and of in): within f's rows,
+    // the next tile's 6 rows are prefetched.
+    if (collect.extents.empty()) {
+        std::cout << "Expected a loop over the prefetched rows\n";
+        return 1;
+    }
+    // Evaluate at the first tile of 100 rows.
+    std::map<std::string, Expr> at = {{collect.loop, 0}};
+    visit_with(collect.extents[0].get(), [&](auto *self, const Variable *op) {
+        if (ends_with(op->name, ".extent.1")) {
+            at[op->name] = 100;
+        } else if (ends_with(op->name, ".min.1")) {
+            at[op->name] = 0;
+        }
+    });
+    Expr rows = simplify(substitute(at, collect.extents[0]));
+    if (!is_const(rows, 6)) {
+        std::cout << "Expected 6 prefetched rows, got " << rows << " (" << collect.extents[0] << ")\n";
+        return 1;
+    }
+    return 0;
+}
+
 }  // anonymous namespace
 
 int main(int argc, char **argv) {
@@ -489,7 +610,7 @@ int main(int argc, char **argv) {
     };
 
     using Fn = int (*)(const Target &t);
-    std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11, test12};
+    std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11, test12, test13, test14};
 
     for (const Target &t : targets) {
         std::cout << "Testing target: " << t << "\n";
