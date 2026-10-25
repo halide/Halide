@@ -39,9 +39,11 @@
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context,
-                                           const Internal::StmtSourceMap *debug_source) {
+                                           const Internal::StmtSourceMap *debug_source,
+                                           const Internal::StmtSourceMap *debug_conceptual_source) {
     std::unique_ptr<Internal::CodeGen_LLVM> cg(Internal::CodeGen_LLVM::new_for_target(module.target(), context));
     cg->debug_source = debug_source;
+    cg->debug_conceptual_source = debug_conceptual_source;
     return cg->compile(module);
 }
 
@@ -173,9 +175,14 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 }  // namespace
 
 struct CodeGen_LLVM::DebugInfo {
-    // The printed Module, if compile() had to print it itself.
-    StmtSourceMap own_source;
+    // What the debug info points into, and the printings compile() had to
+    // make itself.
+    StmtSourceMap own_source, own_conceptual_source;
     const StmtSourceMap *source = nullptr;
+
+    // Where each function of the Module being compiled starts in source.
+    std::vector<StmtSourceMap::Function> own_functions;
+    const std::vector<StmtSourceMap::Function> *functions = nullptr;
 
     std::unique_ptr<DIBuilder> builder;
     DICompileUnit *unit = nullptr;
@@ -260,9 +267,12 @@ struct CodeGen_LLVM::DebugInfo {
         return result;
     }
 
-    // The source is printed from input if it is null.
+    // The debug info points into source, a printing of input, or if
+    // conceptual is set, into conceptual_source, a printing of its conceptual
+    // Stmt. Printings that are null are made from input.
     static std::unique_ptr<DebugInfo> make(llvm::Module &m, const Module *input, const Target &target,
-                                           const StmtSourceMap *source, bool line_tables_only,
+                                           const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
+                                           bool conceptual, bool line_tables_only,
                                            StructType *buffer_t, StructType *type_t, StructType *dimension_t) {
         auto d = std::make_unique<DebugInfo>();
         d->line_tables_only = line_tables_only;
@@ -276,6 +286,46 @@ struct CodeGen_LLVM::DebugInfo {
         }
         internal_assert(!input || d->source->functions.size() == input->functions().size())
             << "The debug source of a Module must be a printing of that Module\n";
+        d->functions = &d->source->functions;
+
+        if (conceptual) {
+            internal_assert(input);
+            if (!conceptual_source) {
+                d->own_conceptual_source = print_with_source_map(input->get_conceptual_stmt());
+                d->own_conceptual_source.path = input->name() + ".conceptual.stmt";
+                conceptual_source = &d->own_conceptual_source;
+            }
+            // The functions themselves are not in the conceptual Stmt. Each
+            // starts where the first of its code that is in it does.
+            const StmtSourceMap &final = *d->source;
+            std::vector<const StmtSourceMap::Location *> mapped = map_locations(final, *conceptual_source);
+            d->own_functions = final.functions;
+            std::vector<uint32_t> first(final.functions.size(), UINT32_MAX);
+            for (size_t i = 0; i < final.locations.size(); i++) {
+                const StmtSourceMap::Location &l = final.locations[i];
+                auto f = std::upper_bound(final.functions.begin(), final.functions.end(), l.start,
+                                          [](uint32_t start, const StmtSourceMap::Function &f) { return start < f.start; });
+                if (!mapped[i] || f == final.functions.begin()) {
+                    continue;
+                }
+                size_t k = (f - final.functions.begin()) - 1;
+                if (l.start < first[k]) {
+                    first[k] = l.start;
+                    d->own_functions[k].start = mapped[i]->start;
+                    d->own_functions[k].line = mapped[i]->line;
+                    d->own_functions[k].column = mapped[i]->column;
+                }
+            }
+            for (size_t k = 0; k < first.size(); k++) {
+                if (first[k] == UINT32_MAX) {
+                    d->own_functions[k].start = 0;
+                    d->own_functions[k].line = 1;
+                    d->own_functions[k].column = 1;
+                }
+            }
+            d->functions = &d->own_functions;
+            d->source = conceptual_source;
+        }
 
         const bool codeview = target.os == Target::Windows;
         if (!m.getModuleFlag("Debug Info Version")) {
@@ -892,8 +942,12 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
-    if (debug_source || target.has_feature(Target::DebugSymbols)) {
-        init_debug_info(debug_source, &input, false);
+    user_assert(!(target.has_feature(Target::DebugSymbols) && target.has_feature(Target::DebugSymbolsConceptual)))
+        << "The debug info of " << input.name() << " can point into the stmt (debug_symbols) "
+        << "or into the conceptual stmt (debug_symbols_conceptual), but not both.\n";
+    if (debug_source || target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) {
+        init_debug_info(debug_source, debug_conceptual_source, &input,
+                        target.has_feature(Target::DebugSymbolsConceptual), false);
     }
 
     // Generate the code for this module.
@@ -1015,7 +1069,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     int idx = 0;
     for (const auto &f : input.functions()) {
         if (debug_info) {
-            debug_info->function = &debug_info->source->functions[idx];
+            debug_info->function = &(*debug_info->functions)[idx];
         }
         const auto &names = function_names[idx++];
 
@@ -1142,8 +1196,9 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
     current_function_args.clear();
 }
 
-void CodeGen_LLVM::init_debug_info(const StmtSourceMap *source, const Module *input, bool line_tables_only) {
-    debug_info = DebugInfo::make(*module, input, target, source, line_tables_only,
+void CodeGen_LLVM::init_debug_info(const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
+                                   const Module *input, bool conceptual, bool line_tables_only) {
+    debug_info = DebugInfo::make(*module, input, target, source, conceptual_source, conceptual, line_tables_only,
                                  halide_buffer_t_type, type_t_type, dimension_t_type);
 }
 
@@ -1165,6 +1220,7 @@ void CodeGen_LLVM::begin_debug_function(const std::string &name, const std::stri
         start = l->start;
     } else if (d.function) {
         line = d.function->line;
+        column = d.function->column;
         start = d.function->start;
     } else {
         return;

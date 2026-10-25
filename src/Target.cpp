@@ -660,6 +660,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"simulator", Target::Simulator},
     {"no_metadata", Target::NoMetadata},
     {"debug_symbols", Target::DebugSymbols},
+    {"debug_symbols_conceptual", Target::DebugSymbolsConceptual},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

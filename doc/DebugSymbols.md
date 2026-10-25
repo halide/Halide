@@ -56,13 +56,23 @@ Halide's names contain dots, so quote them in GDB:
 (gdb) print 'input.buffer'->dim[1]
 ```
 
+## Pointing into the conceptual stmt
+
+With the `debug_symbols_conceptual` feature instead, the debug info points into
+the conceptual stmt (the `conceptual_stmt` output): the IR before it is lowered
+to device code offloading, closures for parallel loops, and the like, which is
+usually easier to read. Code made from IR that is not in the conceptual stmt,
+e.g. the call that runs a parallel loop, is attributed to the nearest enclosing
+IR that is, which can be the start of the function. A target can't have both
+features.
+
 ## GPU device code
 
 CUDA kernels, which are compiled with LLVM, get line information that points
 into the conceptual stmt (the `conceptual_stmt` output), as that is the IR that
 still holds the code of the kernels. It is line information only, like
-`nvcc -lineinfo`, so the kernels are still optimized as usual. Kernels for the
-other GPU APIs get no debug info.
+`nvcc -lineinfo`, so the kernels are still optimized as usual. This is the case
+with either feature. Kernels for the other GPU APIs get no debug info.
 
 ## The html outputs
 
@@ -76,8 +86,8 @@ click assembly to go to the IR it came from. The assembly pane shows the line
 numbers of the assembly file, without the lines that hold the debug info.
 
 In the `conceptual_stmt_html`, CUDA device code is linked in the same way, but
-only with the `debug_symbols` feature, as kernels are compiled before it is
-known which outputs will be requested.
+only with one of the debug symbols features, as kernels are compiled before it
+is known which outputs will be requested.
 
 ## Caveats
 

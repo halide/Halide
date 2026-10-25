@@ -614,7 +614,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
 
     TemporaryFileDir temp_assembly_dir;
 
-    const bool debug_symbols = target().has_feature(Target::DebugSymbols);
+    // Debug info can point into the stmt, or into the conceptual stmt.
+    const bool conceptual_debug_symbols = target().has_feature(Target::DebugSymbolsConceptual);
+    const bool debug_symbols = target().has_feature(Target::DebugSymbols) || conceptual_debug_symbols;
     const bool html = contains(output_files, OutputFileType::stmt_html) ||
                       contains(output_files, OutputFileType::conceptual_stmt_html);
 
@@ -646,37 +648,38 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         debug(1) << "Module.compile(): creating temp file for assembly output at " << html_assembly_path << "\n";
     }
 
-    // Debug info points into the stmt output. If that isn't requested, it
-    // points to where it would go if it were: next to the compiled code.
+    // Debug info points into the stmt (or conceptual stmt) output. If that
+    // isn't requested, it points to where it would go if it were: next to the
+    // compiled code.
+    auto stmt_path = [&](OutputFileType stmt) {
+        if (contains(output_files, stmt)) {
+            return output_files.at(stmt);
+        }
+        const auto info = get_output_info(target());
+        for (OutputFileType t : {OutputFileType::object, OutputFileType::static_library,
+                                 OutputFileType::assembly, OutputFileType::bitcode,
+                                 OutputFileType::llvm_assembly, OutputFileType::stmt_html,
+                                 OutputFileType::conceptual_stmt_html}) {
+            if (contains(output_files, t)) {
+                std::string path = output_files.at(t);
+                const std::string &extension = info.at(t).extension;
+                if (ends_with(path, extension)) {
+                    path.resize(path.size() - extension.size());
+                }
+                return path + info.at(stmt).extension;
+            }
+        }
+        return name() + info.at(stmt).extension;
+    };
     std::optional<Internal::StmtSourceMap> debug_source;
     if (debug_symbols || html) {
         debug_source = Internal::print_with_source_map(*this);
-        if (contains(output_files, OutputFileType::stmt)) {
-            debug_source->path = output_files.at(OutputFileType::stmt);
-        } else {
-            const auto info = get_output_info(target());
-            for (OutputFileType t : {OutputFileType::object, OutputFileType::static_library,
-                                     OutputFileType::assembly, OutputFileType::bitcode,
-                                     OutputFileType::llvm_assembly, OutputFileType::stmt_html}) {
-                if (contains(output_files, t)) {
-                    std::string path = output_files.at(t);
-                    const std::string &extension = info.at(t).extension;
-                    if (ends_with(path, extension)) {
-                        path.resize(path.size() - extension.size());
-                    }
-                    debug_source->path = path + info.at(OutputFileType::stmt).extension;
-                    break;
-                }
-            }
-            if (debug_source->path.empty()) {
-                debug_source->path = name() + info.at(OutputFileType::stmt).extension;
-            }
-        }
+        debug_source->path = stmt_path(OutputFileType::stmt);
     }
-
     std::optional<Internal::StmtSourceMap> conceptual_source;
-    if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+    if (conceptual_debug_symbols || contains(output_files, OutputFileType::conceptual_stmt_html)) {
         conceptual_source = Internal::print_with_source_map(get_conceptual_stmt());
+        conceptual_source->path = stmt_path(OutputFileType::conceptual_stmt);
     }
 
     if (contains(output_files, OutputFileType::object) || contains(output_files, OutputFileType::assembly) ||
@@ -684,7 +687,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         contains(output_files, OutputFileType::static_library) || !html_assembly_path.empty()) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(
-            compile_module_to_llvm_module(*this, context, debug_source ? &*debug_source : nullptr));
+            compile_module_to_llvm_module(*this, context,
+                                          debug_source ? &*debug_source : nullptr,
+                                          conceptual_source ? &*conceptual_source : nullptr));
 
         if (!html_assembly_path.empty() && html_assembly_path != assembly_path) {
             debug(1) << "Module.compile(): assembly for html " << html_assembly_path << "\n";
@@ -760,12 +765,14 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::stmt_html)) {
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
         Internal::print_to_stmt_html(output_files.at(OutputFileType::stmt_html),
-                                     *this, html_assembly_path, *debug_source);
+                                     *this, html_assembly_path, *debug_source,
+                                     conceptual_debug_symbols ? &*conceptual_source : nullptr);
     }
     if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
         debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html) << "\n";
         Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
-                                                *this, html_assembly_path, *debug_source, *conceptual_source);
+                                                *this, html_assembly_path, *debug_source, *conceptual_source,
+                                                conceptual_debug_symbols);
     }
     if (contains(output_files, OutputFileType::device_code)) {
         debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";

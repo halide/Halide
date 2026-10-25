@@ -634,10 +634,9 @@ StmtSourceMap make_source_map(MarkupStreambuf &markup, const PrintRecord &record
         result.functions.resize(record.function_starts.size());
         for (size_t i = 0; i < record.function_starts.size(); i++) {
             StmtSourceMap::Function &f = result.functions[i];
-            uint32_t column;
             f.name = m->functions()[i].name;
             f.start = record.function_starts[i];
-            line_and_column(f.start, f.line, column);
+            line_and_column(f.start, f.line, f.column);
             f.end_line = end_line(f.start, record.function_ends[i]);
         }
         for (uint32_t start : record.buffer_starts) {

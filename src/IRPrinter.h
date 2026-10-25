@@ -187,6 +187,8 @@ struct StmtSourceMap {
         uint32_t start;
         /** 1-based lines of the function header and its closing brace. */
         uint32_t line, end_line;
+        /** 1-based column at which the function starts. */
+        uint32_t column = 1;
     };
 
     std::string text;

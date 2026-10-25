@@ -436,8 +436,9 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 }  // namespace
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context,
-                                                            const Internal::StmtSourceMap *debug_source) {
-    return codegen_llvm(module, context, debug_source);
+                                                            const Internal::StmtSourceMap *debug_source,
+                                                            const Internal::StmtSourceMap *debug_conceptual_source) {
+    return codegen_llvm(module, context, debug_source, debug_conceptual_source);
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {

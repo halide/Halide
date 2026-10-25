@@ -75,6 +75,12 @@ public:
      * Module itself, and the debug info refers to a file named after it. */
     const StmtSourceMap *debug_source = nullptr;
 
+    /** For targets with the DebugSymbolsConceptual feature: the printing of
+     * the conceptual Stmt of the Module that the debug info points into. If
+     * null, compile() prints it itself, and the debug info refers to a file
+     * named after the Module. */
+    const StmtSourceMap *debug_conceptual_source = nullptr;
+
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
@@ -208,9 +214,12 @@ protected:
     void add_debug_variable(const std::string &name, const Type &type, llvm::Value *value, unsigned arg_no = 0);
 
     /** Set up debug_info for the module being generated, pointing into
-     * source, or if that is null, into a printing of input. With
-     * line_tables_only, it only says which code came from where. */
-    void init_debug_info(const StmtSourceMap *source, const Module *input, bool line_tables_only);
+     * source, a printing of input, or if conceptual is set, into
+     * conceptual_source, a printing of the conceptual Stmt of input.
+     * Printings that are null are made from input. With line_tables_only, it
+     * only says which code came from where. */
+    void init_debug_info(const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
+                         const Module *input, bool conceptual, bool line_tables_only);
 
     /** If there is debug info, give the function being generated a
      * subprogram, starting at where node was printed. If node is null, it is
@@ -843,10 +852,11 @@ private:
 }  // namespace Internal
 
 /** Given a Halide module, generate an llvm::Module. See
- * CodeGen_LLVM::debug_source for debug_source. */
+ * CodeGen_LLVM::debug_source and debug_conceptual_source for those. */
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
                                            llvm::LLVMContext &context,
-                                           const Internal::StmtSourceMap *debug_source = nullptr);
+                                           const Internal::StmtSourceMap *debug_source = nullptr,
+                                           const Internal::StmtSourceMap *debug_conceptual_source = nullptr);
 
 }  // namespace Halide
 

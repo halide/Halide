@@ -526,7 +526,7 @@ void lower_impl(const vector<Function> &output_funcs,
         // Device code gets debug info that points into the conceptual stmt,
         // which still has the code of the kernels.
         std::optional<StmtSourceMap> conceptual_source;
-        if (t.has_feature(Target::DebugSymbols)) {
+        if (t.has_feature(Target::DebugSymbols) || t.has_feature(Target::DebugSymbolsConceptual)) {
             conceptual_source = print_with_source_map(result_module.get_conceptual_stmt());
             conceptual_source->path = pipeline_name + ".conceptual.stmt";
         }

@@ -346,7 +346,7 @@ namespace {
 // Debug info of JIT-compiled code points into a .stmt file in the temp
 // directory, named after its contents so that recompiling the same pipeline
 // reuses it.
-std::string write_jit_stmt_file(const std::string &module_name, const std::string &text) {
+std::string write_jit_stmt_file(const std::string &module_name, const std::string &text, const std::string &extension) {
     llvm::MD5 md5;
     md5.update(text);
     llvm::MD5::MD5Result digest = md5.final();
@@ -355,7 +355,7 @@ std::string write_jit_stmt_file(const std::string &module_name, const std::strin
 
     llvm::SmallString<256> path;
     llvm::sys::path::system_temp_directory(/* ErasedOnReboot */ true, path);
-    llvm::sys::path::append(path, "halide-jit-" + module_name + "-" + checksum.str().substr(0, 16).str() + ".stmt");
+    llvm::sys::path::append(path, "halide-jit-" + module_name + "-" + checksum.str().substr(0, 16).str() + extension);
     if (!llvm::sys::fs::exists(path)) {
         std::error_code error;
         llvm::raw_fd_ostream out(path, error);
@@ -374,13 +374,18 @@ std::string write_jit_stmt_file(const std::string &module_name, const std::strin
 JITModule::JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies) {
     jit_module = new JITModuleContents();
-    std::optional<StmtSourceMap> debug_source;
+    std::optional<StmtSourceMap> debug_source, conceptual_source;
     if (m.target().has_feature(Target::DebugSymbols)) {
         debug_source = print_with_source_map(m);
-        debug_source->path = write_jit_stmt_file(m.name(), debug_source->text);
+        debug_source->path = write_jit_stmt_file(m.name(), debug_source->text, ".stmt");
+    } else if (m.target().has_feature(Target::DebugSymbolsConceptual)) {
+        conceptual_source = print_with_source_map(m.get_conceptual_stmt());
+        conceptual_source->path = write_jit_stmt_file(m.name(), conceptual_source->text, ".conceptual.stmt");
     }
     std::unique_ptr<llvm::Module> llvm_module(
-        compile_module_to_llvm_module(m, *jit_module->context, debug_source ? &*debug_source : nullptr));
+        compile_module_to_llvm_module(m, *jit_module->context,
+                                      debug_source ? &*debug_source : nullptr,
+                                      conceptual_source ? &*conceptual_source : nullptr));
     std::vector<JITModule> deps_with_runtime = dependencies;
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
@@ -455,7 +460,7 @@ void compile_module_impl(
             auto layer = std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
-            if (target.has_feature(Target::DebugSymbols)) {
+            if (target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) {
                 layer->registerJITEventListener(*llvm::JITEventListener::createGDBRegistrationListener());
             }
             return layer;
@@ -481,7 +486,7 @@ void compile_module_impl(
                                   .setObjectLinkingLayerCreator(linkerBuilder)
                                   .create());
 
-    if (target.has_feature(Target::DebugSymbols) &&
+    if ((target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) &&
         llvm::isa<llvm::orc::ObjectLinkingLayer>(JIT->getObjLinkingLayer())) {
         // Tell debuggers about the code, through the GDB JIT interface.
         if (llvm::Error error = llvm::orc::enableDebuggerSupport(*JIT)) {

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <regex>
@@ -869,12 +870,9 @@ struct AssemblyMap {
     std::vector<uint32_t> stmt_lines;
 };
 
-// If from_conceptual is set, the debug info points into stmt, and the lines
-// are mapped to those of the nodes in conceptual, using from_conceptual (the
-// result of map_locations(stmt, conceptual)).
-AssemblyMap map_assembly(std::string_view code, const StmtSourceMap &stmt,
-                         const StmtSourceMap *conceptual,
-                         const std::vector<const StmtSourceMap::Location *> *from_conceptual) {
+// The debug info in the assembly says where each instruction came from. To
+// line maps such a line and column to the line of the stmt that is shown.
+AssemblyMap map_assembly(std::string_view code, const std::function<uint32_t(uint32_t, uint32_t)> &to_line) {
     AssemblyMap result;
     uint32_t current = 0;
     bool in_debug_section = false;
@@ -908,12 +906,7 @@ AssemblyMap map_assembly(std::string_view code, const StmtSourceMap &stmt,
             std::istringstream in{std::string(trimmed.substr(4))};
             uint32_t file = 0, l = 0, column = 0;
             in >> file >> l >> column;
-            current = l;
-            if (conceptual && l != 0) {
-                const StmtSourceMap::Location *at = stmt.at(l, column);
-                const StmtSourceMap::Location *c = at ? (*from_conceptual)[at - stmt.locations.data()] : nullptr;
-                current = c ? c->line : 0;
-            }
+            current = l ? to_line(l, column) : 0;
             continue;
         }
         // The comments that say where variables live are debug info too.
@@ -1255,12 +1248,18 @@ void print_stmt_lines(std::ostream &stream, const StmtSourceMap &src, IRCostMode
 class PipelineHTMLInspector {
 public:
     // Construct the visualizer and point it to the output file
+    // Shows the conceptual stmt if show_conceptual is set, otherwise stmt.
+    // The debug info of the assembly points into the conceptual stmt if
+    // assembly_in_conceptual is set, otherwise into stmt.
     explicit PipelineHTMLInspector(const std::string &html_output_filename,
                                    const Module &m,
                                    const std::string &assembly_input_filename,
                                    const StmtSourceMap &stmt,
-                                   const StmtSourceMap *conceptual_stmt)
-        : stmt(stmt), conceptual_stmt(conceptual_stmt) {
+                                   const StmtSourceMap *conceptual_stmt,
+                                   bool show_conceptual,
+                                   bool assembly_in_conceptual)
+        : stmt(stmt), conceptual_stmt(show_conceptual ? conceptual_stmt : nullptr),
+          assembly_conceptual_stmt(assembly_in_conceptual ? conceptual_stmt : nullptr) {
         // Open output file
         stream.open(html_output_filename.c_str());
 
@@ -1288,11 +1287,25 @@ public:
     void generate_html(const Module &m) {
         // The debug info in the assembly says which line of the stmt each
         // instruction was generated for.
-        if (conceptual_stmt) {
+        if (conceptual_stmt && !assembly_conceptual_stmt) {
+            // Through the nodes the stmt has in common with the conceptual
+            // stmt it was lowered from, or their nearest enclosing nodes.
             std::vector<const StmtSourceMap::Location *> from_conceptual = map_locations(stmt, *conceptual_stmt);
-            host_asm = map_assembly(asm_buffer, stmt, conceptual_stmt, &from_conceptual);
+            host_asm = map_assembly(asm_buffer, [&](uint32_t line, uint32_t column) {
+                const StmtSourceMap::Location *at = stmt.at(line, column);
+                const StmtSourceMap::Location *c = at ? from_conceptual[at - stmt.locations.data()] : nullptr;
+                return c ? c->line : 0;
+            });
+        } else if (!conceptual_stmt && assembly_conceptual_stmt) {
+            // Through the nodes the conceptual stmt has in common with the
+            // stmt it was lowered to.
+            host_asm = map_assembly(asm_buffer, [&](uint32_t line, uint32_t column) {
+                const StmtSourceMap::Location *at = assembly_conceptual_stmt->at(line, column);
+                const StmtSourceMap::Location *f = at ? stmt.find(at->node, 0) : nullptr;
+                return f ? f->line : 0;
+            });
         } else {
-            host_asm = map_assembly(asm_buffer, stmt, nullptr, nullptr);
+            host_asm = map_assembly(asm_buffer, [](uint32_t line, uint32_t) { return line; });
         }
 
         // The device code, with debug info, points into the conceptual
@@ -1326,9 +1339,13 @@ private:
     // Holds cost information for visualized program
     IRCostModel cost_model;
 
-    // The IR as it is printed in the stmt files.
+    // The IR as it is printed in the stmt files. The conceptual stmt is set
+    // if it is shown.
     const StmtSourceMap &stmt;
     const StmtSourceMap *conceptual_stmt;
+
+    // The conceptual stmt, if the debug info of the assembly points into it.
+    const StmtSourceMap *assembly_conceptual_stmt;
 
     /* Methods for generating the <head> section of the html file */
     void generate_head(const Module &m) {
@@ -1530,8 +1547,10 @@ private:
 void print_to_stmt_html(const std::string &html_output_filename,
                         const Module &m,
                         const std::string &assembly_input_filename,
-                        const StmtSourceMap &stmt) {
-    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, stmt, nullptr);
+                        const StmtSourceMap &stmt,
+                        const StmtSourceMap *assembly_conceptual_stmt) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, stmt,
+                                    assembly_conceptual_stmt, false, assembly_conceptual_stmt != nullptr);
     inspector.generate_html(m);
     debug(1) << "Done generating HTML IR Inspector - printed to: " << html_output_filename << "\n";
 }
@@ -1540,8 +1559,10 @@ void print_to_conceptual_stmt_html(const std::string &html_output_filename,
                                    const Module &m,
                                    const std::string &assembly_input_filename,
                                    const StmtSourceMap &stmt,
-                                   const StmtSourceMap &conceptual_stmt) {
-    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, stmt, &conceptual_stmt);
+                                   const StmtSourceMap &conceptual_stmt,
+                                   bool assembly_in_conceptual_stmt) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, stmt,
+                                    &conceptual_stmt, true, assembly_in_conceptual_stmt);
     inspector.generate_html(m);
     debug(1) << "Done generating HTML Conceptual IR Inspector - printed to: " << html_output_filename << "\n";
 }

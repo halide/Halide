@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
     input.set(in);
     scale.set(3);
     offset.set(-11);
-    Buffer<int> out = f.realize({37, 5}, get_jit_target_from_environment().with_feature(Target::DebugSymbols));
+    Buffer<int> out = f.realize({37, 5}, get_jit_target_from_environment().without_feature(Target::DebugSymbolsConceptual).with_feature(Target::DebugSymbols));
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
             int correct = in(x, y) * 3 - 11;
@@ -295,6 +295,90 @@ int main(int argc, char **argv) {
             object.find("debug_symbols_html.stmt") != std::string::npos) {
             printf("The object has debug info without debug_symbols\n");
             return 1;
+        }
+    }
+
+    // With debug_symbols_conceptual, the debug info points into the
+    // conceptual stmt instead.
+    {
+        const Target conceptual_target = get_host_target().with_feature(Target::DebugSymbolsConceptual);
+        const std::string c_stmt_path = dir + "debug_symbols_c.stmt";
+        const std::string c_conceptual_path = dir + "debug_symbols_c.conceptual.stmt";
+        const std::string c_ll_path = dir + "debug_symbols_c.ll";
+        const std::string c_html_path = dir + "debug_symbols_c.stmt.html";
+        const std::string c_conceptual_html_path = dir + "debug_symbols_c.conceptual.stmt.html";
+        for (const auto &p : {c_stmt_path, c_conceptual_path, c_ll_path, c_html_path, c_conceptual_html_path}) {
+            Internal::ensure_no_file_exists(p);
+        }
+        f.compile_to({{OutputFileType::stmt, c_stmt_path},
+                      {OutputFileType::conceptual_stmt, c_conceptual_path},
+                      {OutputFileType::llvm_assembly, c_ll_path},
+                      {OutputFileType::stmt_html, c_html_path},
+                      {OutputFileType::conceptual_stmt_html, c_conceptual_html_path}},
+                     {input, scale, offset}, "debug_symbols_c", conceptual_target);
+
+        const std::string c_ll = read_file(c_ll_path);
+        const std::vector<std::string> c_lines = split_lines(read_file(c_conceptual_path));
+        if (c_ll.find("!DIFile(filename: \"debug_symbols_c.conceptual.stmt\"") == std::string::npos) {
+            printf("The debug info does not refer to the conceptual stmt\n");
+            return 1;
+        }
+        std::map<std::string, std::pair<int, int>> c_locations;
+        std::regex location_re(R"((!\d+) = (?:distinct )?!DILocation\(line: (\d+), column: (\d+))");
+        for (std::sregex_iterator it(c_ll.begin(), c_ll.end(), location_re), end; it != end; ++it) {
+            int line = std::stoi((*it)[2]), column = std::stoi((*it)[3]);
+            c_locations[(*it)[1]] = {line, column};
+            if (line == 0) {
+                continue;
+            }
+            if (line > (int)c_lines.size() || column < 1 ||
+                column > (int)c_lines[line - 1].size() ||
+                c_lines[line - 1][column - 1] == ' ') {
+                printf("Location %d:%d does not point at the conceptual stmt's text\n", line, column);
+                return 1;
+            }
+        }
+        std::regex mul_re(R"(= mul [^\n]*!dbg (!\d+))");
+        int c_muls = 0;
+        for (std::sregex_iterator it(c_ll.begin(), c_ll.end(), mul_re), end; it != end; ++it) {
+            auto loc = c_locations.find((*it)[1]);
+            if (loc != c_locations.end() && loc->second.first > 0 &&
+                c_lines[loc->second.first - 1][loc->second.second - 1] == '*') {
+                c_muls++;
+            }
+        }
+        if (c_muls == 0) {
+            printf("No multiply points at a '*' in the conceptual stmt\n");
+            return 1;
+        }
+        if (!check_html(c_html_path, c_stmt_path) ||
+            !check_html(c_conceptual_html_path, c_conceptual_path)) {
+            return 1;
+        }
+
+        // The debug info can't point into both.
+        bool refused = false;
+        try {
+            f.compile_to({{OutputFileType::llvm_assembly, c_ll_path}},
+                         {input, scale, offset}, "debug_symbols_c",
+                         conceptual_target.with_feature(Target::DebugSymbols));
+        } catch (const Halide::CompileError &e) {
+            refused = true;
+        }
+        if (!refused) {
+            printf("Asking for both kinds of debug symbols was not an error\n");
+            return 1;
+        }
+
+        // JIT compilation with it still computes the right thing.
+        Buffer<int> c_out = f.realize({37, 5}, get_jit_target_from_environment().without_feature(Target::DebugSymbols).with_feature(Target::DebugSymbolsConceptual));
+        for (int y = 0; y < c_out.height(); y++) {
+            for (int x = 0; x < c_out.width(); x++) {
+                if (c_out(x, y) != in(x, y) * 3 - 11) {
+                    printf("c_out(%d, %d) = %d instead of %d\n", x, y, c_out(x, y), in(x, y) * 3 - 11);
+                    return 1;
+                }
+            }
         }
     }
 

@@ -342,7 +342,7 @@ void CodeGen_PTX_Dev::init_module() {
     module = get_initial_module_for_ptx_device(target, context);
 
     if (debug_source) {
-        init_debug_info(debug_source, nullptr, /* line_tables_only */ true);
+        init_debug_info(debug_source, nullptr, nullptr, false, /* line_tables_only */ true);
     }
 
     struct Intrinsic {
