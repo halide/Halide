@@ -1201,8 +1201,13 @@ void print_stmt_lines(std::ostream &stream, const StmtSourceMap &src, IRCostMode
             stream << " in-thr";
         }
         stream << "' data-line='" << line << "'";
-        if (parallel_column[line] >= 0 || thread_column[line] >= 0) {
+        // The indentation, so that a wrapped line continues indented too.
+        const size_t indent = std::min(line_text(line).find_first_not_of(' '), line_text(line).size());
+        if (indent > 0 || parallel_column[line] >= 0 || thread_column[line] >= 0) {
             stream << " style='";
+            if (indent > 0) {
+                stream << "--ind:" << indent << ";";
+            }
             if (parallel_column[line] >= 0) {
                 stream << "--par:" << parallel_column[line] << ";";
             }

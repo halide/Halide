@@ -1020,6 +1020,13 @@ div.ir-code div.l {
     min-height: 1.3em;
     line-height: 1.3em;
 }
+/* A wrapped line continues a little deeper than it is indented: the first
+ * row starts at the gutter, the others after the indentation. */
+div.ir-code div.l {
+    --hang: calc(var(--ind, 0) * 1ch + 4ch);
+    padding-left: calc(var(--ir-gutter) + var(--hang));
+    text-indent: calc(-1 * var(--hang));
+}
 [data-wrap="true"] div.ir-code div.l {
     white-space: pre-wrap;
 }
@@ -1034,7 +1041,8 @@ div.ir-code div.l[data-hidden]:not([data-hidden="0"]) {
 }
 
 /* Shading of parallel loops and loops over GPU blocks, and of loops over GPU
- * threads: from the column of the loop, with a line along its left. */
+ * threads: from just left of the column of the loop, with a line along its
+ * left. */
 div.ir-code {
     --par-edge: rgba(240, 200, 0, 0.35);
     --par-fill: rgba(240, 200, 0, 0.07);
@@ -1042,12 +1050,12 @@ div.ir-code {
     --thr-fill: rgba(240, 100, 50, 0.07);
 }
 div.ir-code div.l.in-par {
-    --par-x: calc(var(--ir-gutter) + var(--par) * 1ch);
+    --par-x: calc(var(--ir-gutter) + var(--par) * 1ch - 0.8ch);
     background-image: linear-gradient(to right, transparent var(--par-x), var(--par-edge) var(--par-x),
                                       var(--par-edge) calc(var(--par-x) + 3px), var(--par-fill) calc(var(--par-x) + 3px));
 }
 div.ir-code div.l.in-thr {
-    --thr-x: calc(var(--ir-gutter) + var(--thr) * 1ch);
+    --thr-x: calc(var(--ir-gutter) + var(--thr) * 1ch - 0.8ch);
     background-image: linear-gradient(to right, transparent var(--thr-x), var(--thr-edge) var(--thr-x),
                                       var(--thr-edge) calc(var(--thr-x) + 3px), var(--thr-fill) calc(var(--thr-x) + 3px));
 }
@@ -1063,6 +1071,7 @@ div.ir-code span.g {
     width: var(--ir-gutter);
     display: inline-flex;
     white-space: nowrap;
+    text-indent: 0;
     user-select: none;
     -webkit-user-select: none;
 }
