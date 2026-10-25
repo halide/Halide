@@ -112,14 +112,15 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # sublanes=true (vec_dot and mul_mat's gemv tiles: the sub-blocks across the
 # vector lanes, their scales one vector multiply-add per 4 sub-blocks) where
 # measured faster (iq2_xs's gemv +14-19%, with interleave=1: with two blocks
-# per iteration it spills): it also cuts q4_K-q6_K's loops by ~15% in
-# instructions, not in time (latency bound), and slows iq4_xs, iq2_s and
-# iq1_m. slp=false (not a GeneratorParam: the generator runs with
-# HL_LLVM_ARGS=-vectorize-slp=false) where LLVM's SLP vectorizer packs the
-# scalar grid-index arithmetic (shifts and masks of qh) into vectors, each
-# index then extracted lane by lane for its table load: iq1_s's and iq1_m's
-# loops twice the SIMD instructions, ~15-30% slower (also with f32 acts,
-# quantized in the pipeline: gemv iq1_s +18-28%, iq1_m +6-10%).
+# per iteration it spills; iq3_xxs's vec_dot +2%, not its gemv): it also cuts
+# q4_K-q6_K's loops by ~15% in instructions, not in time (latency bound), and
+# slows iq4_xs, iq2_s and iq1_m. slp=false (not a GeneratorParam: the
+# generator runs with HL_LLVM_ARGS=-vectorize-slp=false) where LLVM's SLP
+# vectorizer packs the scalar grid-index arithmetic (shifts and masks of qh)
+# into vectors, each index then extracted lane by lane for its table load:
+# iq1_s's and iq1_m's loops twice the SIMD instructions, ~15-30% slower (also
+# with f32 acts, quantized in the pipeline: gemv iq1_s +18-28%, iq1_m
+# +6-10%).
 # gpr_scales=true (the 6-bit sub-block scales and mins decoded in GPRs,
 # GGML's SWAR): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
 # thread); in the gemm tiles, decoded once per block per row (not per
@@ -156,7 +157,7 @@ set(GGML_SCHEDULE_PARAMS
     "tq1_0 vec_dot q8_K interleave=1"
     "tq2_0 vec_dot q8_K interleave=1"
     "iq2_xxs vec_dot q8_K interleave=1"
-    "iq3_xxs vec_dot q8_K interleave=1"
+    "iq3_xxs vec_dot q8_K interleave=1 sublanes=true"
     "iq1_s vec_dot q8_K interleave=1 slp=false"
     "iq1_m vec_dot q8_K slp=false"
     "iq4_xs vec_dot q8_K interleave=1"
