@@ -190,6 +190,8 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::VTCM;
     case Serialize::MemoryType::AMXTile:
         return MemoryType::AMXTile;
+    case Serialize::MemoryType::GPR:
+        return MemoryType::GPR;
     default:
         user_error << "unknown memory type " << (int)memory_type << "\n";
         return MemoryType::Auto;
@@ -214,8 +216,8 @@ ForType Deserializer::deserialize_for_type(Serialize::ForType for_type) {
         return ForType::GPUThread;
     case Serialize::ForType::GPULane:
         return ForType::GPULane;
-    case Serialize::ForType::VectorizedGPR:
-        return ForType::VectorizedGPR;
+    case Serialize::ForType::VectorizedSWAR:
+        return ForType::VectorizedSWAR;
     default:
         user_error << "unknown for type " << (int)for_type << "\n";
         return ForType::Serial;

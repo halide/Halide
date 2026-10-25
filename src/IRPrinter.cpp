@@ -189,6 +189,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::AMXTile:
         out << "AMXTile";
         break;
+    case MemoryType::GPR:
+        out << "GPR";
+        break;
     }
     return out;
 }
@@ -348,8 +351,8 @@ ostream &operator<<(ostream &out, const ForType &type) {
     case ForType::Vectorized:
         out << "vectorized";
         break;
-    case ForType::VectorizedGPR:
-        out << "vectorized_gpr";
+    case ForType::VectorizedSWAR:
+        out << "vectorized_swar";
         break;
     case ForType::Extern:
         out << "extern";

@@ -84,7 +84,7 @@ enum ForType: byte {
     GPUBlock,
     GPUThread,
     GPULane,
-    VectorizedGPR,
+    VectorizedSWAR,
 }
 
 enum Partition: byte {
@@ -119,6 +119,7 @@ enum MemoryType: byte {
     VTCM,
     AMXTile,
     GPUSharedAsync,
+    GPR,
 }
 
 table Range {

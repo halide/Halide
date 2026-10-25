@@ -1645,9 +1645,9 @@ public:
      * split. 'factor' must be an integer. */
     Func &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
-    /** Variants of vectorize that also choose which class of registers
-     * holds the lanes. VectorizeIn::SIMD is the same as the overloads
-     * above. VectorizeIn::GPR packs all the lanes of the vector into a
+    /** Variants of vectorize that also choose how the lanes are
+     * computed on. VectorizeIn::SIMD is the same as the overloads
+     * above. VectorizeIn::SWAR packs all the lanes of the vector into a
      * single general-purpose integer register (32 or 64 bits wide,
      * depending on the target) and implements lane-wise operations with
      * ordinary integer instructions, masking off bits that would cross
@@ -1659,24 +1659,30 @@ public:
      * dimension so that shift amounts and masks become uniform across
      * the lanes of each word:
      \code
-     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
+     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
      \endcode
      *
-     * GPR vectorization only applies to CPU targets. The vector must fit in
+     * SWAR vectorization only applies to CPU targets. The vector must fit in
      * one general-purpose register, its lanes must be integers, and every
      * operation in the vectorized loop must be one that can be done
-     * lane-wise within an integer register (see VectorizeIn::GPR). Anything
+     * lane-wise within an integer register (see VectorizeIn::SWAR). Anything
      * else is a compile-time error suggesting SIMD vectorization instead.
      *
-     * A loop vectorized with VectorizeIn::GPR may be nested inside a loop
+     * A loop vectorized with VectorizeIn::SWAR may be nested inside a loop
      * vectorized with VectorizeIn::SIMD (in the same Func, or in a Func
      * computed inside the SIMD loop). Each lane of the SIMD vectors then
      * holds one word of packed lanes, so the SIMD loop runs several words
      * side by side. For example, to decode four blocks at once:
      \code
-     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR).vectorize(b, 4);
+     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR).vectorize(b, 4);
      \endcode
-     * The reverse nesting, a SIMD loop inside a GPR loop, is an error. */
+     * The reverse nesting, a SIMD loop inside a SWAR loop, is an error.
+     *
+     * Where a SWAR-vectorized Func is stored is chosen separately with
+     * store_in. By default its words are stored to memory as vectors of
+     * their lanes; MemoryType::GPR stores them as integer words instead,
+     * so that consumers that read one lane at a time extract the lanes
+     * with shifts and masks. */
     // @{
     Func &vectorize(const VarOrRVar &var, VectorizeIn where);
     Func &vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail = TailStrategy::Auto);

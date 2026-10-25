@@ -630,8 +630,8 @@ SOURCE_FILES = \
   UnsafePromises.cpp \
   Util.cpp \
   Var.cpp \
-  VectorizeGPR.cpp \
   VectorizeLoops.cpp \
+  VectorizeSWAR.cpp \
   WasmExecutor.cpp \
 # keep-sorted end
 
@@ -824,8 +824,8 @@ HEADER_FILES = \
   UnsafePromises.h \
   Util.h \
   Var.h \
-  VectorizeGPR.h \
   VectorizeLoops.h \
+  VectorizeSWAR.h \
   WasmExecutor.h \
 # keep-sorted end
 

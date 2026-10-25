@@ -17,8 +17,8 @@
 #include "Substitute.h"
 #include "Target.h"
 #include "Util.h"
-#include "VectorizeGPR.h"
 #include "VectorizeLoops.h"
+#include "VectorizeSWAR.h"
 
 namespace Halide {
 namespace Internal {
@@ -213,7 +213,7 @@ protected:
         if (a == alloc) {
             if (const Ramp *r = index.as<Ramp>()) {
                 // Keep dense vector accesses (e.g. by words of packed lanes
-                // of a VectorizeIn::GPR loop) recognizable as ramps.
+                // of a VectorizeIn::SWAR loop) recognizable as ramps.
                 return Ramp::make(r->base * lanes + var, r->stride * lanes, r->lanes);
             }
             return index * lanes + var;
@@ -803,9 +803,9 @@ protected:
             // SIMD lanes.
 
             // Predicated loads and stores can't be done in
-            // general-purpose registers, so for GPR vectorization we
+            // general-purpose registers, so for SWAR vectorization we
             // scalarize instead.
-            bool vectorize_predicate = !in_gpr_loop;
+            bool vectorize_predicate = !in_swar_loop;
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
@@ -921,15 +921,15 @@ protected:
         }
 
         if (is_vectorized(op->for_type)) {
-            const bool gpr = op->for_type == ForType::VectorizedGPR;
-            internal_assert(in_gpr_loop || !gpr)
-                << "Loop " << op->name << " vectorized with VectorizeIn::GPR should have been "
+            const bool swar = op->for_type == ForType::VectorizedSWAR;
+            internal_assert(in_swar_loop || !swar)
+                << "Loop " << op->name << " vectorized with VectorizeIn::SWAR should have been "
                 << "lowered before the enclosing SIMD loop " << vectorized_vars.front().name << "\n";
-            user_assert(gpr || !in_gpr_loop)
+            user_assert(swar || !in_swar_loop)
                 << "Loop " << op->name << " is vectorized with VectorizeIn::SIMD, but it is "
                 << "nested inside loop " << vectorized_vars.front().name << ", which is "
-                << "vectorized with VectorizeIn::GPR. A loop vectorized in SIMD registers can't "
-                << "be nested inside one vectorized in a general-purpose register. (The reverse "
+                << "vectorized with VectorizeIn::SWAR. A SIMD-vectorized loop can't "
+                << "be nested inside a SWAR-vectorized one. (The reverse "
                 << "is allowed: each SIMD lane then holds a word of packed lanes.)\n";
             Expr extent = simplify((max - min) + 1);
             const IntImm *extent_int = extent.as<IntImm>();
@@ -1490,14 +1490,14 @@ protected:
         }
     }
 
-    // Whether the outermost vectorized loop is vectorized with VectorizeIn::GPR.
-    const bool in_gpr_loop;
+    // Whether the outermost vectorized loop is vectorized with VectorizeIn::SWAR.
+    const bool in_swar_loop;
 
     const Target &target;
 
 public:
-    VectorSubs(const VectorizedVar &vv, bool in_gpr_loop, const Target &target)
-        : in_gpr_loop(in_gpr_loop), target(target) {
+    VectorSubs(const VectorizedVar &vv, bool in_swar_loop, const Target &target)
+        : in_swar_loop(in_swar_loop), target(target) {
         vectorized_vars.push_back(vv);
         update_replacements();
     }
@@ -1682,9 +1682,9 @@ protected:
     // host, if any.
     const For *device_loop = nullptr;
 
-    // Only vectorize loops vectorized with VectorizeIn::GPR, leaving SIMD
-    // loops (but not the GPR loops within them) to an enclosing pass.
-    const bool only_gpr;
+    // Only vectorize loops vectorized with VectorizeIn::SWAR, leaving SIMD
+    // loops (but not the SWAR loops within them) to an enclosing pass.
+    const bool only_swar;
 
     Stmt visit(const For *for_loop) override {
         Stmt stmt;
@@ -1693,7 +1693,7 @@ protected:
             for_loop->device_api != DeviceAPI::Host) {
             device_loop = for_loop;
         }
-        if (only_gpr && for_loop->for_type == ForType::Vectorized) {
+        if (only_swar && for_loop->for_type == ForType::Vectorized) {
             stmt = IRMutator::visit(for_loop);
         } else if (is_vectorized(for_loop->for_type)) {
             Expr loop_extent = simplify(for_loop->extent());
@@ -1705,17 +1705,17 @@ protected:
                            << "constant extent > 1\n";
             }
 
-            const bool gpr = for_loop->for_type == ForType::VectorizedGPR;
-            if (gpr && device_loop) {
+            const bool swar = for_loop->for_type == ForType::VectorizedSWAR;
+            if (swar && device_loop) {
                 user_error << "Loop " << for_loop->name
-                           << " is vectorized with VectorizeIn::GPR, but it runs on device API "
+                           << " is vectorized with VectorizeIn::SWAR, but it runs on device API "
                            << device_loop->device_api << " (inside loop " << device_loop->name
-                           << "). VectorizeIn::GPR is only supported for code that runs on the host CPU.\n";
+                           << "). VectorizeIn::SWAR is only supported for code that runs on the host CPU.\n";
             }
 
             Stmt body = for_loop->body;
-            if (!gpr) {
-                // GPR loops nested within a SIMD loop are lowered first,
+            if (!swar) {
+                // SWAR loops nested within a SIMD loop are lowered first,
                 // to scalar words of packed lanes, which this loop then
                 // vectorizes like any other scalars: each SIMD lane holds
                 // one word ("SWAR within a vector register").
@@ -1723,9 +1723,9 @@ protected:
             }
 
             VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
-            stmt = VectorSubs(vectorized_var, gpr, target)(body);
-            if (gpr) {
-                stmt = lower_gpr_vectors(stmt, for_loop->name, target);
+            stmt = VectorSubs(vectorized_var, swar, target)(body);
+            if (swar) {
+                stmt = lower_swar_vectors(stmt, for_loop->name, target);
             }
         } else {
             stmt = IRMutator::visit(for_loop);
@@ -1735,8 +1735,8 @@ protected:
     }
 
 public:
-    VectorizeLoops(const Target &target, bool only_gpr = false, const For *device_loop = nullptr)
-        : target(target), device_loop(device_loop), only_gpr(only_gpr) {
+    VectorizeLoops(const Target &target, bool only_swar = false, const For *device_loop = nullptr)
+        : target(target), device_loop(device_loop), only_swar(only_swar) {
     }
 };
 

@@ -116,7 +116,7 @@ bool is_parallel(ForType for_type) {
 
 bool is_vectorized(ForType for_type) {
     return (for_type == ForType::Vectorized ||
-            for_type == ForType::VectorizedGPR);
+            for_type == ForType::VectorizedSWAR);
 }
 
 /** Returns true if for_type is GPUBlock, GPUThread, or GPULane. */

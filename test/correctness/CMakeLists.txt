@@ -603,11 +603,11 @@ tests(
     vector_store_alignment.cpp
     vector_tile.cpp
     vectorize_dynamic.cpp
-    vectorize_gpr.cpp
-    vectorize_gpr_errors.cpp
     vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp
     vectorize_nested.cpp
+    vectorize_swar.cpp
+    vectorize_swar_errors.cpp
     vectorize_too_little.cpp
     vectorize_too_much.cpp
     vectorize_varying_allocation_size.cpp

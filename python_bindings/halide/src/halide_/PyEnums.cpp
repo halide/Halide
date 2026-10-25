@@ -61,7 +61,8 @@ void define_enums(py::module &m) {
         .value("LockedCache", MemoryType::LockedCache)
         .value("VTCM", MemoryType::VTCM)
         .value("AMXTile", MemoryType::AMXTile)
-        .value("GPUSharedAsync", MemoryType::GPUSharedAsync);
+        .value("GPUSharedAsync", MemoryType::GPUSharedAsync)
+        .value("GPR", MemoryType::GPR);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
@@ -95,7 +96,7 @@ void define_enums(py::module &m) {
 
     py::enum_<VectorizeIn>(m, "VectorizeIn")
         .value("SIMD", VectorizeIn::SIMD)
-        .value("GPR", VectorizeIn::GPR);
+        .value("SWAR", VectorizeIn::SWAR);
 
     // Predicate is deprecated in C++ (identical to GuardWithIf), but the
     // Python binding is kept for one release for backwards compatibility.
