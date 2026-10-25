@@ -2066,7 +2066,8 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true) {
+                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true,
+                    Expr row_bytes = Expr()) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
@@ -2201,8 +2202,14 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
     // A staged table's decode, per row pair, outweighs sharing the act's loads
-    // (`row_pairs`: a per-format parameter)
-    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
+    // (`row_pairs`: a per-format parameter). Rows of over 11 KB (q8_0's from
+    // K = 11008) in single rows: on one thread, two weight streams that far
+    // apart are slower than one (on M3, q8_0's gemv at K = 14336 1.15x in
+    // single rows, at 16384 1.55x); on ten, about even (still 1.03-1.06x of
+    // GGML's).
+    Expr paired = fits(pairs, 1);
+    if (row_bytes.defined()) paired = paired && row_bytes <= 11 * 1024;
+    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
 }
 
