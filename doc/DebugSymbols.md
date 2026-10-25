@@ -68,11 +68,12 @@ features.
 
 ## GPU device code
 
-GPU kernels get line information that points into the conceptual stmt (the
-`conceptual_stmt` output), as that is the IR that still holds the code of the
-kernels. This is the case with either feature.
+The debug symbols features are about the code of the host. With the
+`gpu_debug_symbols` feature, GPU kernels get line information that points into
+the conceptual stmt (the `conceptual_stmt` output), as that is the IR that still
+holds the code of the kernels. The drivers and tools of the GPU APIs use it.
 
-- CUDA kernels, which are compiled with LLVM, get line information only, like
+- CUDA kernels, which are compiled with LLVM, get `.loc` directives only, like
   `nvcc -lineinfo`, so they are still optimized as usual.
 - The C-like source of OpenCL, Metal and D3D12 kernels gets `#line` directives,
   which the compilers of these APIs use in their messages and debug info.
@@ -90,9 +91,9 @@ click assembly to go to the IR it came from. The assembly pane shows the line
 numbers of the assembly file, without the lines that hold the debug info.
 
 In the `conceptual_stmt_html`, the device code of CUDA, OpenCL, Metal and D3D12
-kernels is linked in the same way, but only with one of the debug symbols
-features, as kernels are compiled before it is known which outputs will be
-requested.
+kernels is linked in the same way, with or without `gpu_debug_symbols`. The
+device code pane shows the line numbers of the device code as it is compiled
+into the pipeline, without the line information.
 
 ## Caveats
 

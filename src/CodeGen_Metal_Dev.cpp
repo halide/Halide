@@ -59,8 +59,14 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    void set_debug_source(const StmtSourceMap *source) override {
-        debug_source = source;
+    void set_line_info(const Stmt &conceptual_stmt, const StmtSourceMap *conceptual_source, bool in_code) override {
+        record_lines = true;
+        conceptual_nodes = nodes_of(conceptual_stmt);
+        line_info_source = in_code ? conceptual_source : nullptr;
+    }
+
+    DeviceCodeLines device_code_lines() override {
+        return lines;
     }
 
     std::string api_unique_name() override {
@@ -157,10 +163,14 @@ protected:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
 
-    // With debug info: what it points into, and where the Stmts of the
-    // kernels were printed.
-    const StmtSourceMap *debug_source = nullptr;
+    // Where the lines of device code came from: the nodes of the conceptual
+    // Stmt, where the Stmts of the kernels were printed, and what to point
+    // into with #line directives, if anything.
+    bool record_lines = false;
+    std::set<const IRNode *> conceptual_nodes;
     std::vector<IRPrinterLocation> kernel_locations;
+    const StmtSourceMap *line_info_source = nullptr;
+    DeviceCodeLines lines;
     CodeGen_Metal_C metal_c;
 };
 
@@ -894,7 +904,7 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
     kernel_locations.clear();
-    metal_c.recorded_locations = debug_source ? &kernel_locations : nullptr;
+    metal_c.recorded_locations = record_lines ? &kernel_locations : nullptr;
 
     // Write out the Halide math functions.
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
@@ -934,8 +944,10 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     debug(1) << "Metal kernel:\n"
              << str << "\n";
 
-    if (debug_source) {
-        str = add_line_directives(str, kernel_locations, *debug_source, "halide_metal_kernels");
+    if (record_lines) {
+        lines = c_like_device_code_lines(str, kernel_locations, conceptual_nodes, line_info_source,
+                                         "halide_metal_kernels");
+        str = lines.text;
     }
     vector<char> buffer(str.begin(), str.end());
 

@@ -523,15 +523,27 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        // Device code gets debug info that points into the conceptual stmt,
-        // which still has the code of the kernels.
+        // The html outputs show which line of the conceptual stmt, which still
+        // has the code of the kernels, each line of device code came from.
+        // The device code itself only says so with gpu_debug_symbols. A JIT
+        // module has no html outputs.
+        const bool line_info_in_code = t.has_feature(Target::GPUDebugSymbols);
+        const bool device_code_lines = line_info_in_code || !t.has_feature(Target::JIT);
+        // Line information in device code compiled with LLVM points into the
+        // printing of the conceptual stmt.
         std::optional<StmtSourceMap> conceptual_source;
-        if (t.has_feature(Target::DebugSymbols) || t.has_feature(Target::DebugSymbolsConceptual)) {
+        if (device_code_lines && (line_info_in_code || t.has_feature(Target::CUDA))) {
             conceptual_source = print_with_source_map(result_module.get_conceptual_stmt());
             conceptual_source->path = pipeline_name + ".conceptual.stmt";
         }
+        std::vector<DeviceCodeLines> lines;
         s = inject_gpu_offload(s, t, any_strict_float, env,
-                               conceptual_source ? &*conceptual_source : nullptr);
+                               device_code_lines ? result_module.get_conceptual_stmt() : Stmt(),
+                               conceptual_source ? &*conceptual_source : nullptr,
+                               line_info_in_code, &lines);
+        for (auto &l : lines) {
+            result_module.append_device_code_lines(std::move(l));
+        }
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {

@@ -1,4 +1,5 @@
 #include "StmtToHTML.h"
+#include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
 #include "Error.h"
 #include "IROperator.h"
@@ -1086,7 +1087,7 @@ public:
         // stmt, which still holds the code of the kernels.
         Buffer<> device_code_buf = m.get_device_code_buffer();
         if (device_code_buf.defined()) {
-            generate_device_code_pane(device_code_buf);
+            generate_device_code_pane(m, device_code_buf);
         }
 
         // Run the cost model over this module to pre-compute all
@@ -1264,85 +1265,79 @@ private:
     }
 
     // Generate pane: Generated device code, into device_code_pane
-    void generate_device_code_pane(const Buffer<> &buf) {
+    void generate_device_code_pane(const Module &m, const Buffer<> &buf) {
         std::ostringstream pane;
         pane << "<div id='device-code-pane' class='pane'>\n";
         int length = buf.size_in_bytes();
         while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
             length--;
         }
-        std::string str((const char *)buf.data(), length);
-        if (starts_with(buf.name(), "cuda_")) {
-            // The PTX, which the page highlights. With debug info, .loc
-            // directives say which line of the conceptual stmt the
-            // instructions after them were made from. They are not shown, and
-            // only the conceptual stmt is shown with links.
-            std::istringstream ss{str};
-            pane << "<div class='code ptx'>\n";
-            int number = 0;
-            uint32_t ir_line = 0;
-            for (std::string line; std::getline(ss, line);) {
+        const std::string code((const char *)buf.data(), length);
+        const bool ptx = starts_with(buf.name(), "cuda_");
+
+        // Where the lines came from. The conceptual stmt is the IR that has
+        // the code of the kernels, so only it is linked to them.
+        const DeviceCodeLines *lines = nullptr;
+        for (const DeviceCodeLines &l : m.get_device_code_lines()) {
+            if (l.name == buf.name()) {
+                lines = &l;
+            }
+        }
+        const bool link = lines && conceptual_stmt;
+        const std::string &text = lines ? lines->text : code;
+        // The line numbers are those of the device code in the pipeline,
+        // which has the line information in it only with gpu_debug_symbols.
+        // The line information is not shown.
+        const bool line_info_numbered = text == code;
+
+        // The page highlights PTX. With .loc directives, the instructions after
+        // them were made from the given line of the conceptual stmt. Other
+        // device code says per line which IR node it was made from.
+        pane << "<div class='code" << (ptx ? " ptx" : "") << "'>\n";
+        int number = 0;
+        uint32_t loc_line = 0;
+        size_t index = 0;
+        for (size_t start = 0; start < text.size(); index++) {
+            const size_t end = std::min(text.find('\n', start), text.size());
+            const std::string line = text.substr(start, end - start);
+            start = end + 1;
+            const size_t first = line.find_first_not_of(" \t");
+            const std::string_view trimmed = first == std::string::npos ? std::string_view{} : std::string_view(line).substr(first);
+            const bool line_info = ptx ? is_ptx_line_info(line) : begins_with(line, "#line ");
+            if (!line_info || line_info_numbered) {
                 number++;
-                const size_t first = line.find_first_not_of(" \t");
-                const std::string_view trimmed = first == std::string::npos ? std::string_view{} : std::string_view(line).substr(first);
-                if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ")) {
-                    // .loc <file> <line> <column>
-                    std::istringstream loc{std::string(trimmed.substr(4))};
-                    uint32_t file = 0;
-                    loc >> file >> ir_line;
-                    continue;
-                }
-                if (begins_with(trimmed, ".file\t") || begins_with(trimmed, ".file ")) {
-                    continue;
-                }
+            }
+            if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ")) {
+                // .loc <file> <line> <column>
+                std::istringstream loc{std::string(trimmed.substr(4))};
+                uint32_t file = 0;
+                loc >> file >> loc_line;
+            }
+            if (line_info) {
+                continue;
+            }
+            uint32_t ir_line = 0;
+            if (link && ptx) {
                 const bool is_instruction = first != 0 && !trimmed.empty() &&
                                             trimmed[0] != '.' && trimmed[0] != '/' &&
                                             trimmed[0] != '{' && trimmed[0] != '}' &&
                                             trimmed.back() != ':';
-                pane << "<span class='line' data-n='" << number << "'";
-                if (conceptual_stmt && is_instruction && ir_line) {
-                    pane << " data-ir='" << ir_line << "'";
-                    if (ir_line >= device_code_ir_lines.size()) {
-                        device_code_ir_lines.resize(ir_line + 1, false);
-                    }
-                    device_code_ir_lines[ir_line] = true;
-                }
-                pane << ">" << escape_html(line) << "</span>\n";
+                ir_line = is_instruction ? loc_line : 0;
+            } else if (link && index < lines->line_nodes.size() && lines->line_nodes[index]) {
+                const StmtSourceMap::Location *l = conceptual_stmt->find(lines->line_nodes[index], 0);
+                ir_line = l ? l->line : 0;
             }
-            pane << "</div>\n";
-        } else {
-            // With debug info, #line directives say which line of the
-            // conceptual stmt the lines after them were made from. They are
-            // not shown, and only the conceptual stmt is shown with links.
-            std::istringstream ss{str};
-            pane << "<div class='code'>\n";
-            int number = 0;
-            uint32_t ir_line = 0;
-            bool in_ir = false;
-            for (std::string line; std::getline(ss, line);) {
-                number++;
-                if (begins_with(line, "#line ")) {
-                    std::istringstream directive{line.substr(6)};
-                    std::string file;
-                    directive >> ir_line >> file;
-                    if (!file.empty()) {
-                        in_ir = ends_with(file, ".conceptual.stmt\"");
-                    }
-                    continue;
+            pane << "<span class='line' data-n='" << number << "'";
+            if (ir_line) {
+                pane << " data-ir='" << ir_line << "'";
+                if (ir_line >= device_code_ir_lines.size()) {
+                    device_code_ir_lines.resize(ir_line + 1, false);
                 }
-                pane << "<span class='line' data-n='" << number << "'";
-                if (in_ir && conceptual_stmt) {
-                    pane << " data-ir='" << ir_line << "'";
-                    if (ir_line >= device_code_ir_lines.size()) {
-                        device_code_ir_lines.resize(ir_line + 1, false);
-                    }
-                    device_code_ir_lines[ir_line] = true;
-                }
-                pane << ">" << escape_html(line) << "</span>\n";
-                ir_line++;
+                device_code_ir_lines[ir_line] = true;
             }
-            pane << "\n</div>\n";
+            pane << ">" << escape_html(line) << "</span>\n";
         }
+        pane << "</div>\n";
         pane << "</div>\n";
         device_code_pane = std::move(pane).str();
     }

@@ -49,8 +49,13 @@ public:
 
     void set_kernel_max_registers(int n) override;
 
-    void set_debug_source(const StmtSourceMap *source) override {
-        debug_source = source;
+    void set_line_info(const Stmt &conceptual_stmt, const StmtSourceMap *conceptual_source, bool in_code) override {
+        debug_source = conceptual_source;
+        line_info_in_code = in_code;
+    }
+
+    DeviceCodeLines device_code_lines() override {
+        return lines;
     }
 
     static void test();
@@ -67,6 +72,10 @@ public:
     }
 
 protected:
+    // Whether the line information stays in the PTX, and the PTX with it.
+    bool line_info_in_code = false;
+    DeviceCodeLines lines;
+
     using CodeGen_LLVM::visit;
 
     /** What the schedule asked for, if anything. Zero leaves it to ptxas. */
@@ -1207,6 +1216,22 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
              << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
+    if (debug_source) {
+        lines.text = std::string(outstr.begin(), outstr.end());
+        if (!line_info_in_code) {
+            std::string ptx;
+            for (size_t start = 0; start < lines.text.size();) {
+                size_t end = std::min(lines.text.find('\n', start), lines.text.size());
+                std::string_view line = std::string_view(lines.text).substr(start, end - start);
+                if (!is_ptx_line_info(line)) {
+                    ptx.append(line);
+                    ptx.push_back('\n');
+                }
+                start = end + 1;
+            }
+            buffer.assign(ptx.begin(), ptx.end());
+        }
+    }
 
     // Dump the SASS too if the cuda SDK is in the path
     debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";

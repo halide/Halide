@@ -338,6 +338,10 @@ struct ModuleContents {
      * etc...). In other words, we'd like to keep this
      * conceptually relevant and human-readable. */
     Stmt conceptual_code;
+
+    /** The device code of the kernels of the GPU APIs, with where its lines
+     * came from in conceptual_code. */
+    std::vector<Internal::DeviceCodeLines> device_code_lines;
 };
 
 template<>
@@ -578,6 +582,14 @@ void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
 
 const Internal::Stmt &Module::get_conceptual_stmt() const {
     return contents->conceptual_code;
+}
+
+void Module::append_device_code_lines(Internal::DeviceCodeLines lines) {
+    contents->device_code_lines.push_back(std::move(lines));
+}
+
+const std::vector<Internal::DeviceCodeLines> &Module::get_device_code_lines() const {
+    return contents->device_code_lines;
 }
 
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {

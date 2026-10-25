@@ -281,6 +281,7 @@ void define_enums(py::module &m) {
         .value("NoMetadata", Target::Feature::NoMetadata)
         .value("DebugSymbols", Target::Feature::DebugSymbols)
         .value("DebugSymbolsConceptual", Target::Feature::DebugSymbolsConceptual)
+        .value("GPUDebugSymbols", Target::Feature::GPUDebugSymbols)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

@@ -1648,6 +1648,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_debug_symbols,          ///< Emit debug info that maps the generated code to the lines of the .stmt output, so debuggers and profilers can step through and annotate the lowered IR.
     /// Like debug_symbols, but map the generated code to the lines of the .conceptual.stmt output instead.
     halide_target_feature_debug_symbols_conceptual,
+    /// Put line information that points into the .conceptual.stmt output in GPU device code (.loc directives in PTX, #line directives in C-like source), for the tools of the GPU APIs.
+    halide_target_feature_gpu_debug_symbols,
     halide_target_feature_end  ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
