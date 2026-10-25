@@ -328,11 +328,41 @@ inline std::vector<Func> staged_tables(const std::vector<ApproximationResult> &r
     return fs;
 }
 
+// A table decode g's indices, if read as is (a struct field or a buffer's
+// elements: iq3_xxs's grid index
+// bytes; not its sign indices, 7-bit fields): staged at `at` (per block
+// group), a word of them per load, in general-purpose registers
+// (MemoryType::GPR), where g's row reads extract each with a shift and a
+// mask. Read in place instead, each index is a load of its own (the dot is
+// bound by its loads; M3 Max, iq3_xxs, gemv 1.16-1.27x, gemm 1.3-1.38x,
+// vec_dot 1.16-1.2x); staged in a SIMD register, each is a lane move (half
+// the gain).
+inline void staged_indices(Func g, LoopLevel at, const Target &t) {
+    Func idx;
+    for (const Expr &v : g.function().definition().values()) {
+        Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
+            if (c->call_type == Internal::Call::Halide && !idx.defined()) idx = Func(Internal::Function(c->func));
+            self->visit_base(c);
+        });
+    }
+    if (!idx.defined() || idx.dimensions() == 0 || !idx.type().is_uint() || idx.function().has_update_definition()) return;
+    const Internal::Call *read = idx.function().definition().values()[0].as<Internal::Call>();
+    if (!read || !(read->call_type == Internal::Call::Halide || read->call_type == Internal::Call::Image ||
+                   read->is_intrinsic(Internal::Call::struct_field_read))) return;
+    const int lanes = t.bits / idx.type().bits();
+    Func w = idx.in(g);
+    Var k = w.args()[0], ko("ko"), ki("ki");
+    w.compute_at(at).store_in(MemoryType::GPR).split(k, ko, ki, lanes).unroll(ko).vectorize(ki);
+    for (size_t a = 1; a < w.args().size(); a++) {
+        w.unroll(w.args()[a]);
+    }
+}
+
 // The table decodes at `at` (per block group), each a copy for its calls from
 // `consumers` (a pipeline computes them per kernel): unrolled over all but
 // their first dimension, split by the table's rows, so each read of a row is
 // a dense load.
-inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at) {
+inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at, const Target &t) {
     for (Func f : staged_tables(rs)) {
         std::vector<Func> cs;
         for (Func c : consumers) {
@@ -356,6 +386,7 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
         for (size_t k = 1; k < g.args().size(); k++) {
             g.unroll(g.args()[k]);
         }
+        staged_indices(g, at, t);
     }
 }
 
@@ -902,7 +933,7 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 // record, as GGML's low and high nibbles), accumulated over the pieces, then
 // its quads summed (pairwise adds across the group's blocks).
 inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDom &r, const Tiles &ts, int sub, int nsub, int vec, int per,
-                              const std::vector<ApproximationResult> &rs) {
+                              const std::vector<ApproximationResult> &rs, const Target &t) {
     Var lane("lane"), u("u"), q("q"), bacc("bacc"), lu("lu"), qlv("ql");
     RVar ry = r.y, rxs("rxs"), rxh("rxh"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     const int ql = vec / per / nsub;
@@ -925,7 +956,7 @@ inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDo
     quads.compute_at(acc, ryo).reorder_storage(q, lane, u, n, m).bound_storage(u, ts.interleave);
     quads.reorder(q, lane, u, n, m).fuse(q, lane, qlv).vectorize(qlv).unroll(u).unroll(n).unroll(m);
     quads.update().reorder(rxi, q, lane, rxh, u, n, m).fuse(q, lane, qlv).atomic().vectorize(rxi).vectorize(qlv).unroll(rxh).unroll(u).unroll(n).unroll(m);
-    tables(rs, {blk, codes, quads}, LoopLevel(acc, ryo));
+    tables(rs, {blk, codes, quads}, LoopLevel(acc, ryo), t);
 }
 
 // vec_dot: a constant code offset's term (derived_sums(): d.offsets, d.sub_sums,
@@ -1170,7 +1201,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     std::optional<int64_t> bx = Internal::as_const_int(r.x.extent());
     int nsub = sub && bx ? (int)*bx / sub : 0;
     if (nsub && integer && !sublanes && !gpr_scales && !affine(rs) && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {
-        blocked_sub_lanes(out, st, s, dot.args()[0], dot.args()[1], r, ts, sub, nsub, vec, per, rs);
+        blocked_sub_lanes(out, st, s, dot.args()[0], dot.args()[1], r, ts, sub, nsub, vec, per, rs, t);
         return;
     }
     bool sl = sub && sublanes;
@@ -1305,7 +1336,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             });
         }
     }
-    tables(rs, readers, LoopLevel(acc, ryo));
+    tables(rs, readers, LoopLevel(acc, ryo), t);
 }
 
 // Weights of one value per record (floats: no blocks, r.x is a single value):
@@ -1518,7 +1549,7 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // the act's scale times the codes' dot), so the weight's scale multiplies
 // once per weight block, not per block.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
-                         const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
+                         const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
                          int per = 1, bool fold_offsets = true, bool gpr_scales = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
@@ -1714,7 +1745,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             .vectorize(kb, 4, VectorizeIn::SWAR)
             .unroll(k.args()[2]);
     }
-    tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo));
+    tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo), t);
 }
 
 // The Funcs of e's encoder: the intermediates of the result that encodes e,
@@ -2165,16 +2196,16 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     if (whole && tiled && !rmmla) {
         for (auto [c, ts] : tiles) {
-            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs, false, 0, 0, false, false, fmt.sub ? 1 : fmt.per);
+            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs, t, false, 0, 0, false, false, fmt.sub ? 1 : fmt.per);
         }
     } else if (rmmla) {
         // whole records of rows (from 0 mod their rows: their addresses dense)
         // (dr's act is the last result: its derived ports, rs[1]'s for derived_sums)
         std::vector<ApproximationResult> rr = rs;
         if (whole) std::swap(rr[1], rr.back());
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true, whole, 1, fold_gemm);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, fold_gemm);
     } else if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm, gpr_scales);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm, gpr_scales);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm);
