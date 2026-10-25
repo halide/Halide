@@ -5,6 +5,7 @@
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/Support/Compression.h>
+#include <llvm/Support/Endian.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -13,13 +14,6 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-
-std::vector<uint8_t> zlib_compress(const uint8_t *data, size_t size) {
-    llvm::SmallVector<uint8_t, 0> compressed;
-    llvm::compression::zlib::compress(llvm::ArrayRef<uint8_t>(data, size), compressed,
-                                      llvm::compression::zlib::BestSizeCompression);
-    return std::vector<uint8_t>(compressed.begin(), compressed.end());
-}
 
 // The MSZIP format that the Windows Compression API (cabinet.dll) decompresses
 // in block mode (COMPRESS_ALGORITHM_MSZIP | COMPRESS_RAW), one block per call.
@@ -34,16 +28,17 @@ std::vector<char> compress_mszip(const std::vector<char> &src) {
     const uint8_t *in = (const uint8_t *)src.data();
 
     std::vector<char> out;
+    llvm::SmallVector<uint8_t, 0> block;
     for (size_t offset = 0; offset < src.size(); offset += block_size) {
-        std::vector<uint8_t> block = zlib_compress(in + offset, std::min(block_size, src.size() - offset));
+        llvm::ArrayRef<uint8_t> chunk(in + offset, std::min(block_size, src.size() - offset));
+        llvm::compression::zlib::compress(chunk, block, llvm::compression::zlib::BestSizeCompression);
         internal_assert(block.size() > 6) << "Unexpectedly short zlib stream\n";
-        const uint32_t size = (uint32_t)(block.size() - 4);  // "CK" + deflate stream
-        for (int i = 0; i < 4; i++) {
-            out.push_back((char)((size >> (8 * i)) & 0xff));
-        }
-        out.push_back('C');
-        out.push_back('K');
-        out.insert(out.end(), block.begin() + 2, block.end() - 4);
+
+        const llvm::support::ulittle32_t size(block.size() - 4);  // "CK" + deflate stream
+        out.insert(out.end(), (const char *)&size, (const char *)&size + sizeof(size));
+        block[0] = 'C';
+        block[1] = 'K';
+        out.insert(out.end(), block.begin(), block.end() - 4);
     }
     return out;
 }
@@ -59,7 +54,9 @@ std::vector<char> compress_kernel_source(const std::vector<char> &src, const Tar
     if (target.os == Target::Windows) {
         return compress_mszip(src);
     }
-    std::vector<uint8_t> compressed = zlib_compress((const uint8_t *)src.data(), src.size());
+    llvm::SmallVector<uint8_t, 0> compressed;
+    llvm::compression::zlib::compress(llvm::ArrayRef<uint8_t>((const uint8_t *)src.data(), src.size()),
+                                      compressed, llvm::compression::zlib::BestSizeCompression);
     return std::vector<char>(compressed.begin(), compressed.end());
 }
 
