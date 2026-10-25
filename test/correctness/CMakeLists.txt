@@ -284,6 +284,7 @@ tests(
     gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
+    gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp
     growing_stack.cpp
     half_native_interleave.cpp
