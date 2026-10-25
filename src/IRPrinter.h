@@ -148,28 +148,45 @@ struct IRPrinterLocation {
     /** The node's most telling character, e.g. the operator of a binary
      * op. Equal to start for most nodes. */
     uint32_t anchor;
+    /** Where printing of the node ended. */
+    uint32_t end;
 };
 
-/** The text of a Module exactly as operator<< prints it (minus any ANSI
- * colors), together with where each IR node of its functions' bodies ended up
- * in that text. Debug info uses this to point into the .stmt output. */
+/** The text of a Module or Stmt exactly as operator<< prints it (minus any
+ * ANSI colors), together with where each IR node in it ended up in that text.
+ * Debug info and the HTML outputs use this to point into the .stmt files. */
 struct StmtSourceMap {
     struct Location {
         const IRNode *node;
-        /** Byte offset at which printing of the node began. A node shared by
-         * several parents is printed once per parent, this tells the copies
-         * apart. */
-        uint32_t start;
+        /** Byte offsets at which printing of the node began and ended. A node
+         * shared by several parents is printed once per parent, this tells
+         * the copies apart. */
+        uint32_t start, end;
         /** 1-based line and column of the node's anchor. */
         uint32_t line, column;
+        /** 1-based line of the last character of the node, e.g. its closing
+         * brace. */
+        uint32_t end_line;
+    };
+
+    /** A piece of text that IRPrinter styles, e.g. a keyword. */
+    struct Token {
+        uint32_t start, end;
+        /** Which of IRPrinter's styles: 'k'eyword, 'v'ariable, 'b'uffer,
+         * 'n'ame of a function, 't'ype, 'i'nteger, 'f'loat, 's'tring,
+         * 'h'ighlight, 'd'immed, or 'p'unctuation and operators, which
+         * are 'P' when bold. */
+        char style;
+        /** For punctuation and operators: the nesting depth, modulo 6. */
+        uint8_t depth;
     };
 
     struct Function {
         std::string name;
         /** Byte offset of the function header. */
         uint32_t start;
-        /** 1-based line of the function header. */
-        uint32_t line;
+        /** 1-based lines of the function header and its closing brace. */
+        uint32_t line, end_line;
     };
 
     std::string text;
@@ -181,19 +198,43 @@ struct StmtSourceMap {
     /** Sorted by node, then by start. */
     std::vector<Location> locations;
 
-    /** In Module::functions() order. */
+    /** In Module::functions() order. Empty when printing a Stmt. */
     std::vector<Function> functions;
+
+    /** 1-based line of each buffer, in Module::buffers() order. */
+    std::vector<uint32_t> buffer_lines;
+
+    /** Sorted by start. Tokens can contain one another, but never contain
+     * the start or end of a node they are not part of. */
+    std::vector<Token> tokens;
 
     /** Find the printed copy of node that sits under a parent which began
      * printing at parent_start: the first copy at or after parent_start, or
      * the last copy before it if there is none. Returns nullptr if the node
      * was never printed. */
     const Location *find(const IRNode *node, uint32_t parent_start) const;
+
+    /** The location with the given anchor. Of nested nodes that share one,
+     * the innermost. Returns nullptr if there is none. */
+    const Location *at(uint32_t line, uint32_t column) const;
+
+    /** Indices into locations, sorted by line and column, for at(). */
+    std::vector<uint32_t> by_anchor;
 };
 
 /** Print a Module the same way operator<< does, without colors, and record
  * where all IR nodes of its functions went. */
 StmtSourceMap print_with_source_map(const Module &m);
+
+/** Print a Stmt the same way operator<< does, without colors, and record
+ * where all of its IR nodes went. */
+StmtSourceMap print_with_source_map(const Stmt &s);
+
+/** For each location of from, in from.locations order: the location in to of
+ * the same IR node, or else that of its nearest enclosing node that to has, or
+ * else nullptr. Nodes are printed in both when to is a printing of IR that
+ * from's IR was lowered from, e.g. the conceptual Stmt of a Module. */
+std::vector<const StmtSourceMap::Location *> map_locations(const StmtSourceMap &from, const StmtSourceMap &to);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -245,6 +286,11 @@ protected:
     bool ansi = false;
     int paren_depth = 0;
 
+    /** Instead of ANSI escape codes, mark styled text with '\x01', a style
+     * character (see StmtSourceMap::Token), and for punctuation a depth
+     * digit, up to a closing '\x02'. */
+    bool markup = false;
+
     /** If set, every node printed through print() or print_lets() gets an
      * entry here. */
     std::vector<IRPrinterLocation> *recorded_locations = nullptr;
@@ -259,6 +305,10 @@ protected:
     /** Mark the current stream position as the anchor of the node being
      * printed. */
     void anchor();
+
+    /** Mark the current stream position as the end of the node with the
+     * given index in recorded_locations. */
+    void end_location(int index);
 
     const char *ansi_hl = "";
     const char *ansi_dim = "";

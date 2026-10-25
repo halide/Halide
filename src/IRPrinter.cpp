@@ -105,14 +105,13 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
 
 namespace Internal {
 namespace {
-void print_module(ostream &stream, const Module &m,
-                  vector<IRPrinterLocation> *locations,
-                  vector<uint32_t> *function_starts);
+struct PrintRecord;
+void print_module(ostream &stream, const Module &m, PrintRecord *record);
 }  // namespace
 }  // namespace Internal
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    Internal::print_module(stream, m, nullptr, nullptr);
+    Internal::print_module(stream, m, nullptr);
     return stream;
 }
 
@@ -416,16 +415,102 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
 
 namespace {
 
-// An IRPrinter that prints without colors, so that byte offsets map directly
-// to columns, and records where every node goes.
+// Strips the markup that a markup IRPrinter writes around styled text out of
+// what is written to it, and records where that text went as tokens.
+class MarkupStreambuf : public std::streambuf {
+public:
+    string text;
+    vector<StmtSourceMap::Token> tokens;
+    // Off while writing something that is not IR, which could contain the
+    // markup characters.
+    bool enabled = true;
+
+private:
+    // Indices into tokens of those still open.
+    vector<uint32_t> open;
+    enum { Text,
+           Style,
+           Depth } state = Text;
+
+    void put(char c) {
+        if (state == Style) {
+            tokens.push_back({(uint32_t)text.size(), (uint32_t)text.size(), c, 0});
+            open.push_back((uint32_t)tokens.size() - 1);
+            state = (c == 'p' || c == 'P') ? Depth : Text;
+        } else if (state == Depth) {
+            tokens.back().depth = (uint8_t)(c - '0');
+            state = Text;
+        } else if (enabled && c == '\x01') {
+            state = Style;
+        } else if (enabled && c == '\x02') {
+            if (!open.empty()) {
+                tokens[open.back()].end = (uint32_t)text.size();
+                open.pop_back();
+            }
+        } else {
+            text.push_back(c);
+        }
+    }
+
+    int overflow(int c) override {
+        if (c != EOF) {
+            put((char)c);
+        }
+        return c;
+    }
+
+    std::streamsize xsputn(const char *s, std::streamsize n) override {
+        for (std::streamsize i = 0; i < n; i++) {
+            put(s[i]);
+        }
+        return n;
+    }
+
+    // Supports tellp().
+    pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode) override {
+        if (off == 0 && dir == std::ios_base::cur) {
+            return pos_type((off_type)text.size());
+        }
+        return pos_type(off_type(-1));
+    }
+};
+
+// What gets recorded while printing a Module for a source map.
+struct PrintRecord {
+    MarkupStreambuf *markup = nullptr;
+    vector<IRPrinterLocation> locations;
+    vector<uint32_t> function_starts, function_ends, buffer_starts;
+};
+
+// An IRPrinter that records where every node goes, and marks up styled text
+// for a MarkupStreambuf instead of coloring it.
 class SourceMapPrinter : public IRPrinter {
 public:
     SourceMapPrinter(ostream &s, vector<IRPrinterLocation> *locations)
         : IRPrinter(s) {
-        ansi = false;
-        ansi_hl = ansi_dim = ansi_kw = ansi_imm_int = ansi_imm_float = "";
-        ansi_imm_str = ansi_var = ansi_buf = ansi_fn = ansi_type = "";
-        ansi_reset_col = ansi_reset = "";
+        ansi = true;
+        markup = true;
+        ansi_hl = "\x01"
+                  "h";
+        ansi_dim = "\x01"
+                   "d";
+        ansi_kw = "\x01"
+                  "k";
+        ansi_imm_int = "\x01"
+                       "i";
+        ansi_imm_float = "\x01"
+                         "f";
+        ansi_imm_str = "\x01"
+                       "s";
+        ansi_var = "\x01"
+                   "v";
+        ansi_buf = "\x01"
+                   "b";
+        ansi_fn = "\x01"
+                  "n";
+        ansi_type = "\x01"
+                    "t";
+        ansi_reset_col = ansi_reset = "\x02";
         recorded_locations = locations;
     }
 };
@@ -449,29 +534,119 @@ void print_lowered_func(ostream &stream, const LoweredFunc &function,
     stream << "}\n\n";
 }
 
-void print_module(ostream &stream, const Module &m,
-                  vector<IRPrinterLocation> *locations,
-                  vector<uint32_t> *function_starts) {
+void print_module(ostream &stream, const Module &m, PrintRecord *record) {
     for (const auto &s : m.submodules()) {
         // Submodules are compiled separately, so their nodes need no
         // locations, but they must not be printed with colors either.
-        vector<IRPrinterLocation> ignored;
-        print_module(stream, s, locations ? &ignored : nullptr, nullptr);
+        PrintRecord ignored;
+        ignored.markup = record ? record->markup : nullptr;
+        print_module(stream, s, record ? &ignored : nullptr);
         stream << "\n";
     }
 
     // The module retains implied features, but print it in minimal form.
     stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
     for (const auto &b : m.buffers()) {
+        if (record) {
+            record->buffer_starts.push_back((uint32_t)stream.tellp());
+            record->markup->enabled = false;
+        }
         stream << b << "\n";
+        if (record) {
+            record->markup->enabled = true;
+        }
     }
     for (const auto &f : m.functions()) {
-        if (function_starts) {
-            function_starts->push_back((uint32_t)stream.tellp());
+        if (record) {
+            record->function_starts.push_back((uint32_t)stream.tellp());
         }
-        print_lowered_func(stream, f, locations);
+        print_lowered_func(stream, f, record ? &record->locations : nullptr);
+        if (record) {
+            record->function_ends.push_back((uint32_t)stream.tellp());
+        }
         stream << "\n";
     }
+}
+
+// Turn what was recorded while printing into a source map of the text.
+StmtSourceMap make_source_map(MarkupStreambuf &markup, const PrintRecord &record, const Module *m) {
+    StmtSourceMap result;
+    result.text = std::move(markup.text);
+    result.tokens = std::move(markup.tokens);
+    const string &t = result.text;
+
+    vector<uint32_t> line_starts{0};
+    for (uint32_t i = 0; i < (uint32_t)t.size(); i++) {
+        if (t[i] == '\n') {
+            line_starts.push_back(i + 1);
+        }
+    }
+    auto line_of = [&](uint32_t offset) {
+        return (uint32_t)(std::upper_bound(line_starts.begin(), line_starts.end(), offset) - line_starts.begin());
+    };
+
+    // Offsets usually sit on indentation or on the space in front of an
+    // operator. Point at the first thing actually printed instead.
+    auto line_and_column = [&](uint32_t offset, uint32_t &line, uint32_t &column) {
+        while (offset < t.size() && (t[offset] == ' ' || t[offset] == '\n')) {
+            offset++;
+        }
+        line = line_of(offset);
+        column = offset - line_starts[line - 1] + 1;
+    };
+
+    // The end is just past the last thing printed, which is usually a
+    // newline.
+    auto end_line = [&](uint32_t start, uint32_t end) {
+        while (end > start && (t[end - 1] == ' ' || t[end - 1] == '\n')) {
+            end--;
+        }
+        return line_of(end > start ? end - 1 : start);
+    };
+
+    const auto &recorded = record.locations;
+    result.locations.resize(recorded.size());
+    for (size_t i = 0; i < recorded.size(); i++) {
+        StmtSourceMap::Location &l = result.locations[i];
+        l.node = recorded[i].node;
+        l.start = recorded[i].start;
+        l.end = recorded[i].end;
+        line_and_column(recorded[i].anchor, l.line, l.column);
+        l.end_line = end_line(l.start, l.end);
+    }
+    std::sort(result.locations.begin(), result.locations.end(),
+              [](const StmtSourceMap::Location &a, const StmtSourceMap::Location &b) {
+                  return a.node != b.node ? std::less<>()(a.node, b.node) : a.start < b.start;
+              });
+
+    // Nodes nested in one another can share an anchor, e.g. a Block and its
+    // first Stmt. The innermost one began printing last, or ended first.
+    result.by_anchor.resize(result.locations.size());
+    for (uint32_t i = 0; i < (uint32_t)result.by_anchor.size(); i++) {
+        result.by_anchor[i] = i;
+    }
+    std::sort(result.by_anchor.begin(), result.by_anchor.end(), [&](uint32_t i, uint32_t j) {
+        const StmtSourceMap::Location &a = result.locations[i], &b = result.locations[j];
+        return std::tie(a.line, a.column, b.start, a.end) < std::tie(b.line, b.column, a.start, b.end);
+    });
+
+    if (m) {
+        result.functions.resize(record.function_starts.size());
+        for (size_t i = 0; i < record.function_starts.size(); i++) {
+            StmtSourceMap::Function &f = result.functions[i];
+            uint32_t column;
+            f.name = m->functions()[i].name;
+            f.start = record.function_starts[i];
+            line_and_column(f.start, f.line, column);
+            f.end_line = end_line(f.start, record.function_ends[i]);
+        }
+        for (uint32_t start : record.buffer_starts) {
+            uint32_t line, column;
+            line_and_column(start, line, column);
+            result.buffer_lines.push_back(line);
+        }
+    }
+    return result;
 }
 
 }  // namespace
@@ -482,53 +657,26 @@ ostream &operator<<(ostream &stream, const LoweredFunc &function) {
 }
 
 StmtSourceMap print_with_source_map(const Module &m) {
-    std::ostringstream stream;
-    vector<IRPrinterLocation> recorded;
-    vector<uint32_t> function_starts;
-    print_module(stream, m, &recorded, &function_starts);
+    MarkupStreambuf markup;
+    std::ostream stream(&markup);
+    PrintRecord record;
+    record.markup = &markup;
+    print_module(stream, m, &record);
+    return make_source_map(markup, record, &m);
+}
 
-    StmtSourceMap result;
-    result.text = std::move(stream).str();
-    const string &text = result.text;
-
-    vector<uint32_t> line_starts{0};
-    for (uint32_t i = 0; i < (uint32_t)text.size(); i++) {
-        if (text[i] == '\n') {
-            line_starts.push_back(i + 1);
-        }
+StmtSourceMap print_with_source_map(const Stmt &s) {
+    MarkupStreambuf markup;
+    std::ostream stream(&markup);
+    PrintRecord record;
+    record.markup = &markup;
+    if (s.defined()) {
+        SourceMapPrinter p(stream, &record.locations);
+        p.print(s);
+    } else {
+        stream << s;
     }
-
-    // Offsets usually sit on indentation or on the space in front of an
-    // operator. Point at the first thing actually printed instead.
-    auto line_and_column = [&](uint32_t offset, uint32_t &line, uint32_t &column) {
-        while (offset < text.size() && (text[offset] == ' ' || text[offset] == '\n')) {
-            offset++;
-        }
-        auto it = std::upper_bound(line_starts.begin(), line_starts.end(), offset);
-        line = (uint32_t)(it - line_starts.begin());
-        column = offset - *(it - 1) + 1;
-    };
-
-    result.locations.resize(recorded.size());
-    for (size_t i = 0; i < recorded.size(); i++) {
-        StmtSourceMap::Location &l = result.locations[i];
-        l.node = recorded[i].node;
-        l.start = recorded[i].start;
-        line_and_column(recorded[i].anchor, l.line, l.column);
-    }
-    std::sort(result.locations.begin(), result.locations.end(),
-              [](const StmtSourceMap::Location &a, const StmtSourceMap::Location &b) {
-                  return a.node != b.node ? std::less<>()(a.node, b.node) : a.start < b.start;
-              });
-
-    result.functions.resize(function_starts.size());
-    for (size_t i = 0; i < function_starts.size(); i++) {
-        uint32_t column;
-        result.functions[i].name = m.functions()[i].name;
-        result.functions[i].start = function_starts[i];
-        line_and_column(function_starts[i], result.functions[i].line, column);
-    }
-    return result;
+    return make_source_map(markup, record, nullptr);
 }
 
 const StmtSourceMap::Location *StmtSourceMap::find(const IRNode *node, uint32_t parent_start) const {
@@ -543,6 +691,45 @@ const StmtSourceMap::Location *StmtSourceMap::find(const IRNode *node, uint32_t 
         return &*(it - 1);
     }
     return nullptr;
+}
+
+const StmtSourceMap::Location *StmtSourceMap::at(uint32_t line, uint32_t column) const {
+    auto it = std::lower_bound(by_anchor.begin(), by_anchor.end(), std::make_pair(line, column),
+                               [&](uint32_t i, const std::pair<uint32_t, uint32_t> &lc) {
+                                   return std::make_pair(locations[i].line, locations[i].column) < lc;
+                               });
+    if (it != by_anchor.end() && locations[*it].line == line && locations[*it].column == column) {
+        return &locations[*it];
+    }
+    return nullptr;
+}
+
+std::vector<const StmtSourceMap::Location *> map_locations(const StmtSourceMap &from, const StmtSourceMap &to) {
+    // Walk the locations of from in the order they were printed, which visits
+    // each node before the nodes nested in it.
+    std::vector<uint32_t> order(from.locations.size());
+    for (uint32_t i = 0; i < (uint32_t)order.size(); i++) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](uint32_t i, uint32_t j) {
+        const StmtSourceMap::Location &a = from.locations[i], &b = from.locations[j];
+        return a.start != b.start ? a.start < b.start : a.end > b.end;
+    });
+
+    std::vector<const StmtSourceMap::Location *> result(from.locations.size(), nullptr);
+    // The enclosing nodes of the current one.
+    std::vector<uint32_t> stack;
+    for (uint32_t i : order) {
+        const StmtSourceMap::Location &l = from.locations[i];
+        while (!stack.empty() && from.locations[stack.back()].end < l.end) {
+            stack.pop_back();
+        }
+        const StmtSourceMap::Location *parent = stack.empty() ? nullptr : result[stack.back()];
+        const StmtSourceMap::Location *found = to.find(l.node, parent ? parent->start : 0);
+        result[i] = found ? found : parent;
+        stack.push_back(i);
+    }
+    return result;
 }
 
 std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
@@ -759,6 +946,11 @@ ansi_helper(type);
 
 template<typename T>
 Ansi<T> IRPrinter::typep(const T &t) {
+    if (markup) {
+        return {t, "\x01"
+                   "t(",
+                ")\x02"};
+    }
     return {t, ansi ? "\033[34m(" : "(", ansi ? ")\033[0m" : ")"};
 }
 
@@ -769,6 +961,12 @@ Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
     }
     if (depth == -1) {
         depth = paren_depth;
+    }
+    if (markup) {
+        static const char *const open[2][6] = {
+            {"\x01p0", "\x01p1", "\x01p2", "\x01p3", "\x01p4", "\x01p5"},
+            {"\x01P0", "\x01P1", "\x01P2", "\x01P3", "\x01P4", "\x01P5"}};
+        return {t, open[bold][depth % 6], ansi_reset};
     }
     const char *open = "";
     if (bold) {
@@ -803,23 +1001,27 @@ void IRPrinter::print(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, false);
     ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
+    end_location(current_location);
 }
 
 void IRPrinter::print_no_parens(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, true);
     ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
+    end_location(current_location);
 }
 
 void IRPrinter::print(const Stmt &ir) {
     ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
+    end_location(current_location);
 }
 
 void IRPrinter::print_summary(const Stmt &ir) {
     ScopedValue<bool> old(is_summary, true);
     ScopedValue<int> loc(current_location, record_location(ir.get()));
     ir.accept(this);
+    end_location(current_location);
 }
 
 int IRPrinter::record_location(const IRNode *node) {
@@ -827,13 +1029,19 @@ int IRPrinter::record_location(const IRNode *node) {
         return -1;
     }
     uint32_t at = (uint32_t)stream.tellp();
-    recorded_locations->push_back({node, at, at});
+    recorded_locations->push_back({node, at, at, at});
     return (int)recorded_locations->size() - 1;
 }
 
 void IRPrinter::anchor() {
     if (recorded_locations && current_location >= 0) {
         (*recorded_locations)[current_location].anchor = (uint32_t)stream.tellp();
+    }
+}
+
+void IRPrinter::end_location(int index) {
+    if (recorded_locations && index >= 0) {
+        (*recorded_locations)[index].end = (uint32_t)stream.tellp();
     }
 }
 
@@ -1326,6 +1534,7 @@ void IRPrinter::print_lets(const Let *let) {
         print_no_parens(let->body);
         stream << "\n";
     }
+    end_location(current_location);
 }
 
 void IRPrinter::print_braced_stmt(const Stmt &stmt, int extra_indent) {
@@ -1563,6 +1772,7 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
+    vector<int> chained_ifs;
     while (true) {
         stream << paren("if (");
         print_no_parens(op->condition);
@@ -1579,6 +1789,7 @@ void IRPrinter::visit(const IfThenElse *op) {
 
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
             stream << get_indent() << paren("} else ");
+            chained_ifs.push_back(record_location(nested_if));
             op = nested_if;
         } else {
             stream << get_indent() << paren("}") << (" else {\n");
@@ -1592,6 +1803,9 @@ void IRPrinter::visit(const IfThenElse *op) {
     }
 
     stream << get_indent() << paren("}\n");
+    for (int i : chained_ifs) {
+        end_location(i);
+    }
 }
 
 void IRPrinter::visit(const Evaluate *op) {

@@ -49,6 +49,10 @@ public:
 
     void set_kernel_max_registers(int n) override;
 
+    void set_debug_source(const StmtSourceMap *source) override {
+        debug_source = source;
+    }
+
     static void test();
 
     std::vector<char> compile_to_src() override;
@@ -234,6 +238,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     function->setCallingConv(llvm::CallingConv::PTX_Kernel);
 
+    std::vector<std::pair<bool, Type>> debug_args;
+    for (const auto &arg : args) {
+        debug_args.emplace_back(arg.is_buffer, arg.type);
+    }
+    begin_debug_function(name, name, stmt.get(), nullptr, debug_args);
+
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
@@ -262,7 +272,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     debug(1) << "Generating llvm bitcode for kernel...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
-    stmt.accept(this);
+    codegen(stmt);
 
     // Now we need to end the function
     builder->CreateRetVoid();
@@ -304,6 +314,8 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                  << kernel_max_registers << " registers per thread\n";
     }
 
+    end_debug_function();
+
     // Now verify the function is ok
     verifyFunction(*function);
 
@@ -328,6 +340,10 @@ void CodeGen_PTX_Dev::init_module() {
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
+
+    if (debug_source) {
+        init_debug_info(debug_source, nullptr, /* line_tables_only */ true);
+    }
 
     struct Intrinsic {
         const char *name;
@@ -1047,6 +1063,8 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
+
+    finalize_debug_info();
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/

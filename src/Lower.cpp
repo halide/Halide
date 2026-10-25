@@ -2,6 +2,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -522,7 +523,15 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t, any_strict_float, env);
+        // Device code gets debug info that points into the conceptual stmt,
+        // which still has the code of the kernels.
+        std::optional<StmtSourceMap> conceptual_source;
+        if (t.has_feature(Target::DebugSymbols)) {
+            conceptual_source = print_with_source_map(result_module.get_conceptual_stmt());
+            conceptual_source->path = pipeline_name + ".conceptual.stmt";
+        }
+        s = inject_gpu_offload(s, t, any_strict_float, env,
+                               conceptual_source ? &*conceptual_source : nullptr);
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {

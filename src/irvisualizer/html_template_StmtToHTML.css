@@ -226,22 +226,22 @@ span.Highlight, span.Highlight * {
     color: var(--bg0) !important;
 }
 [data-theme*="light"] {
-    b.HighlightToggle0 { font-weight: bold; background-color: oklch(80% 0.18 0); }
-    b.HighlightToggle1 { font-weight: bold; background-color: oklch(80% 0.18 50); }
-    b.HighlightToggle2 { font-weight: bold; background-color: oklch(80% 0.18 100); }
-    b.HighlightToggle3 { font-weight: bold; background-color: oklch(80% 0.18 150); }
-    b.HighlightToggle4 { font-weight: bold; background-color: oklch(80% 0.18 200); }
-    b.HighlightToggle5 { font-weight: bold; background-color: oklch(80% 0.18 260); }
-    b.HighlightToggle6 { font-weight: bold; background-color: oklch(80% 0.18 310); }
+    .HighlightToggle0 { font-weight: bold; background-color: oklch(80% 0.18 0); }
+    .HighlightToggle1 { font-weight: bold; background-color: oklch(80% 0.18 50); }
+    .HighlightToggle2 { font-weight: bold; background-color: oklch(80% 0.18 100); }
+    .HighlightToggle3 { font-weight: bold; background-color: oklch(80% 0.18 150); }
+    .HighlightToggle4 { font-weight: bold; background-color: oklch(80% 0.18 200); }
+    .HighlightToggle5 { font-weight: bold; background-color: oklch(80% 0.18 260); }
+    .HighlightToggle6 { font-weight: bold; background-color: oklch(80% 0.18 310); }
 }
 [data-theme*="dark"] {
-    b.HighlightToggle0 { background-color: oklch(40% 0.18 0); }
-    b.HighlightToggle1 { background-color: oklch(40% 0.18 50); }
-    b.HighlightToggle2 { background-color: oklch(40% 0.18 100); }
-    b.HighlightToggle3 { background-color: oklch(40% 0.18 150); }
-    b.HighlightToggle4 { background-color: oklch(40% 0.18 200); }
-    b.HighlightToggle5 { background-color: oklch(40% 0.18 260); }
-    b.HighlightToggle6 { background-color: oklch(40% 0.18 310); }
+    .HighlightToggle0 { background-color: oklch(40% 0.18 0); }
+    .HighlightToggle1 { background-color: oklch(40% 0.18 50); }
+    .HighlightToggle2 { background-color: oklch(40% 0.18 100); }
+    .HighlightToggle3 { background-color: oklch(40% 0.18 150); }
+    .HighlightToggle4 { background-color: oklch(40% 0.18 200); }
+    .HighlightToggle5 { background-color: oklch(40% 0.18 260); }
+    .HighlightToggle6 { background-color: oklch(40% 0.18 310); }
 }
 
 span.OpF32  { color: hsl(106deg 100% 40%); font-weight: bold; }
@@ -301,19 +301,6 @@ span.Label b { background-color: var(--bg_visual_red); font-weight: bold !import
 }
 
 
-[data-rainbow-parens="true"] {
-    #ir-code-pane {
-        color: var(--aqua);
-        span.expr-depth-1 { color: var(--red); }
-        span.expr-depth-2 { color: var(--blue); }
-        span.expr-depth-3 { color: var(--green); }
-        span.expr-depth-4 { color: var(--yellow); }
-        span.expr-depth-5 { color: var(--purple); }
-        span.expr-depth-6 { color: var(--aqua); }
-        span.expr-depth-7 { color: var(--orange); }
-        span.expr-depth-8 { color: var(--green); }
-    }
-}
 
 a,
 a:hover,
@@ -401,11 +388,6 @@ div#ir-code-pane {
     }
     #ir-code-pane div.Module {
         width: max-content;
-    }
-}
-[data-show-line-nums="true"] {
-    div#ir-code-pane {
-        padding-left: 50px;
     }
 }
 
@@ -1018,4 +1000,178 @@ div.cost-btn:hover {
     background:#58f3;
     border-radius:5px;
     margin-bottom:20px
+}
+
+/* IR code: the text of the stmt, one div per line */
+div#ir-code-pane {
+    padding-left: 4px;
+}
+div.ir-code {
+    font-family: monospace;
+    --ir-gutter: calc(5.5em + 46px);
+}
+[data-hide-cost="true"] div.ir-code {
+    --ir-gutter: 5.5em;
+}
+div.ir-code div.l {
+    position: relative;
+    white-space: pre;
+    padding-left: var(--ir-gutter);
+    min-height: 1.3em;
+    line-height: 1.3em;
+}
+[data-wrap="true"] div.ir-code div.l {
+    white-space: pre-wrap;
+}
+div.ir-code div.l:hover {
+    background-color: rgba(128, 128, 128, 0.08);
+}
+div.ir-code div.l.selected {
+    background-color: var(--bg_visual_yellow);
+}
+div.ir-code div.l[data-hidden]:not([data-hidden="0"]) {
+    display: none;
+}
+div.ir-code span.g {
+    position: absolute;
+    left: 0;
+    width: var(--ir-gutter);
+    display: inline-flex;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+div.ir-code span.n {
+    width: 4em;
+    text-align: right;
+    color: var(--cs-line-num);
+}
+[data-show-line-nums="false"] div.ir-code span.n {
+    visibility: hidden;
+}
+div.ir-code div.l[data-asm] span.n {
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+div.ir-code div.l[data-asm] span.n:hover {
+    color: var(--red);
+}
+div.ir-code span.t {
+    width: 1.5em;
+    text-align: center;
+    cursor: pointer;
+    color: var(--cs-line-num);
+}
+div.ir-code span.t:before {
+    content: "\25BE";
+}
+div.ir-code div.l.collapsed span.t:before {
+    content: "\25B8";
+}
+div.ir-code span.t.none {
+    cursor: default;
+}
+div.ir-code span.t.none:before {
+    content: "";
+}
+div.ir-code div.l.collapsed span.c:after {
+    content: " \2026";
+    color: gray;
+    font-style: italic;
+}
+div.ir-code span.costs {
+    display: inline-flex;
+    align-items: center;
+    width: 46px;
+}
+[data-hide-cost="true"] div.ir-code span.costs {
+    display: none;
+}
+div.ir-code span.costs div.cost-btn {
+    float: none;
+    position: relative;
+}
+div.ir-code div.l span.icon-btn {
+    margin-left: 1em;
+    position: relative;
+}
+
+div.ir-code .kw    { color: var(--cs-keyword); font-weight: bold; }
+div.ir-code .type  { color: var(--cs-type); }
+div.ir-code .num   { color: var(--cs-int); }
+div.ir-code .str   { color: var(--cs-str); }
+div.ir-code .buf   { color: var(--cs-symbol); }
+div.ir-code .fn    { color: var(--cs-symbol); }
+div.ir-code .var   { color: var(--cs-variable); cursor: pointer; }
+div.ir-code .op    { color: var(--cs-operator); }
+div.ir-code .op.bold { font-weight: bold; }
+div.ir-code .dim   { opacity: 0.6; }
+div.ir-code .hl    { text-decoration: underline; }
+div.ir-code .op.Highlight { background-color: var(--bg_visual_blue); }
+
+[data-rainbow-parens="true"] {
+    div.ir-code .op.d0 { color: var(--red); }
+    div.ir-code .op.d1 { color: var(--green); }
+    div.ir-code .op.d2 { color: var(--yellow); }
+    div.ir-code .op.d3 { color: var(--blue); }
+    div.ir-code .op.d4 { color: var(--purple); }
+    div.ir-code .op.d5 { color: var(--aqua); }
+}
+
+/* Host assembly, with the numbers of the lines in the assembly file */
+div#asm-view {
+    display: flex;
+}
+pre#asm-line-nums,
+div#assemblyContent {
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 14px;
+    margin: 0;
+    padding: 0;
+    white-space: pre;
+}
+pre#asm-line-nums {
+    color: var(--cs-line-num);
+    text-align: right;
+    padding-right: 1em;
+    user-select: none;
+    -webkit-user-select: none;
+}
+div#asm-code {
+    position: relative;
+    flex-grow: 1;
+}
+div#assemblyContent {
+    cursor: pointer;
+}
+div.asm-hl {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+div.asm-hl.hover {
+    background-color: rgba(255, 200, 0, 0.15);
+}
+div.asm-hl.selected {
+    background-color: rgba(255, 120, 0, 0.3);
+}
+
+/* Device code, with the numbers of its lines in the source */
+div#device-code-pane span.line[data-n]:before {
+    content: attr(data-n) ".";
+}
+div#device-code-pane span.line[data-ir] {
+    cursor: pointer;
+}
+div#device-code-pane span.line.device-hover {
+    background-color: rgba(255, 200, 0, 0.15);
+}
+div#device-code-pane span.line.device-selected {
+    background-color: rgba(255, 120, 0, 0.3);
+}
+div.ir-code div.l[data-device] span.n {
+    cursor: pointer;
+    text-decoration: underline dotted;
 }

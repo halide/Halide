@@ -197,6 +197,9 @@ struct CodeGen_LLVM::DebugInfo {
     std::vector<std::pair<Type, DIType *>> types;
     DIType *buffer_ptr_type = nullptr;
 
+    // Only describe which code came from where, not the values in it.
+    bool line_tables_only = false;
+
     struct Saved {
         DILocation *location = nullptr;
         uint32_t start = 0;
@@ -257,18 +260,21 @@ struct CodeGen_LLVM::DebugInfo {
         return result;
     }
 
-    static std::unique_ptr<DebugInfo> make(llvm::Module &m, const Module &input, const Target &target,
-                                           const StmtSourceMap *source,
+    // The source is printed from input if it is null.
+    static std::unique_ptr<DebugInfo> make(llvm::Module &m, const Module *input, const Target &target,
+                                           const StmtSourceMap *source, bool line_tables_only,
                                            StructType *buffer_t, StructType *type_t, StructType *dimension_t) {
         auto d = std::make_unique<DebugInfo>();
+        d->line_tables_only = line_tables_only;
         if (source) {
             d->source = source;
         } else {
-            d->own_source = print_with_source_map(input);
-            d->own_source.path = input.name() + ".stmt";
+            internal_assert(input);
+            d->own_source = print_with_source_map(*input);
+            d->own_source.path = input->name() + ".stmt";
             d->source = &d->own_source;
         }
-        internal_assert(d->source->functions.size() == input.functions().size())
+        internal_assert(!input || d->source->functions.size() == input->functions().size())
             << "The debug source of a Module must be a printing of that Module\n";
 
         const bool codeview = target.os == Target::Windows;
@@ -282,8 +288,9 @@ struct CodeGen_LLVM::DebugInfo {
         } else if (!m.getModuleFlag("Dwarf Version")) {
             // Version 5 could carry the text of the .stmt in the object, but
             // LLVM then describes many optimized variables with typed DWARF
-            // expressions that gdb can't evaluate.
-            m.addModuleFlag(llvm::Module::Max, "Dwarf Version", 4);
+            // expressions that gdb can't evaluate. Line tables need no more
+            // than version 2, which is what the CUDA tools expect.
+            m.addModuleFlag(llvm::Module::Max, "Dwarf Version", line_tables_only ? 2 : 4);
         }
 
         SmallString<256> path(d->source->path);
@@ -297,8 +304,11 @@ struct CodeGen_LLVM::DebugInfo {
         d->builder = std::make_unique<DIBuilder>(m);
         d->file = d->builder->createFile(sys::path::filename(path), sys::path::parent_path(path),
                                          DIFile::ChecksumInfo<StringRef>(DIFile::CSK_MD5, checksum));
+        // Just the .loc directives is all that GPU device code can take
+        // without the CUDA tools turning optimization off.
         d->unit = d->builder->createCompileUnit(dwarf::DW_LANG_C99, d->file, "Halide",
-                                                /* isOptimized */ true, "", 0);
+                                                /* isOptimized */ true, "", 0, "",
+                                                line_tables_only ? DICompileUnit::DebugDirectivesOnly : DICompileUnit::FullDebug);
         d->pointer_bits = target.bits;
 
         // Describe halide_buffer_t, so that the debugger can show buffers.
@@ -882,9 +892,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
-    if (target.has_feature(Target::DebugSymbols)) {
-        debug_info = DebugInfo::make(*module, input, target, debug_source,
-                                     halide_buffer_t_type, type_t_type, dimension_t_type);
+    if (debug_source || target.has_feature(Target::DebugSymbols)) {
+        init_debug_info(debug_source, &input, false);
     }
 
     // Generate the code for this module.
@@ -1037,10 +1046,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
     llvm::for_each(*module, set_function_attributes_from_halide_target_options);
 
-    if (debug_info) {
-        debug_info->builder->finalize();
-        debug_info.reset();
-    }
+    finalize_debug_info();
 
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
@@ -1069,21 +1075,12 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
 
     if (debug_info && debug_info->function) {
-        DebugInfo &d = *debug_info;
-        std::vector<Metadata *> signature{d.type_of(Int(32))};
+        std::vector<std::pair<bool, Type>> arg_types;
         for (const auto &arg : args) {
-            signature.push_back(arg.is_buffer() ? d.buffer_ptr_type : d.type_of(arg.type));
+            arg_types.emplace_back(arg.is_buffer(), arg.type);
         }
-        DISubprogram *subprogram = d.builder->createFunction(
-            d.file, name, extern_name, d.file, d.function->line,
-            d.builder->createSubroutineType(d.builder->getOrCreateTypeArray(signature)),
-            d.function->line, DINode::FlagPrototyped,
-            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized);
-        function->setSubprogram(subprogram);
-        d.scope = subprogram;
-        d.location = DILocation::get(*context, d.function->line, 1, subprogram);
-        d.location_start = d.function->start;
-        builder->SetCurrentDebugLocation(d.location);
+        const Type return_type = Int(32);
+        begin_debug_function(name, extern_name, nullptr, &return_type, arg_types);
     }
 
     // Null out the destructor block.
@@ -1134,13 +1131,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
         }
     }
 
-    if (debug_info && debug_info->scope) {
-        debug_info->builder->finalizeSubprogram(function->getSubprogram());
-        debug_info->function = nullptr;
-        debug_info->scope = nullptr;
-        debug_info->location = nullptr;
-        builder->SetCurrentDebugLocation(DebugLoc());
-    }
+    end_debug_function();
 
     bool valid = !verifyFunction(*function, &llvm::errs());
     if (!valid) {
@@ -1149,6 +1140,66 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
     internal_assert(valid) << "Generated function does not pass LLVM's verifyFunction.\n";
 
     current_function_args.clear();
+}
+
+void CodeGen_LLVM::init_debug_info(const StmtSourceMap *source, const Module *input, bool line_tables_only) {
+    debug_info = DebugInfo::make(*module, input, target, source, line_tables_only,
+                                 halide_buffer_t_type, type_t_type, dimension_t_type);
+}
+
+void CodeGen_LLVM::begin_debug_function(const std::string &name, const std::string &linkage_name,
+                                        const IRNode *node, const Type *return_type,
+                                        const std::vector<std::pair<bool, Type>> &args) {
+    if (!debug_info) {
+        return;
+    }
+    DebugInfo &d = *debug_info;
+    uint32_t line = 0, column = 1, start = 0;
+    if (node) {
+        const StmtSourceMap::Location *l = d.source->find(node, 0);
+        if (!l) {
+            return;
+        }
+        line = l->line;
+        column = l->column;
+        start = l->start;
+    } else if (d.function) {
+        line = d.function->line;
+        start = d.function->start;
+    } else {
+        return;
+    }
+    std::vector<Metadata *> signature{return_type ? d.type_of(*return_type) : nullptr};
+    for (const auto &[is_buffer, type] : args) {
+        signature.push_back(is_buffer ? d.buffer_ptr_type : d.type_of(type));
+    }
+    DISubprogram *subprogram = d.builder->createFunction(
+        d.file, name, linkage_name, d.file, line,
+        d.builder->createSubroutineType(d.builder->getOrCreateTypeArray(signature)),
+        line, DINode::FlagPrototyped,
+        DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized);
+    function->setSubprogram(subprogram);
+    d.scope = subprogram;
+    d.location = DILocation::get(*context, line, column, subprogram);
+    d.location_start = start;
+    builder->SetCurrentDebugLocation(d.location);
+}
+
+void CodeGen_LLVM::end_debug_function() {
+    if (debug_info && debug_info->scope) {
+        debug_info->builder->finalizeSubprogram(function->getSubprogram());
+        debug_info->function = nullptr;
+        debug_info->scope = nullptr;
+        debug_info->location = nullptr;
+        builder->SetCurrentDebugLocation(DebugLoc());
+    }
+}
+
+void CodeGen_LLVM::finalize_debug_info() {
+    if (debug_info) {
+        debug_info->builder->finalize();
+        debug_info.reset();
+    }
 }
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
@@ -1750,7 +1801,7 @@ void CodeGen_LLVM::sym_pop(const string &name) {
 }
 
 void CodeGen_LLVM::add_debug_variable(const string &name, const Type &type, llvm::Value *value, unsigned arg_no) {
-    if (!debug_info || !debug_info->scope || !value || !builder->GetInsertBlock()) {
+    if (!debug_info || debug_info->line_tables_only || !debug_info->scope || !value || !builder->GetInsertBlock()) {
         return;
     }
     DebugInfo &d = *debug_info;

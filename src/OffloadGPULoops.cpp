@@ -272,7 +272,8 @@ protected:
 
 public:
     InjectGpuOffload(const Target &target, bool any_strict_float,
-                     const std::map<std::string, Function> &env)
+                     const std::map<std::string, Function> &env,
+                     const StmtSourceMap *debug_source)
         : target(target), env(env) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
@@ -301,6 +302,7 @@ public:
 
         for (auto &i : cgdev) {
             i.second->set_any_strict_float(any_strict_float);
+            i.second->set_debug_source(debug_source);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
@@ -409,9 +411,10 @@ class FlattenAliasedAllocations : public IRMutator {
 }  // namespace
 
 Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float,
-                        const std::map<std::string, Function> &env) {
+                        const std::map<std::string, Function> &env,
+                        const StmtSourceMap *debug_source) {
     Stmt flattened = FlattenAliasedAllocations()(s);
-    return InjectGpuOffload(host_target, any_strict_float, env).inject(flattened);
+    return InjectGpuOffload(host_target, any_strict_float, env, debug_source).inject(flattened);
 }
 
 }  // namespace Internal

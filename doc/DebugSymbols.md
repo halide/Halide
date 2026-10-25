@@ -56,9 +56,31 @@ Halide's names contain dots, so quote them in GDB:
 (gdb) print 'input.buffer'->dim[1]
 ```
 
+## GPU device code
+
+CUDA kernels, which are compiled with LLVM, get line information that points
+into the conceptual stmt (the `conceptual_stmt` output), as that is the IR that
+still holds the code of the kernels. It is line information only, like
+`nvcc -lineinfo`, so the kernels are still optimized as usual. Kernels for the
+other GPU APIs get no debug info.
+
+## The html outputs
+
+The `stmt_html` and `conceptual_stmt_html` outputs show the IR exactly as the
+`stmt` and `conceptual_stmt` outputs print it: the line numbers and columns are
+those of these files. The host assembly is compiled with debug info for them
+(even without the `debug_symbols` feature, in which case the other outputs get
+none), and that debug info links each line of IR to the assembly generated for
+it: hover a line to see its assembly, click its line number to go there, and
+click assembly to go to the IR it came from. The assembly pane shows the line
+numbers of the assembly file, without the lines that hold the debug info.
+
+In the `conceptual_stmt_html`, CUDA device code is linked in the same way, but
+only with the `debug_symbols` feature, as kernels are compiled before it is
+known which outputs will be requested.
+
 ## Caveats
 
 - The code is still fully optimized, so many variables are `<optimized out>`,
   and stepping can jump back and forth between lines.
 - DWARF version 4 is emitted, or CodeView on Windows.
-- Code for GPUs and other devices gets no debug info.

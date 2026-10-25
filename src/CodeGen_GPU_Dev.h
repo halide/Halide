@@ -14,9 +14,17 @@
 namespace Halide {
 namespace Internal {
 
+struct StmtSourceMap;
+
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {
     virtual ~CodeGen_GPU_Dev();
+
+    /** Give the kernels compiled into the next module debug info that points
+     * into source, a printing of IR that contains the kernels' Stmts. Only
+     * the LLVM-based code generators do anything with this. */
+    virtual void set_debug_source(const StmtSourceMap *source) {
+    }
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

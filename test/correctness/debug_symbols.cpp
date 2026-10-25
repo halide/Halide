@@ -28,6 +28,88 @@ std::vector<std::string> split_lines(const std::string &text) {
     return lines;
 }
 
+// The text of each line of IR in an html output, in order of their line
+// numbers, which must be consecutive from 1.
+bool html_lines(const std::string &html, std::vector<std::string> &lines) {
+    const std::string line_open = "<div class='l' data-line='";
+    const std::string code_open = "<span class='c'>";
+    for (size_t at = html.find(line_open); at != std::string::npos; at = html.find(line_open, at + 1)) {
+        int number = std::atoi(html.c_str() + at + line_open.size());
+        if (number != (int)lines.size() + 1) {
+            printf("html line %d follows line %d\n", number, (int)lines.size());
+            return false;
+        }
+        size_t c = html.find(code_open, at) + code_open.size();
+        std::string text;
+        int depth = 1;
+        while (depth > 0) {
+            if (html.compare(c, 5, "<span") == 0) {
+                depth++;
+                c = html.find('>', c) + 1;
+            } else if (html.compare(c, 7, "</span>") == 0) {
+                depth--;
+                c += 7;
+            } else if (html.compare(c, 5, "&amp;") == 0) {
+                text += '&';
+                c += 5;
+            } else if (html.compare(c, 4, "&lt;") == 0) {
+                text += '<';
+                c += 4;
+            } else if (html.compare(c, 4, "&gt;") == 0) {
+                text += '>';
+                c += 4;
+            } else {
+                text += html[c++];
+            }
+        }
+        lines.push_back(text);
+    }
+    return true;
+}
+
+bool check_html(const std::string &html_path, const std::string &stmt_path) {
+    const std::string html = read_file(html_path);
+    const std::vector<std::string> stmt_lines = split_lines(read_file(stmt_path));
+    std::vector<std::string> lines;
+    if (!html_lines(html, lines)) {
+        return false;
+    }
+    if (lines != stmt_lines) {
+        for (size_t i = 0; i < std::max(lines.size(), stmt_lines.size()); i++) {
+            std::string a = i < lines.size() ? lines[i] : "(none)";
+            std::string b = i < stmt_lines.size() ? stmt_lines[i] : "(none)";
+            if (a != b) {
+                printf("%s line %d is\n  %s\ninstead of\n  %s\n", html_path.c_str(), (int)i + 1, a.c_str(), b.c_str());
+                break;
+            }
+        }
+        return false;
+    }
+    // Some IR lines are linked to their assembly.
+    const std::string asm_lines = "const asmIRLines = [";
+    size_t at = html.find(asm_lines);
+    if (html.find("data-asm='1'") == std::string::npos || at == std::string::npos) {
+        printf("%s links no IR to assembly\n", html_path.c_str());
+        return false;
+    }
+    // ... and the assembly is linked to lines that exist.
+    std::istringstream in(html.substr(at + asm_lines.size(), html.find(']', at) - at - asm_lines.size()));
+    int linked = 0;
+    for (std::string n; std::getline(in, n, ',');) {
+        int line = std::atoi(n.c_str());
+        if (line < 0 || line > (int)lines.size()) {
+            printf("%s links assembly to line %d of %d\n", html_path.c_str(), line, (int)lines.size());
+            return false;
+        }
+        linked += line > 0;
+    }
+    if (linked == 0) {
+        printf("%s links no assembly to IR\n", html_path.c_str());
+        return false;
+    }
+    return true;
+}
+
 size_t count(const std::string &text, const std::string &needle) {
     size_t n = 0;
     for (size_t at = text.find(needle); at != std::string::npos; at = text.find(needle, at + 1)) {
@@ -159,6 +241,120 @@ int main(int argc, char **argv) {
             int correct = in(x, y) * 3 - 11;
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
+                return 1;
+            }
+        }
+    }
+
+    // The source maps hold the text of the stmt files.
+    {
+        Module m = f.compile_to_module({input, scale, offset}, "debug_symbols", target);
+        std::ostringstream module_text, conceptual_text;
+        module_text << m;
+        conceptual_text << m.get_conceptual_stmt();
+        if (Internal::print_with_source_map(m).text != module_text.str() ||
+            Internal::print_with_source_map(m.get_conceptual_stmt()).text != conceptual_text.str()) {
+            printf("Source map text differs from the printed IR\n");
+            return 1;
+        }
+    }
+
+    // The html outputs show the IR exactly as the stmt files do, and link it
+    // to the assembly. Without debug_symbols, only the html has debug info.
+    {
+        Func g("g"), h("h");
+        RDom r(0, 10);
+        g(x, y) = x + y;
+        g(r, y) += select(g(r, y) > 3, g(r, y) / 2, offset);
+        h(x, y) = g(x, y) * scale;
+        g.compute_at(h, y);
+        h.specialize(scale > 2).vectorize(x, 4);
+        h.parallel(y);
+
+        const std::string html_path = dir + "debug_symbols_html.stmt.html";
+        const std::string conceptual_html_path = dir + "debug_symbols_html.conceptual.stmt.html";
+        const std::string html_stmt_path = dir + "debug_symbols_html.stmt";
+        const std::string conceptual_stmt_path = dir + "debug_symbols_html.conceptual.stmt";
+        const std::string html_object_path = dir + "debug_symbols_html.o";
+        for (const auto &p : {html_path, conceptual_html_path, html_stmt_path, conceptual_stmt_path, html_object_path}) {
+            Internal::ensure_no_file_exists(p);
+        }
+        h.compile_to({{OutputFileType::stmt_html, html_path},
+                      {OutputFileType::conceptual_stmt_html, conceptual_html_path},
+                      {OutputFileType::stmt, html_stmt_path},
+                      {OutputFileType::conceptual_stmt, conceptual_stmt_path},
+                      {OutputFileType::object, html_object_path}},
+                     {scale, offset}, "debug_symbols_html", get_host_target());
+        if (!check_html(html_path, html_stmt_path) ||
+            !check_html(conceptual_html_path, conceptual_stmt_path)) {
+            return 1;
+        }
+        // The object did not ask for debug info.
+        const std::string object = read_file(html_object_path);
+        if (object.find(".debug_line") != std::string::npos ||
+            object.find("debug_symbols_html.stmt") != std::string::npos) {
+            printf("The object has debug info without debug_symbols\n");
+            return 1;
+        }
+    }
+
+    // GPU device code compiled with LLVM gets debug info that points into the
+    // conceptual stmt, which is where the code of its kernels is.
+    {
+        ImageParam gpu_input(Float(32), 2, "gpu_input");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Func blur("blur"), gpu_out("gpu_out");
+        blur(x, y) = (gpu_input(x, y) + gpu_input(x + 1, y)) / 2;
+        gpu_out(x, y) = select(blur(x, y) > 0.5f, blur(x, y) * 3.0f, blur(x, y + 1));
+        gpu_out.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+        blur.compute_at(gpu_out, xo).gpu_threads(x, y);
+
+        const std::string ptx_path = dir + "debug_symbols_gpu.ptx";
+        const std::string conceptual_stmt_path = dir + "debug_symbols_gpu.conceptual.stmt";
+        const std::string conceptual_html_path = dir + "debug_symbols_gpu.conceptual.stmt.html";
+        const std::string gpu_object_path = dir + "debug_symbols_gpu.o";
+        for (const auto &p : {ptx_path, conceptual_stmt_path, conceptual_html_path, gpu_object_path}) {
+            Internal::ensure_no_file_exists(p);
+        }
+        bool compiled = true;
+        try {
+            gpu_out.compile_to({{OutputFileType::device_code, ptx_path},
+                                {OutputFileType::conceptual_stmt, conceptual_stmt_path},
+                                {OutputFileType::conceptual_stmt_html, conceptual_html_path},
+                                {OutputFileType::object, gpu_object_path}},
+                               {gpu_input}, "debug_symbols_gpu", target.with_feature(Target::CUDA));
+        } catch (const Halide::CompileError &e) {
+            printf("[SKIP] No CUDA backend: %s\n", e.what());
+            compiled = false;
+        }
+        if (compiled) {
+            const std::string ptx = read_file(ptx_path);
+            const std::vector<std::string> conceptual = split_lines(read_file(conceptual_stmt_path));
+            if (ptx.find(", debug") != std::string::npos) {
+                printf("The PTX asks for debug compilation\n");
+                return 1;
+            }
+            std::regex loc_re(R"(\.loc\s+\d+ (\d+) (\d+))");
+            int locs = 0;
+            for (std::sregex_iterator it(ptx.begin(), ptx.end(), loc_re), end; it != end; ++it) {
+                int line = std::stoi((*it)[1]), column = std::stoi((*it)[2]);
+                if (line == 0 || column == 0) {
+                    continue;
+                }
+                if (line > (int)conceptual.size() || column > (int)conceptual[line - 1].size() ||
+                    conceptual[line - 1][column - 1] == ' ') {
+                    printf("PTX location %d:%d does not point at the conceptual stmt's text\n", line, column);
+                    return 1;
+                }
+                locs++;
+            }
+            if (locs == 0) {
+                printf("The PTX has no locations\n");
+                return 1;
+            }
+            const std::string html = read_file(conceptual_html_path);
+            if (html.find("data-ir='") == std::string::npos || html.find("data-device='1'") == std::string::npos) {
+                printf("The html does not link device code to the IR\n");
                 return 1;
             }
         }

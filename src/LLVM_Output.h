@@ -28,10 +28,11 @@ typedef llvm::raw_pwrite_stream LLVMOStream;
 struct StmtSourceMap;
 }  // namespace Internal
 
-/** Generate an LLVM module. For targets with the DebugSymbols feature, the
- * debug info points into debug_source, which must be a printing of the module
- * (see print_with_source_map). If it is null, the module is printed here, and
- * the debug info refers to a file named after the module. */
+/** Generate an LLVM module. If debug_source is set, it gets debug info that
+ * points into it, which must be a printing of the module (see
+ * print_with_source_map). Otherwise, for targets with the DebugSymbols
+ * feature, the module is printed here, and the debug info refers to a file
+ * named after the module. */
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context,
                                                             const Internal::StmtSourceMap *debug_source = nullptr);
 

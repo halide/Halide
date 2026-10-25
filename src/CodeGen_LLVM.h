@@ -69,10 +69,10 @@ public:
 
     ~CodeGen_LLVM() override;
 
-    /** For targets with the DebugSymbols feature: the printed Module that
-     * debug info should point into, which must be a printing of the Module
-     * passed to compile(). If null, compile() prints the Module itself, and
-     * the debug info refers to a file named after the Module. */
+    /** If set, compile() emits debug info that points into this printed
+     * Module, which must be a printing of the Module passed to it. If null,
+     * and the target has the DebugSymbols feature, compile() prints the
+     * Module itself, and the debug info refers to a file named after it. */
     const StmtSourceMap *debug_source = nullptr;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
@@ -207,6 +207,25 @@ protected:
      * arg_no above zero makes it the arg_no-th parameter of the function. */
     void add_debug_variable(const std::string &name, const Type &type, llvm::Value *value, unsigned arg_no = 0);
 
+    /** Set up debug_info for the module being generated, pointing into
+     * source, or if that is null, into a printing of input. With
+     * line_tables_only, it only says which code came from where. */
+    void init_debug_info(const StmtSourceMap *source, const Module *input, bool line_tables_only);
+
+    /** If there is debug info, give the function being generated a
+     * subprogram, starting at where node was printed. If node is null, it is
+     * the function of the Module being compiled. A null return_type is void.
+     * The args say whether each argument is a buffer, and its type. */
+    void begin_debug_function(const std::string &name, const std::string &linkage_name,
+                              const IRNode *node, const Type *return_type,
+                              const std::vector<std::pair<bool, Type>> &args);
+
+    /** Finish the subprogram of the function being generated, if any. */
+    void end_debug_function();
+
+    /** Finish the debug info of the module being generated, if any. */
+    void finalize_debug_info();
+
     /** Emit any target-specific fence required after non-temporal stores. */
     virtual void emit_streaming_store_fence();
 
@@ -267,8 +286,8 @@ protected:
     llvm::Type *void_t = nullptr, *i1_t = nullptr, *i8_t = nullptr, *i16_t = nullptr, *i32_t = nullptr, *i64_t = nullptr, *f16_t = nullptr, *f32_t = nullptr, *f64_t = nullptr;
     llvm::PointerType *ptr_t = nullptr;
     llvm::StructType *halide_buffer_t_type = nullptr,
-                     *type_t_type,
-                     *dimension_t_type,
+                     *type_t_type = nullptr,
+                     *dimension_t_type = nullptr,
                      *metadata_t_type = nullptr,
                      *argument_t_type = nullptr,
                      *scalar_value_t_type = nullptr,

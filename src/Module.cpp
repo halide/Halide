@@ -614,10 +614,22 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
 
     TemporaryFileDir temp_assembly_dir;
 
+    const bool debug_symbols = target().has_feature(Target::DebugSymbols);
+    const bool html = contains(output_files, OutputFileType::stmt_html) ||
+                      contains(output_files, OutputFileType::conceptual_stmt_html);
+
     std::string assembly_path;
     if (contains(output_files, OutputFileType::assembly)) {
         assembly_path = output_files.at(OutputFileType::assembly);
-    } else if (contains(output_files, OutputFileType::stmt_html) || contains(output_files, OutputFileType::conceptual_stmt_html)) {
+    }
+
+    // The html shows which assembly came from which line of IR, according to
+    // the debug info in it. Without the debug_symbols feature, only that
+    // assembly gets debug info, so it can't double as the assembly output.
+    std::string html_assembly_path;
+    if (html && debug_symbols && !assembly_path.empty()) {
+        html_assembly_path = assembly_path;
+    } else if (html) {
         // We need assembly in order to generate stmt_html, but the user doesn't
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
@@ -625,21 +637,19 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::string path;
         if (contains(output_files, OutputFileType::stmt_html)) {
             path = output_files.at(OutputFileType::stmt_html);
-        } else if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
-            path = output_files.at(OutputFileType::conceptual_stmt_html);
         } else {
-            internal_error << "A html file path is required to determine the output of the temporary assembly file.\n";
+            path = output_files.at(OutputFileType::conceptual_stmt_html);
         }
-        assembly_path = temp_assembly_dir.add_temp_file(path,
-                                                        get_output_info(target()).at(OutputFileType::assembly).extension,
-                                                        target());
-        debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
+        html_assembly_path = temp_assembly_dir.add_temp_file(path,
+                                                             get_output_info(target()).at(OutputFileType::assembly).extension,
+                                                             target());
+        debug(1) << "Module.compile(): creating temp file for assembly output at " << html_assembly_path << "\n";
     }
 
     // Debug info points into the stmt output. If that isn't requested, it
     // points to where it would go if it were: next to the compiled code.
     std::optional<Internal::StmtSourceMap> debug_source;
-    if (target().has_feature(Target::DebugSymbols)) {
+    if (debug_symbols || html) {
         debug_source = Internal::print_with_source_map(*this);
         if (contains(output_files, OutputFileType::stmt)) {
             debug_source->path = output_files.at(OutputFileType::stmt);
@@ -647,7 +657,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             const auto info = get_output_info(target());
             for (OutputFileType t : {OutputFileType::object, OutputFileType::static_library,
                                      OutputFileType::assembly, OutputFileType::bitcode,
-                                     OutputFileType::llvm_assembly}) {
+                                     OutputFileType::llvm_assembly, OutputFileType::stmt_html}) {
                 if (contains(output_files, t)) {
                     std::string path = output_files.at(t);
                     const std::string &extension = info.at(t).extension;
@@ -658,15 +668,32 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
                     break;
                 }
             }
+            if (debug_source->path.empty()) {
+                debug_source->path = name() + info.at(OutputFileType::stmt).extension;
+            }
         }
+    }
+
+    std::optional<Internal::StmtSourceMap> conceptual_source;
+    if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+        conceptual_source = Internal::print_with_source_map(get_conceptual_stmt());
     }
 
     if (contains(output_files, OutputFileType::object) || contains(output_files, OutputFileType::assembly) ||
         contains(output_files, OutputFileType::bitcode) || contains(output_files, OutputFileType::llvm_assembly) ||
-        contains(output_files, OutputFileType::static_library) || !assembly_path.empty()) {
+        contains(output_files, OutputFileType::static_library) || !html_assembly_path.empty()) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(
             compile_module_to_llvm_module(*this, context, debug_source ? &*debug_source : nullptr));
+
+        if (!html_assembly_path.empty() && html_assembly_path != assembly_path) {
+            debug(1) << "Module.compile(): assembly for html " << html_assembly_path << "\n";
+            auto out = make_raw_fd_ostream(html_assembly_path);
+            compile_llvm_module_to_assembly(*llvm_module, *out);
+        }
+        if (!debug_symbols) {
+            llvm::StripDebugInfo(*llvm_module);
+        }
 
         if (contains(output_files, OutputFileType::object)) {
             const auto &f = output_files.at(OutputFileType::object);
@@ -695,7 +722,6 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             Target base_target(target().os, target().arch, target().bits, target().processor_tune);
             create_static_library(temp_object_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
-        // Don't use contains() here, we might need assembly output for stmt_html
         if (!assembly_path.empty()) {
             debug(1) << "Module.compile(): assembly " << assembly_path << "\n";
             auto out = make_raw_fd_ostream(assembly_path);
@@ -725,19 +751,21 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::conceptual_stmt)) {
         debug(1) << "Module.compile(): conceptual_stmt " << output_files.at(OutputFileType::conceptual_stmt) << "\n";
         std::ofstream file(output_files.at(OutputFileType::conceptual_stmt));
-        file << get_conceptual_stmt();
+        if (conceptual_source) {
+            file << conceptual_source->text;
+        } else {
+            file << get_conceptual_stmt();
+        }
     }
     if (contains(output_files, OutputFileType::stmt_html)) {
-        internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
         Internal::print_to_stmt_html(output_files.at(OutputFileType::stmt_html),
-                                     *this, assembly_path);
+                                     *this, html_assembly_path, *debug_source);
     }
     if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
-        internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html) << "\n";
         Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
-                                                *this, assembly_path);
+                                                *this, html_assembly_path, *debug_source, *conceptual_source);
     }
     if (contains(output_files, OutputFileType::device_code)) {
         debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
