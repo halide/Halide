@@ -68,11 +68,15 @@ features.
 
 ## GPU device code
 
-CUDA kernels, which are compiled with LLVM, get line information that points
-into the conceptual stmt (the `conceptual_stmt` output), as that is the IR that
-still holds the code of the kernels. It is line information only, like
-`nvcc -lineinfo`, so the kernels are still optimized as usual. This is the case
-with either feature. Kernels for the other GPU APIs get no debug info.
+GPU kernels get line information that points into the conceptual stmt (the
+`conceptual_stmt` output), as that is the IR that still holds the code of the
+kernels. This is the case with either feature.
+
+- CUDA kernels, which are compiled with LLVM, get line information only, like
+  `nvcc -lineinfo`, so they are still optimized as usual.
+- The C-like source of OpenCL, Metal and D3D12 kernels gets `#line` directives,
+  which the compilers of these APIs use in their messages and debug info.
+- Kernels for the other GPU APIs get no debug info.
 
 ## The html outputs
 
@@ -85,9 +89,10 @@ it: hover a line to see its assembly, click its line number to go there, and
 click assembly to go to the IR it came from. The assembly pane shows the line
 numbers of the assembly file, without the lines that hold the debug info.
 
-In the `conceptual_stmt_html`, CUDA device code is linked in the same way, but
-only with one of the debug symbols features, as kernels are compiled before it
-is known which outputs will be requested.
+In the `conceptual_stmt_html`, the device code of CUDA, OpenCL, Metal and D3D12
+kernels is linked in the same way, but only with one of the debug symbols
+features, as kernels are compiled before it is known which outputs will be
+requested.
 
 ## Caveats
 

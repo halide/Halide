@@ -474,6 +474,64 @@ int main(int argc, char **argv) {
         }
     }
 
+    // C-like GPU source, e.g. OpenCL C, gets #line directives that say which
+    // line of the conceptual stmt each line was made from.
+    {
+        ImageParam cl_input(Float(32), 2, "cl_input");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Func cl_blur("cl_blur"), cl_out("cl_out");
+        cl_blur(x, y) = (cl_input(x, y) + cl_input(x + 1, y)) / 2;
+        cl_out(x, y) = select(cl_blur(x, y) > 0.5f, cl_blur(x, y) * 3.0f, cl_blur(x, y + 1));
+        cl_out.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+        cl_blur.compute_at(cl_out, xo).gpu_threads(x, y);
+
+        const std::string cl_source_path = dir + "debug_symbols_cl.cl";
+        const std::string cl_conceptual_path = dir + "debug_symbols_cl.conceptual.stmt";
+        const std::string cl_html_path = dir + "debug_symbols_cl.conceptual.stmt.html";
+        for (bool with_debug_symbols : {false, true}) {
+            for (const auto &p : {cl_source_path, cl_conceptual_path, cl_html_path}) {
+                Internal::ensure_no_file_exists(p);
+            }
+            Target cl_target = get_host_target().with_feature(Target::OpenCL);
+            if (with_debug_symbols) {
+                cl_target = cl_target.with_feature(Target::DebugSymbols);
+            }
+            cl_out.compile_to({{OutputFileType::device_code, cl_source_path},
+                               {OutputFileType::conceptual_stmt, cl_conceptual_path},
+                               {OutputFileType::conceptual_stmt_html, cl_html_path}},
+                              {cl_input}, "debug_symbols_cl", cl_target);
+            const std::string source = read_file(cl_source_path);
+            const std::vector<std::string> conceptual = split_lines(read_file(cl_conceptual_path));
+            std::regex line_re(R"re(#line (\d+) "([^"]*)")re");
+            int directives = 0;
+            for (std::sregex_iterator it(source.begin(), source.end(), line_re), end; it != end; ++it) {
+                directives++;
+                const std::string file = (*it)[2];
+                if (file != "debug_symbols_cl.conceptual.stmt") {
+                    continue;
+                }
+                const int line = std::stoi((*it)[1]);
+                if (line < 1 || line > (int)conceptual.size() ||
+                    conceptual[line - 1].find_first_not_of(' ') == std::string::npos) {
+                    printf("#line %d does not point at a line of the conceptual stmt\n", line);
+                    return 1;
+                }
+            }
+            if ((directives > 0) != with_debug_symbols) {
+                printf("%d #line directives %s debug_symbols\n", directives, with_debug_symbols ? "with" : "without");
+                return 1;
+            }
+            const std::string html = read_file(cl_html_path);
+            const bool linked = html.find("data-ir='") != std::string::npos &&
+                                html.find("data-device='1'") != std::string::npos;
+            if (linked != with_debug_symbols) {
+                printf("The html %s the OpenCL C to the IR %s debug_symbols\n",
+                       linked ? "links" : "does not link", with_debug_symbols ? "with" : "without");
+                return 1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

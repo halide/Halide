@@ -5,6 +5,7 @@
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "IRVisitor.h"
 
 namespace Halide {
@@ -276,6 +277,60 @@ std::string CodeGen_GPU_C::print_extern_call(const Call *op) {
     debug(3) << "Writing out call to " << name << "\n";
     rhs << name << "(" << with_commas(args) << ")";
     return rhs.str();
+}
+
+std::string add_line_directives(const std::string &source, const std::vector<IRPrinterLocation> &locations,
+                                const StmtSourceMap &ir, const std::string &source_name) {
+    const StmtSourceMap printed = source_map_of(source, locations);
+    const std::vector<const StmtSourceMap::Location *> in_ir = map_locations(printed, ir);
+
+    std::vector<std::string_view> lines;
+    for (size_t start = 0; start < source.size();) {
+        size_t end = std::min(source.find('\n', start), source.size());
+        lines.emplace_back(std::string_view(source).substr(start, end - start));
+        start = end + 1;
+    }
+
+    // The line of ir each line was made from: that of the innermost Stmt it
+    // was printed for. Visit enclosing Stmts first, so that the Stmts in them
+    // overwrite their lines.
+    std::vector<uint32_t> ir_line(lines.size() + 1, 0);
+    std::vector<uint32_t> order(printed.locations.size());
+    for (uint32_t i = 0; i < (uint32_t)order.size(); i++) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](uint32_t i, uint32_t j) {
+        const StmtSourceMap::Location &a = printed.locations[i], &b = printed.locations[j];
+        return a.start != b.start ? a.start < b.start : a.end > b.end;
+    });
+    for (uint32_t i : order) {
+        const StmtSourceMap::Location &l = printed.locations[i];
+        if (!in_ir[i]) {
+            continue;
+        }
+        for (uint32_t line = l.line; line <= l.end_line && line <= lines.size(); line++) {
+            ir_line[line] = in_ir[i]->line;
+        }
+    }
+
+    // A #line directive sets the number of the next line, and the lines after
+    // count on from it.
+    std::ostringstream out;
+    uint32_t lines_out = 0, implied = 0;
+    for (size_t i = 0; i < lines.size(); i++) {
+        const uint32_t want = ir_line[i + 1];
+        if (want && implied != want) {
+            out << "#line " << want << " \"" << ir.path << "\"\n";
+            lines_out++;
+        } else if (!want && implied) {
+            out << "#line " << lines_out + 2 << " \"" << source_name << "\"\n";
+            lines_out++;
+        }
+        out << lines[i] << "\n";
+        lines_out++;
+        implied = want ? want + 1 : 0;
+    }
+    return std::move(out).str();
 }
 
 }  // namespace Internal

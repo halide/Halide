@@ -15,6 +15,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Simplify.h"
 #include "StrictifyFloat.h"
 
@@ -53,6 +54,10 @@ public:
     void dump() override;
 
     std::string print_gpu_name(const std::string &name) override;
+
+    void set_debug_source(const StmtSourceMap *source) override {
+        debug_source = source;
+    }
 
     std::string api_unique_name() override {
         return "d3d12compute";
@@ -179,6 +184,11 @@ protected:
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
+
+    // With debug info: what it points into, and where the Stmts of the
+    // kernels were printed.
+    const StmtSourceMap *debug_source = nullptr;
+    std::vector<IRPrinterLocation> kernel_locations;
     CodeGen_D3D12Compute_C d3d12compute_c;
 };
 
@@ -447,7 +457,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
            << " = " << simt_intrinsic(loop->name) << ";\n";
 
-    loop->body.accept(this);
+    print_stmt(loop->body);
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Ramp *op) {
@@ -1445,7 +1455,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
         // Already handled
         internal_assert(!groupshared_allocations.contains(op->name));
         groupshared_allocations.push(op->name);
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -1475,7 +1485,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -1729,7 +1739,9 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
 
     // We need to scalarize/de-predicate any loads/stores, since HLSL does not
     // support predication.
+    Stmt original = s;
     s = scalarize_predicated_loads_stores(s);
+    d3d12compute_c.remember_replaced(original, s);
 
     debug(2) << "CodeGen_D3D12Compute_Dev: after removing predication:\n"
              << s;
@@ -1762,7 +1774,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     debug(2) << "Adding D3D12Compute kernel " << name << "\n";
 
     // HLSL has no bool vector type; lower bool vectors to integer masks.
+    Stmt original = s;
     s = eliminate_bool_vectors(s);
+    remember_replaced(original, s);
 
     // Figure out which arguments should be passed in constant.
     // Such arguments should be:
@@ -1862,7 +1876,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
 
     FindSharedAllocationsAndUniquify fsa;
+    original = s;
     s = fsa(s);
+    remember_replaced(original, s);
 
     const int sm = target.get_d3d12compute_capability_lower_bound();
     uint32_t total_shared_bytes = 0;
@@ -2026,7 +2042,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 : renames(r) {
             }
         };
+        original = s;
         s = RenameKernelArgs(dxc_renames)(s);
+        remember_replaced(original, s);
 
         // Declare all resources globally with explicit register bindings and
         // put scalar uniforms in a per-kernel constant buffer. The runtime binds:
@@ -2169,6 +2187,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+    kernel_locations.clear();
+    d3d12compute_c.recorded_locations = debug_source ? &kernel_locations : nullptr;
 
     // Emit SM version marker for runtime to select FXC (SM 5.1) vs DXC (SM 6.x).
     // Emitted as a real #define (not a comment) so generated shader code can
@@ -2280,6 +2300,9 @@ vector<char> CodeGen_D3D12Compute_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "D3D12Compute kernel:\n"
              << str << "\n";
+    if (debug_source) {
+        str = add_line_directives(str, kernel_locations, *debug_source, "halide_d3d12compute_kernels");
+    }
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

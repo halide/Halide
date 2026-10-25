@@ -15,6 +15,7 @@
 #include "Float16.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -50,6 +51,10 @@ public:
     void dump() override;
 
     std::string print_gpu_name(const std::string &name) override;
+
+    void set_debug_source(const StmtSourceMap *source) override {
+        debug_source = source;
+    }
 
     std::string api_unique_name() override {
         return "opencl";
@@ -140,6 +145,11 @@ protected:
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
+
+    // With debug info: what it points into, and where the Stmts of the
+    // kernels were printed.
+    const StmtSourceMap *debug_source = nullptr;
+    std::vector<IRPrinterLocation> kernel_locations;
     CodeGen_OpenCL_C clc;
 };
 
@@ -248,7 +258,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
-        loop->body.accept(this);
+        print_stmt(loop->body);
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
@@ -786,7 +796,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 
     if (is_gpu_shared(op->memory_type)) {
         // Already handled
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -817,7 +827,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -924,7 +934,9 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
 
     // We need to scalarize/de-predicate any loads/stores, since OpenCL does not
     // support predication.
+    Stmt original = s;
     s = scalarize_predicated_loads_stores(s);
+    clc.remember_replaced(original, s);
 
     debug(2) << "CodeGen_OpenCL_Dev: after removing predication: \n"
              << s;
@@ -957,13 +969,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     debug(2) << "Adding OpenCL kernel " << name << "\n";
 
     debug(2) << "Eliminating bool vectors\n";
+    Stmt original = s;
     s = eliminate_bool_vectors(s);
+    remember_replaced(original, s);
     debug(2) << "After eliminating bool vectors:\n"
              << s << "\n";
 
     // We need to scalarize/de-predicate any loads/stores, since OpenCL does not
     // support predication.
+    original = s;
     s = scalarize_predicated_loads_stores(s);
+    remember_replaced(original, s);
 
     debug(2) << "After removing predication: \n"
              << s;
@@ -1128,6 +1144,8 @@ void CodeGen_OpenCL_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+    kernel_locations.clear();
+    clc.recorded_locations = debug_source ? &kernel_locations : nullptr;
 
     const Target &target = clc.get_target();
 
@@ -1180,6 +1198,9 @@ vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "OpenCL kernel:\n"
              << str << "\n";
+    if (debug_source) {
+        str = add_line_directives(str, kernel_locations, *debug_source, "halide_opencl_kernels");
+    }
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

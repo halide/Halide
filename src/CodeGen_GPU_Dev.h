@@ -15,6 +15,14 @@ namespace Halide {
 namespace Internal {
 
 struct StmtSourceMap;
+struct IRPrinterLocation;
+
+/** Add #line directives to C-like device source, which say which line of ir
+ * (a printing of IR that holds the kernels' Stmts) each line of it was made
+ * from, according to where the Stmts were printed in it (locations). Lines
+ * made from nothing in ir go back to their own line numbers in source_name. */
+std::string add_line_directives(const std::string &source, const std::vector<IRPrinterLocation> &locations,
+                                const StmtSourceMap &ir, const std::string &source_name);
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {

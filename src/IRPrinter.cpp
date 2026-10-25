@@ -664,6 +664,14 @@ StmtSourceMap print_with_source_map(const Module &m) {
     return make_source_map(markup, record, &m);
 }
 
+StmtSourceMap source_map_of(std::string text, const std::vector<IRPrinterLocation> &locations) {
+    MarkupStreambuf markup;
+    markup.text = std::move(text);
+    PrintRecord record;
+    record.locations = locations;
+    return make_source_map(markup, record, nullptr);
+}
+
 StmtSourceMap print_with_source_map(const Stmt &s) {
     MarkupStreambuf markup;
     std::ostream stream(&markup);

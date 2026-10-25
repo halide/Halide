@@ -54,7 +54,6 @@ function addHighlight(selector) {
     });
 }
 
-addHighlight('#device-code-pane');
 
 /* Scroll to code programmatically. Unused at the moment, but could be great for jumping back from assembly/device code to the stmt. */
 function scrollToCode(id) {  // eslint-disable-line no-unused-vars
@@ -250,6 +249,25 @@ function escapeHTML(text) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// The row at which each label of the assembly is defined.
+const asmLabelRows = new Map();
+asmLines.forEach((line, i) => {
+    const m = /^([\w.$]+):/.exec(line);
+    if (m) {
+        asmLabelRows.set(m[1], i);
+    }
+});
+
+// The labels highlighted by clicking them, with the classes of their colors.
+const asmLabelHighlights = new Map();
+
+// A label that is defined in the assembly, which links to its definition.
+function labelHTML(name) {
+    const cls = asmLabelHighlights.get(name);
+    return '<span class="shj-syn-label asm-label' + (cls ? ' ' + cls : '') + '" data-label="' + name + '">' +
+           escapeHTML(name) + '</span>';
+}
+
 // Syntax highlights a line of assembly, with the classes of the speed-highlight
 // library that the stylesheet colors.
 function asmToHTML(line) {
@@ -276,7 +294,9 @@ function asmToHTML(line) {
     const parts = /^(\s*)(\S*)(.*)$/s.exec(code);
     let out = parts[1];
     const head = parts[2], tail = parts[3];
-    if (head) {
+    if (head.endsWith(':') && asmLabelRows.has(head.slice(0, -1))) {
+        out += labelHTML(head.slice(0, -1)) + ':';
+    } else if (head) {
         out += span(head.endsWith(':') ? 'label' : head[0] === '.' ? 'asm-directive' : 'instruction', head);
     }
     // The operands.
@@ -296,6 +316,8 @@ function asmToHTML(line) {
                 out += span('register', w);
             } else if (c === asmSyntax.immediate || /\d/.test(c) || (c === '-' && w.length > 1)) {
                 out += span('num', w);
+            } else if (asmLabelRows.has(w)) {
+                out += labelHTML(w);
             } else if (/^(\.L|\$L|LBB)/.test(w)) {
                 out += span('label', w);
             } else if (isRegister(w)) {
@@ -355,6 +377,134 @@ function scrollToHostAsm(i) {
 /* The device code. Its lines have their line number in data-n, and the line
  * of IR they were generated for in data-ir, if any. */
 const devicePane = document.getElementById('device-code-pane');
+
+// Highlights CUDA device code (PTX): the kernels can be collapsed, the types
+// of instructions are colored, and registers, predicates and labels can be
+// highlighted.
+function highlightPTX(pane) {
+    const code = pane.querySelector('div.code.ptx');
+    if (!code) {
+        return;
+    }
+    let uid = 0;
+    const ids = new Map();
+    // The names come from the escaped text of the line.
+    const variable = (name, tooltip) => {
+        if (!ids.has(name)) {
+            ids.set(name, uid++);
+        }
+        return '<b class="variable matched" id="' + ids.get(name) + '-' + (uid++) + '"' +
+               (tooltip ? ' title="' + tooltip + '"' : '') + '>' + name + '</b>';
+    };
+    const typeSuffixes = [
+        ['f32', 'OpF32'], ['f64', 'OpF64'],
+        ['s8', 'OpI8'], ['s16', 'OpI16'], ['s32', 'OpI32'], ['s64', 'OpI64'],
+        ['u8', 'OpI8'], ['u16', 'OpI16'], ['u32', 'OpI32'], ['u64', 'OpI64'],
+        ['b8', 'OpB8'], ['b16', 'OpB16'], ['b32', 'OpB32'], ['b64', 'OpB64'],
+        ['v2', 'OpVec2'], ['v4', 'OpVec4']];
+
+    let html = '';
+    let kernelId = -1, braceDepth = 0, inSignature = false;
+    for (const el of Array.from(code.children)) {
+        const attributes = ' data-n="' + el.dataset.n + '"' + (el.dataset.ir ? ' data-ir="' + el.dataset.ir + '"' : '');
+        let text = el.textContent;
+        if (text === '' || text === '\t') {
+            html += '<span class="line"' + attributes + '></span>\n';
+            continue;
+        }
+        // The first tab becomes four spaces.
+        const indent = text[0] === '\t';
+        if (indent) {
+            text = text.slice(1);
+        }
+        let line = escapeHTML(text);
+        let openIndent = false;
+        if (text.startsWith('.visible .entry')) {
+            const parts = text.split(' ');
+            if (parts.length === 3) {
+                inSignature = true;
+                braceDepth = 0;
+                kernelId = uid++;
+                html += '<input type="checkbox" id="show-hide-btn-' + kernelId + '" class="show-hide-btn"/>' +
+                        '<label for="show-hide-btn-' + kernelId + '">';
+                line = '<span class="keyword">.visible</span> <span class="keyword">.entry</span> ' +
+                       escapeHTML(parts[2].slice(0, -1)) + ' <span class="matched">(</span>';
+            }
+        } else if (text.startsWith(')') && inSignature) {
+            inSignature = false;
+            line = '<span class="matched">)</span>' + escapeHTML(text.slice(1));
+        } else if (text.startsWith('{') && braceDepth <= 0) {
+            html += '<span class="matched OpeningBrace">{</span>';
+            braceDepth = 1;
+            openIndent = true;
+            line = escapeHTML(text.slice(1));
+        } else if (text.startsWith('{') && braceDepth) {
+            braceDepth++;
+        } else if (text.startsWith('}') && --braceDepth <= 0) {
+            html += '</div>';
+            line = '<span class="matched">}</span>' + escapeHTML(text.slice(1));
+            braceDepth = 0;
+        }
+
+        for (const [suffix, cls] of typeSuffixes) {
+            line = line.split('.' + suffix).join('.<span class="' + cls + '">' + suffix + '</span>');
+        }
+        line = line.split('ld.').join('<span class="Memory">ld</span>.');
+        line = line.split('st.').join('<span class="Memory">st</span>.');
+
+        let idx = line.indexOf('//');
+        if (idx >= 0) {
+            line = line.slice(0, idx) + '<span class="Comment">' + line.slice(idx) + '</span>';
+        }
+        // Predicated instructions
+        if (line[0] === '@' && indent) {
+            idx = line.indexOf(' ');
+            line = '<span class="Pred">@' + variable(line.slice(1, idx), 'bool') + '</span>' + line.slice(idx);
+        }
+        // Labels (depending on the LLVM version with or without a dollar)
+        if (line.startsWith('$L_') && !indent && (idx = line.indexOf(':')) >= 0) {
+            line = '<span class="Label">' + variable(line.slice(0, idx), 'Label') + '</span>:' + line.slice(idx + 1);
+        }
+        // Operands
+        if ((idx = line.indexOf(' \t')) >= 0 && line.endsWith(';')) {
+            const operands = line.slice(idx + 2, -1).split(', ').map(op => {
+                if (op.endsWith('}')) {
+                    return variable(op.slice(0, -1), 'reg') + '}';
+                } else if (op[0] === '%') {
+                    return variable(op, '');
+                } else if (/^[-0-9]+$/.test(op)) {
+                    return '<span class="IntImm Imm">' + op + '</span>';
+                } else if (/^0f[0-9A-F]+$/.test(op)) {
+                    return '<span class="FloatImm Imm">' + op + '</span>';
+                } else if (op[0] === '[' && op.endsWith(']')) {
+                    const plus = op.indexOf('+');
+                    if (plus < 0) {
+                        return '[' + variable(op.slice(1, -1), 'reg') + ']';
+                    }
+                    return '[' + variable(op.slice(1, plus), 'reg') + '+<span class="IntImm Imm">' +
+                           op.slice(plus + 1, -1) + '</span>]';
+                } else if (op[0] === '{') {
+                    return '{' + variable(op.slice(1), 'reg');
+                } else if (op.startsWith('$L_')) {
+                    return '<span class="Label">' + variable(op, 'Label') + '</span>';
+                }
+                return op;
+            });
+            line = line.slice(0, idx + 2) + operands.join(', ') + ';';
+        }
+
+        html += '<span class="line"' + attributes + '>' + (indent ? '    ' : '') + line + '</span>\n';
+        // The block of a kernel can only be opened after its first line.
+        if (openIndent) {
+            html += '</label><div class="op-btns"></div><div class="indent" id="' + kernelId + '">';
+        }
+    }
+    code.innerHTML = html;
+}
+if (devicePane) {
+    highlightPTX(devicePane);
+    addHighlight('#device-code-pane');
+}
 const deviceOfIRLine = new Map();
 if (devicePane) {
     devicePane.querySelectorAll('span.line[data-ir]').forEach(el => {
@@ -500,8 +650,52 @@ function goToIRLine(line) {
         block : 'center'
     });
 }
+// Clicking a label where it is used goes to where it is defined. Clicking it
+// there highlights it everywhere, in one of a few colors.
+function toggleLabelHighlight(name) {
+    if (asmLabelHighlights.has(name)) {
+        asmLabelHighlights.delete(name);
+    } else {
+        const used = new Set(asmLabelHighlights.values());
+        for (let i = 0; i < 7; i++) {
+            if (!used.has('HighlightToggle' + i)) {
+                asmLabelHighlights.set(name, 'HighlightToggle' + i);
+                break;
+            }
+        }
+    }
+    asmRendered = [-1, -1];
+    renderAsm();
+}
+asmContent.addEventListener('mouseover', function(event) {
+    const label = event.target.closest('span.asm-label');
+    if (label) {
+        asmContent.querySelectorAll('span.asm-label[data-label="' + CSS.escape(label.dataset.label) + '"]')
+            .forEach(el => el.classList.add('Highlight'));
+    }
+});
+asmContent.addEventListener('mouseout', function(event) {
+    const label = event.target.closest('span.asm-label');
+    if (label) {
+        asmContent.querySelectorAll('span.asm-label[data-label="' + CSS.escape(label.dataset.label) + '"]')
+            .forEach(el => el.classList.remove('Highlight'));
+    }
+});
+
 asmCode.addEventListener('click', function(event) {
     const i = Math.floor((event.clientY - asmCode.getBoundingClientRect().top) / asmLineHeight());
+    const label = event.target.closest('span.asm-label');
+    if (label) {
+        const name = label.dataset.label;
+        const row = asmLabelRows.get(name);
+        if (row === i) {
+            toggleLabelHighlight(name);
+        } else {
+            scrollToHostAsm(row);
+            highlightAsm([row], 'label-target');
+        }
+        return;
+    }
     const line = asmIRLines[i];
     if (line) {
         goToIRLine(line);
@@ -530,7 +724,7 @@ const deviceCodeTypes = /^(void|bool|char|uchar|short|ushort|int|uint|long|ulong
 
 function highlightDeviceCode(pane) {
     let inBlockComment = false;
-    for (const el of pane.querySelectorAll('div.code span.line')) {
+    for (const el of pane.querySelectorAll('div.code:not(.ptx) span.line')) {
         const text = el.textContent;
         const span = (cls, t) => '<span class="shj-syn-' + cls + '">' + escapeHTML(t) + '</span>';
         let out = '';

@@ -232,6 +232,10 @@ StmtSourceMap print_with_source_map(const Module &m);
  * where all of its IR nodes went. */
 StmtSourceMap print_with_source_map(const Stmt &s);
 
+/** Make a source map of text, from the locations an IRPrinter recorded while
+ * printing it. */
+StmtSourceMap source_map_of(std::string text, const std::vector<IRPrinterLocation> &locations);
+
 /** For each location of from, in from.locations order: the location in to of
  * the same IR node, or else that of its nearest enclosing node that to has, or
  * else nullptr. Nodes are printed in both when to is a printing of IR that
@@ -264,6 +268,11 @@ public:
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
 
+    /** If set, every node printed through print() or print_lets() (and
+     * print_stmt() of CodeGen_C) gets an entry here, with offsets into the
+     * stream. */
+    std::vector<IRPrinterLocation> *recorded_locations = nullptr;
+
 protected:
     Indentation get_indent() const {
         return Indentation{indent};
@@ -292,10 +301,6 @@ protected:
      * character (see StmtSourceMap::Token), and for punctuation a depth
      * digit, up to a closing '\x02'. */
     bool markup = false;
-
-    /** If set, every node printed through print() or print_lets() gets an
-     * entry here. */
-    std::vector<IRPrinterLocation> *recorded_locations = nullptr;
 
     /** The index in recorded_locations of the node being printed, or -1. */
     int current_location = -1;

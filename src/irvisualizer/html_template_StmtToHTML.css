@@ -1230,3 +1230,24 @@ div.ir-code div.l[data-device] span.n {
     cursor: pointer;
     text-decoration: underline dotted;
 }
+
+/* Labels in the assembly link to where they are defined. */
+div#assemblyContent span.asm-label:hover {
+    text-decoration: underline;
+}
+div#assemblyContent span.asm-label.Highlight {
+    background-color: var(--bg_visual_blue);
+}
+div.asm-hl.label-target {
+    background-color: rgba(80, 160, 255, 0.3);
+    /* Pulses after a jump, to show where it went. */
+    animation: asm-label-pulse 0.3s ease-in-out 2;
+}
+@keyframes asm-label-pulse {
+    0%, 100% {
+        background-color: rgba(80, 160, 255, 0.3);
+    }
+    50% {
+        background-color: rgba(80, 160, 255, 0.8);
+    }
+}

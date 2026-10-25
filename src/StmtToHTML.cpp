@@ -550,312 +550,6 @@ bool begins_with(std::string_view s, std::string_view prefix) {
     return s.substr(0, prefix.size()) == prefix;
 }
 
-/** DeviceCodePrinter
- * Prints CUDA device code (PTX) in HTML.
- */
-class DeviceCodePrinter {
-public:
-    explicit DeviceCodePrinter(std::ostream &os)
-        : stream(os), context_stack(1, 0) {
-    }
-
-    // CUDA kernels are embedded into modules as PTX assembly. This
-    // routine pretty - prints that assembly format. If link_to_ir, the
-    // instructions are linked to the line of IR their debug info points to,
-    // and those lines are set in ir_lines.
-    void print_cuda_gpu_source_kernels(const std::string &str, bool link_to_ir, std::vector<bool> &ir_lines) {
-        print_opening_tag("div", "code ptx");
-
-        int current_id = -1;
-        int brace_depth = 0;  // Counting the inline asm braces.
-        bool in_func_signature = false;
-
-        std::string current_kernel;
-        std::istringstream ss(str);
-
-        uint32_t number = 0, ir_line = 0;
-        for (std::string line; std::getline(ss, line);) {
-            number++;
-            const size_t first = line.find_first_not_of(" \t");
-            const std::string_view trimmed = first == std::string::npos ? std::string_view{} : std::string_view(line).substr(first);
-            if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ")) {
-                // .loc <file> <line> <column>
-                std::istringstream loc{std::string(trimmed.substr(4))};
-                uint32_t file = 0;
-                loc >> file >> ir_line;
-                continue;
-            }
-            if (begins_with(trimmed, ".file\t") || begins_with(trimmed, ".file ")) {
-                continue;
-            }
-            if (line.empty() || line == "\t") {
-                stream << "<span class='line' data-n='" << number << "'></span>\n";
-                continue;
-            }
-            const bool is_instruction = first != 0 && !trimmed.empty() &&
-                                        trimmed[0] != '.' && trimmed[0] != '/' &&
-                                        trimmed[0] != '{' && trimmed[0] != '}' &&
-                                        trimmed.back() != ':';
-            bool indent = false;
-            if (line[0] == '\t') {
-                // Replace first tab with four spaces.
-                line = line.substr(1);
-                indent = true;
-            }
-            line = escape_html(line);
-
-            bool should_print_open_indent = false;
-
-            if (starts_with(line, ".visible .entry")) {
-                std::vector<std::string> parts = split_string(line, " ");
-                if (parts.size() == 3) {
-                    in_func_signature = true;
-                    brace_depth = 0;
-                    current_id = gen_unique_id();
-                    print_show_hide_btn_begin(current_id);
-                    std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
-                    line = "<span class='keyword'>.visible</span> <span class='keyword'>.entry</span> ";
-                    line += kernel_name + " <span class='matched'>(</span>";
-                    current_kernel = kernel_name;
-                }
-            } else if (starts_with(line, ")") && in_func_signature) {
-                in_func_signature = false;
-                line = "<span class='matched'>)</span>" + line.substr(1);
-            } else if (starts_with(line, "{") && brace_depth <= 0) {
-                print_opening_brace();
-                brace_depth = 1;
-                internal_assert(current_id != -1);
-                should_print_open_indent = true;
-                current_id = -1;
-                line = line.substr(1);
-                scope.push(current_kernel, gen_unique_id());
-            } else if (starts_with(line, "{") && brace_depth) {
-                brace_depth++;
-            } else if (starts_with(line, "}") && (--brace_depth <= 0)) {
-                print_closing_tag("div");
-                line = "<span class='matched'>}</span>" + line.substr(1);
-                brace_depth = 0;
-                scope.pop(current_kernel);
-            }
-
-            line = replace_all(std::move(line), ".f32", ".<span class='OpF32'>f32</span>");
-            line = replace_all(std::move(line), ".f64", ".<span class='OpF64'>f64</span>");
-
-            line = replace_all(std::move(line), ".s8", ".<span class='OpI8'>s8</span>");
-            line = replace_all(std::move(line), ".s16", ".<span class='OpI16'>s16</span>");
-            line = replace_all(std::move(line), ".s32", ".<span class='OpI32'>s32</span>");
-            line = replace_all(std::move(line), ".s64", ".<span class='OpI64'>s64</span>");
-
-            line = replace_all(std::move(line), ".u8", ".<span class='OpI8'>u8</span>");
-            line = replace_all(std::move(line), ".u16", ".<span class='OpI16'>u16</span>");
-            line = replace_all(std::move(line), ".u32", ".<span class='OpI32'>u32</span>");
-            line = replace_all(std::move(line), ".u64", ".<span class='OpI64'>u64</span>");
-
-            line = replace_all(std::move(line), ".b8", ".<span class='OpB8'>b8</span>");
-            line = replace_all(std::move(line), ".b16", ".<span class='OpB16'>b16</span>");
-            line = replace_all(std::move(line), ".b32", ".<span class='OpB32'>b32</span>");
-            line = replace_all(std::move(line), ".b64", ".<span class='OpB64'>b64</span>");
-
-            line = replace_all(std::move(line), ".v2", ".<span class='OpVec2'>v2</span>");
-            line = replace_all(std::move(line), ".v4", ".<span class='OpVec4'>v4</span>");
-
-            line = replace_all(std::move(line), "ld.", "<span class='Memory'>ld</span>.");
-            line = replace_all(std::move(line), "st.", "<span class='Memory'>st</span>.");
-
-            size_t idx;
-            if ((idx = line.find("&#x2F;&#x2F")) != std::string::npos) {
-                line.insert(idx, "<span class='Comment'>");
-                line += "</span>";
-            }
-
-            // Predicated instructions
-            if (!line.empty() && line.front() == '@' && indent) {
-                idx = line.find(' ');
-                std::string pred = line.substr(1, idx - 1);
-                line = "<span class='Pred'>@" + variable(pred, Bool()) + "</span>" + line.substr(idx);
-            }
-
-            // Labels (depending on the LLVM version we get L with or without a dollar)
-            if (starts_with(line, "$L_") && !indent && (idx = line.find(':')) != std::string::npos) {
-                std::string label = line.substr(0, idx);
-                line = "<span class='Label'>" + variable(label, "Label") + "</span>:" + line.substr(idx + 1);
-            }
-
-            // Highlight operands
-            if ((idx = line.find(" \t")) != std::string::npos && line.back() == ';') {
-                std::string operands_str = line.substr(idx + 2);
-                operands_str = operands_str.substr(0, operands_str.length() - 1);
-                std::vector<std::string> operands = split_string(operands_str, ", ");
-                operands_str = "";
-                for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
-                    const std::string &op = operands[opidx];
-                    internal_assert(!op.empty());
-                    if (opidx != 0) {
-                        operands_str += ", ";
-                    }
-                    if (op.back() == '}') {
-                        std::string reg = op.substr(0, op.size() - 1);
-                        operands_str += variable(reg, "reg") + '}';
-                    } else if (op.front() == '%') {
-                        operands_str += variable(op, "");
-                    } else if (op.find_first_not_of("-0123456789") == std::string::npos) {
-                        operands_str += "<span class='IntImm Imm'>";
-                        operands_str += op;
-                        operands_str += "</span>";
-                    } else if (starts_with(op, "0f") &&
-                               op.find_first_not_of("0123456789ABCDEF", 2) == std::string::npos) {
-                        operands_str += "<span class='FloatImm Imm'>";
-                        operands_str += op;
-                        operands_str += "</span>";
-                    } else if (op.front() == '[' && op.back() == ']') {
-                        size_t idx = op.find('+');
-                        if (idx == std::string::npos) {
-                            std::string reg = op.substr(1, op.size() - 2);
-                            operands_str += '[' + variable(reg, "reg") + ']';
-                        } else {
-                            std::string reg = op.substr(1, idx - 1);
-                            std::string offset = op.substr(idx + 1);
-                            offset = offset.substr(0, offset.size() - 1);
-                            operands_str += '[' + variable(reg, "reg") + "+";
-                            operands_str += "<span class='IntImm Imm'>";
-                            operands_str += offset;
-                            operands_str += "</span>";
-                            operands_str += ']';
-                        }
-                    } else if (op.front() == '{') {
-                        std::string reg = op.substr(1);
-                        operands_str += '{' + variable(reg, "reg");
-                    } else if (starts_with(op, "$L_")) {
-                        // Labels
-                        operands_str += "<span class='Label'>" + variable(op, "Label") + "</span>";
-                    } else {
-                        operands_str += op;
-                    }
-                }
-                operands_str += ";";
-                // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
-                line = line.substr(0, idx + 2) + operands_str;
-            }
-
-            stream << "<span class='line' data-n='" << number << "'";
-            if (link_to_ir && is_instruction && ir_line) {
-                stream << " data-ir='" << ir_line << "'";
-                if (ir_line >= ir_lines.size()) {
-                    ir_lines.resize(ir_line + 1, false);
-                }
-                ir_lines[ir_line] = true;
-            }
-            stream << ">";
-            if (indent) {
-                stream << "    ";
-            }
-            stream << line << "</span>\n";
-
-            // Indent-divs can only be opened after the line is finished.
-            if (should_print_open_indent) {
-                print_show_hide_btn_end(nullptr);
-                print_opening_tag("div", "indent", "", current_id);
-            }
-        }
-        print_closing_tag("div");
-    }
-
-private:
-    std::ostream &stream;
-
-    // Used to generate unique ids
-    int id = 0;
-
-    // Used to track scope during traversal
-    Scope<int> scope;
-
-    /* All spans and divs will have an id of the form "x-y", where x
-     * is shared among all spans/divs in the same context, and y is unique.
-     * These variables are used to track the context within generated HTML */
-    std::vector<int> context_stack;
-    std::vector<std::string> context_stack_tags;
-
-    int gen_unique_id() {
-        return id++;
-    }
-
-    // Prints the opening tag for the specified html element. A unique ID is
-    // auto-generated unless provided.
-    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &tooltip = "", int id = -1) {
-        stream << "<" << tag << " class='" << cls << "'";
-        if (!tooltip.empty()) {
-            stream << " title='" << tooltip << "'";
-        }
-        stream << " id='";
-        if (id == -1) {
-            stream << context_stack.back() << "-";
-            stream << gen_unique_id();
-        } else {
-            stream << id;
-        }
-        stream << "'>";
-        context_stack.push_back(gen_unique_id());
-        context_stack_tags.push_back(tag);
-    }
-
-    // Prints the closing tag for the specified html element.
-    void print_closing_tag(const std::string &tag) {
-        internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
-            << "closing tag: " << tag << ", stack size: " << context_stack.size() << ", last element: " << (context_stack_tags.empty() ? "null" : context_stack_tags.back());
-        context_stack.pop_back();
-        context_stack_tags.pop_back();
-        stream << "</" + tag + ">";
-    }
-
-    // Prints an html element: opening tag, body and closing tag
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &tooltip = "", int id = -1) {
-        print_opening_tag(tag, cls, tooltip, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    void print_opening_brace() {
-        print_html_element("span", "matched OpeningBrace", "{");
-    }
-
-    // Prints the opening/closing tags for an anchor that toggles code block view
-    void print_show_hide_btn_begin(int id, bool collapsed = false) {
-        stream << "<input type=checkbox id='show-hide-btn-" << id << "' class='show-hide-btn'";
-        if (collapsed) {
-            stream << " checked";
-        }
-        stream << "/>";
-        stream << "<label for='show-hide-btn-" << id << "'>";
-    }
-
-    void print_show_hide_btn_end(const IRNode *) {
-        stream << "</label><div class='op-btns'></div>";
-    }
-
-    std::string variable(const std::string &x, const std::string &tooltip) {
-        int id;
-        if (const int *i = scope.find(x)) {
-            id = *i;
-        } else {
-            id = gen_unique_id();
-            scope.push(x, id);
-        }
-        std::ostringstream s;
-        s << "<b class='variable matched' id='" << id << "-" << gen_unique_id() << "'";
-        if (!tooltip.empty()) {
-            s << " title='" << tooltip << "'";
-        }
-        s << ">" << x << "</b>";
-        return s.str();
-    }
-
-    std::string variable(const std::string &x, Type type) {
-        std::ostringstream ss;
-        ss << type;
-        return variable(x, ss.str());
-    }
-};
-
 // Writes text as the contents of a JavaScript string literal, which can
 // appear in a <script>.
 void write_js_string(std::ostream &stream, std::string_view text) {
@@ -1579,13 +1273,73 @@ private:
         }
         std::string str((const char *)buf.data(), length);
         if (starts_with(buf.name(), "cuda_")) {
-            DeviceCodePrinter(pane).print_cuda_gpu_source_kernels(str, conceptual_stmt != nullptr, device_code_ir_lines);
+            // The PTX, which the page highlights. With debug info, .loc
+            // directives say which line of the conceptual stmt the
+            // instructions after them were made from. They are not shown, and
+            // only the conceptual stmt is shown with links.
+            std::istringstream ss{str};
+            pane << "<div class='code ptx'>\n";
+            int number = 0;
+            uint32_t ir_line = 0;
+            for (std::string line; std::getline(ss, line);) {
+                number++;
+                const size_t first = line.find_first_not_of(" \t");
+                const std::string_view trimmed = first == std::string::npos ? std::string_view{} : std::string_view(line).substr(first);
+                if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ")) {
+                    // .loc <file> <line> <column>
+                    std::istringstream loc{std::string(trimmed.substr(4))};
+                    uint32_t file = 0;
+                    loc >> file >> ir_line;
+                    continue;
+                }
+                if (begins_with(trimmed, ".file\t") || begins_with(trimmed, ".file ")) {
+                    continue;
+                }
+                const bool is_instruction = first != 0 && !trimmed.empty() &&
+                                            trimmed[0] != '.' && trimmed[0] != '/' &&
+                                            trimmed[0] != '{' && trimmed[0] != '}' &&
+                                            trimmed.back() != ':';
+                pane << "<span class='line' data-n='" << number << "'";
+                if (conceptual_stmt && is_instruction && ir_line) {
+                    pane << " data-ir='" << ir_line << "'";
+                    if (ir_line >= device_code_ir_lines.size()) {
+                        device_code_ir_lines.resize(ir_line + 1, false);
+                    }
+                    device_code_ir_lines[ir_line] = true;
+                }
+                pane << ">" << escape_html(line) << "</span>\n";
+            }
+            pane << "</div>\n";
         } else {
+            // With debug info, #line directives say which line of the
+            // conceptual stmt the lines after them were made from. They are
+            // not shown, and only the conceptual stmt is shown with links.
             std::istringstream ss{str};
             pane << "<div class='code'>\n";
             int number = 0;
+            uint32_t ir_line = 0;
+            bool in_ir = false;
             for (std::string line; std::getline(ss, line);) {
-                pane << "<span class='line' data-n='" << ++number << "'>" << escape_html(line) << "</span>\n";
+                number++;
+                if (begins_with(line, "#line ")) {
+                    std::istringstream directive{line.substr(6)};
+                    std::string file;
+                    directive >> ir_line >> file;
+                    if (!file.empty()) {
+                        in_ir = ends_with(file, ".conceptual.stmt\"");
+                    }
+                    continue;
+                }
+                pane << "<span class='line' data-n='" << number << "'";
+                if (in_ir && conceptual_stmt) {
+                    pane << " data-ir='" << ir_line << "'";
+                    if (ir_line >= device_code_ir_lines.size()) {
+                        device_code_ir_lines.resize(ir_line + 1, false);
+                    }
+                    device_code_ir_lines[ir_line] = true;
+                }
+                pane << ">" << escape_html(line) << "</span>\n";
+                ir_line++;
             }
             pane << "\n</div>\n";
         }
