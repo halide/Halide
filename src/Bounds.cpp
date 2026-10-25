@@ -22,6 +22,7 @@
 #include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -1533,15 +1534,50 @@ protected:
                             }
                         }
 
-                    } else if (op->is_intrinsic(Call::bitwise_or) &&
-                               a_interval.has_lower_bound() &&
-                               b_interval.has_lower_bound()) {
-                        if (t.is_int()) {
-                            // Larger than the smaller arg
-                            interval.min = min(a_interval.min, b_interval.min);
-                        } else if (t.is_uint()) {
-                            // Larger than both args
-                            interval.min = max(a_interval.min, b_interval.min);
+                    } else if (op->is_intrinsic(Call::bitwise_or) ||
+                               op->is_intrinsic(Call::bitwise_xor)) {
+                        bool is_or = op->is_intrinsic(Call::bitwise_or);
+                        bool a_positive = t.is_uint() || (a_interval.has_lower_bound() &&
+                                                          can_prove(a_interval.min >= 0));
+                        bool b_positive = t.is_uint() || (b_interval.has_lower_bound() &&
+                                                          can_prove(b_interval.min >= 0));
+                        if (a_positive && b_positive) {
+                            if (!is_or) {
+                                interval.min = make_zero(t);
+                            }
+                            // Neither sets a bit above the highest bit either
+                            // arg can have.
+                            auto const_max = [](const Interval &i) -> std::optional<uint64_t> {
+                                if (!i.has_upper_bound()) {
+                                    return std::nullopt;
+                                }
+                                Expr m = simplify(i.max);
+                                if (auto u = as_const_uint(m)) {
+                                    return u;
+                                } else if (auto s = as_const_int(m); s && *s >= 0) {
+                                    return (uint64_t)*s;
+                                }
+                                return std::nullopt;
+                            };
+                            auto a_max = const_max(a_interval), b_max = const_max(b_interval);
+                            if (a_max && b_max) {
+                                uint64_t mask = std::max(*a_max, *b_max);
+                                for (int s = 1; s < 64; s *= 2) {
+                                    mask |= mask >> s;
+                                }
+                                interval.max = make_const(t, mask);
+                            }
+                        }
+                        if (is_or &&
+                            a_interval.has_lower_bound() &&
+                            b_interval.has_lower_bound()) {
+                            if (t.is_uint() || (a_positive && b_positive)) {
+                                // Larger than both args
+                                interval.min = max(a_interval.min, b_interval.min);
+                            } else {
+                                // Larger than the smaller arg
+                                interval.min = min(a_interval.min, b_interval.min);
+                            }
                         }
                     }
                 }
@@ -1567,7 +1603,7 @@ protected:
                 }
             }
         } else if (op->args.size() == 1 &&
-                   (op->is_intrinsic(Call::round) ||
+                   (op->is_intrinsic({Call::round, Call::round_half_away}) ||
                     op->name == "sqrt_f32" || op->name == "sqrt_f64" ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
@@ -2038,6 +2074,179 @@ private:
                 innermost_depth = *depth;
             }
         }
+    }
+};
+
+// Bounds inference infers bounds on variables from if conditions. For
+// example, in the following, it knows f is only accessed at positive
+// coordinates:
+//
+// if (0 < x) { f(x) }
+//
+// Sometimes we'd like to exploit bounds on subexpressions too:
+//
+// if (0 < x + y) { f(x + y) }
+//
+// But we may also want bounds on the individual terms within those
+// subexpressions. In the following, at the use of f we'd like to know x + y is
+// positive, and at the use of g we'd like to know that x is greater than -y:
+//
+// if (0 < x + y) { f(x + y); g(x) }
+//
+// Rather than teaching BoxesTouched to track bounds on arbitrary Exprs, the
+// mutator below identifies promising Exprs and gives them names, producing:
+//
+// let t = x + y in if (0 < x + y) { if (0 < t) { f(t); g(x) } }
+//
+// The two ifs are redundant - the inner one is just a way to communicate to
+// BoxesTouched that it can also assume t is positive. The else case is
+// treated the same way using the negated condition. This IR is temporary and
+// only consumed by BoxesTouched, so the redundant if doesn't escape into the
+// rest of lowering.
+//
+// ScheduleFunctions lowers RDom::where predicates using split_predicate(),
+// turning conjunctions into nested IfThenElses. Each conjunct can therefore
+// supply a bound independently here. Conditions from other sources need not
+// have this form: this pass only names an expression if solving the condition
+// yields a single comparison with that expression's variable on the left.
+// Results containing && or || are not decomposed into individual bounds.
+class NameGuardedIndices : public IRMutator {
+    using IRMutator::visit;
+    using ExprSet = set<Expr, IRDeepCompare>;
+
+    Stmt visit(const IfThenElse *op) override {
+        // Identify all integer subexpressions of the condition
+        ExprSet in_condition;
+        mutate_with(op->condition, [&](auto *self, const Expr &e) {
+            if (e.type() == Int(32) && !e.as<Variable>() && !is_const(e)) {
+                in_condition.insert(e);
+            }
+            return self->mutate_base(e);
+        });
+
+        // Peel any tag (e.g. likely) so that we can solve the condition, and
+        // rewrap each bound we derive from it in the same tag.
+        Expr condition = op->condition;
+        const Call *tag = Call::as_tag(condition);
+        if (tag) {
+            condition = tag->args[0];
+        }
+
+        // Named subexpressions, shared by both branches
+        map<Expr, Expr, IRDeepCompare> names;
+        vector<pair<string, Expr>> lets;
+
+        auto name_guarded_indices = [&](const Expr &cond, const Stmt &body) {
+            if (!body.defined()) {
+                return body;
+            }
+
+            // Filter the condition's subexpressions down to the ones used in an
+            // indexing context inside the body
+            ExprSet in_index;
+            if (!in_condition.empty()) {
+                int index_depth = 0;
+                mutate_with(
+                    body,
+                    [&](auto *self, const Expr &e) {
+                        if (index_depth > 0 && in_condition.count(e)) {
+                            in_index.insert(e);
+                        }
+                        const Call *call = e.as<Call>();
+                        bool is_access = call && (call->call_type == Call::Halide || call->call_type == Call::Image);
+                        index_depth += is_access;
+                        self->mutate_base(e);
+                        index_depth -= is_access;
+                        return e;
+                    },
+                    [&](auto *self, const Stmt &s) {
+                        const Provide *provide = s.as<Provide>();
+                        if (!provide) {
+                            self->mutate_base(s);
+                            return s;
+                        }
+                        for (const Expr &v : provide->values) {
+                            self->mutate(v);
+                        }
+                        index_depth++;
+                        for (const Expr &a : provide->args) {
+                            self->mutate(a);
+                        }
+                        index_depth--;
+                        self->mutate(provide->predicate);
+                        return s;
+                    });
+            }
+
+            // For each identified subexpression, see if the condition can be
+            // solved to give a bound on it, and if so, give it a name and an
+            // extra IfThenElse stating that bound.
+            map<Expr, Expr, IRDeepCompare> replacements;
+            vector<Expr> lifted_conditions;
+            for (const Expr &e : in_index) {
+                auto it = names.find(e);
+                Expr var = (it != names.end()) ? it->second : Variable::make(e.type(), unique_name('t'));
+                const string &name = var.as<Variable>()->name;
+                SolverResult solved = solve_expression(simplify(substitute(e, var, cond)), name);
+                if (!solved.fully_solved) {
+                    continue;
+                }
+                Expr c = solved.result;
+                Expr lhs;
+                if (const LT *lt = c.as<LT>()) {
+                    lhs = lt->a;
+                } else if (const LE *le = c.as<LE>()) {
+                    lhs = le->a;
+                } else if (const GT *gt = c.as<GT>()) {
+                    lhs = gt->a;
+                } else if (const GE *ge = c.as<GE>()) {
+                    lhs = ge->a;
+                } else if (const EQ *eq = c.as<EQ>()) {
+                    lhs = eq->a;
+                }
+                if (!lhs.defined() || !equal(lhs, var)) {
+                    continue;
+                }
+                if (tag) {
+                    c = Call::make(tag->type, tag->name, {c}, tag->call_type);
+                }
+                if (it == names.end()) {
+                    names.emplace(e, var);
+                    lets.emplace_back(name, e);
+                }
+                replacements.emplace(e, var);
+                lifted_conditions.push_back(c);
+            }
+
+            // Replace all subexpression uses with the named variables
+            Stmt s = body;
+            if (!replacements.empty()) {
+                s = mutate_with(s, [&](auto *self, const Expr &e) {
+                    auto it = replacements.find(e);
+                    if (it != replacements.end()) {
+                        return it->second;
+                    }
+                    return self->mutate_base(e);
+                });
+            }
+            s = mutate(s);
+
+            // Make all the inner IfThenElses
+            for (const Expr &c : reverse_view(lifted_conditions)) {
+                s = IfThenElse::make(c, s);
+            }
+            return s;
+        };
+
+        Stmt then_case = name_guarded_indices(condition, op->then_case);
+        Stmt else_case = name_guarded_indices(!condition, op->else_case);
+
+        // Wrap all the new named lets
+        Stmt stmt = op->with(op->condition, then_case, else_case);
+        for (const auto &let : reverse_view(lets)) {
+            stmt = LetStmt::make(let.first, let.second, stmt);
+        }
+        return stmt;
     }
 };
 
@@ -3128,6 +3337,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     // as possible, so that BoxesTouched can prune the variable scope tighter
     // when encountering the IfThenElse.
     if (s.defined()) {
+        s = NameGuardedIndices()(s);
         s = SolveIfThenElse()(s);
     }
 

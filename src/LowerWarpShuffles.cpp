@@ -1,18 +1,21 @@
 #include "LowerWarpShuffles.h"
 
 #include "BoundsTracker.h"
+#include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LICM.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include <algorithm>
+#include <functional>
+#include <set>
 #include <utility>
 
-// In CUDA, allocations stored in registers and shared across lanes
+// On GPUs, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication
 // across lanes is possible. So while we model then as allocations
 // outside the loop over lanes, we need to codegen them as allocations
@@ -221,8 +224,8 @@ class DetermineAllocStride : public IRVisitor {
     void visit(const IfThenElse *op) override {
         // When things drop down to a single thread, we have different
         // constraints, so notice that. Check if the condition implies
-        // the lane var is at most one.
-        if (can_prove(!op->condition || Variable::make(Int(32), lane_var) <= 1)) {
+        // that only lane zero is active.
+        if (can_prove(!op->condition || Variable::make(Int(32), lane_var) <= 0)) {
             bool old_single_thread = single_thread;
             single_thread = true;
             op->then_case.accept(this);
@@ -323,25 +326,14 @@ public:
             // better if the stride matches up because then it's just
             // a register access, not a warp shuffle.
             Expr s = warp_stride(e);
-            if (!stride.defined()) {
+            if (s.defined()) {
+                s = simplify(s);
+            }
+            // A load that doesn't depend on the lane says nothing
+            // about the striping.
+            if (!stride.defined() && !is_const_zero(s)) {
                 stride = s;
             }
-        }
-
-        if (stride.defined()) {
-            for (const Expr &e : single_stores) {
-                // If only thread zero was active for the store, that makes the proof simpler.
-                Expr simpler = substitute(lane_var, 0, e);
-                bool this_ok = can_prove(reduce_expr(simpler / stride, warp_size, tracker.interval_scope()) == 0);
-                if (!this_ok) {
-                    bad.push_back(e);
-                }
-                ok = ok && this_ok;
-            }
-        }
-
-        if (!ok) {
-            fail(bad);
         }
 
         if (!stride.defined()) {
@@ -349,13 +341,288 @@ public:
             stride = 1;
         }
 
+        for (const Expr &e : single_stores) {
+            // If only thread zero was active for the store, that makes the proof simpler.
+            Expr simpler = substitute(lane_var, 0, e);
+            bool this_ok = can_prove(reduce_expr(simpler / stride, warp_size, tracker.interval_scope()) == 0);
+            if (!this_ok) {
+                bad.push_back(e);
+            }
+            ok = ok && this_ok;
+        }
+
+        if (!ok) {
+            fail(bad);
+        }
+
         return stride;
+    }
+};
+
+// Make a call to one of the gpu_shuffle intrinsics, which require
+// 32-bit scalars.
+Expr make_shuffle(Call::IntrinsicOp op, Expr value, const Expr &arg, int warp_size) {
+    Type type = value.type();
+    if (type.is_vector()) {
+        vector<Expr> elems;
+        elems.reserve(type.lanes());
+        for (int i = 0; i < type.lanes(); i++) {
+            elems.push_back(make_shuffle(op, extract_lane(value, i), arg, warp_size));
+        }
+        return Shuffle::make_concat(elems);
+    }
+
+    // Make 32-bit with a combination of reinterprets and zero extension
+    Type shuffle_type = type;
+    if (type.bits() < 32) {
+        shuffle_type = UInt(32);
+        value = cast(shuffle_type, reinterpret(type.with_code(Type::UInt), value));
+    } else if (type.bits() == 64) {
+        // TODO: separate shuffles of the low and high halves and then recombine.
+        user_error << "Warp shuffles of 64-bit types not yet implemented\n";
+    } else {
+        user_assert(type.bits() == 32) << "Warp shuffles not supported for this type: " << type << "\n";
+    }
+
+    // Shuffles must be executed by all participating lanes, so they are
+    // impure to stop later passes from moving them into lane-dependent
+    // control flow (e.g. the if statements that guard stores done by
+    // lane zero alone).
+    Expr shuffled = Call::make(shuffle_type, op, {value, arg, warp_size}, Call::Intrinsic);
+    if (shuffle_type != type) {
+        // Narrow it back down
+        shuffled = reinterpret(type, cast(type.with_code(Type::UInt), shuffled));
+    }
+    return shuffled;
+}
+
+// Rewrite stores into warp-level allocations whose index does not
+// depend on the lane, so that the lanes don't clobber each other's
+// stripes once the allocation is striped across them:
+//
+// - A mutex-free atomic update of the form a[i] = a[i] op v, where op
+//   is commutative and associative, is a reduction of v across the
+//   lanes. It becomes a butterfly reduction using register shuffles,
+//   and lane zero alone updates a[i] with the result. Every lane must
+//   participate in the shuffles, so the update must not be inside any
+//   condition or loop that depends on the lane, and the lane loop must
+//   not need masking.
+//
+// - Any other store of a lane-invariant value is performed by lane
+//   zero alone, provided lane zero executes it.
+class LowerWarpReductions : public IRMutator {
+    using IRMutator::visit;
+
+    const string &lane_var;
+    const int warp_size;
+    const std::set<string> &warp_allocs;
+
+    // Conditions enclosing the current statement within the lane loop.
+    vector<Expr> conditions;
+    // Variables whose values may differ across the lanes.
+    Scope<> lane_dependent;
+    // Allocations inside the lane loop, which are private to each lane.
+    Scope<> per_lane_allocs;
+    // Number of enclosing loops with lane-dependent bounds.
+    int divergent_loops = 0;
+
+    Expr this_lane() const {
+        return Variable::make(Int(32), lane_var);
+    }
+
+    // Do all lanes execute the current statement?
+    bool all_lanes_active() const {
+        return divergent_loops == 0 &&
+               std::all_of(conditions.begin(), conditions.end(),
+                           [&](const Expr &c) { return lane_invariant(c); });
+    }
+
+    // Does lane zero execute the current statement whenever any lane does?
+    bool lane_zero_active() const {
+        return divergent_loops == 0 &&
+               std::all_of(conditions.begin(), conditions.end(), [&](const Expr &c) {
+                   return lane_invariant(c) || can_prove(substitute(lane_var, 0, c));
+               });
+    }
+
+    // Conservatively check if an Expr has the same value in every lane.
+    bool lane_invariant(const Expr &e) const {
+        if (expr_uses_vars(e, lane_dependent)) {
+            return false;
+        }
+        bool result = true;
+        visit_with(
+            e,
+            [&](auto *self, const Load *op) {
+                result &= !per_lane_allocs.contains(op->name);
+                self->visit_base(op);
+            },
+            [&](auto *self, const Call *op) {
+                result &= op->is_pure();
+                self->visit_base(op);
+            });
+        return result;
+    }
+
+    Stmt visit(const Allocate *op) override {
+        ScopedBinding<> bind(per_lane_allocs, op->name);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<> bind_if(!lane_invariant(op->value), lane_dependent, op->name);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        Expr condition = mutate(op->condition);
+        conditions.push_back(condition);
+        Stmt then_case = mutate(op->then_case);
+        conditions.back() = !condition;
+        Stmt else_case = mutate(op->else_case);
+        conditions.pop_back();
+        return IfThenElse::make(condition, then_case, else_case);
+    }
+
+    Stmt visit(const For *op) override {
+        bool divergent = !lane_invariant(op->min) || !lane_invariant(op->max);
+        ScopedValue<int> old(divergent_loops, divergent_loops + divergent);
+        ScopedBinding<> bind_if(divergent, lane_dependent, op->name);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        if (warp_allocs.count(op->name) &&
+            divergent_loops == 0 &&
+            is_const_one(op->predicate) &&
+            lane_invariant(op->index) &&
+            lane_invariant(op->value) &&
+            lane_zero_active()) {
+            return IfThenElse::make(this_lane() <= 0, Stmt(op));
+        }
+        return op;
+    }
+
+    Stmt visit(const Atomic *op) override {
+        if (!op->mutex_name.empty()) {
+            return IRMutator::visit(op);
+        }
+
+        vector<pair<string, Expr>> lets;
+        Stmt body = op->body;
+        vector<ScopedBinding<>> bindings;
+        while (const LetStmt *let = body.as<LetStmt>()) {
+            lets.emplace_back(let->name, let->value);
+            bindings.emplace_back(!lane_invariant(let->value), lane_dependent, let->name);
+            body = let->body;
+        }
+
+        const Store *store = body.as<Store>();
+        if (!store ||
+            !warp_allocs.count(store->name) ||
+            !is_const_one(store->predicate) ||
+            !lane_invariant(store->index)) {
+            return IRMutator::visit(op);
+        }
+
+        auto is_self_load = [&](const Expr &e) {
+            const Load *load = e.as<Load>();
+            return load && load->name == store->name && equal(load->index, store->index);
+        };
+
+        // Match a[i] = a[i] op v or a[i] = v op a[i]
+        Type t = store->value.type();
+        Expr a, b;
+        std::function<Expr(Expr, Expr)> combine;
+        if (const Add *add = store->value.as<Add>()) {
+            a = add->a;
+            b = add->b;
+            combine = [](Expr x, Expr y) { return std::move(x) + std::move(y); };
+        } else if (const Mul *mul = store->value.as<Mul>()) {
+            a = mul->a;
+            b = mul->b;
+            combine = [](Expr x, Expr y) { return std::move(x) * std::move(y); };
+        } else if (const Min *min = store->value.as<Min>()) {
+            a = min->a;
+            b = min->b;
+            combine = [](Expr x, Expr y) { return Halide::min(std::move(x), std::move(y)); };
+        } else if (const Max *max = store->value.as<Max>()) {
+            a = max->a;
+            b = max->b;
+            combine = [](Expr x, Expr y) { return Halide::max(std::move(x), std::move(y)); };
+        } else {
+            return IRMutator::visit(op);
+        }
+        if (is_self_load(b)) {
+            std::swap(a, b);
+        }
+        if (!is_self_load(a)) {
+            return IRMutator::visit(op);
+        }
+        bool b_loads_self = false;
+        visit_with(b, [&](auto *self, const Load *load) {
+            b_loads_self |= (load->name == store->name);
+            self->visit_base(load);
+        });
+        if (b_loads_self) {
+            return IRMutator::visit(op);
+        }
+
+        user_assert(all_lanes_active())
+            << "Can't lower the atomic update of " << store->name
+            << " to a reduction across the gpu lanes, because not all lanes execute it. "
+            << "The extent of the loop over gpu lanes must be a power of two, "
+            << "and the update must not be inside a condition or loop that depends on the lane.\n";
+
+        Expr value = b;
+        for (int k = warp_size / 2; k >= 1; k /= 2) {
+            string name = unique_name('t');
+            Expr var = Variable::make(t, name);
+            lets.emplace_back(name, value);
+            value = combine(var, make_shuffle(Call::gpu_shuffle_xor, var, k, warp_size));
+        }
+        string name = unique_name('t');
+        lets.emplace_back(name, value);
+        value = Variable::make(t, name);
+
+        Stmt result = store->with(combine(a, value), store->index, store->predicate, store->alignment);
+        result = IfThenElse::make(this_lane() <= 0, result);
+        while (!lets.empty()) {
+            result = LetStmt::make(lets.back().first, lets.back().second, result);
+            lets.pop_back();
+        }
+        return result;
+    }
+
+public:
+    LowerWarpReductions(const string &lane_var, int warp_size, const std::set<string> &warp_allocs)
+        : lane_var(lane_var), warp_size(warp_size), warp_allocs(warp_allocs) {
+        lane_dependent.push(lane_var);
+    }
+};
+
+// Remove the Free of an allocation that is being moved elsewhere.
+class RemoveFree : public IRMutator {
+    using IRMutator::visit;
+
+    const string &name;
+
+    Stmt visit(const Free *op) override {
+        if (op->name == name) {
+            return Evaluate::make(0);
+        }
+        return op;
+    }
+
+public:
+    RemoveFree(const string &name)
+        : name(name) {
     }
 };
 
 // Move allocations outside the loop over lanes into the loop over
 // lanes (using the striping described above), and rewrites
-// stores/loads to them as cuda register shuffle intrinsics.
+// stores/loads to them as gpu_shuffle intrinsics.
 class LowerWarpShuffles : public IRMutator {
     using IRMutator::visit;
 
@@ -369,7 +636,6 @@ class LowerWarpShuffles : public IRMutator {
     };
     Scope<AllocInfo> allocation_info;
     BoundsTracker tracker;
-    int cuda_cap;
 
     Expr visit(const Let *op) override {
         auto binding = tracker.push_let(op->name, op->value);
@@ -391,7 +657,7 @@ class LowerWarpShuffles : public IRMutator {
             if (op->for_type == ForType::GPULane) {
                 auto loop_size = as_const_int(extent);
                 user_assert(loop_size && *loop_size <= 32)
-                    << "CUDA gpu lanes loop must have constant extent of at most 32: " << extent << "\n";
+                    << "gpu lanes loop must have constant extent of at most 32: " << extent << "\n";
 
                 // Select a warp size - the smallest power of two that contains the loop size
                 int64_t ws = 1;
@@ -408,6 +674,17 @@ class LowerWarpShuffles : public IRMutator {
             may_use_warp_shuffle = (op->for_type == ForType::GPULane);
 
             Stmt body = op->body;
+
+            if (should_mask) {
+                // Mask off the excess lanes in the warp
+                body = IfThenElse::make(this_lane <= op->max, body);
+            }
+
+            std::set<string> warp_allocs;
+            for (const Stmt &s : allocations) {
+                warp_allocs.insert(s.as<Allocate>()->name);
+            }
+            body = LowerWarpReductions(op->name, (int)*as_const_int(warp_size), warp_allocs)(body);
 
             // Figure out the shrunken size of the hoisted allocations
             // and populate the scope.
@@ -429,12 +706,7 @@ class LowerWarpShuffles : public IRMutator {
                 allocation_info.push(alloc->name, {(int)(*sz), stride.get_stride()});
             }
 
-            body = mutate(op->body);
-
-            if (should_mask) {
-                // Mask off the excess lanes in the warp
-                body = IfThenElse::make(this_lane <= op->max, body, Stmt());
-            }
+            body = mutate(body);
 
             // Wrap the hoisted warp-level allocations, at their new
             // reduced size.
@@ -443,7 +715,8 @@ class LowerWarpShuffles : public IRMutator {
                 internal_assert(alloc && alloc->extents.size() == 1);
                 int new_size = allocation_info.get(alloc->name).size;
                 allocation_info.pop(alloc->name);
-                body = alloc->with({new_size}, alloc->condition, body);
+                body = alloc->with({new_size}, alloc->condition,
+                                   Block::make(body, Free::make(alloc->name)));
             }
             allocations.clear();
 
@@ -457,7 +730,8 @@ class LowerWarpShuffles : public IRMutator {
             // Rewrap any hoisted allocations that weren't placed outside some inner loop
             for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
-                body = alloc->with(alloc->extents, alloc->condition, body);
+                body = alloc->with(alloc->extents, alloc->condition,
+                                   Block::make(body, Free::make(alloc->name)));
             }
             allocations.clear();
 
@@ -521,6 +795,40 @@ class LowerWarpShuffles : public IRMutator {
         }
     }
 
+    // Read a value from the given lane. The relative shuffles require an
+    // offset that is the same in every lane, so they are only used for
+    // constant offsets. Everything else is a general gather.
+    Expr shuffle_from_lane(Expr value, Expr lane) {
+        if (const Broadcast *b = lane.as<Broadcast>()) {
+            lane = b->value;
+        }
+
+        if (lane.type().is_vector()) {
+            // Each vector element comes from a different lane, so do
+            // one shuffle per element.
+            vector<Expr> elems;
+            elems.reserve(lane.type().lanes());
+            for (int i = 0; i < lane.type().lanes(); i++) {
+                elems.push_back(shuffle_from_lane(extract_lane(value, i), extract_lane(lane, i)));
+            }
+            return Shuffle::make_concat(elems);
+        }
+
+        int ws = (int)*as_const_int(warp_size);
+        Expr delta = simplify(lane - this_lane, tracker.interval_scope());
+        if (auto c = as_const_int(delta)) {
+            if (*c == 0) {
+                return value;
+            } else if (*c > 0) {
+                return make_shuffle(Call::gpu_shuffle_down, value, (int)*c, ws);
+            } else {
+                return make_shuffle(Call::gpu_shuffle_up, value, (int)-*c, ws);
+            }
+        }
+
+        return make_shuffle(Call::gpu_shuffle_idx, value, lane, ws);
+    }
+
     Expr make_warp_load(Type type, const string &name, const Expr &idx, Expr lane) {
         // idx: The index of the value within the local allocation
         // lane: Which thread's value we want. If it's our own, we can just use a load.
@@ -554,93 +862,13 @@ class LowerWarpShuffles : public IRMutator {
             return base_val;
         }
 
-        // Make 32-bit with a combination of reinterprets and zero extension
-        Type shuffle_type = type;
-        if (type.bits() < 32) {
-            shuffle_type = UInt(32, type.lanes());
-            base_val = cast(shuffle_type, reinterpret(type.with_code(Type::UInt), base_val));
-        } else if (type.bits() == 64) {
-            // TODO: separate shuffles of the low and high halves and then recombine.
-            user_error << "Warp shuffles of 64-bit types not yet implemented\n";
-        } else {
-            user_assert(type.bits() == 32) << "Warp shuffles not supported for this type: " << type << "\n";
-        }
-
         internal_assert(may_use_warp_shuffle) << name << ", " << idx << ", " << lane << "\n";
-
-        // We must add .sync after volta architecture:
-        // https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
-        string sync_suffix = "";
-        if (cuda_cap >= 70) {
-            sync_suffix = ".sync";
-        }
-
-        auto shfl_args = [&](const std::vector<Expr> &args) {
-            if (cuda_cap >= 70) {
-                return args;
-            }
-            return std::vector({args[1], args[2], args[3]});
-        };
-
-        string intrin_suffix;
-        if (shuffle_type.is_float()) {
-            intrin_suffix = ".f32";
-        } else {
-            intrin_suffix = ".i32";
-        }
-
-        Expr wild = Variable::make(Int(32), "*");
-        vector<Expr> result;
-        std::optional<int> bits;
 
         // Move this_lane as far left as possible in the expression to
         // reduce the number of cases to check below.
         lane = solve_expression(lane, this_lane_name).result;
 
-        Expr shuffled;
-        Expr membermask = (int)0xffffffff;
-        if (expr_match(this_lane + wild, lane, result)) {
-            // We know that 0 <= lane + wild < warp_size by how we
-            // constructed it, so we can just do a shuffle down.
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
-                                   shfl_args({membermask, base_val, result[0], 31}), Call::PureExtern);
-            shuffled = down;
-        } else if (expr_match((this_lane + wild) % wild, lane, result) &&
-                   (bits = is_const_power_of_two_integer(result[1])) &&
-                   *bits <= 5) {
-            result[0] = simplify(result[0] % result[1], tracker.interval_scope());
-            // Rotate. Mux a shuffle up and a shuffle down. Uses fewer
-            // intermediate registers than using a general gather for
-            // this.
-            Expr mask = (1 << *bits) - 1;
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
-                                   shfl_args({membermask, base_val, result[0], mask}), Call::PureExtern);
-            Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".up" + intrin_suffix,
-                                 shfl_args({membermask, base_val, (1 << *bits) - result[0], 0}), Call::PureExtern);
-            Expr cond = (this_lane >= (1 << *bits) - result[0]);
-            Expr equiv = select(cond, up, down);
-            shuffled = simplify(equiv, tracker.interval_scope());
-        } else {
-            // The format of the mask is a pain. The high bits tell
-            // you how large the a warp is for this instruction
-            // (i.e. is it a shuffle within groups of 8, or a shuffle
-            // within groups of 16?). The low bits serve as a clamp on
-            // the max value pulled from. We don't use that, but it
-            // could hypothetically be used for boundary conditions.
-            Expr mask = simplify(((31 & ~(warp_size - 1)) << 8) | 31);
-            // The idx variant can do a general gather. Use it for all other cases.
-            shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".idx" + intrin_suffix,
-                                  shfl_args({membermask, base_val, lane, mask}), Call::PureExtern);
-        }
-        // TODO: There are other forms, like butterfly and clamp, that
-        // don't need to use the general gather
-
-        if (shuffled.type() != type) {
-            user_assert(shuffled.type().bits() > type.bits());
-            // Narrow it back down
-            shuffled = reinterpret(type, cast(type.with_code(Type::UInt), shuffled));
-        }
-        return shuffled;
+        return shuffle_from_lane(base_val, lane);
     }
 
     Expr visit(const Load *op) override {
@@ -669,27 +897,38 @@ class LowerWarpShuffles : public IRMutator {
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
+            // Its Free moves with it.
             allocations.emplace_back(op);
-            return mutate(op->body);
+            return mutate(RemoveFree(op->name)(op->body));
         }
     }
-
-public:
-    LowerWarpShuffles(int cuda_cap)
-        : cuda_cap(cuda_cap) {
-    }
 };
+
+bool is_warp_shuffle(const Call *op) {
+    return op->is_intrinsic({Call::gpu_shuffle_down,
+                             Call::gpu_shuffle_idx,
+                             Call::gpu_shuffle_up,
+                             Call::gpu_shuffle_xor});
+}
 
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     using IRMutator::visit;
 
-    Scope<int> stored_to;
+    // Buffers stored to inside the if, at or before the current point.
+    Scope<> stored_to;
+
+    // Lets inside the if whose values depend on a store inside the
+    // if, so can't be computed before it.
+    Scope<> computed_inside;
+
+    // The lifted values, in an order in which each one only depends on
+    // the ones before it.
     vector<pair<string, Expr>> lifted_lets;
 
     Expr visit(const Call *op) override {
         // If it was written outside this if clause but read inside of
         // it, we need to hoist it.
-        if (starts_with(op->name, "llvm.nvvm.shfl.") &&
+        if (is_warp_shuffle(op) &&
             !expr_uses_vars(op, stored_to)) {
             string name = unique_name('t');
             lifted_lets.emplace_back(name, op);
@@ -702,17 +941,30 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         Expr value = mutate(op->value);
+
+        // Anything lifted from the body comes after anything lifted
+        // from the value, and may depend on this let.
+        size_t first_lifted_from_body = lifted_lets.size();
+        bool depends_on_store = expr_uses_vars(value, stored_to) ||
+                                expr_uses_vars(value, computed_inside);
+        ScopedBinding<> bind_if(depends_on_store, computed_inside, op->name);
         auto body = mutate(op->body);
 
         // If any of the lifted expressions use this, we also need to
         // lift this.
         bool should_lift = false;
-        for (const auto &p : lifted_lets) {
-            should_lift |= expr_uses_var(p.second, op->name);
+        for (size_t i = first_lifted_from_body; i < lifted_lets.size(); i++) {
+            should_lift |= expr_uses_var(lifted_lets[i].second, op->name);
+        }
+
+        if (should_lift && depends_on_store) {
+            // A shuffle depends on a value that can't be computed until
+            // partway through the if, so we can't hoist it.
+            success = false;
         }
 
         if (should_lift) {
-            lifted_lets.push_back({op->name, value});
+            lifted_lets.insert(lifted_lets.begin() + first_lifted_from_body, {op->name, value});
             return body;
         } else {
             return LetOrLetStmt::make(op->name, value, body);
@@ -728,6 +980,12 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
+        // A load early in the loop body may read a value stored later
+        // in the body on a previous iteration.
+        visit_with(op->body, [&](auto *self, const Store *store) {
+            stored_to.push(store->name);
+            self->visit_base(store);
+        });
         Stmt body = mutate(op->body);
         bool fail = false;
         for (const auto &p : lifted_lets) {
@@ -735,7 +993,6 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         }
         if (fail) {
             // We can't hoist. We need to bail out here.
-            body = rewrap(body);
             success = false;
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
@@ -744,8 +1001,10 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        stored_to.push(op->name, 0);
-        return IRMutator::visit(op);
+        // The value and index are computed before the store happens.
+        Stmt s = IRMutator::visit(op);
+        stored_to.push(op->name);
+        return s;
     }
 
 public:
@@ -763,8 +1022,11 @@ class MoveIfStatementInwards : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Store *op) override {
-        // We've already hoisted warp shuffles out of stores
-        return IfThenElse::make(condition, op, Stmt());
+        // Compute any warp shuffles in the store just before it, so that
+        // all the lanes participate in them.
+        HoistWarpShufflesFromSingleIfStmt hoister;
+        Stmt store = hoister(Stmt(op));
+        return hoister.rewrap(IfThenElse::make(condition, store, Stmt()));
     }
 
     Expr condition;
@@ -781,20 +1043,65 @@ public:
 class HoistWarpShuffles : public IRMutator {
     using IRMutator::visit;
 
+    // Variables that may differ across the lanes of a warp.
+    Scope<> lane_dependent;
+
+    // Conservatively check if an Expr may differ across the lanes of a
+    // warp. Loads may be from per-lane registers, and impure calls
+    // include the shuffles themselves.
+    bool may_depend_on_lane(const Expr &e) {
+        if (expr_uses_vars(e, lane_dependent)) {
+            return true;
+        }
+        bool result = false;
+        visit_with(
+            e,
+            [&](auto *, const Load *) {
+                result = true;
+            },
+            [&](auto *self, const Call *op) {
+                result |= !op->is_pure();
+                self->visit_base(op);
+            });
+        return result;
+    }
+
+    Stmt visit(const For *op) override {
+        ScopedBinding<> bind_if(op->for_type == ForType::GPULane ||
+                                    may_depend_on_lane(op->min) ||
+                                    may_depend_on_lane(op->max),
+                                lane_dependent, op->name);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<> bind_if(may_depend_on_lane(op->value), lane_dependent, op->name);
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const IfThenElse *op) override {
+        if (!may_depend_on_lane(op->condition)) {
+            // All the lanes in a warp take the same branch, so they are
+            // all active for any shuffles inside it.
+            return IRMutator::visit(op);
+        }
+
         // Move all Exprs that contain a shuffle out of the body of
         // the if.
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
 
-        HoistWarpShufflesFromSingleIfStmt hoister;
-        then_case = hoister(then_case);
-        else_case = hoister(else_case);
-        Stmt s = IfThenElse::make(op->condition, then_case, else_case);
-        if (hoister.success) {
-            return hoister.rewrap(s);
+        // Stores in one branch don't happen before loads in the other,
+        // so hoist from each separately.
+        HoistWarpShufflesFromSingleIfStmt then_hoister, else_hoister;
+        Stmt hoisted_then_case = then_hoister(then_case);
+        Stmt hoisted_else_case = else_hoister(else_case);
+        if (then_hoister.success && else_hoister.success) {
+            Stmt s = IfThenElse::make(op->condition, hoisted_then_case, hoisted_else_case);
+            return then_hoister.rewrap(else_hoister.rewrap(s));
         } else {
             // Need to move the ifstmt further inwards instead.
+            Stmt s = IfThenElse::make(op->condition, then_case, else_case);
             internal_assert(!else_case.defined()) << "Cannot hoist warp shuffle out of " << s << "\n";
             string pred_name = unique_name('p');
             s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name))(then_case);
@@ -825,9 +1132,17 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::CUDA && has_lane_loop(op)) {
+        if ((op->device_api == DeviceAPI::CUDA ||
+             op->device_api == DeviceAPI::Metal) &&
+            has_lane_loop(op)) {
+            // Apple GPUs have 32-wide SIMD-groups, so a group of up to
+            // 32 gpu lanes always fits within one. Other GPUs (e.g. Intel)
+            // may run a kernel with narrower SIMD-groups.
+            user_assert(op->device_api != DeviceAPI::Metal || target.arch == Target::ARM)
+                << "gpu_lanes() is only supported for Metal on Apple GPUs (arm targets). "
+                << "Target: " << target << "\n";
             Stmt s = op;
-            s = LowerWarpShuffles(cuda_cap)(s);
+            s = LowerWarpShuffles()(s);
             s = HoistWarpShuffles()(s);
             return simplify(s);
         } else {
@@ -835,11 +1150,11 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
         }
     }
 
-    int cuda_cap;
+    const Target &target;
 
 public:
-    LowerWarpShufflesInEachKernel(int cuda_cap)
-        : cuda_cap(cuda_cap) {
+    LowerWarpShufflesInEachKernel(const Target &target)
+        : target(target) {
     }
 };
 
@@ -849,7 +1164,7 @@ Stmt lower_warp_shuffles(Stmt s, const Target &t) {
     s = hoist_loop_invariant_values(s);
     s = SubstituteInLaneVar()(s);
     s = simplify(s);
-    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound())(s);
+    s = LowerWarpShufflesInEachKernel(t)(s);
     return s;
 };
 

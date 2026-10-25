@@ -658,6 +658,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx10_1", Target::AVX10_1},
     {"x86apx", Target::X86APX},
     {"simulator", Target::Simulator},
+    {"no_metadata", Target::NoMetadata},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

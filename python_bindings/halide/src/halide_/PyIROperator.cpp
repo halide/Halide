@@ -195,6 +195,7 @@ void define_operators(py::module &m) {
     m.def("floor", &floor);
     m.def("ceil", &ceil);
     m.def("round", &round);
+    m.def("round_half_away", &round_half_away);
     m.def("trunc", &trunc);
     m.def("fract", &fract);
     m.def("is_nan", &is_nan);

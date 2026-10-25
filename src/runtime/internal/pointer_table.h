@@ -244,7 +244,7 @@ void PointerTable::remove(void *user_context, size_t index, size_t entry_count) 
                             << "dst_offset=" << (int32_t)dst_offset << " "
                             << "bytes=" << (int32_t)bytes << ")...\n";
 #endif
-        memmove(ptr + dst_offset, ptr + src_offset, bytes);
+        memmove(offset_address(ptr, dst_offset), offset_address(ptr, src_offset), bytes);
     }
     resize(user_context, last_index - entry_count);
 }
@@ -276,7 +276,7 @@ void PointerTable::insert(void *user_context, size_t index, const void **array, 
         size_t src_offset = index * sizeof(void *);
         size_t dst_offset = (index + array_size) * sizeof(void *);
         size_t bytes = (last_index - index) * sizeof(void *);
-        memmove(ptr + dst_offset, ptr + src_offset, bytes);
+        memmove(offset_address(ptr, dst_offset), offset_address(ptr, src_offset), bytes);
     }
     replace(user_context, index, array, array_size);
 }

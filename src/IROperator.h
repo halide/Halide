@@ -1092,6 +1092,14 @@ Expr ceil(Expr x);
  * cast<int>(x + 0.5f) or similar. */
 Expr round(Expr x);
 
+/** Return the whole number closest to a floating-point expression, with ties
+ * rounding away from zero, like std::round in C. If the argument is not
+ * floating-point, it is cast to Float(32). The return value is still in
+ * floating point, despite being a whole number. On platforms without a native
+ * instruction for this, it is emulated as trunc(x + copysign(p, x)), where p
+ * is the largest float below one half. */
+Expr round_half_away(Expr x);
+
 /** Return the integer part of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). The return value is still in
  * floating point, despite being a whole number. Vectorizes cleanly. */

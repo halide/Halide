@@ -315,9 +315,11 @@ private:
     mutable Scope<Interval> scope;
 
     /** A condition passed to push_fact(), alongside the variables it
-     * mentions, collected on first use since most are never consulted. */
+     * mentions. On first use, since most are never consulted, the condition
+     * is simplified into the canonical form the simplifier requires of the
+     * facts it learns from, and its variables are collected. */
     struct Fact {
-        Expr condition;
+        mutable Expr condition;
         mutable VarSet vars;
         mutable bool vars_built = false;
     };

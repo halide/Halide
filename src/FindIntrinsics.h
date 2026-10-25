@@ -35,6 +35,8 @@ Expr lower_sorted_avg(const Expr &a, const Expr &b);
 Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q);
 Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q);
 
+Expr lower_fixed_to_float(const Type &t, const Expr &x, const Expr &k);
+
 /** Replace one of the above ops with equivalent arithmetic. */
 Expr lower_intrinsic(const Call *op);
 

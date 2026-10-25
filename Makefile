@@ -20,7 +20,7 @@ ifeq ($(OS), Windows_NT)
     $(error Halide no longer supports the MinGW environment. Please use MSVC through CMake instead.)
 else
     # let's assume "normal" UNIX such as linux
-    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread
+    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -520,6 +520,7 @@ SOURCE_FILES = \
   FuzzFloatStores.cpp \
   Generator.cpp \
   GeneratorCache.cpp \
+  Halidoscope.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -728,6 +729,7 @@ HEADER_FILES = \
   FuzzFloatStores.h \
   Generator.h \
   GeneratorCache.h \
+  Halidoscope.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -1272,6 +1274,9 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+$(BUILD_DIR)/Halidoscope.o: CXX_FLAGS += -I$(SRC_DIR)/runtime
+
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -1490,6 +1495,10 @@ $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(TES
 # The spirv_ir test needs access to the internal-only SpirvIR.h header and
 # the vendored SPIR-V headers used by the Vulkan backend.
 $(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
+$(BIN_DIR)/correctness_vulkan_bool_minmax: $(ROOT_DIR)/test/correctness/vulkan_bool_minmax.cpp $(TEST_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
 
@@ -2505,6 +2514,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)

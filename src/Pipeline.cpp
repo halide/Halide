@@ -668,7 +668,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // The initial args are the same.
     same_compile = same_compile && std::equal(lowering_args.begin(), lowering_args.end(), old_module.functions().front().args.begin());
     // Linkage is the same.
-    same_compile = same_compile && old_module.functions().front().linkage == linkage_type;
+    same_compile = same_compile && old_module.functions().front().linkage == linkage_for_target(linkage_type, target);
     // The outputs of a Pipeline cannot change, so no need to test them.
 
     if (same_compile) {
@@ -1000,6 +1000,33 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
 void Pipeline::trace_pipeline() {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->trace_pipeline = true;
+}
+
+void Pipeline::halidoscope(std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope(nullptr, std::move(sizes), options, target);
+}
+
+void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope(nullptr, std::move(output), options, target);
+}
+
+void Pipeline::halidoscope(JITUserContext *context, std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    auto prepare = [&](Pipeline &p, const Target &t) {
+        return HalidoscopeRunner{[&p, t, &sizes](JITUserContext *c) { p.realize(c, sizes, t); },
+                                 std::make_unique<ProfilerScope>(p)};
+    };
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
+}
+
+void Pipeline::halidoscope(JITUserContext *context, RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    Realization r = output.r   ? *output.r :
+                    output.buf ? Realization(Buffer<>(*output.buf)) :
+                                 Realization(std::move(*output.buffer_list));
+    auto prepare = [&](Pipeline &p, const Target &t) {
+        return HalidoscopeRunner{[&p, t, &r](JITUserContext *c) { p.realize(c, r, t); },
+                                 std::make_unique<ProfilerScope>(p)};
+    };
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
 }
 
 ProfilerScope::ProfilerScope(Pipeline p)

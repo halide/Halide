@@ -682,7 +682,8 @@ gengen
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
       conceptual_stmt_html, hlpipe, device_code].
-     If omitted, default value is [c_header, static_library, registration].
+     If omitted, default value is [c_header, static_library, registration],
+     or [c_header, static_library] if the target has no_metadata.
 
  -p  A comma-separated list of shared libraries that will be loaded before the
      generator is run. Useful for custom auto-schedulers. The generator must
@@ -801,14 +802,16 @@ gengen
         return targets;
     };
 
-    const auto build_output_types = [&]() {
+    const auto build_output_types = [&](const std::vector<Target> &targets) {
         std::set<OutputFileType> output_types;
 
         std::string emit_flags_string = flags_info["-e"];
 
-        // If omitted or empty, assume .a and .h and registration.cpp
+        // If omitted or empty, assume .a and .h and registration.cpp. A target
+        // with no_metadata can't be registered, so then leave out the registration.
         if (emit_flags_string.empty()) {
-            emit_flags_string = "c_header,registration,static_library";
+            const bool no_metadata = !targets.empty() && targets.front().has_feature(Target::NoMetadata);
+            emit_flags_string = no_metadata ? "c_header,static_library" : "c_header,registration,static_library";
         }
 
         // If HL_EXTRA_OUTPUTS is defined, assume it's extra outputs we want to generate
@@ -870,7 +873,7 @@ gengen
     args.suffixes = build_target_strings(&args.generator_params);
     args.targets = build_targets(args.suffixes);
     args.output_dir = flags_info["-o"];
-    args.output_types = build_output_types();
+    args.output_types = build_output_types(args.targets);
     args.generator_name = flags_info["-g"];
     args.function_name = flags_info["-f"];
     args.file_base_name = flags_info["-n"];
@@ -1013,6 +1016,12 @@ void run_with_cache(const std::string &key,
 }
 
 #ifdef WITH_SERIALIZATION
+// HL_LLVM_ARGS is passed straight to LLVM's option parser, so it can change
+// codegen without changing anything else in the key.
+void add_llvm_args_key_field(CacheKeyBuilder &b) {
+    b.add(get_env_variable("HL_LLVM_ARGS"));
+}
+
 // Mix the invocation-wide (target-independent) inputs that affect codegen
 // into a fresh key builder: the compiler identity plus names, build mode,
 // requested output types, and the canonical generator-param settings.
@@ -1025,6 +1034,7 @@ bool add_common_key_fields(CacheKeyBuilder &b, const char *kind, const ExecuteGe
     }
     b.add(kind);
     b.add(compiler_id);
+    add_llvm_args_key_field(b);
     b.add(args.function_name);
     b.add(args.file_base_name);
     b.add(args.build_mode == ExecuteGeneratorArgs::Gradient ? "gradient" : "default");
@@ -1178,6 +1188,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                 CacheKeyBuilder b;
                 b.add("runtime");
                 b.add(compiler_id);
+                add_llvm_args_key_field(b);
                 b.add(gcd_target.to_string());
                 for (OutputFileType t : args.output_types) {
                     b.add(std::to_string((int)t));
@@ -1668,6 +1679,19 @@ void GeneratorBase::post_schedule() {
 void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
     internal_assert(!pipeline.defined());
     requirements.push_back({condition, error_args});
+}
+
+void GeneratorBase::halidoscope_impl(const HalidoscopeOptions &options, JITUserContext *context,
+                                     const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args) {
+    std::vector<Argument> arguments = ordered_input_arguments();
+    auto prepare = [&](const HalidoscopeArgs &args) {
+        return [&arguments, &args](Pipeline &p, const Target &t) {
+            Callable c = p.compile_to_callable(arguments, t);
+            return HalidoscopeRunner{[c, &args](JITUserContext *ctx) { args(c, ctx); },
+                                     std::make_unique<ProfilerScope>(c)};
+        };
+    };
+    pipeline_halidoscope(get_pipeline(), context, prepare(trace_args), prepare(profile_args), options, get_target());
 }
 
 Pipeline GeneratorBase::get_pipeline() {

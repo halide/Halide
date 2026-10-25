@@ -278,7 +278,9 @@ const std::vector<BoundsTracker::Candidate> &BoundsTracker::candidates() const {
             // over-estimating what a condition mentions only costs an extra
             // condition handed to the simplifier.
             Expr loop_var = Variable::make(Int(32), entry.name);
-            entry.fact_lo = loop_var >= entry.lo;
+            // In the simplifier's canonical form, which it requires of facts
+            // and only learns bounds from: LT and LE, never GT or GE.
+            entry.fact_lo = entry.lo <= loop_var;
             entry.fact_hi = loop_var <= entry.hi;
             entry.fact_vars = vars_of(entry.fact_lo);
             entry.fact_vars.merge(vars_of(entry.fact_hi));
@@ -320,6 +322,7 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
                 continue;
             }
             if (!fact.vars_built) {
+                fact.condition = simplify(fact.condition);
                 fact.vars = vars_of(fact.condition);
                 fact.vars_built = true;
             }

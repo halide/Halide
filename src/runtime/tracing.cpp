@@ -238,7 +238,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
             return halide_error_trace_failed(user_context, "Could not write to trace file");
         }
 
-        // Write a packet into it
+        // Write a packet into it. Zero the last word first so that the
+        // padding is deterministic, which helps compression.
+        ((uint32_t *)packet)[total_size / 4 - 1] = 0;
         packet->size = total_size;
         packet->event = e->event;
         packet->parent_id = e->parent_id;
