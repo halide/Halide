@@ -1153,7 +1153,7 @@ inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per
 // sub-blocks' scales, decoded once per block as a vector, apply as one
 // vector multiply-add per vec / per sub-blocks. `gpr_scales` (a per-format
 // parameter): the sub-blocks' decoded scales (and mins), per block in
-// general-purpose registers, 4 bytes a word (VectorizeIn::GPR: GGML's SWAR
+// general-purpose registers, 4 bytes a word (VectorizeIn::SWAR: GGML's SWAR
 // decode of q4_K's 6-bit scales and mins). `merge` (vec_dot): a constant code
 // offset's sums merged into the codes' lanes (merge_sums()). `defer`
 // (vec_dot and gemv, no sub-blocks): the codes' bit fields' shifts
@@ -1285,7 +1285,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         Var kw("kw"), kb("kb");
         // (all unrolled: a loop here splits the block's code, and LLVM
         // hoists the block's loads above it and spills them)
-        w.compute_at(acc, ryo).split(w.args()[0], kw, kb, 4).unroll(kw).vectorize(kb, 4, VectorizeIn::GPR);
+        w.compute_at(acc, ryo).split(w.args()[0], kw, kb, 4).unroll(kw).vectorize(kb, 4, VectorizeIn::SWAR);
         for (size_t i = 1; i < w.args().size(); i++)
             w.unroll(w.args()[i]);
         readers.push_back(w);
@@ -1711,7 +1711,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             .split(k.args()[0], kw, kb, 4)
             .unroll(kw)
             .unroll(k.args()[1])
-            .vectorize(kb, 4, VectorizeIn::GPR)
+            .vectorize(kb, 4, VectorizeIn::SWAR)
             .unroll(k.args()[2]);
     }
     tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo));
