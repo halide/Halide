@@ -639,7 +639,6 @@ SOURCE_FILES = \
    CodeGen_C_vectors
 
 HTML_TEMPLATE_FILES = \
-   StmtToHTML_dependencies.html \
    StmtToHTML.js \
    StmtToHTML.css
 

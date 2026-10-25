@@ -517,6 +517,79 @@ if (devicePane) {
 }
 
 
+/* The device code of the APIs other than CUDA is C-like source (OpenCL C,
+ * Metal, HLSL, WGSL, ...), highlighted here with the classes of the
+ * speed-highlight library that the stylesheet colors. */
+const deviceCodeKeywords = new Set([
+    'auto', 'break', 'case', 'const', 'constant', 'constexpr', 'continue', 'default', 'device', 'do', 'else',
+    'enum', 'extern', 'fn', 'for', 'global', 'groupshared', 'if', 'inline', 'kernel', 'let', 'local', 'namespace',
+    'private', 'restrict', 'return', 'sizeof', 'static', 'struct', 'switch', 'template', 'thread', 'threadgroup',
+    'typedef', 'typename', 'uniform', 'union', 'using', 'var', 'volatile', 'while', '__constant', '__global',
+    '__kernel', '__local', '__private', '__attribute__', 'true', 'false']);
+const deviceCodeTypes = /^(void|bool|char|uchar|short|ushort|int|uint|long|ulong|half|float|double|size_t|ptrdiff_t|u?int(8|16|32|64)_t|(bool|char|uchar|short|ushort|int|uint|long|ulong|half|float|double)(2|3|4|8|16)?|[iuf](8|16|32|64)|vec[234]\w*|mat\w+)$/;
+
+function highlightDeviceCode(pane) {
+    let inBlockComment = false;
+    for (const el of pane.querySelectorAll('div.code span.line')) {
+        const text = el.textContent;
+        const span = (cls, t) => '<span class="shj-syn-' + cls + '">' + escapeHTML(t) + '</span>';
+        let out = '';
+        let i = 0;
+        if (inBlockComment) {
+            const end = text.indexOf('*/');
+            i = end < 0 ? text.length : end + 2;
+            inBlockComment = end < 0;
+            out += span('cmnt', text.slice(0, i));
+        } else {
+            // A preprocessor directive.
+            const m = /^\s*#\s*\w*/.exec(text);
+            if (m) {
+                out += span('kwd', m[0]);
+                i = m[0].length;
+            }
+        }
+        while (i < text.length) {
+            const rest = text.slice(i);
+            let m;
+            if (rest.startsWith('//')) {
+                out += span('cmnt', rest);
+                break;
+            } else if (rest.startsWith('/*')) {
+                const end = rest.indexOf('*/', 2);
+                const t = end < 0 ? rest : rest.slice(0, end + 2);
+                inBlockComment = end < 0;
+                out += span('cmnt', t);
+                i += t.length;
+            } else if ((m = /^"(?:[^"\\]|\\.)*"?|^'(?:[^'\\]|\\.)*'?/.exec(rest))) {
+                out += span('str', m[0]);
+                i += m[0].length;
+            } else if ((m = /^(?:0x[0-9a-fA-F]+|\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)[uUlLfFh]*/.exec(rest))) {
+                out += span('num', m[0]);
+                i += m[0].length;
+            } else if ((m = /^[A-Za-z_]\w*/.exec(rest))) {
+                const w = m[0];
+                if (deviceCodeKeywords.has(w)) {
+                    out += span('kwd', w);
+                } else if (deviceCodeTypes.test(w)) {
+                    out += span('type', w);
+                } else if (/^\s*\(/.test(rest.slice(w.length))) {
+                    out += span('func', w);
+                } else {
+                    out += escapeHTML(w);
+                }
+                i += w.length;
+            } else {
+                out += escapeHTML(rest[0]);
+                i += 1;
+            }
+        }
+        el.innerHTML = out;
+    }
+}
+if (devicePane) {
+    highlightDeviceCode(devicePane);
+}
+
 function initToolbar() {
 
     /* IR Settings */

@@ -275,6 +275,7 @@ span.Label b { background-color: var(--bg_visual_red); font-weight: bold !import
 }
 .shj-syn-err,.shj-syn-kwd{
     color: var(--cs-keyword);
+    font-weight: bold;
 }
 .shj-syn-num,.shj-syn-class{
     color: var(--cs-int);

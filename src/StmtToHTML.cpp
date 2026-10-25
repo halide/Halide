@@ -34,7 +34,6 @@
 #include <filesystem>
 #endif
 
-extern "C" unsigned char halide_html_template_StmtToHTML_dependencies_html[];
 extern "C" unsigned char halide_html_template_StmtToHTML_css[];
 extern "C" unsigned char halide_html_template_StmtToHTML_js[];
 
@@ -1421,7 +1420,6 @@ private:
     void generate_head(const Module &m) {
         stream << "<head>\n";
         stream << "<title>Halide Module: " << m.name() << "</title>\n";
-        stream << halide_html_template_StmtToHTML_dependencies_html;
 #if INLINE_TEMPLATES
         stream << "<style type='text/css'>\n"
                << halide_html_template_StmtToHTML_css
