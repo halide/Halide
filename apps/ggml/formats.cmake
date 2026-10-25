@@ -112,7 +112,7 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # sublanes=true (vec_dot and mul_mat's gemv tiles: the sub-blocks across the
 # vector lanes, their scales one vector multiply-add per 4 sub-blocks) where
 # measured faster (iq2_xs's gemv +14-19%, with interleave=1: with two blocks
-# per iteration it spills; iq3_xxs's vec_dot +2%, not its gemv): it also cuts
+# per iteration it spills; iq3_xxs's vec_dot +2%, gemv +0.5-1%): it also cuts
 # q4_K-q6_K's loops by ~15% in instructions, not in time (latency bound), and
 # slows iq4_xs, iq2_s and iq1_m. slp=false (not a GeneratorParam: the
 # generator runs with HL_LLVM_ARGS=-vectorize-slp=false) where LLVM's SLP
@@ -165,8 +165,8 @@ set(GGML_SCHEDULE_PARAMS
     "iq2_xs mul_mat q8_K interleave=1 sublanes=true"
     "iq2_xs mul_mat f32:q8_K interleave=1 sublanes=true"
     "iq2_xxs mul_mat f32:q8_K interleave=1"
-    "iq3_xxs mul_mat q8_K interleave=1"
-    "iq3_xxs mul_mat f32:q8_K interleave=1"
+    "iq3_xxs mul_mat q8_K interleave=1 sublanes=true"
+    "iq3_xxs mul_mat f32:q8_K interleave=1 sublanes=true"
     "iq1_s mul_mat q8_K interleave=1 slp=false"
     "iq1_m mul_mat q8_K slp=false"
     "iq1_m mul_mat f32:q8_K slp=false"
