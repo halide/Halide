@@ -1788,7 +1788,10 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     if (fmt.block == 1) {
-        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
+        // (flat()'s 8 interleaved steps: 16 f32 accumulators, so the widening
+        // FMAs (fmlal) issue back to back: on M3, f16 vec_dot 1.2x, its gemv
+        // 1.05-1.1x of 4 steps')
+        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t);
         return;
     }
     blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true, true);
@@ -2120,7 +2123,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // pairs, single rows. gemv (M = 1) takes single rows: one weight
         // stream (row pairs are two, a row apart: 0.65x GGML at K = 14336).
         if (whole || fmt.rows > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
-        Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 4, 16};
+        Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 8, 16};
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
         if (acc.defined()) fg = {2, 2, 1, 32, 32, 2};
         for (auto [c, ts] : Chain{{N >= fg.nt && M >= fg.mt, fg}, {N >= fp.nt && M > 1, fp}, {Expr(), fr}}) {
