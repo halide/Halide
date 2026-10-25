@@ -120,10 +120,10 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # index then extracted lane by lane for its table load: iq1_s's and iq1_m's
 # loops twice the SIMD instructions, ~15-30% slower (also with f32 acts,
 # quantized in the pipeline: gemv iq1_s +18-28%, iq1_m +6-10%).
-# gpr_scales=true (vec_dot and the gemv tiles: the 6-bit sub-block scales
-# and mins decoded in GPRs, GGML's SWAR; not the gemm tiles, where they cost
-# q5_K's 20%): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
-# thread). fold_offsets (all by default: a weight's constant code offset,
+# gpr_scales=true (the 6-bit sub-block scales and mins decoded in GPRs,
+# GGML's SWAR): q4_K vec_dot +7-12%, q5_K vec_dot +4-7% and gemv +4-9% (one
+# thread); in the gemm tiles, decoded once per block per row (not per
+# sub-block per row pair), q4_K gemm +9-18%, q5_K +6-15%. fold_offsets (all by default: a weight's constant code offset,
 # tq2_0's -1 or q6_K's -32, times the act's sub-block sums, as GGML's vec_dot
 # does, not subtracted per value; tq2_0's and tq1_0's gemm 1.2-1.5x, gemv
 # 1.1-1.3x): =gemv on vec_dot and the gemv tiles only (q6_K: its gemm tiles
