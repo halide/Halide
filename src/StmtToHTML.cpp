@@ -914,7 +914,8 @@ AssemblyMap map_assembly(std::string_view code, const std::function<uint32_t(uin
         if (begins_with(trimmed, ".section")) {
             std::string_view name = trimmed.substr(8);
             name = name.substr(std::min(name.size(), name.find_first_not_of(" \t")));
-            in_debug_section = begins_with(name, ".debug_");
+            // .debug_* for DWARF, .debug$* for CodeView.
+            in_debug_section = begins_with(name, ".debug");
         } else if (begins_with(trimmed, ".text") || begins_with(trimmed, ".data")) {
             in_debug_section = false;
         }
@@ -922,12 +923,22 @@ AssemblyMap map_assembly(std::string_view code, const std::function<uint32_t(uin
             continue;
         }
 
-        if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ")) {
-            // .loc <file> <line> <column> [flags]
-            std::istringstream in{std::string(trimmed.substr(4))};
-            uint32_t file = 0, l = 0, column = 0;
+        if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ") ||
+            begins_with(trimmed, ".cv_loc\t") || begins_with(trimmed, ".cv_loc ")) {
+            // .loc <file> <line> <column> [flags] for DWARF, and
+            // .cv_loc <function> <file> <line> <column> for CodeView.
+            const bool codeview = begins_with(trimmed, ".cv_loc");
+            std::istringstream in{std::string(trimmed.substr(codeview ? 7 : 4))};
+            uint32_t function = 0, file = 0, l = 0, column = 0;
+            if (codeview) {
+                in >> function;
+            }
             in >> file >> l >> column;
             current = l ? to_line(l, column) : 0;
+            continue;
+        }
+        // The other directives of CodeView are debug info too.
+        if (begins_with(trimmed, ".cv_")) {
             continue;
         }
         // The comments that say where variables live are debug info too.
@@ -1463,7 +1474,9 @@ private:
         // How comments and immediates look in the assembly of this target.
         const Target &t = m.target();
         const bool arm32 = t.arch == Target::ARM && t.bits == 32;
-        const char *comment = (t.arch == Target::ARM && !arm32) || t.arch == Target::Hexagon ? "//" :
+        const bool apple = t.os == Target::MacOS || t.os == Target::IOS;
+        const char *comment = t.arch == Target::ARM && !arm32 && apple                       ? ";" :
+                              (t.arch == Target::ARM && !arm32) || t.arch == Target::Hexagon ? "//" :
                               arm32                                                          ? "@" :
                                                                                                "#";
         stream << "];\nconst asmSyntax = {comment: \"" << comment << "\", immediate: \""

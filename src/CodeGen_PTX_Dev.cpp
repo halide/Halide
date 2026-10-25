@@ -239,6 +239,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     function->setCallingConv(llvm::CallingConv::PTX_Kernel);
 
     std::vector<std::pair<bool, Type>> debug_args;
+    debug_args.reserve(args.size());
     for (const auto &arg : args) {
         debug_args.emplace_back(arg.is_buffer, arg.type);
     }

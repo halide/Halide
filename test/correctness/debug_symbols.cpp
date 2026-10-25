@@ -304,6 +304,30 @@ int main(int argc, char **argv) {
         }
     }
 
+    // The html links the IR to the assembly for other platforms too, whose
+    // assembly carries the debug info differently (e.g. CodeView on Windows).
+    for (const char *other : {"x86-64-windows", "arm-64-macos", "arm-64-linux"}) {
+        Func k("k");
+        k(x, y) = x * scale + offset;
+        k.vectorize(x, 4).parallel(y);
+        const std::string other_html_path = dir + "debug_symbols_" + other + ".stmt.html";
+        const std::string other_stmt_path = dir + "debug_symbols_" + other + ".stmt";
+        for (const auto &p : {other_html_path, other_stmt_path}) {
+            Internal::ensure_no_file_exists(p);
+        }
+        try {
+            k.compile_to({{OutputFileType::stmt_html, other_html_path},
+                          {OutputFileType::stmt, other_stmt_path}},
+                         {scale, offset}, "debug_symbols_other", Target(other));
+        } catch (const Halide::CompileError &e) {
+            printf("[SKIP] Can't compile for %s: %s\n", other, e.what());
+            continue;
+        }
+        if (!check_html(other_html_path, other_stmt_path)) {
+            return 1;
+        }
+    }
+
     // With debug_symbols_conceptual, the debug info points into the
     // conceptual stmt instead.
     {

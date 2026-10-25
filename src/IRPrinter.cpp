@@ -425,7 +425,7 @@ public:
     // markup characters.
     bool enabled = true;
 
-private:
+protected:
     // Indices into tokens of those still open.
     vector<uint32_t> open;
     enum { Text,

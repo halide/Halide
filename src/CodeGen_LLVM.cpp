@@ -344,7 +344,9 @@ struct CodeGen_LLVM::DebugInfo {
         }
 
         SmallString<256> path(d->source->path);
-        sys::fs::make_absolute(path);
+        if (std::error_code error = sys::fs::make_absolute(path)) {
+            debug(1) << "Could not make " << d->source->path << " absolute: " << error.message() << "\n";
+        }
         MD5 md5;
         md5.update(d->source->text);
         SmallString<32> checksum;
@@ -1130,6 +1132,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
 
     if (debug_info && debug_info->function) {
         std::vector<std::pair<bool, Type>> arg_types;
+        arg_types.reserve(args.size());
         for (const auto &arg : args) {
             arg_types.emplace_back(arg.is_buffer(), arg.type);
         }
