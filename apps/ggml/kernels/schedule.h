@@ -2192,12 +2192,17 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // two records per tile where N allows, each act piece's broadcast
         // serving both (on M3, the gemv of mxfp4.4x4 1.08-1.1x, q4_0.i4.4x8
         // 1.04-1.1x, q1_0.4x1 1.02-1.05x; q8_0's, a load per piece, 0.85x at
-        // K = 14336: two weight streams)
+        // K = 14336: two weight streams). Records of over 11 KB, as row pairs
+        // below, one per tile up to 4 threads (q4_0.i4.4x4's at K = 14336,
+        // 32 KB: 1.2x on one thread, 1.04x on four; even on six; on ten, two
+        // records 1.1-1.4x).
         std::vector<Func> cd = decoders(rs, only({tag::codes}), 0, 1);
         if (!cd.empty() && cd.front().type() != cd.back().type()) {
             Tiles r2 = rt;
             r2.nt = 2 * fmt.rows;
-            blocked_rows(out, 2 * whole, dots[0], N % r2.nt == 0, r2, r, fmt.chunk, rs);
+            Expr two = N % r2.nt == 0;
+            if (row_bytes.defined()) two = two && (row_bytes <= 11 * 1024 || threads() > 4);
+            blocked_rows(out, 2 * whole, dots[0], two, r2, r, fmt.chunk, rs);
         }
         blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs);
         return;
