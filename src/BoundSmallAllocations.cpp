@@ -74,13 +74,21 @@ class BoundSmallAllocations : public IRMutator {
     }
 
     bool must_be_constant(MemoryType memory_type) const {
-        return memory_type == MemoryType::Register;
+        return memory_type == MemoryType::Register || memory_type == MemoryType::GPR;
+    }
+
+    void check_gpr_on_host(const std::string &name, MemoryType memory_type) const {
+        user_assert(memory_type != MemoryType::GPR ||
+                    (!in_thread_loop && (device_api == DeviceAPI::None || device_api == DeviceAPI::Host)))
+            << "Allocation " << name << " is stored in MemoryType::GPR inside a loop on a GPU. "
+            << "MemoryType::GPR is only supported on CPU targets; use MemoryType::Register instead.\n";
     }
 
     Stmt visit(const Realize *op) override {
         // Called pre-storage-flattening. At this point we just want
         // to ensure any extents on allocations which *must* be
         // constant *are* constant.
+        check_gpr_on_host(op->name, op->memory_type);
         if (must_be_constant(op->memory_type)) {
             Region region = op->bounds;
             bool changed = false;
@@ -112,6 +120,7 @@ class BoundSmallAllocations : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
+        check_gpr_on_host(op->name, op->memory_type);
         Expr total_extent = make_const(Int(64), 1);
         for (const Expr &e : op->extents) {
             total_extent *= e;
@@ -119,7 +128,7 @@ class BoundSmallAllocations : public IRMutator {
         Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
 
         if (!bound.defined() && must_be_constant(op->memory_type)) {
-            user_assert(op->memory_type != MemoryType::Register)
+            user_assert(op->memory_type != MemoryType::Register && op->memory_type != MemoryType::GPR)
                 << "Allocation " << op->name << " has a dynamic size. "
                 << "Only fixed-size allocations can be stored in registers. "
                 << "Try storing on the heap or stack instead.";

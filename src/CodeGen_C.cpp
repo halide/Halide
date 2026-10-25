@@ -2435,6 +2435,7 @@ void CodeGen_C::visit(const Allocate *op) {
 
                 if (op->memory_type == MemoryType::Stack ||
                     op->memory_type == MemoryType::Register ||
+                    op->memory_type == MemoryType::GPR ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;

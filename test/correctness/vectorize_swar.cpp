@@ -1,8 +1,11 @@
 #include "Halide.h"
+#include "halide_test_dirs.h"
 
 #include <cstdio>
+#include <fstream>
 #include <functional>
 #include <random>
+#include <sstream>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -10,7 +13,7 @@ using namespace Halide::Internal;
 namespace {
 
 // Look for vector values in the producer of a Func vectorized with
-// VectorizeIn::GPR. The only vectors allowed are dense loads and stores of
+// VectorizeIn::SWAR. The only vectors allowed are dense loads and stores of
 // words, which appear as reinterprets between a vector load or store and
 // a scalar word.
 class FindVectors : public IRVisitor {
@@ -122,7 +125,7 @@ public:
     }
 };
 
-// For a Func vectorized with VectorizeIn::GPR inside a SIMD loop, look
+// For a Func vectorized with VectorizeIn::SWAR inside a SIMD loop, look
 // for vector arithmetic on the narrow lanes in its producer. Each SIMD
 // lane should instead hold a word of packed narrow lanes, so the only
 // narrow vectors allowed are loads (including lane-by-lane predicated
@@ -227,11 +230,11 @@ public:
     }
 };
 
-// Compile the pipeline, checking that the producer of gpr_func, vectorized
-// with VectorizeIn::GPR inside a SIMD loop, computes on SIMD vectors of
+// Compile the pipeline, checking that the producer of swar_func, vectorized
+// with VectorizeIn::SWAR inside a SIMD loop, computes on SIMD vectors of
 // words of packed lanes rather than on SIMD vectors of the lanes.
-bool check_words_in_simd(Pipeline p, const Func &gpr_func, int lane_bits, int word_bits) {
-    FindNarrowVectorOpsPass checker(gpr_func.name(), lane_bits, word_bits);
+bool check_words_in_simd(Pipeline p, const Func &swar_func, int lane_bits, int word_bits) {
+    FindNarrowVectorOpsPass checker(swar_func.name(), lane_bits, word_bits);
     p.add_custom_lowering_pass(&checker, nullptr);
     p.compile_jit();
     p.clear_custom_lowering_passes();
@@ -241,7 +244,7 @@ bool check_words_in_simd(Pipeline p, const Func &gpr_func, int lane_bits, int wo
 class FindVectorsPass : public IRMutator {
 public:
     std::vector<std::string> funcs;
-    size_t num_gpr_funcs;
+    size_t num_swar_funcs;
     std::vector<bool> found_producer, has_vectors;
 
     using IRMutator::mutate;
@@ -249,7 +252,7 @@ public:
         found_producer.clear();
         has_vectors.clear();
         for (size_t i = 0; i < funcs.size(); i++) {
-            FindVectors finder(funcs[i], i < num_gpr_funcs);
+            FindVectors finder(funcs[i], i < num_swar_funcs);
             s.accept(&finder);
             found_producer.push_back(finder.found_producer);
             has_vectors.push_back(!finder.vectors.empty());
@@ -257,37 +260,37 @@ public:
         return s;
     }
 
-    FindVectorsPass(const std::vector<std::string> &funcs, size_t num_gpr_funcs)
-        : funcs(funcs), num_gpr_funcs(num_gpr_funcs) {
+    FindVectorsPass(const std::vector<std::string> &funcs, size_t num_swar_funcs)
+        : funcs(funcs), num_swar_funcs(num_swar_funcs) {
     }
 };
 
-// Compile the pipeline, checking that the producers of the gpr_funcs have
+// Compile the pipeline, checking that the producers of the swar_funcs have
 // no vectors left in them, and that the producers of the simd_funcs do
 // (i.e. that they were not lowered to general-purpose registers).
-bool check_vectors(Pipeline p, const std::vector<Func> &gpr_funcs,
+bool check_vectors(Pipeline p, const std::vector<Func> &swar_funcs,
                    const std::vector<Func> &simd_funcs = {}) {
     std::vector<std::string> names;
-    for (const Func &f : gpr_funcs) {
+    for (const Func &f : swar_funcs) {
         names.push_back(f.name());
     }
     for (const Func &f : simd_funcs) {
         names.push_back(f.name());
     }
-    FindVectorsPass checker(names, gpr_funcs.size());
+    FindVectorsPass checker(names, swar_funcs.size());
     p.add_custom_lowering_pass(&checker, nullptr);
     p.compile_jit();
     p.clear_custom_lowering_passes();
     bool ok = checker.found_producer.size() == names.size();
     for (size_t i = 0; ok && i < names.size(); i++) {
-        const bool gpr = i < gpr_funcs.size();
+        const bool swar = i < swar_funcs.size();
         if (!checker.found_producer[i]) {
             printf("Did not find the producer of %s\n", names[i].c_str());
             ok = false;
-        } else if (gpr && checker.has_vectors[i]) {
-            printf("GPR-vectorized Func %s still contains vectors\n", names[i].c_str());
+        } else if (swar && checker.has_vectors[i]) {
+            printf("SWAR-vectorized Func %s still contains vectors\n", names[i].c_str());
             ok = false;
-        } else if (!gpr && !checker.has_vectors[i]) {
+        } else if (!swar && !checker.has_vectors[i]) {
             printf("SIMD-vectorized Func %s contains no vectors\n", names[i].c_str());
             ok = false;
         }
@@ -295,8 +298,8 @@ bool check_vectors(Pipeline p, const std::vector<Func> &gpr_funcs,
     return ok;
 }
 
-bool check_no_vectors(Pipeline p, const Func &gpr_func) {
-    return check_vectors(std::move(p), {gpr_func});
+bool check_no_vectors(Pipeline p, const Func &swar_func) {
+    return check_vectors(std::move(p), {swar_func});
 }
 
 std::mt19937 rng(0x5eed);
@@ -380,7 +383,7 @@ bool test_kscales(int lanes) {
     Var k("k"), b("b"), j("j"), i("i");
     in_f(i, b) = in(i, b);
     f(k, b) = kscales_decode(in_f, k, b);
-    f.bound(k, 0, 16).split(k, j, i, lanes).unroll(j).vectorize(i, lanes, VectorizeIn::GPR);
+    f.bound(k, 0, 16).split(k, j, i, lanes).unroll(j).vectorize(i, lanes, VectorizeIn::SWAR);
 
     if (!check_no_vectors(Pipeline(f), f)) {
         return false;
@@ -389,9 +392,9 @@ bool test_kscales(int lanes) {
     return check_equal("kscales", out, kscales_reference(in));
 }
 
-// A GPR producer computed per block inside a SIMD consumer, which is how
+// A SWAR producer computed per block inside a SIMD consumer, which is how
 // the scales get used in the q4_K dot product.
-bool test_kscales_consumer(bool register_storage) {
+bool test_kscales_consumer(MemoryType storage) {
     const int nb = 23;
     Buffer<uint8_t> in = random_buffer<uint8_t>({12, nb});
     Buffer<int16_t> bs = random_buffer<int16_t>({8, nb});
@@ -403,10 +406,8 @@ bool test_kscales_consumer(bool register_storage) {
     g(k, b) = cast<int32_t>(f(k + 8, b)) * cast<int32_t>(bs(k, b));
 
     g.bound(k, 0, 8).vectorize(k, 8);
-    f.compute_at(g, b).bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
-    if (register_storage) {
-        f.store_in(MemoryType::Register);
-    }
+    f.compute_at(g, b).bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
+    f.store_in(storage);
 
     if (!check_vectors(Pipeline(g), {f}, {g})) {
         return false;
@@ -420,6 +421,64 @@ bool test_kscales_consumer(bool register_storage) {
         }
     }
     return check_equal("kscales_consumer", out, ref);
+}
+
+// Index bytes staged per block in MemoryType::GPR, by a SIMD- or a
+// SWAR-vectorized loop, and read one at a time by a table lookup, which is
+// how GGML's iq3_xxs reads its grid indices. Each 8-byte word of the stage
+// is held in a general-purpose register, so the lookups extract the
+// indices with shifts rather than from a SIMD register, or by reloading
+// them from memory.
+bool test_staged_indices(MemoryType storage, VectorizeIn where, int lanes, bool check_words = false) {
+    const int nb = 21, per_block = 16;
+    Buffer<uint8_t> in = random_buffer<uint8_t>({per_block, nb});
+    Buffer<int32_t> table = random_buffer<int32_t>({256});
+
+    Func idx("idx"), g("g");
+    Var k("k"), b("b"), ko("ko"), ki("ki");
+    idx(k, b) = in(k, b);
+    g(k, b) = table(cast<int>(idx(k, b))) + k;
+
+    g.bound(k, 0, per_block).unroll(k);
+    idx.compute_at(g, b).store_in(storage).split(k, ko, ki, lanes).unroll(ko).vectorize(ki, lanes, where);
+
+    Buffer<int32_t> out = g.realize({per_block, nb});
+    Buffer<int32_t> ref(per_block, nb);
+    for (int bb = 0; bb < nb; bb++) {
+        for (int kk = 0; kk < per_block; kk++) {
+            ref(kk, bb) = table(in(kk, bb)) + kk;
+        }
+    }
+    if (!check_equal("staged_indices", out, ref)) {
+        return false;
+    }
+
+    if (check_words) {
+        // The stage's words never reach a SIMD register: the vector type of
+        // a word is gone from the optimized LLVM IR. (Checked against the
+        // same schedule in MemoryType::Stack, which LLVM keeps as vectors,
+        // so that a change in LLVM doesn't silently make this vacuous.)
+        auto llvm_ir = [&](MemoryType m) {
+            idx.store_in(m);
+            const std::string file = Internal::get_test_tmp_dir() + "vectorize_swar_staged.ll";
+            g.compile_to_llvm_assembly(file, {}, "staged", get_jit_target_from_environment().with_feature(Target::NoRuntime));
+            std::ifstream f(file);
+            std::stringstream s;
+            s << f.rdbuf();
+            return s.str();
+        };
+        const std::string word_vector = "<" + std::to_string(lanes) + " x i8>";
+        const std::string gpr_ir = llvm_ir(MemoryType::GPR), stack_ir = llvm_ir(MemoryType::Stack);
+        idx.store_in(storage);
+        if (stack_ir.find(word_vector) == std::string::npos) {
+            printf("staged_indices: LLVM no longer keeps the stack stage in %s vectors; skipping the check\n",
+                   word_vector.c_str());
+        } else if (gpr_ir.find(word_vector) != std::string::npos) {
+            printf("staged_indices: the stage in MemoryType::GPR still uses %s vectors\n", word_vector.c_str());
+            return false;
+        }
+    }
+    return true;
 }
 
 // The same, but with the decode in a wrapper of an inlined Func, computed
@@ -440,7 +499,7 @@ bool test_kscales_wrapper() {
     acc.bound(k, 0, 8).vectorize(k, 8);
     acc.update().reorder(k, r).vectorize(k, 8);
     Func wrapper = f.in(acc);
-    wrapper.compute_at(acc, r).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
+    wrapper.compute_at(acc, r).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
 
     if (!check_vectors(Pipeline(acc), {wrapper}, {acc})) {
         return false;
@@ -458,7 +517,7 @@ bool test_kscales_wrapper() {
     return check_equal("kscales_wrapper", out, ref);
 }
 
-// Update stages can be vectorized with VectorizeIn::GPR too, while a
+// Update stages can be vectorized with VectorizeIn::SWAR too, while a
 // sibling Func computed in the same loop nest stays in SIMD registers.
 bool test_update_and_sibling() {
     const int nb = 29;
@@ -481,9 +540,9 @@ bool test_update_and_sibling() {
     out(k, b) = f(k, b) - s(k, b);
 
     out.bound(k, 0, 16);
-    f.compute_at(out, b).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
-    f.update(0).vectorize(k, 4, VectorizeIn::GPR);
-    f.update(1).vectorize(r, 4, VectorizeIn::GPR);
+    f.compute_at(out, b).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
+    f.update(0).vectorize(k, 4, VectorizeIn::SWAR);
+    f.update(1).vectorize(r, 4, VectorizeIn::SWAR);
     s.compute_at(out, b).vectorize(k, 16);
 
     if (!check_vectors(Pipeline(out), {f}, {s})) {
@@ -513,7 +572,7 @@ bool test_kscales_simd_blocks(int simd_lanes) {
     Var k("k"), b("b"), j("j"), i("i");
     in_f(i, b) = in(i, b);
     f(k, b) = kscales_decode(in_f, k, b);
-    f.bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR).vectorize(b, simd_lanes);
+    f.bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR).vectorize(b, simd_lanes);
 
     if (!check_words_in_simd(Pipeline(f), f, 8, 32)) {
         printf("  in test kscales_simd_blocks with %d SIMD lanes\n", simd_lanes);
@@ -523,7 +582,7 @@ bool test_kscales_simd_blocks(int simd_lanes) {
     return check_equal("kscales_simd_blocks", out, kscales_reference(in));
 }
 
-// A GPR producer computed inside a SIMD-vectorized loop of its consumer.
+// A SWAR producer computed inside a SIMD-vectorized loop of its consumer.
 bool test_kscales_in_simd_consumer() {
     const int nb = 23;
     Buffer<uint8_t> in = random_buffer<uint8_t>({12, nb});
@@ -536,7 +595,7 @@ bool test_kscales_in_simd_consumer() {
     g(k, b) = cast<int32_t>(f(k + 8, b)) * cast<int32_t>(bs(k, b));
 
     g.bound(k, 0, 8).split(b, bo, bi, 4).reorder(bi, k, bo).vectorize(bi);
-    f.compute_at(g, bi).bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::GPR);
+    f.compute_at(g, bi).bound(k, 0, 16).split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
 
     if (!check_words_in_simd(Pipeline(g), f, 8, 32)) {
         printf("  in test kscales_in_simd_consumer\n");
@@ -554,10 +613,10 @@ bool test_kscales_in_simd_consumer() {
 }
 
 // The number of SIMD lanes of words test_elementwise vectorizes across, in
-// a SIMD loop around the GPR loop, or 1 for no SIMD loop.
+// a SIMD loop around the SWAR loop, or 1 for no SIMD loop.
 int simd_lanes = 1;
 
-// Check a GPR-vectorized Func against the same Func computed without
+// Check a SWAR-vectorized Func against the same Func computed without
 // vectorization. The definition is given the Var to vectorize and the
 // inputs.
 template<typename T>
@@ -572,21 +631,21 @@ bool test_elementwise(const char *name, int lanes,
     a(x) = a_buf(x);
     c(x) = c_buf(x);
 
-    Func f(std::string(name) + "_gpr"), ref(std::string(name) + "_ref");
+    Func f(std::string(name) + "_swar"), ref(std::string(name) + "_ref");
     f(x) = def(x, a, c);
     ref(x) = def(x, a, c);
     if (simd_lanes > 1) {
         Var xo("xo"), xw("xw"), y("y"), xi("xi");
         f.split(x, xw, xi, lanes, tail)
             .split(xw, xo, y, simd_lanes, TailStrategy::GuardWithIf)
-            .vectorize(xi, VectorizeIn::GPR)
+            .vectorize(xi, VectorizeIn::SWAR)
             .vectorize(y);
         if (!check_words_in_simd(Pipeline(f), f, sizeof(T) * 8, sizeof(T) * 8 * lanes)) {
             printf("  in test %s with %d lanes in %d SIMD lanes\n", name, lanes, simd_lanes);
             return false;
         }
     } else {
-        f.vectorize(x, lanes, VectorizeIn::GPR, tail);
+        f.vectorize(x, lanes, VectorizeIn::SWAR, tail);
         if (!check_no_vectors(Pipeline(f), f)) {
             printf("  in test %s with %d lanes\n", name, lanes);
             return false;
@@ -624,14 +683,23 @@ int main(int argc, char **argv) {
         // which bytes to load differ between the two halves of each word.
         ok = ok && test_kscales(8);
     }
-    ok = ok && test_kscales_consumer(false);
-    ok = ok && test_kscales_consumer(true);
+    ok = ok && test_kscales_consumer(MemoryType::Auto);
+    ok = ok && test_kscales_consumer(MemoryType::Register);
+    ok = ok && test_kscales_consumer(MemoryType::GPR);
     ok = ok && test_kscales_wrapper();
     ok = ok && test_update_and_sibling();
-    // SIMD loops around GPR loops.
+    // SIMD loops around SWAR loops.
     ok = ok && test_kscales_simd_blocks(4);
     ok = ok && test_kscales_simd_blocks(8);
     ok = ok && test_kscales_in_simd_consumer();
+    // Bytes staged in MemoryType::GPR.
+    for (int lanes : {4, word_bits / 8}) {
+        for (MemoryType m : {MemoryType::Stack, MemoryType::GPR}) {
+            ok = ok && test_staged_indices(m, VectorizeIn::SIMD, lanes);
+            ok = ok && test_staged_indices(m, VectorizeIn::SWAR, lanes);
+        }
+    }
+    ok = ok && test_staged_indices(MemoryType::GPR, VectorizeIn::SIMD, word_bits / 8, true);
 
     std::vector<int> u8_lanes = {2, 4};
     std::vector<int> u16_lanes = {2};
@@ -640,7 +708,7 @@ int main(int argc, char **argv) {
         u16_lanes.push_back(4);
     }
 
-    // Each GPR loop on its own, then inside a SIMD loop.
+    // Each SWAR loop on its own, then inside a SIMD loop.
     for (int simd : {1, 4}) {
         simd_lanes = simd;
         for (int lanes : u8_lanes) {

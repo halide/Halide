@@ -1,9 +1,9 @@
-#ifndef HALIDE_VECTORIZE_GPR_H
-#define HALIDE_VECTORIZE_GPR_H
+#ifndef HALIDE_VECTORIZE_SWAR_H
+#define HALIDE_VECTORIZE_SWAR_H
 
 /** \file
  * Defines the lowering pass that moves the vectors of a loop vectorized
- * with VectorizeIn::GPR into general-purpose integer registers.
+ * with VectorizeIn::SWAR into general-purpose integer registers.
  */
 
 #include "Expr.h"
@@ -17,7 +17,7 @@ struct Target;
 namespace Internal {
 
 /** Take the vectorized body of a loop scheduled with
- * VectorizeIn::GPR (the output of vectorizing the loop named
+ * VectorizeIn::SWAR (the output of vectorizing the loop named
  * loop_name), and rewrite all of its vector values as unsigned integer
  * scalars that hold the lanes packed together ("SIMD within a
  * register"). Lane i of a vector of b-bit lanes occupies bits [b * i, b
@@ -26,7 +26,7 @@ namespace Internal {
  * scalar loads and stores. Reports a user error for any vector that is
  * too wide for a general-purpose register of the target, or any
  * operation that cannot be done lane-wise within one. */
-Stmt lower_gpr_vectors(const Stmt &s, const std::string &loop_name, const Target &target);
+Stmt lower_swar_vectors(const Stmt &s, const std::string &loop_name, const Target &target);
 
 }  // namespace Internal
 }  // namespace Halide

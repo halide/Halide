@@ -2085,7 +2085,7 @@ Stage &Stage::vectorize(const VarOrRVar &var) {
 }
 
 Stage &Stage::vectorize(const VarOrRVar &var, VectorizeIn where) {
-    set_dim_type(var, where == VectorizeIn::GPR ? ForType::VectorizedGPR : ForType::Vectorized);
+    set_dim_type(var, where == VectorizeIn::SWAR ? ForType::VectorizedSWAR : ForType::Vectorized);
     return *this;
 }
 

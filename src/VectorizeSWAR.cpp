@@ -1,4 +1,4 @@
-#include "VectorizeGPR.h"
+#include "VectorizeSWAR.h"
 #include "Deinterleave.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -62,9 +62,9 @@ string func_name_of_loop(const string &loop_name) {
     return loop_name;
 }
 
-// Rewrites all vectors in the body of a GPR-vectorized loop as unsigned
+// Rewrites all vectors in the body of a SWAR-vectorized loop as unsigned
 // scalar words with the lanes packed together, lane 0 in the low bits.
-class LowerGPRVectors : public IRMutator {
+class LowerSWARVectors : public IRMutator {
     const string loop_name;
     const int max_word_bits;
 
@@ -80,7 +80,7 @@ class LowerGPRVectors : public IRMutator {
         (why << ... << args);
         user_error << "In the schedule for Func " << func_name_of_loop(loop_name)
                    << ", loop " << loop_name
-                   << " is vectorized with VectorizeIn::GPR, but it contains an "
+                   << " is vectorized with VectorizeIn::SWAR, but it contains an "
                    << "operation that cannot be done lane-wise in a general-purpose register: "
                    << why.str() << ":\n  " << e << "\n"
                    << "Use VectorizeIn::SIMD (the default) to vectorize this loop in SIMD registers instead.\n";
@@ -635,7 +635,7 @@ class LowerGPRVectors : public IRMutator {
     }
 
 public:
-    LowerGPRVectors(const string &loop_name, int max_word_bits)
+    LowerSWARVectors(const string &loop_name, int max_word_bits)
         : loop_name(loop_name), max_word_bits(max_word_bits) {
     }
 
@@ -760,9 +760,9 @@ protected:
 
 }  // namespace
 
-Stmt lower_gpr_vectors(const Stmt &s, const string &loop_name, const Target &target) {
+Stmt lower_swar_vectors(const Stmt &s, const string &loop_name, const Target &target) {
     Stmt result = simplify(s);
-    result = LowerGPRVectors(loop_name, target.bits)(result);
+    result = LowerSWARVectors(loop_name, target.bits)(result);
     return result;
 }
 
