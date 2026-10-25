@@ -30,7 +30,8 @@ public:
     // where a weight's constant code offsets fold into the act's sub-block
     // sums (see ggml::Fold)
     GeneratorParam<ggml::Fold> fold_offsets{"fold_offsets", ggml::Fold::All, {{"none", ggml::Fold::None}, {"gemv", ggml::Fold::Gemv}, {"all", ggml::Fold::All}}};
-    // mul_mat's gemv in tiles of two rows where N allows (else one)
+    // mul_mat's gemv in tiles of two rows where N allows and a row is short
+    // enough (see ggml::mul_mat; else one)
     GeneratorParam<bool> row_pairs{"row_pairs", true};
 
     void configure() {
@@ -147,6 +148,10 @@ public:
             record(p).set_extent(record(w[0]).extent());
             row(p).set_extent(row(w[0]).extent());
         }
+        row_bytes = 0;
+        for (const ImageParam &p : w) {
+            row_bytes += row(p).stride() * p.type().bytes();
+        }
         for (ImageParam p : a) {
             dense(p);
             if (p.dimensions() > 1) record(p).set_extent(record(w[0]).extent() * (fw.block / fa.block));
@@ -172,7 +177,7 @@ public:
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs, row_bytes);
         }
     }
 
@@ -184,6 +189,7 @@ private:
     std::vector<Func> staged;                 // encoded inside the pipeline
     ggml::Formats fmt;
     Approximation acc;  // the dot's sums (undefined: f32)
+    Expr row_bytes;     // a weight row's (record row's) bytes
     GeneratorOutput<Buffer<>> *result = nullptr;
 
     // The encoded ports of a format (the values themselves for plain f32);
