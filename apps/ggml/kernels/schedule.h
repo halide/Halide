@@ -1519,7 +1519,7 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // once per weight block, not per block.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
                          const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
-                         int per = 1, bool fold_offsets = true) {
+                         int per = 1, bool fold_offsets = true, bool gpr_scales = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi"), ryw("ryw"), ryp("ryp");
@@ -1528,6 +1528,10 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Sums d;
     // records: the sub-blocks' decoded scales (and mins) their own stage
     std::vector<Func> kept = records && sub ? scale_decoders(rs) : std::vector<Func>{};
+    // gpr_scales: the plain weights' sub-block scales too, decoded per block
+    // per row in GPRs (below), not per sub-block per row pair
+    bool swar = gpr_scales && sub && !records;
+    if (swar) kept = scale_decoders(rs);
     if (derived && derived_sums(out, st, dot, s, r, rs, d, act_sub, records ? sub : 0, kept, fold_offsets)) aff = false;
     // With the act's records: if, within the period over which the bit
     // fields' positions repeat (bit_period: q6_K's 128 values), a bit of the
@@ -1664,7 +1668,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         // the sub-block's scales, decoded once across the record's rows (per
         // period, its sub-blocks', the rows innermost: dense in a looped
         // sub-block, not gathered)
-        for (Func k : kept) {
+        for (Func k : swar ? std::vector<Func>{} : kept) {
             if (!calls_any(part.function().update(0).values()[0], {k})) continue;
             Func ks = k.in(part);
             if (period) ks.reorder_storage(ks.args()[2], ks.args()[0], ks.args()[1]);
@@ -1686,6 +1690,30 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, records, act_records);
+    // a tile-local wrapper (k is shared with the other tiles), computed per
+    // block: four scales per word, the rows unrolled (with SIMD across the
+    // rows instead, or SIMD only: 3-4% slower)
+    for (Func k0 : swar ? kept : std::vector<Func>{}) {
+        std::vector<Func> callers;
+        for (Func g : {part, inner, codes, blk, mid, rest, d.sums, d.blk, d.sum, d.part, d.pair}) {
+            if (!g.defined()) continue;
+            bool c = false;
+            for (int i = -1; i < g.num_update_definitions(); i++) {
+                const auto &vals = i < 0 ? g.function().values() : g.function().update(i).values();
+                c = c || std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {k0}); });
+            }
+            if (c && std::none_of(callers.begin(), callers.end(), [&](const Func &h) { return h.name() == g.name(); })) callers.push_back(g);
+        }
+        if (callers.empty()) continue;
+        Func k = k0.in(callers);
+        Var kw("kw"), kb("kb");
+        k.compute_at(acc, ryo)
+            .split(k.args()[0], kw, kb, 4)
+            .unroll(kw)
+            .unroll(k.args()[1])
+            .vectorize(kb, 4, VectorizeIn::GPR)
+            .unroll(k.args()[2]);
+    }
     tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo));
 }
 
@@ -2142,7 +2170,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (whole) std::swap(rr[1], rr.back());
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, true, fmt.sub, fmt.act_sub, true, whole, 1, fold_gemm);
     } else if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm, gpr_scales);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm);
