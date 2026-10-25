@@ -10,6 +10,7 @@
 #include "Util.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -856,6 +857,128 @@ private:
     }
 };
 
+// Escapes text for html, after a span with the given class if that is set.
+void append_html(std::string &out, std::string_view text, const char *cls = nullptr) {
+    if (cls) {
+        out += "<span class='";
+        out += cls;
+        out += "'>";
+    }
+    for (char c : text) {
+        switch (c) {
+        case '&':
+            out += "&amp;";
+            break;
+        case '<':
+            out += "&lt;";
+            break;
+        case '>':
+            out += "&gt;";
+            break;
+        default:
+            out += c;
+        }
+    }
+    if (cls) {
+        out += "</span>";
+    }
+}
+
+// Syntax highlights a line of assembly in html, using the classes of the
+// speed-highlight library that the stylesheet colors.
+std::string highlight_assembly(std::string_view line, const Target &target) {
+    const bool x86 = target.arch == Target::X86;
+    const bool arm32 = target.arch == Target::ARM && target.bits == 32;
+    const std::string_view comment_start = (target.arch == Target::ARM && !arm32) || target.arch == Target::Hexagon ? "//" :
+                                           arm32                                                                    ? "@" :
+                                                                                                                      "#";
+    const char immediate_start = x86 ? '$' : '#';
+
+    // Split off the comment, which is not inside a string.
+    std::string_view code = line, comment;
+    for (size_t i = 0; i < line.size(); i++) {
+        if (line[i] == '"') {
+            i = std::min(line.find('"', i + 1), line.size());
+        } else if (begins_with(line.substr(i), comment_start)) {
+            code = line.substr(0, i);
+            comment = line.substr(i);
+            break;
+        }
+    }
+
+    auto is_word = [](char c) {
+        return std::isalnum((unsigned char)c) || c == '_' || c == '.' || c == '$';
+    };
+    auto is_register = [&](std::string_view w) {
+        if (x86) {
+            return false;  // x86 registers start with %.
+        }
+        if (w == "sp" || w == "wsp" || w == "xzr" || w == "wzr" || w == "lr" || w == "fp" || w == "pc") {
+            return true;
+        }
+        // e.g. x0, w12, v3.4s, q1, d7, r4, a0, t1
+        size_t i = 0;
+        while (i < w.size() && i < 2 && std::isalpha((unsigned char)w[i])) {
+            i++;
+        }
+        size_t digits = i;
+        while (digits < w.size() && std::isdigit((unsigned char)w[digits])) {
+            digits++;
+        }
+        return i > 0 && digits > i && (digits == w.size() || w[digits] == '.');
+    };
+
+    std::string out;
+    size_t first = code.find_first_not_of(" \t");
+    if (first == std::string_view::npos) {
+        append_html(out, code);
+    } else {
+        append_html(out, code.substr(0, first));
+        std::string_view rest = code.substr(first);
+        size_t end = rest.find_first_of(" \t");
+        std::string_view head = rest.substr(0, end);
+        std::string_view tail = end == std::string_view::npos ? std::string_view{} : rest.substr(end);
+        if (!head.empty() && head.back() == ':') {
+            append_html(out, head, "shj-syn-label");
+        } else {
+            append_html(out, head, head[0] == '.' ? "shj-syn-asm-directive" : "shj-syn-instruction");
+        }
+        // The operands.
+        for (size_t i = 0; i < tail.size();) {
+            char c = tail[i];
+            size_t j = i + 1;
+            if (c == '"') {
+                j = std::min(tail.find('"', i + 1), tail.size() - 1) + 1;
+                append_html(out, tail.substr(i, j - i), "shj-syn-str");
+            } else if (c == '%' || c == immediate_start || is_word(c) || c == '-') {
+                while (j < tail.size() && (is_word(tail[j]) || (c != '%' && j == i + 1 && tail[j] == '-'))) {
+                    j++;
+                }
+                std::string_view w = tail.substr(i, j - i);
+                const char *cls = nullptr;
+                if (c == '%') {
+                    cls = "shj-syn-register";
+                } else if (c == immediate_start || std::isdigit((unsigned char)c) ||
+                           (c == '-' && w.size() > 1)) {
+                    cls = "shj-syn-num";
+                } else if (begins_with(w, ".L") || begins_with(w, "$L") || begins_with(w, "LBB")) {
+                    cls = "shj-syn-label";
+                } else if (is_register(w)) {
+                    cls = "shj-syn-register";
+                }
+                append_html(out, w, cls);
+            } else {
+                append_html(out, tail.substr(i, 1));
+            }
+            i = j;
+        }
+    }
+    if (!comment.empty()) {
+        append_html(out, comment, "shj-syn-cmnt");
+    }
+    return out;
+}
+
 /** Where the code generated for each line of a stmt went, in some assembly
  * with debug info that points into the stmt (or into a stmt it was lowered
  * from). */
@@ -1462,21 +1585,16 @@ private:
     // Generate pane: Generated host assembly code
     void generate_host_assembly_pane(const Module &m) {
         stream << "<div id='host-assembly-pane' class='pane'>\n";
-        stream << "<div id='asm-view'>\n";
-        // The line numbers are those in the assembly file, which has more
-        // lines than are shown.
-        stream << "<pre id='asm-line-nums'>";
-        for (uint32_t line : host_asm.asm_lines) {
-            stream << line << "\n";
-        }
-        stream << "</pre>\n";
         stream << "<div id='asm-code'>\n";
         stream << "<div id='asm-highlights'></div>\n";
-        stream << "<div id='assemblyContent' class='shj-lang-asm'>";
-        for (const std::string &line : host_asm.lines) {
-            stream << escape_html(line) << "\n";
+        // One row of fixed height per line, so that a line can be found by
+        // its index. The line numbers are those in the assembly file, which
+        // has more lines than are shown.
+        stream << "<div id='assemblyContent'>\n";
+        for (size_t i = 0; i < host_asm.lines.size(); i++) {
+            stream << "<div><span class='n'>" << host_asm.asm_lines[i] << "</span>"
+                   << highlight_assembly(host_asm.lines[i], m.target()) << "</div>\n";
         }
-        stream << "</div>\n";
         stream << "</div>\n";
         stream << "</div>\n";
         stream << "</div>\n";

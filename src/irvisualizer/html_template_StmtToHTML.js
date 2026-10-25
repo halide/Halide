@@ -230,8 +230,9 @@ asmIRLines.forEach((line, i) => {
         asmOfIRLine.get(line).push(i);
     }
 });
+const asmRows = document.getElementById('assemblyContent').children;
 function asmLineHeight() {
-    return parseFloat(window.getComputedStyle(document.getElementById('asm-line-nums')).lineHeight);
+    return asmRows.length ? asmRows[0].getBoundingClientRect().height : 14;
 }
 function highlightAsm(lines, cls) {
     asmHighlights.querySelectorAll('div.' + cls).forEach(el => el.remove());

@@ -1119,31 +1119,28 @@ div.ir-code .op.Highlight { background-color: var(--bg_visual_blue); }
 }
 
 /* Host assembly, with the numbers of the lines in the assembly file */
-div#asm-view {
-    display: flex;
+div#asm-code {
+    position: relative;
 }
-pre#asm-line-nums,
 div#assemblyContent {
     font-family: monospace;
     font-size: 12px;
-    line-height: 14px;
-    margin: 0;
-    padding: 0;
-    white-space: pre;
+    cursor: pointer;
 }
-pre#asm-line-nums {
-    color: var(--cs-line-num);
-    text-align: right;
+div#assemblyContent > div {
+    height: 14px;
+    line-height: 14px;
+    white-space: pre;
+    overflow: hidden;
+}
+div#assemblyContent span.n {
+    display: inline-block;
+    width: 4.5em;
     padding-right: 1em;
+    text-align: right;
+    color: var(--cs-line-num);
     user-select: none;
     -webkit-user-select: none;
-}
-div#asm-code {
-    position: relative;
-    flex-grow: 1;
-}
-div#assemblyContent {
-    cursor: pointer;
 }
 div.asm-hl {
     position: absolute;
