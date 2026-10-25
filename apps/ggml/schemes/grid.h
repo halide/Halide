@@ -149,17 +149,19 @@ inline Approximation iq2_s(const std::string &lay, bool indexed = false) {
 }
 
 // block_iq3_xxs {f16 d; u8 qs[96]}: per 4 values a grid index (kgrid_256,
-// digits 4 + 8i, the top 62) in qs[0:64]; per 32 values a u32 in qs[64:96],
-// the 4 sign indices (per 8) at bits 7l, the scale s (2s + 1) at bit 28; d * 4
-// in d.
+// digits 4 + 8i, the top 62) in qs[0:64], read as 8 u64s of 8 indices (a
+// load per 8 indices, not one per index: the dot is bound by its loads; M3
+// Max, gemv 1.16-1.27x, gemm 1.3-1.38x, vec_dot 1.16-1.2x); per 32 values a
+// u32 in qs[64:96], the 4 sign indices (per 8) at bits 7l, the scale s (2s +
+// 1) at bit 28; d * 4 in d.
 inline Approximation iq3_xxs(const std::string &lay, bool indexed = false, bool tables = false) {
-    return trusted("iq3_xxs", lay, indexed, {{"d", Float(16)}, {"qs", UInt(8), QK_K / 4}, {"scales_and_signs", UInt(32), QK_K / 32}},
+    return trusted("iq3_xxs", lay, indexed, {{"d", Float(16)}, {"qs", UInt(64), QK_K / 32}, {"scales_and_signs", UInt(32), QK_K / 32}},
                    {"qs", "scales_and_signs", "d"},
                    {ScaledCodes{32, -62, 62, 1, 31},
                     Parallel{{"codes", Compose{SignSplit{}, Parallel{grid("kgrid_256", kgrid_256(), 3, 4, {4, 12, 20, 28, 36, 44, 52, 62}), even_signs(tables)}}},
                              {"scales", odd_scales(4)},
                              {"scale", Compose{scale_by(4), fp16()}}},
-                    Parallel{Identity{}, BitFields{UInt(32), {{"signs", 7, 4, 0, 7}, {"scales", 4, 1, 28}}}, Identity{}}});
+                    Parallel{BitFields{UInt(64), {{"grid", 8, 8, 0, 8}}}, BitFields{UInt(32), {{"signs", 7, 4, 0, 7}, {"scales", 4, 1, 28}}}, Identity{}}});
 }
 
 // block_iq3_s {f16 d; u8 qs[64]; u8 qh[8]; u8 signs[32]; u8 scales[4]}: per
