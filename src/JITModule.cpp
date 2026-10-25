@@ -492,8 +492,8 @@ void compile_module_impl(
         // functions that register it with the debugger are looked up among
         // the symbols of the process, which do not include them when LLVM is
         // linked statically, so define them there. They are also exported
-        // from libHalide (see exported_symbols.osx) for the lookups that go
-        // through dlsym.
+        // from libHalide (see exported_symbols.ldscript/.osx) for the lookups
+        // that go through dlsym.
         if (llvm::orc::JITDylibSP process = JIT->getProcessSymbolsJITDylib()) {
             llvm::orc::SymbolMap symbols;
             auto define = [&](const char *name, auto *fn) {
