@@ -83,13 +83,20 @@ inline Approximation e2m1_codes() {
 // GGML's e8m0 scales: d = 2^(e - 128), half of e8m0's value (as
 // GGML_E8M0_TO_FP32_HALF): an e8m0 MiniFloat (OCP MX's: byte 0xFF NaN, so
 // 2^128 encodes to it) of 2d, and decoded GGML's way, with 0xFF as 2^127.
-// Lossless on the powers of two 2^-128 .. 2^127. The decode builds d's top
-// 16 bits in int16: (e - 1) << 7 (d's exponent field, e >= 2), else, as the
-// larger, (e + 1) << 5 (its subnormals 2^-128 and 2^-127, e < 2).
-inline Approximation e8m0_half() {
+// Lossless on the powers of two 2^-128 .. 2^127. The decode builds d's bits
+// as (e - 1) << 23 (d's exponent field, e >= 2), else, as the larger,
+// (e + 1) << 21 (its subnormals 2^-128 and 2^-127, e < 2). Interleaved
+// records decode a vector of scales, cheaper as d's top 16 bits in int16
+// (eight lanes to a register, widened by the shift); a flat layout's one
+// scale per block is cheaper in int32.
+inline Approximation e8m0_half(bool narrow = false) {
     MiniFloat f{8, 0, 127, false, MiniFloat::Specials::NaNOnly};
     return Pointwise{"e8m0_half", [=](const Expr &x) { return f.encode(x * 2.0f); },
                      [=](const Expr &x) {
+                         if (!narrow) {
+                             Expr e = cast<int32_t>(x);
+                             return reinterpret<float>(max((e - 1) << 23, (e + 1) << 21));
+                         }
                          Expr e = cast<int16_t>(x), top = max((e - 1) << 7, (e + 1) << 5);
                          return reinterpret<float>(cast<uint32_t>(cast<uint16_t>(top)) << 16);
                      }}
@@ -100,7 +107,7 @@ inline Approximation e8m0_half() {
 // block_mxfp4: the codes' fields packed as q4_0's (code j in the low nibble
 // of byte j, code j + 16 in its high nibble), the scale's byte e before them.
 inline Approximation mxfp4(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, MXFP4Quant{}, Parallel{{"codes", e2m1_codes()}, {"scale", e8m0_half()}},
+    return Compose{BlockReshape{QK, indexed}, MXFP4Quant{}, Parallel{{"codes", e2m1_codes()}, {"scale", e8m0_half(isdigit(lay[0]))}},
                    Parallel{{"codes", PlanarFieldPack{4, QK / 2}}},
                    layout(lay, {{"e", UInt(8)}, {"qs", UInt(8), QK / 2}}, {"qs", "e"})};
 }
