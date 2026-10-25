@@ -392,7 +392,7 @@ int main(int argc, char **argv) {
             f.compile_to({{OutputFileType::llvm_assembly, c_ll_path}},
                          {input, scale, offset}, "debug_symbols_c",
                          conceptual_target.with_feature(Target::DebugSymbols));
-        } catch (const Halide::CompileError &e) {
+        } catch (const Halide::CompileError &) {
             refused = true;
         }
         if (!refused) {

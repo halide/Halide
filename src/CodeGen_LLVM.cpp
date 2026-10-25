@@ -1232,11 +1232,13 @@ void CodeGen_LLVM::begin_debug_function(const std::string &name, const std::stri
     for (const auto &[is_buffer, type] : args) {
         signature.push_back(is_buffer ? d.buffer_ptr_type : d.type_of(type));
     }
+    // A combination of flags is not one of the enumerators.
+    const auto sp_flags = static_cast<DISubprogram::DISPFlags>(  // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
+        +DISubprogram::SPFlagDefinition | +DISubprogram::SPFlagOptimized);
     DISubprogram *subprogram = d.builder->createFunction(
         d.file, name, linkage_name, d.file, line,
         d.builder->createSubroutineType(d.builder->getOrCreateTypeArray(signature)),
-        line, DINode::FlagPrototyped,
-        DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized);
+        line, DINode::FlagPrototyped, sp_flags);
     function->setSubprogram(subprogram);
     d.scope = subprogram;
     d.location = DILocation::get(*context, line, column, subprogram);

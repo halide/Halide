@@ -488,7 +488,27 @@ void compile_module_impl(
 
     if ((target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) &&
         llvm::isa<llvm::orc::ObjectLinkingLayer>(JIT->getObjLinkingLayer())) {
-        // Tell debuggers about the code, through the GDB JIT interface.
+        // Tell debuggers about the code, through the GDB JIT interface. The
+        // functions that register it with the debugger are looked up among
+        // the symbols of the process, which do not include them when LLVM is
+        // linked statically, so define them there. They are also exported
+        // from libHalide (see exported_symbols.osx) for the lookups that go
+        // through dlsym.
+        if (llvm::orc::JITDylibSP process = JIT->getProcessSymbolsJITDylib()) {
+            llvm::orc::SymbolMap symbols;
+            auto define = [&](const char *name, auto *fn) {
+                symbols[JIT->mangleAndIntern(name)] =
+                    llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(fn), llvm::JITSymbolFlags::Exported);
+            };
+            define("llvm_orc_registerJITLoaderGDBAllocAction", &llvm_orc_registerJITLoaderGDBAllocAction);
+#if LLVM_VERSION < 220
+            define("llvm_orc_registerJITLoaderGDBWrapper", &llvm_orc_registerJITLoaderGDBWrapper);
+#endif
+            if (llvm::Error error = process->define(llvm::orc::absoluteSymbols(std::move(symbols)))) {
+                debug(1) << "Could not define the debugger registration functions for JIT code: "
+                         << llvm::toString(std::move(error)) << "\n";
+            }
+        }
         if (llvm::Error error = llvm::orc::enableDebuggerSupport(*JIT)) {
             debug(1) << "Could not enable debugger support for JIT code: "
                      << llvm::toString(std::move(error)) << "\n";

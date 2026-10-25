@@ -242,6 +242,7 @@ LLVM_STATIC_LIBFILES = \
 	ipo \
 	passes \
 	orcjit \
+	orcdebugging \
 	$(X86_LLVM_CONFIG_LIB) \
 	$(ARM_LLVM_CONFIG_LIB) \
 	$(OPENCL_LLVM_CONFIG_LIB) \
