@@ -395,10 +395,30 @@ function scrollToDevice(line) {
 }
 
 // Hovering a line of IR shows its code, clicking its number goes there.
+// Marks (or unmarks) the lines that collapsing a block would hide, down to
+// its closing brace, along the indentation of the block.
+function markFold(header, mark) {
+    const line = parseInt(header.dataset.line);
+    const end = parseInt(header.dataset.blockEnd);
+    const column = parseInt(header.style.getPropertyValue('--ind') || '0');
+    for (let l = line + 1; l <= end; l++) {
+        const el = irLines[l - 1];
+        el.classList.toggle('fold', mark);
+        el.classList.toggle('fold-end', mark && l === end);
+        el.style.setProperty('--fold', column);
+    }
+}
+
 irPane.addEventListener('mouseover', function(event) {
     const op = event.target.closest('span.op[data-g]');
     if (op) {
         irPane.querySelectorAll('span.op[data-g="' + op.dataset.g + '"]').forEach(el => el.classList.add('Highlight'));
+    }
+    if (event.target.classList.contains('t')) {
+        const header = event.target.closest('div.l');
+        if (header && header.dataset.blockEnd) {
+            markFold(header, true);
+        }
     }
     const l = event.target.closest('div.l');
     highlightAsm(l ? (asmOfIRLine.get(parseInt(l.dataset.line)) || []) : [], 'hover');
@@ -408,6 +428,12 @@ irPane.addEventListener('mouseout', function(event) {
     const op = event.target.closest('span.op[data-g]');
     if (op) {
         irPane.querySelectorAll('span.op[data-g="' + op.dataset.g + '"]').forEach(el => el.classList.remove('Highlight'));
+    }
+    if (event.target.classList.contains('t')) {
+        const header = event.target.closest('div.l');
+        if (header && header.dataset.blockEnd) {
+            markFold(header, false);
+        }
     }
 });
 irPane.addEventListener('mouseleave', function() {

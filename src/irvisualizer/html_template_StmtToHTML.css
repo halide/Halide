@@ -1095,6 +1095,27 @@ div.ir-code span.t {
     text-align: center;
     cursor: pointer;
     color: var(--cs-line-num);
+    font-size: 1.4em;
+    line-height: 0.93em;
+}
+div.ir-code span.t:hover {
+    color: var(--red);
+}
+/* While hovering the collapse toggle of a block, a line marks the lines it
+ * collapses. */
+div.ir-code div.l.fold::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--ir-gutter) + var(--fold) * 1ch + 0.4ch);
+    border-left: 2px dotted var(--fg0);
+    pointer-events: none;
+}
+div.ir-code div.l.fold-end::after {
+    bottom: 50%;
+    width: 0.6ch;
+    border-bottom: 2px dotted var(--fg0);
 }
 div.ir-code span.t:before {
     content: "\25BE";
