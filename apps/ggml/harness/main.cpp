@@ -12,6 +12,7 @@
 #include <random>
 #include <set>
 #include <sstream>
+#include <thread>
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -104,6 +105,21 @@ void convert_rows(ggml_type t, const float *src, uint8_t *dst, int64_t rows, int
             ggml_quantize_chunk(t, src + r * K, dst + r * rs, 0, 1, K, nullptr);
         }
     }
+}
+
+// GGML's quantizer on rows split across threads (rows are independent: the
+// same bytes as one call; the iq* searches otherwise dominate the bench's run).
+void quantize_rows(ggml_type t, const float *src, uint8_t *dst, int64_t rows, int64_t K) {
+    const float *w = importance(t, K);
+    ggml_quantize_init(t);
+    int64_t n = std::min<int64_t>(rows, std::max(1u, std::thread::hardware_concurrency()));
+    std::vector<std::thread> ts;
+    for (int64_t i = 0; i < n; i++) {
+        int64_t r0 = rows * i / n, r1 = rows * (i + 1) / n;
+        ts.emplace_back([=] { ggml_quantize_chunk(t, src + r0 * K, dst + r0 * ggml_row_size(t, K), 0, r1 - r0, K, w); });
+    }
+    for (std::thread &th : ts)
+        th.join();
 }
 
 struct Emitter {
@@ -270,7 +286,7 @@ int main(int argc, char **argv) {
                 for (float &x : wf)
                     x = normal(rng);
                 std::vector<uint8_t> w(wbytes * copies);
-                ggml_quantize_chunk(wt, wf.data(), w.data(), 0, s.N, s.K, importance(wt, s.K));
+                quantize_rows(wt, wf.data(), w.data(), s.N, s.K);
                 for (int c = 1; c < copies; c++)
                     memcpy(&w[c * wbytes], w.data(), wbytes);
                 std::vector<float> af(s.M * s.K);
