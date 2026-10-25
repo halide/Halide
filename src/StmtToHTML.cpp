@@ -1158,6 +1158,32 @@ void print_stmt_lines(std::ostream &stream, const StmtSourceMap &src, IRCostMode
         }
     }
 
+    // Parallel loops and loops over GPU blocks are shaded, and so are loops
+    // over GPU threads, in another color. A shade starts at the column of the
+    // outermost such loop around the line, or is -1 if there is none.
+    std::vector<int> parallel_column(num_lines + 1, -1), thread_column(num_lines + 1, -1);
+    for (uint32_t line = 1; line <= num_lines; line++) {
+        const StmtSourceMap::Location *l = line_stmt[line];
+        if (!l || l->node->node_type != IRNodeType::For) {
+            continue;
+        }
+        const ForType for_type = ((const For *)l->node)->for_type;
+        std::vector<int> *column = nullptr;
+        if (for_type == ForType::Parallel || for_type == ForType::GPUBlock) {
+            column = &parallel_column;
+        } else if (for_type == ForType::GPUThread || for_type == ForType::GPULane) {
+            column = &thread_column;
+        } else {
+            continue;
+        }
+        const int indent = (int)line_text(line).find_first_not_of(' ');
+        for (uint32_t l2 = line; l2 <= std::max(line, block_end[line]); l2++) {
+            if ((*column)[l2] < 0) {
+                (*column)[l2] = indent;
+            }
+        }
+    }
+
     // Spans to open and close as the text goes by: one per Expr, and one per
     // token.
     struct Event {
@@ -1268,7 +1294,24 @@ void print_stmt_lines(std::ostream &stream, const StmtSourceMap &src, IRCostMode
     std::vector<const Event *> open;
     size_t next_event = 0;
     for (uint32_t line = 1; line <= num_lines; line++) {
-        stream << "<div class='l' data-line='" << line << "'";
+        stream << "<div class='l";
+        if (parallel_column[line] >= 0) {
+            stream << " in-par";
+        }
+        if (thread_column[line] >= 0) {
+            stream << " in-thr";
+        }
+        stream << "' data-line='" << line << "'";
+        if (parallel_column[line] >= 0 || thread_column[line] >= 0) {
+            stream << " style='";
+            if (parallel_column[line] >= 0) {
+                stream << "--par:" << parallel_column[line] << ";";
+            }
+            if (thread_column[line] >= 0) {
+                stream << "--thr:" << thread_column[line] << ";";
+            }
+            stream << "'";
+        }
         if (block_end[line]) {
             stream << " data-block-end='" << block_end[line] << "'";
         }

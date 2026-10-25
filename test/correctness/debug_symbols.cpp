@@ -31,10 +31,16 @@ std::vector<std::string> split_lines(const std::string &text) {
 // The text of each line of IR in an html output, in order of their line
 // numbers, which must be consecutive from 1.
 bool html_lines(const std::string &html, std::vector<std::string> &lines) {
-    const std::string line_open = "<div class='l' data-line='";
+    // A line may have more classes than 'l', e.g. when it is shaded.
+    const std::string line_open = "<div class='l";
+    const std::string number_attribute = "data-line='";
     const std::string code_open = "<span class='c'>";
     for (size_t at = html.find(line_open); at != std::string::npos; at = html.find(line_open, at + 1)) {
-        int number = std::atoi(html.c_str() + at + line_open.size());
+        const char next = html[at + line_open.size()];
+        if (next != '\'' && next != ' ') {
+            continue;
+        }
+        int number = std::atoi(html.c_str() + html.find(number_attribute, at) + number_attribute.size());
         if (number != (int)lines.size() + 1) {
             printf("html line %d follows line %d\n", number, (int)lines.size());
             return false;

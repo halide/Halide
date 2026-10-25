@@ -1032,6 +1032,31 @@ div.ir-code div.l.selected {
 div.ir-code div.l[data-hidden]:not([data-hidden="0"]) {
     display: none;
 }
+
+/* Shading of parallel loops and loops over GPU blocks, and of loops over GPU
+ * threads: from the column of the loop, with a line along its left. */
+div.ir-code {
+    --par-edge: rgba(240, 200, 0, 0.35);
+    --par-fill: rgba(240, 200, 0, 0.07);
+    --thr-edge: rgba(240, 100, 50, 0.35);
+    --thr-fill: rgba(240, 100, 50, 0.07);
+}
+div.ir-code div.l.in-par {
+    --par-x: calc(var(--ir-gutter) + var(--par) * 1ch);
+    background-image: linear-gradient(to right, transparent var(--par-x), var(--par-edge) var(--par-x),
+                                      var(--par-edge) calc(var(--par-x) + 3px), var(--par-fill) calc(var(--par-x) + 3px));
+}
+div.ir-code div.l.in-thr {
+    --thr-x: calc(var(--ir-gutter) + var(--thr) * 1ch);
+    background-image: linear-gradient(to right, transparent var(--thr-x), var(--thr-edge) var(--thr-x),
+                                      var(--thr-edge) calc(var(--thr-x) + 3px), var(--thr-fill) calc(var(--thr-x) + 3px));
+}
+div.ir-code div.l.in-par.in-thr {
+    background-image: linear-gradient(to right, transparent var(--thr-x), var(--thr-edge) var(--thr-x),
+                                      var(--thr-edge) calc(var(--thr-x) + 3px), var(--thr-fill) calc(var(--thr-x) + 3px)),
+                      linear-gradient(to right, transparent var(--par-x), var(--par-edge) var(--par-x),
+                                      var(--par-edge) calc(var(--par-x) + 3px), var(--par-fill) calc(var(--par-x) + 3px));
+}
 div.ir-code span.g {
     position: absolute;
     left: 0;
