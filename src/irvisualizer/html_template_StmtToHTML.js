@@ -230,10 +230,110 @@ asmIRLines.forEach((line, i) => {
         asmOfIRLine.get(line).push(i);
     }
 });
-const asmRows = document.getElementById('assemblyContent').children;
-function asmLineHeight() {
-    return asmRows.length ? asmRows[0].getBoundingClientRect().height : 14;
+// The assembly is rendered in rows of a fixed height, only those near the
+// view, which keeps the page small and fast.
+const asmContent = document.getElementById('assemblyContent');
+const asmRowHeight = 14;
+const asmLineNumbers = [];
+{
+    let n = 0;
+    for (const step of asmLineSteps) {
+        n += step;
+        asmLineNumbers.push(n);
+    }
 }
+function asmLineHeight() {
+    return asmRowHeight;
+}
+
+function escapeHTML(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Syntax highlights a line of assembly, with the classes of the speed-highlight
+// library that the stylesheet colors.
+function asmToHTML(line) {
+    const span = (cls, text) => '<span class="shj-syn-' + cls + '">' + escapeHTML(text) + '</span>';
+    // Split off the comment, which is not inside a string.
+    let code = line, comment = '';
+    for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') {
+            const j = line.indexOf('"', i + 1);
+            i = j < 0 ? line.length : j;
+        } else if (line.startsWith(asmSyntax.comment, i)) {
+            code = line.slice(0, i);
+            comment = line.slice(i);
+            break;
+        }
+    }
+    const isWord = c => /[\w.$]/.test(c);
+    const isRegister = w => {
+        if (asmSyntax.x86) {
+            return false;  // x86 registers start with %.
+        }
+        return /^(sp|wsp|xzr|wzr|lr|fp|pc)$/.test(w) || /^[a-z]{1,2}\d+(\..*)?$/.test(w);
+    };
+    const parts = /^(\s*)(\S*)(.*)$/s.exec(code);
+    let out = parts[1];
+    const head = parts[2], tail = parts[3];
+    if (head) {
+        out += span(head.endsWith(':') ? 'label' : head[0] === '.' ? 'asm-directive' : 'instruction', head);
+    }
+    // The operands.
+    for (let i = 0; i < tail.length;) {
+        const c = tail[i];
+        let j = i + 1;
+        if (c === '"') {
+            const end = tail.indexOf('"', i + 1);
+            j = end < 0 ? tail.length : end + 1;
+            out += span('str', tail.slice(i, j));
+        } else if (c === '%' || c === asmSyntax.immediate || isWord(c) || c === '-') {
+            while (j < tail.length && (isWord(tail[j]) || (c !== '%' && j === i + 1 && tail[j] === '-'))) {
+                j++;
+            }
+            const w = tail.slice(i, j);
+            if (c === '%') {
+                out += span('register', w);
+            } else if (c === asmSyntax.immediate || /\d/.test(c) || (c === '-' && w.length > 1)) {
+                out += span('num', w);
+            } else if (/^(\.L|\$L|LBB)/.test(w)) {
+                out += span('label', w);
+            } else if (isRegister(w)) {
+                out += span('register', w);
+            } else {
+                out += escapeHTML(w);
+            }
+        } else {
+            out += escapeHTML(c);
+        }
+        i = j;
+    }
+    if (comment) {
+        out += span('cmnt', comment);
+    }
+    return out;
+}
+
+let asmRendered = [-1, -1];
+function renderAsm() {
+    const top = asmPane.scrollTop - asmCode.offsetTop;
+    const first = Math.max(0, Math.floor(top / asmRowHeight) - 100);
+    const last = Math.min(asmLines.length, Math.ceil((top + asmPane.clientHeight) / asmRowHeight) + 100);
+    if (first === asmRendered[0] && last === asmRendered[1]) {
+        return;
+    }
+    asmRendered = [first, last];
+    let html = '';
+    for (let i = first; i < last; i++) {
+        html += '<div style="top:' + (i * asmRowHeight) + 'px"><span class="n">' + asmLineNumbers[i] + '</span>' +
+                asmToHTML(asmLines[i]) + '</div>';
+    }
+    asmContent.innerHTML = html;
+}
+asmContent.style.height = (asmLines.length * asmRowHeight) + 'px';
+asmPane.addEventListener('scroll', renderAsm);
+window.addEventListener('resize', renderAsm);
+renderAsm();
 function highlightAsm(lines, cls) {
     asmHighlights.querySelectorAll('div.' + cls).forEach(el => el.remove());
     const lineHeight = asmLineHeight();

@@ -1148,15 +1148,17 @@ div#asm-code {
     position: relative;
 }
 div#assemblyContent {
+    position: relative;
     font-family: monospace;
     font-size: 12px;
     cursor: pointer;
 }
 div#assemblyContent > div {
+    position: absolute;
+    left: 0;
     height: 14px;
     line-height: 14px;
     white-space: pre;
-    overflow: hidden;
 }
 div#assemblyContent span.n {
     display: inline-block;

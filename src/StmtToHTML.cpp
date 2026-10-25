@@ -857,126 +857,25 @@ private:
     }
 };
 
-// Escapes text for html, after a span with the given class if that is set.
-void append_html(std::string &out, std::string_view text, const char *cls = nullptr) {
-    if (cls) {
-        out += "<span class='";
-        out += cls;
-        out += "'>";
-    }
-    for (char c : text) {
-        switch (c) {
-        case '&':
-            out += "&amp;";
-            break;
-        case '<':
-            out += "&lt;";
-            break;
-        case '>':
-            out += "&gt;";
-            break;
-        default:
-            out += c;
-        }
-    }
-    if (cls) {
-        out += "</span>";
-    }
-}
-
-// Syntax highlights a line of assembly in html, using the classes of the
-// speed-highlight library that the stylesheet colors.
-std::string highlight_assembly(std::string_view line, const Target &target) {
-    const bool x86 = target.arch == Target::X86;
-    const bool arm32 = target.arch == Target::ARM && target.bits == 32;
-    const std::string_view comment_start = (target.arch == Target::ARM && !arm32) || target.arch == Target::Hexagon ? "//" :
-                                           arm32                                                                    ? "@" :
-                                                                                                                      "#";
-    const char immediate_start = x86 ? '$' : '#';
-
-    // Split off the comment, which is not inside a string.
-    std::string_view code = line, comment;
-    for (size_t i = 0; i < line.size(); i++) {
-        if (line[i] == '"') {
-            i = std::min(line.find('"', i + 1), line.size());
-        } else if (begins_with(line.substr(i), comment_start)) {
-            code = line.substr(0, i);
-            comment = line.substr(i);
-            break;
-        }
-    }
-
-    auto is_word = [](char c) {
-        return std::isalnum((unsigned char)c) || c == '_' || c == '.' || c == '$';
-    };
-    auto is_register = [&](std::string_view w) {
-        if (x86) {
-            return false;  // x86 registers start with %.
-        }
-        if (w == "sp" || w == "wsp" || w == "xzr" || w == "wzr" || w == "lr" || w == "fp" || w == "pc") {
-            return true;
-        }
-        // e.g. x0, w12, v3.4s, q1, d7, r4, a0, t1
-        size_t i = 0;
-        while (i < w.size() && i < 2 && std::isalpha((unsigned char)w[i])) {
-            i++;
-        }
-        size_t digits = i;
-        while (digits < w.size() && std::isdigit((unsigned char)w[digits])) {
-            digits++;
-        }
-        return i > 0 && digits > i && (digits == w.size() || w[digits] == '.');
-    };
-
-    std::string out;
-    size_t first = code.find_first_not_of(" \t");
-    if (first == std::string_view::npos) {
-        append_html(out, code);
-    } else {
-        append_html(out, code.substr(0, first));
-        std::string_view rest = code.substr(first);
-        size_t end = rest.find_first_of(" \t");
-        std::string_view head = rest.substr(0, end);
-        std::string_view tail = end == std::string_view::npos ? std::string_view{} : rest.substr(end);
-        if (!head.empty() && head.back() == ':') {
-            append_html(out, head, "shj-syn-label");
+// Writes text as the contents of a JavaScript string literal, which can
+// appear in a <script>.
+void write_js_string(std::ostream &stream, std::string_view text) {
+    stream << '"';
+    for (size_t i = 0; i < text.size(); i++) {
+        const char c = text[i];
+        if (c == '"' || c == '\\') {
+            stream << '\\' << c;
+        } else if (c == '\t') {
+            stream << "\\t";
+        } else if ((unsigned char)c < ' ') {
+            stream << "\\x" << "0123456789abcdef"[(c >> 4) & 15] << "0123456789abcdef"[c & 15];
+        } else if (c == '/' && i > 0 && text[i - 1] == '<') {
+            stream << "\\/";
         } else {
-            append_html(out, head, head[0] == '.' ? "shj-syn-asm-directive" : "shj-syn-instruction");
-        }
-        // The operands.
-        for (size_t i = 0; i < tail.size();) {
-            char c = tail[i];
-            size_t j = i + 1;
-            if (c == '"') {
-                j = std::min(tail.find('"', i + 1), tail.size() - 1) + 1;
-                append_html(out, tail.substr(i, j - i), "shj-syn-str");
-            } else if (c == '%' || c == immediate_start || is_word(c) || c == '-') {
-                while (j < tail.size() && (is_word(tail[j]) || (c != '%' && j == i + 1 && tail[j] == '-'))) {
-                    j++;
-                }
-                std::string_view w = tail.substr(i, j - i);
-                const char *cls = nullptr;
-                if (c == '%') {
-                    cls = "shj-syn-register";
-                } else if (c == immediate_start || std::isdigit((unsigned char)c) ||
-                           (c == '-' && w.size() > 1)) {
-                    cls = "shj-syn-num";
-                } else if (begins_with(w, ".L") || begins_with(w, "$L") || begins_with(w, "LBB")) {
-                    cls = "shj-syn-label";
-                } else if (is_register(w)) {
-                    cls = "shj-syn-register";
-                }
-                append_html(out, w, cls);
-            } else {
-                append_html(out, tail.substr(i, 1));
-            }
-            i = j;
+            stream << c;
         }
     }
-    if (!comment.empty()) {
-        append_html(out, comment, "shj-syn-cmnt");
-    }
-    return out;
+    stream << '"';
 }
 
 /** Where the code generated for each line of a stmt went, in some assembly
@@ -1541,13 +1440,32 @@ private:
         stream << "     </div>\n";
         stream << "  </div>\n";
 
-        // For each shown line of assembly, the line of the IR it was
+        // The shown lines of the host assembly, which the page renders as
+        // they come into view: their text, their line numbers in the assembly
+        // file as the steps from one to the next, and the line of IR each was
         // generated for.
-        stream << "<script>\nconst asmIRLines = [";
+        stream << "<script>\nconst asmLines = [";
+        for (size_t i = 0; i < host_asm.lines.size(); i++) {
+            stream << (i ? ",\n" : "");
+            write_js_string(stream, host_asm.lines[i]);
+        }
+        stream << "];\nconst asmLineSteps = [";
+        for (size_t i = 0; i < host_asm.asm_lines.size(); i++) {
+            stream << (i ? "," : "") << host_asm.asm_lines[i] - (i ? host_asm.asm_lines[i - 1] : 0);
+        }
+        stream << "];\nconst asmIRLines = [";
         for (size_t i = 0; i < host_asm.stmt_lines.size(); i++) {
             stream << (i ? "," : "") << host_asm.stmt_lines[i];
         }
-        stream << "];\n</script>\n";
+        // How comments and immediates look in the assembly of this target.
+        const Target &t = m.target();
+        const bool arm32 = t.arch == Target::ARM && t.bits == 32;
+        const char *comment = (t.arch == Target::ARM && !arm32) || t.arch == Target::Hexagon ? "//" :
+                              arm32                                                          ? "@" :
+                                                                                               "#";
+        stream << "];\nconst asmSyntax = {comment: \"" << comment << "\", immediate: \""
+               << (t.arch == Target::X86 ? "$" : "#") << "\", x86: " << (t.arch == Target::X86 ? "true" : "false")
+               << "};\n</script>\n";
 
 #if INLINE_TEMPLATES
         stream << "<script>\n"
@@ -1625,20 +1543,12 @@ private:
         stream << "</div>\n";
     }
 
-    // Generate pane: Generated host assembly code
+    // Generate pane: Generated host assembly code, rendered by the page
     void generate_host_assembly_pane(const Module &m) {
         stream << "<div id='host-assembly-pane' class='pane'>\n";
         stream << "<div id='asm-code'>\n";
         stream << "<div id='asm-highlights'></div>\n";
-        // One row of fixed height per line, so that a line can be found by
-        // its index. The line numbers are those in the assembly file, which
-        // has more lines than are shown.
-        stream << "<div id='assemblyContent'>\n";
-        for (size_t i = 0; i < host_asm.lines.size(); i++) {
-            stream << "<div><span class='n'>" << host_asm.asm_lines[i] << "</span>"
-                   << highlight_assembly(host_asm.lines[i], m.target()) << "</div>\n";
-        }
-        stream << "</div>\n";
+        stream << "<div id='assemblyContent'></div>\n";
         stream << "</div>\n";
         stream << "</div>\n";
     }
