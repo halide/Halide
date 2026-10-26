@@ -535,71 +535,77 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    auto make_params = [](const auto &set) {
+        Params p;
+        set(p);
+        return p;
+    };
+
     std::vector<Params> params;
 
     // The simplest possible case.
     params.push_back({});
 
     // Each of the other supported tile shapes.
-    params.push_back({.tile_m = 32, .tile_n = 8});
-    params.push_back({.tile_m = 8, .tile_n = 32});
+    params.push_back(make_params([&](Params &p) { p.tile_m = 32; p.tile_n = 8; }));
+    params.push_back(make_params([&](Params &p) { p.tile_m = 8; p.tile_n = 32; }));
 
     // Each combination of input layouts.
-    params.push_back({.a_transposed = true});
-    params.push_back({.b_transposed = true});
-    params.push_back({.a_transposed = true, .b_transposed = true});
+    params.push_back(make_params([&](Params &p) { p.a_transposed = true; }));
+    params.push_back(make_params([&](Params &p) { p.b_transposed = true; }));
+    params.push_back(make_params([&](Params &p) { p.a_transposed = true; p.b_transposed = true; }));
 
     // Several accumulator fragments live at once, which is what you want in
     // practice so that each operand load feeds more than one multiply.
-    params.push_back({.tiles_m = 2, .tiles_n = 2});
+    params.push_back(make_params([&](Params &p) { p.tiles_m = 2; p.tiles_n = 2; }));
 
     // More than one warp per block.
-    params.push_back({.warps = 2});
-    params.push_back({.tiles_m = 2, .tiles_n = 2, .warps = 2});
+    params.push_back(make_params([&](Params &p) { p.warps = 2; }));
+    params.push_back(make_params([&](Params &p) { p.tiles_m = 2; p.tiles_n = 2; p.warps = 2; }));
 
     // Accumulating in half precision, which uses half as many registers per
     // accumulator fragment.
-    params.push_back({.half_accumulator = true});
-    params.push_back({.tiles_m = 2, .tiles_n = 2, .half_accumulator = true});
+    params.push_back(make_params([&](Params &p) { p.half_accumulator = true; }));
+    params.push_back(make_params([&](Params &p) { p.tiles_m = 2; p.tiles_n = 2; p.half_accumulator = true; }));
 
     // The other operand types the hardware multiplies. Brain floats accumulate
     // into single precision, and eight-bit integers into 32-bit ones, which is
     // the interesting case for imaging.
     for (Type t : {BFloat(16), Int(8), UInt(8)}) {
-        params.push_back({.operand = t});
-        params.push_back({.operand = t, .tile_m = 32, .tile_n = 8});
-        params.push_back({.operand = t, .tile_m = 8, .tile_n = 32});
-        params.push_back({.operand = t, .tiles_m = 2, .tiles_n = 2});
-        params.push_back({.operand = t, .warps = 2});
-        params.push_back({.operand = t, .a_transposed = true});
-        params.push_back({.operand = t, .b_transposed = true});
-        params.push_back({.operand = t, .stage_in_shared = true});
-        params.push_back({.operand = t, .init_from_memory = true});
-        params.push_back({.operand = t, .out_transposed = true});
+        params.push_back(make_params([&](Params &p) { p.operand = t; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.tile_m = 32; p.tile_n = 8; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.tile_m = 8; p.tile_n = 32; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.tiles_m = 2; p.tiles_n = 2; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.warps = 2; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.a_transposed = true; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.b_transposed = true; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.stage_in_shared = true; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.init_from_memory = true; }));
+        params.push_back(make_params([&](Params &p) { p.operand = t; p.out_transposed = true; }));
     }
 
     // Operand tiles staged through shared memory inside the reduction loop.
     // This only works if the loop over lanes wraps the individual wmma
     // statements rather than the whole accumulator allocation.
-    params.push_back({.stage_in_shared = true});
-    params.push_back({.tiles_m = 2, .tiles_n = 2, .stage_in_shared = true});
-    params.push_back({.half_accumulator = true, .stage_in_shared = true});
+    params.push_back(make_params([&](Params &p) { p.stage_in_shared = true; }));
+    params.push_back(make_params([&](Params &p) { p.tiles_m = 2; p.tiles_n = 2; p.stage_in_shared = true; }));
+    params.push_back(make_params([&](Params &p) { p.half_accumulator = true; p.stage_in_shared = true; }));
 
     // Accumulators that start from a matrix already in memory rather than from
     // zero, which uses the load-into-the-accumulator-fragment instruction.
-    params.push_back({.init_from_memory = true});
-    params.push_back({.tiles_m = 2, .tiles_n = 2, .init_from_memory = true});
-    params.push_back({.half_accumulator = true, .init_from_memory = true});
-    params.push_back({.stage_in_shared = true, .init_from_memory = true});
+    params.push_back(make_params([&](Params &p) { p.init_from_memory = true; }));
+    params.push_back(make_params([&](Params &p) { p.tiles_m = 2; p.tiles_n = 2; p.init_from_memory = true; }));
+    params.push_back(make_params([&](Params &p) { p.half_accumulator = true; p.init_from_memory = true; }));
+    params.push_back(make_params([&](Params &p) { p.stage_in_shared = true; p.init_from_memory = true; }));
 
     // A column-major output, which the accumulator is stored to with the other
     // layout of the store instruction.
-    params.push_back({.out_transposed = true});
-    params.push_back({.tiles_m = 2, .tiles_n = 2, .out_transposed = true});
+    params.push_back(make_params([&](Params &p) { p.out_transposed = true; }));
+    params.push_back(make_params([&](Params &p) { p.tiles_m = 2; p.tiles_n = 2; p.out_transposed = true; }));
 
     // A reduction that isn't a whole number of tiles per unrolled step, and
     // matrices that aren't square.
-    params.push_back({.M = 32, .N = 128, .K = 256});
+    params.push_back(make_params([&](Params &p) { p.M = 32; p.N = 128; p.K = 256; }));
 
     for (const Params &p : params) {
         if (!test(p)) {
