@@ -1000,90 +1000,6 @@ inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDo
     tables(rs, {blk, codes, quads}, LoopLevel(acc, ryo), t);
 }
 
-// vec_dot: a constant code offset's term (derived_sums(): d.offsets, d.sub_sums,
-// tq2_0's and tq1_0's -1 times the act's sub-block sums, scaled per block as
-// the codes' dot) merged into the codes' int32 lanes (codes, of blk): the
-// act's sub-block sums (int16) reduced to `lanes` (each that of 2 pairs of
-// sub-blocks: saddlp, sadalp) and taken off the lanes before their float
-// conversion, as GGML's ggml_vec_dot_tq2_0_q8_K: per block one conversion
-// and multiply-add, not two and a horizontal add (tq2_0 and tq1_0 ~5% faster
-// per block). The lanes' float sums reassociate (not bit for bit, within the
-// check's tolerance). False (nothing changed) where the terms' block scales
-// differ or the sums don't split across the lanes.
-inline bool merge_sums(Func dot, const Stage &ds, Sums &d, Func blk, Func codes, int lanes, LoopLevel at, int interleave) {
-    using namespace Internal;
-    if (!d.offsets || !d.sub_sums || !d.sum.defined() || d.part.defined() || d.pair.defined() || !codes.defined() || codes.type() != Int(32)) return false;
-    // f's update: f + scale * term
-    auto scale = [](Func f) -> Expr {
-        Expr v = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
-        const Add *a = v.as<Add>();
-        const Mul *m = a ? a->b.as<Mul>() : nullptr;
-        return m && m->b.as<Call>() ? m->a : Expr();
-    };
-    Expr sw = scale(blk), ss = scale(d.blk);
-    if (!sw.defined() || !ss.defined() || !equal(sw, ss)) return false;
-    // dot's increment: with + k * sums (k an integer)
-    Definition dd = stage_definition(dot, ds);
-    std::optional<int> k;
-    auto sums = [&](const Expr &e) {
-        const Call *c = e.as<Call>();
-        return c && c->name == d.sums.name();
-    };
-    Expr v = mutate_with(dd.values()[0], [&](auto *self, const Mul *op) -> Expr {
-        const FloatImm *f = op->a.as<FloatImm>();
-        if (sums(op->b) && f && f->value == (int)f->value) {
-            k = (int)f->value;
-            return make_zero(op->type);
-        }
-        return self->visit_base(op); }, [&](auto *self, const Sub *op) -> Expr {
-        if (sums(op->b)) {
-            k = -1;
-            return self->mutate(op->a);
-        }
-        return self->visit_base(op); });
-    if (!k) return false;
-    const std::vector<ReductionVariable> &rv = d.sum.function().update(0).schedule().rvars();
-    std::optional<int64_t> ext = rv.size() == 1 ? as_const_int(simplify(rv[0].extent)) : std::nullopt;
-    if (!ext || *ext % (2 * lanes)) return false;  // (sub-block pairs per lane)
-    // blk's float(codes) (a wrapper's: change_type()) inlined
-    Definition bd = stage_definition(blk, blk.update());
-    Inliner in;
-    visit_with(bd.values()[0], [&](auto *self, const Call *c) {
-        if (c->func.defined()) {
-            Function f(c->func);
-            const Cast *x = f.has_update_definition() ? nullptr : f.values()[0].as<Cast>();
-            const Call *cc = x ? x->value.as<Call>() : nullptr;
-            if (cc && cc->name == codes.name()) in.add(f);
-        }
-        self->visit_base(c);
-    });
-    Expr bv = in(bd.values()[0]);
-    if (!calls_any(bv, {codes})) return false;
-    // the act's sub-block t = (rk * lanes + lane) * 2 + rj
-    Var lane("lane");
-    RVar rt(rv[0].var), rk("rk"), rr("rr"), rl("rl"), rj("rj");
-    d.sum.update().split(rt, rk, rr, 2 * lanes).split(rr, rl, rj, 2);
-    Func ls = d.sum.update().rfactor(rl, lane);
-    std::vector<std::string> names;
-    for (Var a : codes.args()) {
-        names.push_back(a.name());
-    }
-    bd.values()[0] = mutate_with(bv, [&](auto *self, const Call *c) -> Expr {
-        if (c->name != codes.name()) return self->visit_base(c);
-        std::vector<Expr> args;
-        for (Var a : ls.args()) {
-            args.push_back(c->args[std::find(names.begin(), names.end(), a.name()) - names.begin()]);
-        }
-        return Expr(c) + *k * ls(args);
-    });
-    dd.values()[0] = simplify(v);
-    Var u("u");
-    regs(ls.compute_at(at).reorder_storage(lane, u).bound_storage(u, interleave), {lane}, {u});
-    ls.update().reorder(rj, lane, rk).atomic().vectorize(rj).unroll(rk);
-    d = Sums();
-    return true;
-}
-
 // A block's codes (codes: their dot per lane, chunks rxc of `nchunk`, each
 // `per` values per lane, rxi) whose bit fields (x >> s) & m sit at a position s
 // that varies with the chunk (tq2_0's 2-bit fields: s = 0, 2, 4, 6 by pairs
@@ -1226,15 +1142,14 @@ inline bool deferred_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per
 // vector multiply-add per vec / per sub-blocks. `gpr_scales` (a per-format
 // parameter): the sub-blocks' decoded scales (and mins), per block in
 // general-purpose registers, 4 bytes a word (VectorizeIn::SWAR: GGML's SWAR
-// decode of q4_K's 6-bit scales and mins). `merge` (vec_dot): a constant code
-// offset's sums merged into the codes' lanes (merge_sums()). `defer`
-// (vec_dot and gemv, no sub-blocks): the codes' bit fields' shifts
-// deferred to their sums (deferred_shifts()).
+// decode of q4_K's 6-bit scales and mins). `defer` (vec_dot and gemv, no
+// sub-blocks): the codes' bit fields' shifts deferred to their sums
+// (deferred_shifts()).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
                     int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false, bool fold_offsets = true,
-                    bool merge = false, bool defer = false, bool index_words = false) {
-    Stage s = tile_out(out, st, dot, cond, ts, r), ds = s;
+                    bool defer = false, bool index_words = false) {
+    Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
@@ -1293,7 +1208,6 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     RVar rl = sl ? rxl : rxo;
     Func acc = sum_tree(s, {{{rl, lane}, {ryi, bacc}}, {{rl, lane}}}, tile_at(out, st), n, m, ryo)[0];
     s.atomic().vectorize(rl).unroll(n).unroll(m);
-    if (merge && !sub) merge_sums(dot, ds, d, blk, codes, vec / per, LoopLevel(acc, ryo), ts.interleave);
     // rfactor put the lanes last in storage; per block group (ryo), the
     // blocks' storage also in the K tail: on the stack
     for (Func f : {blk, mid, codes}) {
@@ -1866,7 +1780,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true, true);
+    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
@@ -2249,7 +2163,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm, gpr_scales, gemm_index_words);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
-    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm, false, false, gemm_index_words);
+    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm, false, gemm_index_words);
     // The rows past Mr (with whole records, M = 1's): no tasks when there are none.
     Expr rest = whole ? M == 1 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
@@ -2289,8 +2203,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // GGML's).
     Expr paired = fits(pairs, 1);
     if (row_bytes.defined()) paired = paired && row_bytes <= 11 * 1024;
-    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, false, true);
+    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, true);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, true);
 }
 
 }  // namespace ggml
