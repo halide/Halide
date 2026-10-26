@@ -89,7 +89,16 @@ struct FuncInfo {
         std::vector<int> extents;
         extents.reserve(dimensions);
         for (int i = 0; i < dimensions; i++) {
-            extents.push_back(max_coords[i] - min_coords[i] + 1);
+            // min_coords/max_coords come from the trace stream, so the span can
+            // exceed what fits in an int. Compute it in 64 bits and reject
+            // anything that overflows rather than storing into an undersized
+            // buffer.
+            const int64_t extent = (int64_t)max_coords[i] - (int64_t)min_coords[i] + 1;
+            if (extent < 1 || extent > INT32_MAX) {
+                fprintf(stderr, "Func bounding box is too large to store. Aborting.\n");
+                exit(1);
+            }
+            extents.push_back((int)extent);
         }
         values = Buffer<>(type, extents);
         if (values.data() == nullptr) {
