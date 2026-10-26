@@ -288,6 +288,33 @@ void register_halide_providers() {
             }
         }
     }
+    // halide-by-m-<name>: a Metal weight compute format's library (e.g.
+    // q4_0:f16) for M > 16, else the exact library of its storage format and
+    // act, as GGML picks kernel_mul_mm or its mul_mv kernels by M (and as an
+    // integration would dispatch): Halide's best by M, next to ggml-metal.
+    for (const Row &c : rows()) {
+        FormatSpec fs = parse_format(c.wt);
+        if (!(c.ops & GQ_mul_mat) || fs.compute.empty() || !strstr(c.features, "metal")) continue;
+        for (const Row &e : rows()) {
+            FormatSpec es = parse_format(e.wt);
+            if (!(e.ops & GQ_mul_mat) || es.type != fs.type || !es.compute.empty() || es.soa || es.rows > 1 || strcmp(e.at, c.at) ||
+                strcmp(e.aq, e.at) || strcmp(e.features, c.features))
+                continue;
+            auto make = [](const char *name) {
+                for (const Provider &p : providers()) {
+                    if (p.timed && p.ops & GQ_mul_mat && p.name == std::string("halide-") + name) return p.make;
+                }
+                return std::function<std::unique_ptr<Kernel>(const Inputs &)>();
+            };
+            providers().push_back({std::string("halide-by-m-") + c.name, GQ_mul_mat, true,
+                                   [mv = make(e.name), mm = make(c.name), nv = std::string(e.name), nm = std::string(c.name)](const Inputs &in) {
+                                       bool big = in.s.M > 16;
+                                       auto k = (big ? mm : mv)(in);
+                                       if (k) k->path = "halide:metal:" + (big ? nm : nv);
+                                       return k;
+                                   }});
+        }
+    }
 }
 
 }  // namespace gq

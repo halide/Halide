@@ -2064,6 +2064,28 @@ inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::
     return wh.type() == Float(16) && xh.defined() && xh.type() == Float(16);
 }
 
+// The f32 operands of a Metal gemm on exact weights: the weights' decoded
+// values (wh: their approximation's replacement) and the acts dot multiplies
+// them by (xh: f32 acts, or f16 ones' decode), both f32, else false. Not
+// two-level formats (K-quants, iq4_xs): out's gemm specialization ahead of the
+// rows puts its negation in every SkipStages flag of the rows' Funcs, so the
+// gemv kernel keeps dot's M >= 2 tree and its sub-block stages' flags: M = 1
+// 1.17-1.28x slower on M3 Max (q4_K, q2_K, iq4_xs), though their gemm is
+// 1.1-2.4x faster than the rows at M = 16..64.
+inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
+    using namespace Internal;
+    if (fmt.wcompute || !staged.empty() || rs.empty() || fmt.block % 8 || fmt.sub) return false;
+    wh = rs[0].replacement;
+    const Add *sum = dot.update_value().as<Add>();
+    const Mul *p = sum ? sum->b.as<Mul>() : nullptr;
+    const Call *u = p ? p->a.as<Call>() : nullptr, *v = p ? p->b.as<Call>() : nullptr;
+    if (!u || !v || u->call_type != Call::Halide || v->call_type != Call::Halide) return false;
+    if (v->name == wh.name()) std::swap(u, v);
+    if (u->name != wh.name()) return false;
+    xh = Func(Function(v->func));
+    return dot.type() == Float(32) && wh.type() == Float(32) && xh.type() == Float(32);
+}
+
 // f's update with every Func it calls on the way to `to` (views, decoders)
 // inlined: it then calls those directly.
 inline void inline_until(Func f, const std::vector<Func> &to) {
@@ -2086,17 +2108,18 @@ inline void inline_until(Func f, const std::vector<Func> &to) {
     }
 }
 
-// Metal gemm on f16 operands (f16_operands: wh, xh), as GGML's
-// kernel_mul_mm: dot's sum of their products, in f32, on the simdgroup_matrix
-// unit, for `o` (a stage of out: its specialization for the shapes it takes).
-// A threadgroup (gpu_blocks) takes a bn x bm tile of out, its simdgroups
-// (gpu_threads) wn x 1 sub-tiles of 8 * tn x 8 * tm outputs, each 8 x 8 an
-// accumulator in Tile memory (simdgroup_float8x8). Per step of `kstep` values
-// of K, the threadgroup's simdgroups decode the tile's weights to f16 in
-// threadgroup memory (each lane 4 values of a row at a time) and convert its
-// acts likewise; each simdgroup then loads the operand fragments
-// (simdgroup_half8x8, one per 8 values of K) of its row of tiles and its
-// column of tiles once, and multiplies them into its accumulators. Tiles by
+// Metal gemm on f16 or f32 operands (f16_operands, f32_operands: wh, xh), as
+// GGML's kernel_mul_mm: dot's sum of their products, in f32, on the
+// simdgroup_matrix unit, for `o` (a stage of out: its specialization for the
+// shapes it takes). A threadgroup (gpu_blocks) takes a bn x bm tile of out,
+// its simdgroups (gpu_threads) wn x 1 sub-tiles of 8 * tn x 8 * tm outputs,
+// each 8 x 8 an accumulator in Tile memory (simdgroup_float8x8). Per step of
+// `kstep` values of K, the threadgroup's simdgroups decode the tile's weights
+// (to f16, or f32) in threadgroup memory (each lane 4 values of a row at a
+// time) and stage its acts likewise; each simdgroup then loads the operand
+// fragments (simdgroup_half8x8 or simdgroup_float8x8, one per 8 values of K)
+// of its row of tiles and its column of tiles once, and multiplies them into
+// its accumulators. Tiles by
 // M (the widest it allows): 64 x 32 for M >= 256 and N >= 64 (4 x 1
 // simdgroups of 16 x 32), 32 x 32 for M >= 32 (4 x 1 of 8 x 32), 16 x 16 for
 // M >= 16, 16 x 8 below (2 simdgroups): o needs M >= 8, N >= 32 (edge tiles
@@ -2183,17 +2206,20 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     }
 }
 
-// Metal on f16 operands (f16_operands: wh, xh): metal_mm where M >= 8 and
-// N >= 32 (as GGML's kernel_mul_mm, past its mul_mv's M), else metal_rows,
-// on a clone of dot (each branch computes its own, stored and scheduled
-// apart: one in Tile memory) reading the same rounded operands, decoded per
-// value (the f16-rounded weights' scales no longer factor out of a block).
+// Metal on f16 operands (f16_operands: wh, xh) or f32 ones (f32_operands):
+// metal_mm where M >= min_m and N >= 32, else metal_rows, on a clone of dot
+// (each branch computes its own, stored and scheduled apart: one in Tile
+// memory) reading the same operands. On f16 operands min_m is 8 (as GGML's
+// kernel_mul_mm, past its mul_mv's M), and the rows decode per value (the
+// f16-rounded weights' scales no longer factor out of a block); on f32, 16:
+// below it the f32 tiles lose to the rows on some formats (mxfp4, iq4_nl,
+// q4_1 at M = 8 and 12, their decode staged per tile of 8 acts).
 // One kernel: both behind out's specialization (dot's, done on the host).
-inline void metal_f16(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
+inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m) {
     using namespace Internal;
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     Func rows = dot.clone_in(out);
-    Stage mm = Stage(out).specialize(M >= 8 && N >= 32);
+    Stage mm = Stage(out).specialize(M >= min_m && N >= 32);
     Definition d = out.function().definition().specializations().back().definition;
     for (Expr &v : d.values()) {
         v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
@@ -2393,7 +2419,11 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         packed_muxes(rs);
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
-            metal_f16(out, dots[0], wh, xh, r, fmt, rs);
+            metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 8);
+            return;
+        }
+        if (f32_operands(dots[0], rs, staged, fmt, wh, xh)) {
+            metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 16);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
