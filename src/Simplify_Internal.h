@@ -407,6 +407,16 @@ public:
         return find_outer_bounds_and_alignment_info(name);
     }
 
+    /** Looks up the alignment of let and free vars (see
+     * find_bounds_and_alignment_info), for analyses that take an
+     * AlignmentLookup. */
+    AlignmentLookup let_var_alignment() {
+        return [this](const std::string &name) {
+            const ExprInfo *info = find_bounds_and_alignment_info(name);
+            return info ? info->alignment : ModulusRemainder{};
+        };
+    }
+
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
