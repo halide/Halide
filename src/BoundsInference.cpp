@@ -1057,6 +1057,8 @@ public:
             return op;
         }
 
+        ScopedBinding<> bind(let_vars_in_scope, op->name);
+
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -1288,7 +1290,7 @@ public:
                             }
                             body = LetStmt::make(var + ".min", in.min, body);
                             body = LetStmt::make(var + ".max", in.max, body);
-                        } else {
+                        } else if (let_vars_in_scope.contains(var)) {
                             // If it's not found, we're already in the
                             // scope of the injected let. The let was
                             // probably lifted to an outer level.

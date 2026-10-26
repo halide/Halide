@@ -254,7 +254,12 @@ public:
             check(arm32 ? "vcvt.f32.s32" : "scvtf", 2 * w, f32(i32_1));
             check(arm32 ? "vcvt.u32.f32" : "fcvtzu", 2 * w, u32(f32_1));
             check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2 * w, i32(f32_1));
-            // skip the fixed point conversions for now
+            check(arm32 ? "vcvt.f32.u32*#4" : "ucvtf*#4", 2 * w, f32(u32_1) * 0.0625f);
+            check(arm32 ? "vcvt.f32.s32*#4" : "scvtf*#4", 2 * w, f32(i32_1) * 0.0625f);
+            check(arm32 ? "vcvt.f32.s32*#3" : "scvtf*#3", 2 * w, (f32(i32_1) * f32_2) * 0.125f);
+            if (!arm32) {
+                check("scvtf*#32", 2 * w, f64(i64_1) * Internal::make_const(Float(64), 1.0 / 4294967296.0));
+            }
 
             if (!arm32) {
                 check("frinta", 2 * w, round_half_away(f32_1));

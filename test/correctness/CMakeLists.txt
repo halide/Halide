@@ -160,6 +160,8 @@ tests(
     deinterleave4.cpp
     deinterleave_lets.cpp
     deinterleave_vector.cpp
+    deinterleave_vector_based_ramp.cpp
+    dense_multiramp_index.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
@@ -251,6 +253,8 @@ tests(
     gpu_free_sync.cpp
     gpu_give_input_buffers_device_allocations.cpp
     gpu_jit_explicit_copy_to_device.cpp
+    gpu_lanes_reduction.cpp
+    gpu_lanes_reduction_codegen.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
     gpu_max_registers.cpp
@@ -281,6 +285,7 @@ tests(
     gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
+    gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp
     growing_stack.cpp
     half_native_interleave.cpp
@@ -454,6 +459,7 @@ tests(
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
     rfactor_inner_dim_non_commutative.cpp
+    rfactor_specialize_rvar_bounds.cpp
     round.cpp
     round_up_and_blend_race.cpp
     run_process.cpp
@@ -605,6 +611,7 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     vulkan_bool_scalar_abi.cpp
+    warp_shuffle_hoisting.cpp
     widening_reduction.cpp
     wmma_matmul.cpp
     wmma_row_max.cpp

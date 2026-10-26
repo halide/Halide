@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(conv_layer.generator SOURCES conv_layer_generator.cpp)
 
 # Filters
-add_halide_library(conv_layer FROM conv_layer.generator)
+add_halide_library(
+    conv_layer_pipeline
+    FROM conv_layer.generator
+    GENERATOR conv_layer
+    FUNCTION_NAME conv_layer
+    FILE_BASE_NAME conv_layer
+)
 add_halide_library(
     conv_layer_auto_schedule
     FROM conv_layer.generator
@@ -30,9 +36,10 @@ target_link_libraries(
     conv_layer_process
     PRIVATE
     Halide::ImageIO
-    conv_layer
+    conv_layer_pipeline
     conv_layer_auto_schedule
 )
+add_custom_target(conv_layer DEPENDS conv_layer_process)
 
 # Test that the app actually works!
 add_test(NAME conv_layer_process COMMAND conv_layer_process)

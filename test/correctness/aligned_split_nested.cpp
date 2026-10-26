@@ -38,7 +38,7 @@ public:
     int mux_count{0};
 };
 
-int main(int argc, char **argv) {
+int test(bool gpu) {
     for (auto ts1 : {TailStrategy::GuardWithIf, TailStrategy::ShiftInwards}) {
         for (auto ts2 : {TailStrategy::GuardWithIf, TailStrategy::ShiftInwards}) {
             printf("Testing tail strategies: ts1=%d ts2=%d\n", (int)ts1, (int)ts2);
@@ -55,16 +55,23 @@ int main(int argc, char **argv) {
             f.aligned_split(x, xo, xi, 4, p1, ts1)
                 .aligned_split(xo, xoo, xoi, 3, p2, ts2)
                 .unroll(xi);
-
-            Module module = f.compile_to_module({p1, p2});
-            MuxCounter checker;
-            for (const LoweredFunc &lf : module.functions()) {
-                lf.body.accept(&checker);
+            if (gpu) {
+                f.gpu_blocks(xoo).gpu_threads(xoi);
             }
-            int expected_mux_count = (ts1 == TailStrategy::GuardWithIf) ? 0 : 8;
-            if (checker.mux_count != expected_mux_count) {
-                printf("Expected %d muxes: %d\n", expected_mux_count, checker.mux_count);
-                return 1;
+
+            // The GPU kernels are compiled to device code by the time we get
+            // a Module, so only the CPU schedule is inspected for muxes.
+            if (!gpu) {
+                Module module = f.compile_to_module({p1, p2});
+                MuxCounter checker;
+                for (const LoweredFunc &lf : module.functions()) {
+                    lf.body.accept(&checker);
+                }
+                int expected_mux_count = (ts1 == TailStrategy::GuardWithIf) ? 0 : 8;
+                if (checker.mux_count != expected_mux_count) {
+                    printf("Expected %d muxes: %d\n", expected_mux_count, checker.mux_count);
+                    return 1;
+                }
             }
 
             for (int a1 = 0; a1 < 4; a1++) {
@@ -72,6 +79,7 @@ int main(int argc, char **argv) {
                     p1.set(a1);
                     p2.set(a2);
                     Buffer<int> im = f.realize({61});
+                    im.copy_to_host();
                     for (int x = 0; x < 61; x++) {
                         int selector = (4 + x - a1) % 4;
                         int expected;
@@ -92,6 +100,19 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+        }
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (test(false) != 0) {
+        return 1;
+    }
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Testing the GPU schedule\n");
+        if (test(true) != 0) {
+            return 1;
         }
     }
 

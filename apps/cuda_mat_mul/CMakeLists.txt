@@ -15,11 +15,13 @@ endif ()
 find_package(CUDAToolkit)
 if (NOT CUDAToolkit_FOUND)
     message(WARNING "Could NOT find CUDA")
+    add_custom_target(cuda_mat_mul)
     return()
 endif ()
 
 if (NOT TARGET CUDA::cublas)
     message(WARNING "Could NOT find cuBLAS")
+    add_custom_target(cuda_mat_mul)
     return()
 endif ()
 
@@ -77,16 +79,16 @@ add_halide_library(
 )
 
 # Main executable
-add_executable(runner runner.cpp)
+add_executable(cuda_mat_mul runner.cpp)
 target_link_libraries(
-    runner
+    cuda_mat_mul
     PRIVATE
     mat_mul mat_mul_f16 mat_mul_f16_acc16 mat_mul_bf16 mat_mul_u8 Halide::Halide Halide::Tools
     CUDA::cudart CUDA::cublas
 )
 
 # Test that the app actually works!
-add_test(NAME mat_mul COMMAND runner)
+add_test(NAME mat_mul COMMAND cuda_mat_mul)
 set_tests_properties(
     mat_mul
     PROPERTIES

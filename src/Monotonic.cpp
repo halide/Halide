@@ -48,20 +48,6 @@ bool is_constant(const ConstantInterval &x) {
     return x.is_single_point(0);
 }
 
-ConstantInterval to_interval(Monotonic m) {
-    switch (m) {
-    case Monotonic::Constant:
-        return ConstantInterval::single_point(0);
-    case Monotonic::Increasing:
-        return ConstantInterval::bounded_below(0);
-    case Monotonic::Decreasing:
-        return ConstantInterval::bounded_above(0);
-    case Monotonic::Unknown:
-        return ConstantInterval::everything();
-    }
-    return ConstantInterval::everything();
-}
-
 Monotonic to_monotonic(const ConstantInterval &x) {
     if (is_constant(x)) {
         return Monotonic::Constant;
@@ -526,17 +512,6 @@ Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Consta
         return Monotonic::Unknown;
     }
     return to_monotonic(derivative_bounds(e, var, scope));
-}
-
-Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
-    if (!e.defined()) {
-        return Monotonic::Unknown;
-    }
-    Scope<ConstantInterval> intervals_scope;
-    for (Scope<Monotonic>::const_iterator i = scope.cbegin(); i != scope.cend(); ++i) {
-        intervals_scope.push(i.name(), to_interval(i.value()));
-    }
-    return is_monotonic(e, var, intervals_scope);
 }
 
 }  // namespace Internal
