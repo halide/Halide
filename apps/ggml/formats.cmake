@@ -135,7 +135,12 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # gemv, with interleave=1 (as GGML's vec_dot, a row at a time: a row's block
 # 232 instructions, 149 SIMD, the bound on M3; ~260 in row pairs), 0.94-0.98x
 # of GGML's to 1.01-1.03x on one thread, 1.04-1.13x on ten. An act of `*`:
-# every act.
+# every act. gemm_index_words=true (the gemm tiles' grid index bytes, nested
+# in a computed index, staged a word at a time in GPRs; staged_indices()):
+# iq3_s gemm 1.11-1.2x (integer acts), its index bytes' loads the bound; not
+# with f16 acts (0.96x), nor its gemv or vec_dot (0.88-0.95x: the shift and
+# mask per index cost more than the load, and the words spill), nor iq2_s's,
+# iq1_s's or iq1_m's gemm (0.94-1.01x).
 set(GGML_SCHEDULE_PARAMS
     "q3_K vec_dot * fold_offsets=none"
     "q3_K mul_mat * fold_offsets=none"
@@ -149,6 +154,9 @@ set(GGML_SCHEDULE_PARAMS
     "q4_K mul_mat * gpr_scales=true"
     "q5_K vec_dot * gpr_scales=true"
     "q5_K mul_mat * gpr_scales=true"
+    "iq3_s mul_mat q8_K gemm_index_words=true"
+    "iq3_s mul_mat f32 gemm_index_words=true"
+    "iq3_s mul_mat f32:q8_K gemm_index_words=true"
     "q2_K vec_dot q8_K interleave=1 sublanes=true"
     "iq2_xs vec_dot q8_K interleave=1 sublanes=true"
     "q3_K vec_dot q8_K interleave=1"

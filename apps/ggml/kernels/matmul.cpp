@@ -33,6 +33,9 @@ public:
     // mul_mat's gemv in tiles of two rows where N allows and a row is short
     // enough (see ggml::mul_mat; else one)
     GeneratorParam<bool> row_pairs{"row_pairs", true};
+    // mul_mat's gemm tiles' grid index bytes, nested in a computed index
+    // (iq3_s's qs + qh << 8), staged in GPRs (see ggml::staged_indices)
+    GeneratorParam<bool> gemm_index_words{"gemm_index_words", false};
 
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
@@ -177,7 +180,7 @@ public:
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs, row_bytes);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs, row_bytes, gemm_index_words);
         }
     }
 
