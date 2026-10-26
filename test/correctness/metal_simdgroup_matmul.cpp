@@ -415,6 +415,82 @@ bool test_staged_operands(Type operand) {
     return true;
 }
 
+// Specialize on the size of the output, with differently sized accumulator
+// tiles per SIMD-group in each branch. Every branch has its own Tile allocation
+// for prod, all of the same name but each of its own size.
+bool test_specialized_tile_sizes() {
+    const int N = 64, K = 64;
+    ImageParam A(Float(16), 2, "A"), B(Float(16), 2, "B");
+
+    Var x("x"), y("y");
+    RDom k(0, K, "k");
+    Func prod("prod"), out("out");
+    prod(x, y) = 0.f;
+    prod(x, y) += cast<float>(A(k, y)) * cast<float>(B(x, k));
+    out(x, y) = prod(x, y);
+
+    Var xi("xi"), yi("yi"), mmxi("mmxi"), mmyi("mmyi"), rxi("rxi"), ryi("ryi");
+    RVar rro("rro"), rri("rri");
+    Expr M = out.output_buffer().dim(1).extent();
+    Stage so(out), sp(prod), su = prod.update();
+    for (int tiles : {4, 2, 1}) {
+        Expr cond = tiles == 1 ? Expr() : M % (tile * tiles) == 0;
+        auto pick = [&](Stage s) { return cond.defined() ? s.specialize(cond) : s; };
+        pick(so)
+            .tile(x, y, xi, yi, tile * tiles, tile * tiles)
+            .tile(xi, yi, mmxi, mmyi, tile, tile)
+            .gpu_blocks(x, y)
+            .unroll(xi)
+            .unroll(yi)
+            .vectorize(mmxi)
+            .vectorize(mmyi);
+        pick(sp)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .vectorize(rxi)
+            .vectorize(ryi)
+            .unroll(x)
+            .unroll(y);
+        pick(su)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(k, rro, rri, tile)
+            .reorder(rri, rxi, ryi, x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            .atomic()
+            .vectorize(rri)
+            .vectorize(rxi)
+            .vectorize(ryi);
+    }
+    prod.compute_at(out, x).store_in(MemoryType::Tile);
+
+    // One size for each branch.
+    for (int M : {32, 16, 8}) {
+        Buffer<float16_t> a(K, M), b(N, K);
+        fill(a);
+        fill(b);
+        A.set(a);
+        B.set(b);
+        Buffer<float> result(N, M);
+        out.realize(result);
+        result.copy_to_host();
+        for (int j = 0; j < M; j++) {
+            for (int i = 0; i < N; i++) {
+                float ref = 0.f;
+                for (int l = 0; l < K; l++) {
+                    ref += (float)a(l, j) * (float)b(i, l);
+                }
+                if (result(i, j) != ref) {
+                    std::cerr << "Mismatch at " << i << ", " << j << ": "
+                              << result(i, j) << " != " << ref << "\n"
+                              << "For tile sizes specialized on M = " << M << "\n";
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 // Cross-compile for Metal and check that the kernel source, which is embedded
 // in the object as a string, uses the simdgroup_matrix operations. This doesn't
 // need a GPU.
@@ -524,6 +600,7 @@ int main(int argc, char **argv) {
     }
 
     if (!test_block_level_accumulator() ||
+        !test_specialized_tile_sizes() ||
         !test_staged_operands(Float(16)) ||
         !test_staged_operands(Float(32))) {
         printf("Failed!\n");

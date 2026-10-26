@@ -552,11 +552,14 @@ struct Fragment {
 class ExtractWMMAOperations : public IRMutator {
     using IRMutator::visit;
 
-    // Everything we've learned about each fragment allocation, and the names of
-    // the ones we're currently inside of. The records outlive the first pass so
-    // that the second one can use them.
-    std::map<string, Fragment> fragments;
-    vector<string> in_scope;
+    // Everything we've learned about each fragment allocation, and the ones
+    // we're currently inside of. The records outlive the first pass so that the
+    // second one can use them. They're keyed by the Allocate node rather than
+    // by name, because the first pass leaves the IR untouched, and one name can
+    // belong to several allocations of different sizes, e.g. one per
+    // specialization of the loop nest it's in.
+    std::map<const Allocate *, Fragment> fragments;
+    vector<const Allocate *> in_scope;
 
     // In the first pass we recognize the matrix multiplies, which is what tells
     // us what role each fragment plays and what shape it is. In the second we
@@ -569,9 +572,9 @@ class ExtractWMMAOperations : public IRMutator {
     DeviceAPI device_api = DeviceAPI::Host;
 
     Fragment *find_fragment(const string &name) {
-        for (const string &n : in_scope) {
-            if (n == name) {
-                return &fragments[name];
+        for (auto it = in_scope.rbegin(); it != in_scope.rend(); it++) {
+            if ((*it)->name == name) {
+                return &fragments[*it];
             }
         }
         return nullptr;
@@ -769,7 +772,7 @@ class ExtractWMMAOperations : public IRMutator {
             << op->name << " is stored in Tile memory, but " << unit->name
             << " fragments on " << device_api << " can't hold " << op->type << ".\n";
 
-        Fragment &f = fragments[op->name];
+        Fragment &f = fragments[op];
         if (pass == 0) {
             f.name = op->name;
             f.unit = unit;
@@ -777,7 +780,7 @@ class ExtractWMMAOperations : public IRMutator {
             f.element_type = op->type;
         }
 
-        in_scope.push_back(op->name);
+        in_scope.push_back(op);
         Stmt body = mutate(op->body);
         in_scope.pop_back();
 
