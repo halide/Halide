@@ -93,7 +93,8 @@ numbers of the assembly file, without the lines that hold the debug info.
 In the `conceptual_stmt_html`, the device code of CUDA, OpenCL, Metal and D3D12
 kernels is linked in the same way, with or without `gpu_debug_symbols`. The
 device code pane shows the line numbers of the device code as it is compiled
-into the pipeline, without the line information.
+into the pipeline, without the line information. When all the stores of the
+pipeline are on a device, the assembly pane is hidden until it is asked for.
 
 ## Caveats
 

@@ -1020,6 +1020,27 @@ void print_stmt_lines(std::ostream &stream, const StmtSourceMap &src, IRCostMode
  * three key tabs: IR code, Visualized pipeline and the generated
  * assembly.
  */
+// Whether all the stores of the pipeline are in loops that run on a device,
+// so that the host code only moves data and launches kernels.
+bool all_stores_on_device(const Module &m) {
+    bool on_host = false, on_device = false;
+    int device_loops = 0;
+    visit_with(
+        m.get_conceptual_stmt(),
+        [&](auto *self, const For *op) {
+            const bool device = is_gpu(op->for_type) ||
+                                (op->device_api != DeviceAPI::None && op->device_api != DeviceAPI::Host);
+            device_loops += device;
+            self->visit_base(op);
+            device_loops -= device;
+        },
+        [&](auto *self, const Store *op) {
+            (device_loops ? on_device : on_host) = true;
+            self->visit_base(op);
+        });
+    return on_device && !on_host;
+}
+
 class PipelineHTMLInspector {
 public:
     // Construct the visualizer and point it to the output file
@@ -1205,8 +1226,12 @@ private:
         // Which panes to show
         stream << "<form id='form-panes' name='form-panes'>Panes:\n";
         stream << "   <label><input type='checkbox' name='checkbox-show-ir' checked />Show IR</label>\n";
-        stream << "   <label><input type='checkbox' name='checkbox-show-assembly' checked />Show Assembly</label>\n";
+        // When all the work is done on a device, the host assembly is of
+        // little interest, so it is hidden until asked for.
         Buffer<> device_code_buf = m.get_device_code_buffer();
+        const bool show_assembly = !device_code_buf.defined() || !all_stores_on_device(m);
+        stream << "   <label><input type='checkbox' name='checkbox-show-assembly'"
+               << (show_assembly ? " checked" : "") << " />Show Assembly</label>\n";
         if (device_code_buf.defined()) {
             stream << "   <label><input type='checkbox' name='checkbox-show-device-code' checked />Show Device Code</label>\n";
         }
