@@ -45,7 +45,7 @@ cmake --build llama.cpp/build-hl
 
 The kernels used are listed as `weight:act` pairs in `GGML_HALIDE_VEC_DOTS`,
 `GGML_HALIDE_MUL_MATS` and `GGML_HALIDE_BACKEND_MUL_MATS` (default: q4_0, q8_0,
-q4_K, q6_K and iq4_xs with their GGML activation types).
+q4_K, q5_K, q6_K and iq4_xs with their GGML activation types).
 
 ## Checking
 
