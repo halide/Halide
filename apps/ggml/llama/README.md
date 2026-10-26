@@ -11,11 +11,15 @@ unchanged):
   vec_dots do one row at a time (`nrows = 1`).
 - `mul_mat` (`ggml-halide-cpu.cpp`): an extra buffer type of ggml-cpu, `HALIDE`,
   like its `CPU_REPACK`, and placed first so weights take it ahead of repack's.
-  MUL_MATs of its weights run on ggml-cpu's threads: the activations are
-  quantized in parallel (GGML's `from_float`), then each thread runs the Halide
-  mul_mat kernel on chunks of the weight's rows, with Halide's own parallel
-  loops serial. The kernels' output must be dense, so for more than one
-  activation row, a chunk's output goes through scratch.
+  A weight takes the first kernel in `GGML_HALIDE_MUL_MATS` for its type whose
+  format's row group divides its rows, and is converted to that format when
+  loaded (e.g. to GGML repack's interleaved `q4_K.8x8`, by the harness's
+  `gq::relayout`; it can't be read back). Each MUL_MAT is one call of a kernel
+  that takes f32 activations (`<weight>_f32_to_<act>_mul_mat`, quantization
+  fused, e.g. into `q8_K.4x8`'s interleaved rows) on ggml-cpu's thread 0, over
+  all the weight's rows; its parallel loops' tasks (`halide_do_par_for`, set
+  globally) run on the MUL_MAT's other ggml-cpu threads, which wait for them in
+  the op. Halide's own thread pool isn't used.
 - `backend` (`ggml-halide-backend.cpp`): a backend like ggml-blas, with an ACCEL
   device, `HALIDE`, registered before BLAS. It runs the MUL_MATs of host weights
   (at any batch size) with the kernels that take f32 activations
@@ -38,14 +42,18 @@ git -C llama.cpp checkout e117148a41d8
 git -C llama.cpp apply $HALIDE/apps/ggml/llama/llama.cpp.patch
 cmake -S llama.cpp -B llama.cpp/build-hl -G Ninja -DCMAKE_BUILD_TYPE=Release \
 	-DGGML_CPU_HALIDE=$HALIDE/apps/ggml/llama/ggml-halide.cmake \
-	-DGGML_HALIDE_KERNEL_DIR= build \
-	install <apps/ggml >-DGGML_HALIDE_INCLUDE_DIR= <Halide >/include
+	-DGGML_HALIDE_KERNEL_DIR=$APPS_GGML_BUILD \
+	-DGGML_HALIDE_INCLUDE_DIR=$HALIDE_INSTALL/include
 cmake --build llama.cpp/build-hl
 ```
 
-The kernels used are listed as `weight:act` pairs in `GGML_HALIDE_VEC_DOTS`,
-`GGML_HALIDE_MUL_MATS` and `GGML_HALIDE_BACKEND_MUL_MATS` (default: q4_0, q8_0,
-q4_K, q5_K, q6_K and iq4_xs with their GGML activation types).
+(`$APPS_GGML_BUILD`: a build of apps/ggml, with its kernels; `$HALIDE_INSTALL`:
+Halide's.) The kernels used are listed as `weight:act` pairs in
+`GGML_HALIDE_VEC_DOTS`, `GGML_HALIDE_MUL_MATS` and
+`GGML_HALIDE_BACKEND_MUL_MATS` (default: q4_0, q8_0, q4_K, q5_K, q6_K and iq4_xs
+with their GGML activation types). `GGML_HALIDE_MUL_MATS`' are formats (e.g.
+`q4_K.8x8:q8_K.4x8`, the default for q4_K, then `q4_K:q8_K` for weights whose
+rows aren't a multiple of 8).
 
 ## Checking
 

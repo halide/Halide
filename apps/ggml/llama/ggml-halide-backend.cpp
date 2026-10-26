@@ -33,7 +33,7 @@ struct MulMat {
 };
 
 const MulMat mul_mats[] = {
-#define GGML_HALIDE_BACKEND_MUL_MAT(name, w, a) {#name, GGML_TYPE_##w, name, name##_metadata},
+#define GGML_HALIDE_BACKEND_MUL_MAT(name, w, a, spec) {#name, GGML_TYPE_##w, name, name##_metadata},
     GGML_HALIDE_BACKEND_MUL_MATS
 #undef GGML_HALIDE_BACKEND_MUL_MAT
 };
