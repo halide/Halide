@@ -404,8 +404,26 @@ would otherwise reassociate the tree), and `--check` compares it bit-exact with
 GGML's f16 vec_dot where the CPU has fp16 arithmetic and K % 32 == 0 (GGML sums
 the rest in f64; ours in f16).
 
+Weights take a compute format too, `<storage>:<compute>` (Metal mul_mat only;
+`formats.cmake`): `q4_0:f16` is q4_0's round trip approximated again by the
+`binary16` `MiniFloat` (`approximate_by` on the first approximation's
+replacement, `kernels/matmul.cpp`), i.e. each decoded weight rounded to f16, as
+GGML's Metal gemm (`kernel_mul_mm`) dequantizes to half. The algorithm is still
+the plain mul_mat; the roundings are its approximations. On f16 acts (`f16`, or
+`f32:f16`) its Metal schedule (`metal_f16`, `schedule.h`) specializes on M >= 8
+and N >= 32 for `metal_mm`: threadgroup tiles of out, the weights decoded to f16
+and the acts converted into threadgroup memory per 64 values of K, multiplied by
+the simdgroups as 8 x 8 `simdgroup_half8x8` fragments into `simdgroup_float8x8`
+accumulators (`MemoryType::Tile`). Other shapes run `metal_rows` in the same
+kernel, on a clone of the dot (each branch's dot is stored apart). The rounding
+is per value, so the rows can no longer factor a block's scale out of its
+products: small M runs a few percent slower than the exact q4_0 rows (which
+GGML's mul_mv also is). `--check` declares it as `Precision::w_quant` (an f16
+rounding of every decoded weight: half an ulp, 2^-25 at least).
+
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
 `GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed).
 Halide providers get the default `Precision` (f32 accumulation, no
-re-quantization) plus the act re-quantization of `<storage>:<compute>` acts.
+re-quantization) plus the re-quantization of `<storage>:<compute>` acts and
+weights.

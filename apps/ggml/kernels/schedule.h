@@ -242,6 +242,9 @@ struct Formats {
     bool rowwise = false;
     int sub = 0, act_sub = 0;
     int per = 1;  // blocks per weight block (q1_0's 128 values on q8_0 acts: 4)
+    // the weight's decoded values approximated again (a compute format, e.g.
+    // q4_0:f16): by rs.back() (kernels/matmul.cpp)
+    bool wcompute = false;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
@@ -2050,6 +2053,158 @@ inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func
     }
 }
 
+// The f16 operands of a Metal gemm: the weight's compute format's encoded
+// values (wh: its decoded values rounded to f16, e.g. q4_0:f16) and the act's
+// (xh: an f16 compute format's, staged, or f16 storage's), else false.
+inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
+    if (!fmt.wcompute || rs.size() < 2) return false;
+    wh = rs.back().encoded[0];
+    xh = staged.size() == 1 ? staged[0] : rs.size() == 3 && rs[1].encoded.size() == 1 ? rs[1].encoded[0] :
+                                                                                        Func();
+    return wh.type() == Float(16) && xh.defined() && xh.type() == Float(16);
+}
+
+// f's update with every Func it calls on the way to `to` (views, decoders)
+// inlined: it then calls those directly.
+inline void inline_until(Func f, const std::vector<Func> &to) {
+    using namespace Internal;
+    Stage s = f.update();
+    for (;;) {
+        std::vector<Func> fs;
+        std::set<std::string> seen{f.name()};
+        for (const Func &g : to) {
+            seen.insert(g.name());
+        }
+        for (const Expr &v : s.values()) {
+            visit_with(v, [&](auto *self, const Call *c) {
+                if (c->call_type == Call::Halide && c->func.defined() && seen.insert(c->name).second) fs.emplace_back(Function(c->func));
+                self->visit_base(c);
+            });
+        }
+        if (fs.empty()) return;
+        s.eager_inline(fs);
+    }
+}
+
+// Metal gemm on f16 operands (f16_operands: wh, xh), as GGML's
+// kernel_mul_mm: dot's sum of their products, in f32, on the simdgroup_matrix
+// unit, for `o` (a stage of out: its specialization for the shapes it takes).
+// A threadgroup (gpu_blocks) takes a bn x bm tile of out, its simdgroups
+// (gpu_threads) wn x 1 sub-tiles of 8 * tn x 8 * tm outputs, each 8 x 8 an
+// accumulator in Tile memory (simdgroup_float8x8). Per step of `kstep` values
+// of K, the threadgroup's simdgroups decode the tile's weights to f16 in
+// threadgroup memory (each lane 4 values of a row at a time) and convert its
+// acts likewise; each simdgroup then loads the operand fragments
+// (simdgroup_half8x8, one per 8 values of K) of its row of tiles and its
+// column of tiles once, and multiplies them into its accumulators. Tiles by
+// M (the widest it allows): 64 x 32 for M >= 256 and N >= 64 (4 x 1
+// simdgroups of 16 x 32), 32 x 32 for M >= 32 (4 x 1 of 8 x 32), 16 x 16 for
+// M >= 16, 16 x 8 below (2 simdgroups): o needs M >= 8, N >= 32 (edge tiles
+// shift inwards). Steps of 64 values (two 32-value blocks; one where K is an
+// odd number of them).
+inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt) {
+    if (fmt.block % 8) throw std::invalid_argument("metal_mm: blocks of a multiple of 8 values");
+    const int t = 8;
+    // (names apart from the other specializations' loops, which compute
+    // other Funcs at theirs)
+    Var n = out.args()[0], m = out.args()[1], ni("mm_ni"), mi("mm_mi"), nw("mm_nw"), mw("mm_mw"), nt("mm_nt"), mt("mm_mt");
+    RVar rx = r.x, ry = r.y, ks("ks"), kb("kb"), ko("ko"), kt("kt"), rxk("rxk");
+    Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent(), nb = r.y.extent();
+    struct Shape {
+        Expr cond;
+        int tn, tm, wn;
+    };
+    std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
+    // their fragments (wf, xf)
+    inline_until(dot, {wh, xh});
+    Func ws = wh.in(dot), xs = xh.in(dot), wf = ws.in(dot), xf = xs.in(dot);
+    Stage sd = Stage(dot), su = dot.update();
+    for (const Shape &sh : shapes) {
+        const int bn = t * sh.tn * sh.wn, bm = t * sh.tm;
+        auto tile = [&](Stage st) {
+            return st.tile(n, m, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+        };
+        Stage so = sh.cond.defined() ? o.specialize(sh.cond) : o;
+        so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t);
+        so.gpu_blocks(n, m).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+        tile(sh.cond.defined() ? sd.specialize(sh.cond) : sd);
+        Stage u = sh.cond.defined() ? su.specialize(sh.cond) : su;
+        // ks: the steps of K; kb: their blocks (or, for blocks longer than a
+        // step, ko: the step's 8-value pieces of its block)
+        auto steps = [&](Stage st, int kstep) {
+            tile(st);
+            if (fmt.block >= kstep) {
+                st.split(rx, ks, rxk, kstep).split(rxk, ko, kt, t).reorder(kt, nt, mt, ni, mi, ko, nw, mw, ks, ry);
+            } else {
+                st.split(ry, ks, kb, kstep / fmt.block).split(rx, ko, kt, t).reorder(kt, nt, mt, ni, mi, ko, kb, nw, mw, ks).unroll(kb);
+            }
+            st.unroll(ko).atomic().vectorize(kt);
+        };
+        if (fmt.block < 64) steps(u.specialize(nb % (64 / fmt.block) == 0), 64);
+        steps(u, std::min(fmt.block, 64));
+        // each lane 4 values of K of a row of the step's weights or acts
+        // (blocked (j, b, i) or flat (k, i))
+        for (Func f : {ws, xs}) {
+            std::vector<Var> a = f.args();
+            Var l("l"), ln("ln"), lt("lt"), sw("sw"), jv("jv");
+            Stage s = sh.cond.defined() ? Stage(f).specialize(sh.cond) : Stage(f);
+            s.split(a[0], l, jv, 4);
+            for (size_t i = 1; i < a.size(); i++) {
+                Var fl("l" + std::to_string(i));
+                s.fuse(l, a[i], fl);
+                l = fl;
+            }
+            s.split(l, l, ln, 32).split(l, lt, sw, sh.wn).reorder(jv, lt, ln, sw);
+            s.gpu_lanes(ln).gpu_threads(sw).vectorize(jv);
+        }
+    }
+    dot.compute_at(out, n).store_in(MemoryType::Tile);
+    for (Func f : {ws, xs}) {
+        f.compute_at(dot, ks).store_in(MemoryType::GPUShared);
+    }
+    // the operand fragments of each 8 values of K: xf's 8 x 8 * tm, wf's 8 * tn x 8
+    // (its storage [row, k]: a fragment's rows are the weight's)
+    for (Func f : {xf, wf}) {
+        std::vector<Var> a = f.args();
+        Var j = a[0], i = a.back(), jo("jo"), jt("jt"), io("io"), it("it");
+        if (f.name() == wf.name()) {
+            if (a.size() == 3) f.reorder_storage(i, j, a[1]);
+            else
+                f.reorder_storage(i, j);
+        }
+        f.compute_at(dot, ko).store_in(MemoryType::Tile).split(j, jo, jt, t).split(i, io, it, t);
+        if (a.size() == 3) {
+            f.reorder(jt, it, jo, io, a[1]).unroll(a[1]);
+        } else {
+            f.reorder(jt, it, jo, io);
+        }
+        f.unroll(jo).unroll(io).vectorize(jt).vectorize(it);
+    }
+}
+
+// Metal on f16 operands (f16_operands: wh, xh): metal_mm where M >= 8 and
+// N >= 32 (as GGML's kernel_mul_mm, past its mul_mv's M), else metal_rows,
+// on a clone of dot (each branch computes its own, stored and scheduled
+// apart: one in Tile memory) reading the same rounded operands, decoded per
+// value (the f16-rounded weights' scales no longer factor out of a block).
+// One kernel: both behind out's specialization (dot's, done on the host).
+inline void metal_f16(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
+    using namespace Internal;
+    Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
+    Func rows = dot.clone_in(out);
+    Stage mm = Stage(out).specialize(M >= 8 && N >= 32);
+    Definition d = out.function().definition().specializations().back().definition;
+    for (Expr &v : d.values()) {
+        v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
+            if (c->name != rows.name()) return self->visit_base(c);
+            return Call::make(dot.function(), c->args, c->value_index, c->func.follow_global_wrappers);
+        });
+    }
+    metal_mm(mm, out, dot, wh, xh, r, fmt);
+    metal_rows(out, rows, r, rs, fmt.sub);
+}
+
 // Rowwise formats (schemes/kleidiai.h: weights qsi8cx, acts qai8dx): one
 // scale per row, so the codes' dot accumulates in int32 over the whole of K.
 // dot's increment, the weight's codes times its scale times the act's codes
@@ -2235,8 +2390,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             metal_flat(out, dots[0], r, staged);
             return;
         }
-        if (!staged.empty()) throw std::invalid_argument("metal: blocked act formats stored as computed");
         packed_muxes(rs);
+        Func wh, xh;
+        if (f16_operands(rs, staged, fmt, wh, xh)) {
+            metal_f16(out, dots[0], wh, xh, r, fmt, rs);
+            return;
+        }
+        if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
         metal_rows(out, dots[0], r, rs, fmt.sub);
         return;
     }

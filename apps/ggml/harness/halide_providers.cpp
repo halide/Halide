@@ -234,6 +234,7 @@ void register_halide_providers() {
                                            k->threads = in.threads;
                                            k->path = gpu ? "halide:metal" : "halide";
                                            if (aq != at) k->prec.act_quant = aq;
+                                           if (!fs.compute.empty()) k->prec.w_quant = type_named(fs.compute.c_str());
                                            if (kai) k->prec.act_block = k->prec.w_block = s.K;  // as ggml-cpu-kleidiai's
                                            narrow(*k, in);
                                            size_t wbytes = ggml_row_size(wt, s.K) * s.N;

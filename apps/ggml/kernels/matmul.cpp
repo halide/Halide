@@ -9,6 +9,10 @@
 // act = "<storage>[:<compute>]": X arrives as <storage> and, given a compute
 // format, is approximated by it inside the pipeline too (not severed), as
 // GGML quantizes f32 activations.
+// weight = "<storage>[:<compute>]" likewise: W's decoded values (its storage
+// scheme's round trip) are approximated again by the compute format (a float
+// of one value per record: e.g. q4_0:f16, each decoded weight rounded to f16,
+// as GGML's Metal gemm dequantizes to half; Metal only).
 #include "kernels/schedule.h"
 #include "schemes/schemes.h"
 
@@ -40,16 +44,19 @@ public:
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
         an = an.substr(0, an.find(':'));
+        std::string wn = weight, wc = wn.substr(wn.find(':') + 1);
+        wn = wn.substr(0, wn.find(':'));
+        if (wc != wn && (op != "mul_mat" || !get_target().has_feature(Target::Metal))) throw std::invalid_argument("weight " + std::string(weight) + ": a compute format, for Metal's mul_mat only");
         // mul_mat on weight records of several rows takes their codes at 2^k
         // (an exact alternative, see Type0Quant): it shortens the gemv's decode
-        bool scaled = op == "mul_mat" && ggml::format(weight).rows > 1;
+        bool scaled = op == "mul_mat" && ggml::format(wn).rows > 1;
         bool tables = ggml::use_tables(get_target());
-        ggml::Format fw = ggml::format(weight, false, scaled, true, Expr(), tables), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
+        ggml::Format fw = ggml::format(wn, false, scaled, true, Expr(), tables), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
         std::vector<ImageParam> w = inputs(fw, "w"), a = inputs(fa, "a");
         if (fw.rowwise || fa.rowwise || fc.rowwise) {
             // Rowwise formats reduce over a row's blocks: the weight's records
             Expr nb = record(w[0]).extent();
-            fw = ggml::format(weight, false, scaled, true, nb, tables), fa = ggml::format(an, false, false, true, nb), fc = ggml::format(cn, false, false, false, nb);
+            fw = ggml::format(wn, false, scaled, true, nb, tables), fa = ggml::format(an, false, false, true, nb), fc = ggml::format(cn, false, false, false, nb);
             if (!fw.rowwise || !(fa.rowwise || fc.rowwise)) throw std::invalid_argument("rowwise formats: both operands'");
         }
         Var k("k"), n("n"), m("m");
@@ -107,6 +114,13 @@ public:
                 approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true, fc.rowwise ? record(w[0]).extent() : Expr()), {dots[i]}, block));
                 staged.push_back(approx.back().encoded[0]);
             }
+        }
+        if (wc != wn) {
+            // the weight's decoded values, as every dot reads them (approx[0]'s
+            // round trip), approximated again: the last approximation
+            ggml::Format f = ggml::format(wc);
+            if (!f.scheme.defined() || f.block != 1 || f.rows != 1 || f.acc.defined()) throw std::invalid_argument("weight " + std::string(weight) + ": a compute format of one value per record");
+            approx.push_back(approx[0].replacement.approximate_by(f.scheme, dots));
         }
         // Derived ports (e.g. q8_1's block sums) are dead in the decode until a
         // schedule reads them instead of a term they equal: sever them too.
@@ -170,7 +184,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block};
+        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block, wc != wn};
         acc = fw.acc;
         // The accumulation's order is part of its numerics: without
         // strict_float, LLVM may reassociate the partial sums' tree
