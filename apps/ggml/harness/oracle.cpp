@@ -58,12 +58,18 @@ double gamma(double n, int bits) {
 
 // Per-element bound on |x - deq(q(x))| for re-quantization of a row x to type
 // t (8-bit absmax blocks of `block`, or f16/bf16): d = amax / 127 covers any
-// rounding mode; (1 + 2^-7) covers a bf16- or f16-rounded d.
+// rounding mode; (1 + 2^-7) covers a bf16- or f16-rounded d. f16/bf16 round
+// to nearest: half an ulp, relative (2^-11, 2^-8) down to the subnormals'
+// absolute half ulp (2^-25, 2^-134); x past the largest finite value
+// overflows (INFINITY).
 std::vector<double> requant_err(const float *x, int64_t K, ggml_type t, int64_t block) {
     std::vector<double> e(K);
     if (t == GGML_TYPE_F16 || t == GGML_TYPE_BF16) {
-        for (int64_t k = 0; k < K; k++)
-            e[k] = std::abs(x[k]) * std::ldexp(1.0, t == GGML_TYPE_F16 ? -11 : -8);
+        bool h = t == GGML_TYPE_F16;
+        for (int64_t k = 0; k < K; k++) {
+            double a = std::abs(x[k]);
+            e[k] = h && a >= 65520 ? INFINITY : std::max(a * std::ldexp(1.0, h ? -11 : -8), std::ldexp(1.0, h ? -25 : -134));
+        }
         return e;
     }
     for (int64_t i = 0; i < K; i += block) {
@@ -155,6 +161,8 @@ double error_ratio(const Inputs &in, const Reference &ref, const Precision &p, c
             const float *w = &ref.w[n * K];
             std::vector<double> dw(K, 0.0);
             if (p.w_block) dw = requant_err(w, K, GGML_TYPE_Q8_0, p.w_block);
+            else if (p.w_quant != GGML_TYPE_COUNT)
+                dw = requant_err(w, K, p.w_quant, ggml_blck_size(p.w_quant));
             double S = 0, E = 0, sum_wmax_a = 0;
             for (int64_t k0 = 0; k0 < K; k0 += wb) {
                 double wmax = 0;

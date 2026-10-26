@@ -36,6 +36,7 @@ struct Precision {
     ggml_type act_quant = GGML_TYPE_COUNT;  // activations re-quantized internally to this type
     int64_t act_block = 0;                  // ... with 8-bit absmax blocks of this size (0: act_quant's)
     int64_t w_block = 0;                    // weights re-quantized to 8-bit absmax blocks of this size
+    ggml_type w_quant = GGML_TYPE_COUNT;    // decoded weights re-rounded internally to this type (f16, bf16)
     bool ggml_dot = false;                  // also bit-exact: GGML's CPU vec_dot of each output (act in its vec_dot_type)
 };
 
@@ -122,9 +123,11 @@ struct CodecResult {
 };
 std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::vector<std::string> &filters, bool check, int rounds, double min_ms);
 
-// A Halide format "<type>[.<codes>][.<rows>x<chunk>|.soa][.acc16]" (schemes/schemes.h).
+// A Halide format "<type>[.<codes>][.<rows>x<chunk>|.soa][.acc16][:<compute>]"
+// (schemes/schemes.h; compute: a weight's decoded values rounded again to
+// this type, kernels/matmul.cpp).
 struct FormatSpec {
-    std::string type, codes;
+    std::string type, codes, compute;
     int rows = 1, chunk = 0;
     bool soa = false, acc16 = false;
 };

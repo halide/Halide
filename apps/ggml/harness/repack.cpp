@@ -29,8 +29,10 @@
 
 namespace gq {
 
-FormatSpec parse_format(const std::string &spec) {
+FormatSpec parse_format(const std::string &s) {
     FormatSpec f;
+    std::string spec = s.substr(0, s.find(':'));
+    if (spec.size() < s.size()) f.compute = s.substr(spec.size() + 1);
     std::vector<std::string> t;
     for (size_t i = 0, j; i <= spec.size(); i = j + 1) {
         j = std::min(spec.find('.', i), spec.size());

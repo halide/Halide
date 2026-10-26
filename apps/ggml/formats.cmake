@@ -37,7 +37,12 @@
 # paths do); its library is <type>_f32_to_q8_0_<op>. A compute type with a
 # layout (f32:q8_0.4x8, f32:q8_K.4x8) quantizes the whole groups of rows to
 # its records, as GGML's repacked gemm does, and the rest to the AoS type (its
-# gemv). Each generated library
+# gemv). A weight type may likewise be <storage>:<compute> (Metal mul_mat
+# only): q4_0:f16 decodes q4_0 records and rounds each decoded value to f16,
+# as GGML's Metal gemm (kernel_mul_mm) does; with f16 acts (f16, f32:f16) its
+# library runs that gemm on the GPU's matrix unit for M >= 8 and N >= 32 (and
+# its mul_mv's rows otherwise: one kernel); its library is <storage>_to_<compute>_<act>_<op>.
+# Each generated library
 # has a checked variant (default target: asserts and bounds queries on; used
 # by --check and tests) and a bench variant
 # (GGML_BENCH_FEATURES; what gets timed), both registered with the harness
@@ -107,6 +112,7 @@ set(GGML_FORMATS
     "q3_K mul_mat f32,f16,q8_K metal"
     "f16 mul_mat f16,f32,f32:f16 metal"
     "bf16 mul_mat bf16,f32,f32:bf16 metal"
+    "q4_0:f16 mul_mat f32:f16,f16 metal"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
@@ -233,7 +239,8 @@ foreach (row IN LISTS GGML_FORMATS)
         set(features "-")
     endif ()
     string(REPLACE "," ";" ops "${ops}")
-    string(MAKE_C_IDENTIFIER "${type}" id)
+    string(REPLACE ":" "_to_" id "${type}")
+    string(MAKE_C_IDENTIFIER "${id}" id)
     if ("codec" IN_LIST ops)
         _ggml_library(${id}_quantize codec ${features} type=${type} quantize=true)
         _ggml_library(${id}_dequantize codec ${features} type=${type} quantize=false)
