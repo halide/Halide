@@ -4,11 +4,12 @@
 //   (GGML's vec_dot ABI, one row at a time: nrows = 1), still driven by
 //   ggml-cpu's own mul_mat loop, threads and activation quantization.
 // - mul_mat: an extra buffer type (HALIDE, as GGML's CPU_REPACK) whose
-//   weights' MUL_MATs run the Halide mul_mat kernels on ggml-cpu's threads:
-//   the activations quantized in parallel (GGML's from_float, as ggml-cpu),
-//   then each thread the Halide kernel on chunks of the weight rows (Halide's
-//   own parallel loops serial).
+//   weights, converted at load to their kernel's layout (e.g. GGML's
+//   repack's q4_K_8x8), run the Halide mul_mat kernels (f32 activations,
+//   quantized inside) on ggml-cpu's threads: thread 0 calls the kernel, whose
+//   parallel loops' tasks the others take.
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include "ggml-backend-impl.h"
 #include "ggml-cpu.h"
 #include "ggml-impl.h"
+#include "harness.h"
 #include "traits.h"
 
 // Generated: the kernels' headers, and GGML_HALIDE_VEC_DOT(name, weight, act)
@@ -79,7 +81,7 @@ struct Kernel {
 };
 
 const Kernel kernels[] = {
-#define GGML_HALIDE_VEC_DOT(name, w, a) {#name, GGML_TYPE_##w, GGML_TYPE_##a, VecDot<name, name##_metadata>::call, VecDot<name, name##_metadata>::bind},
+#define GGML_HALIDE_VEC_DOT(name, w, a, spec) {#name, GGML_TYPE_##w, GGML_TYPE_##a, VecDot<name, name##_metadata>::call, VecDot<name, name##_metadata>::bind},
     GGML_HALIDE_VEC_DOTS
 #undef GGML_HALIDE_VEC_DOT
 };
@@ -91,25 +93,99 @@ bool enabled(const char *what) {
 
 // mul_mat
 
+// spec: the weight's format (e.g. q4_K.8x8: GGML's repack's layout, converted
+// to at load, set_tensor); act: the type the kernel quantizes to (GGML's
+// vec_dot_type)
 struct MulMat {
-    const char *name;
+    const char *name, *spec;
     ggml_type weight, act;
     Fn f;
     Md md;
 };
 
 const MulMat mul_mats[] = {
-#define GGML_HALIDE_MUL_MAT(name, w, a) {#name, GGML_TYPE_##w, GGML_TYPE_##a, name, name##_metadata},
+#define GGML_HALIDE_MUL_MAT(name, w, a, spec) {#name, spec, GGML_TYPE_##w, GGML_TYPE_##a, name, name##_metadata},
     GGML_HALIDE_MUL_MATS
 #undef GGML_HALIDE_MUL_MAT
 };
 
-// Halide's parallel loops, inside a ggml-cpu thread's chunk: serial
-int serial_do_par_for(void *uc, halide_task_t f, int min, int size, uint8_t *closure) {
-    for (int i = min; i < min + size; i++) {
-        if (int e = f(uc, i, closure)) return e;
+inline void cpu_relax() {
+#if defined(__aarch64__)
+    __asm__ __volatile__("yield");
+#elif defined(__x86_64__)
+    __builtin_ia32_pause();
+#endif
+}
+
+// A MUL_MAT's ggml-cpu threads (in its wdata) as Halide's: thread 0 runs the
+// kernel; each of its parallel loops is a job, whose tasks all threads claim,
+// a grain at a time, from one word, job << 40 | size << 20 | next task: a
+// claim succeeds only while its job has tasks left, so the task's fields
+// (published before the job) are still the job's. (The claim word, the done
+// count and the rest each have their own cache line: on one, the claims'
+// and dones' traffic doubled a gemv's time.)
+struct Pool {
+    static constexpr int bits = 20;
+    static constexpr uint64_t mask = (1 << bits) - 1;
+    static constexpr size_t line = 128;
+    alignas(line) std::atomic<uint64_t> claim{0};
+    alignas(line) std::atomic<int> done{0};
+    alignas(line) std::atomic<bool> finished{false};
+    std::atomic<int> err{0};
+    std::atomic<halide_task_t> f{nullptr};
+    std::atomic<void *> uc{nullptr};
+    std::atomic<uint8_t *> closure{nullptr};
+    std::atomic<int> min{0}, grain{1};
+
+    // Claims and runs the current job's tasks; false if none
+    bool work() {
+        uint64_t c = claim.load(std::memory_order_acquire);
+        bool any = false;
+        while ((c & mask) < (c >> bits & mask)) {
+            halide_task_t fn = f.load(std::memory_order_relaxed);
+            void *u = uc.load(std::memory_order_relaxed);
+            uint8_t *cl = closure.load(std::memory_order_relaxed);
+            int mn = min.load(std::memory_order_relaxed);
+            int n = std::min<int>(grain.load(std::memory_order_relaxed), (int)((c >> bits & mask) - (c & mask)));
+            if (!claim.compare_exchange_weak(c, c + n, std::memory_order_acq_rel, std::memory_order_acquire)) continue;
+            for (int i = 0; i < n; i++) {
+                if (int e = fn(u, mn + (int)(c & mask) + i, cl)) err.store(e, std::memory_order_relaxed);
+            }
+            done.fetch_add(n, std::memory_order_release);
+            c = claim.load(std::memory_order_acquire);
+            any = true;
+        }
+        return any;
     }
-    return 0;
+};
+
+thread_local Pool *pool = nullptr;  // thread 0's, while it runs a kernel
+
+// Halide's parallel loops: on the MUL_MAT's threads (not nested; elsewhere,
+// e.g. the vec_dots, serial)
+int do_par_for(void *uc, halide_task_t f, int min, int size, uint8_t *closure) {
+    Pool *p = pool;
+    if (!p || size <= 1 || (uint64_t)size > Pool::mask) {
+        for (int i = min; i < min + size; i++) {
+            if (int e = f(uc, i, closure)) return e;
+        }
+        return 0;
+    }
+    pool = nullptr;
+    uint64_t job = (p->claim.load(std::memory_order_relaxed) >> (2 * Pool::bits)) + 1;
+    p->f.store(f, std::memory_order_relaxed);
+    p->uc.store(uc, std::memory_order_relaxed);
+    p->closure.store(closure, std::memory_order_relaxed);
+    p->min.store(min, std::memory_order_relaxed);
+    p->grain.store(std::max(1, size / (8 * halide_get_num_threads())), std::memory_order_relaxed);
+    p->done.store(0, std::memory_order_relaxed);
+    p->claim.store(job << (2 * Pool::bits) | (uint64_t)size << Pool::bits, std::memory_order_release);
+    p->work();
+    while (p->done.load(std::memory_order_acquire) < size) {
+        cpu_relax();
+    }
+    pool = p;
+    return p->err.load(std::memory_order_relaxed);
 }
 
 struct Buf2 : Buf {
@@ -122,15 +198,16 @@ struct Buf2 : Buf {
 
 // A weight's MUL_MATs (tensor->extra)
 class Traits : public ggml::cpu::tensor_traits {
-    const MulMat &k;
-
 public:
+    const MulMat &k;
+    const gq::FormatSpec fs;
+
     explicit Traits(const MulMat &k)
-        : k(k) {
+        : k(k), fs(gq::parse_format(k.spec)) {
     }
 
-    bool work_size(int, const ggml_tensor *op, size_t &size) override {
-        size = ggml_row_size(k.act, ggml_nelements(op->src[1]));
+    bool work_size(int, const ggml_tensor *, size_t &size) override {
+        size = sizeof(Pool) + alignof(Pool);
         return true;
     }
 
@@ -138,70 +215,70 @@ public:
         if (op->op != GGML_OP_MUL_MAT) return false;
         const ggml_tensor *src0 = op->src[0], *src1 = op->src[1];
         const int ith = params->ith, nth = params->nth;
-        const int64_t K = src0->ne[0], N = src0->ne[1], M = src1->ne[1];
-        const size_t arow = ggml_row_size(k.act, K);
-        char *wdata = (char *)params->wdata;
-        const ggml_from_float_t from_float = ggml_get_type_traits_cpu(k.act)->from_float;
-        for (int64_t m = ith; m < M; m += nth) {
-            from_float((const float *)((const char *)src1->data + m * src1->nb[1]), wdata + m * arow, K);
-        }
-        // Chunks of rows: 4 per thread (as GGML's), of 16 rows (Halide's
-        // gemm and gemv tiles' multiple)
-        const int64_t align = 16, nchunk = std::max<int64_t>(1, std::min<int64_t>(4 * nth, N / align));
-        const int64_t dr = (N + nchunk - 1) / nchunk;
-        if (ith == 0) ggml_threadpool_chunk_set(params->threadpool, nth);
+        uintptr_t at = ((uintptr_t)params->wdata + alignof(Pool) - 1) & ~(uintptr_t)(alignof(Pool) - 1);
+        Pool *p = (Pool *)at;
+        if (ith == 0) new (p) Pool();
         ggml_barrier(params->threadpool);
-        const halide_type_t wt = k.md()->arguments[0].type, at = k.md()->arguments[1].type;
-        const int64_t wrecs = K / ggml_blck_size(src0->type), arecs = K / ggml_blck_size(k.act);
-        for (int64_t c = ith; c < nchunk; c = ggml_threadpool_chunk_add(params->threadpool, 1)) {
-            int64_t n0 = std::min(N, (c * dr + align - 1) / align * align), n1 = std::min(N, ((c + 1) * dr + align - 1) / align * align);
-            if (n0 >= n1) continue;
-            Buf2 w((char *)src0->data + n0 * src0->nb[1], wt, wrecs, n1 - n0, src0->nb[1] / ggml_type_size(src0->type));
-            Buf2 a(wdata, at, arecs, M, arow / ggml_type_size(k.act));
-            // The kernels' out is dense: a chunk's, for M > 1, to scratch
-            const int64_t nn = n1 - n0;
-            float *dst = (float *)((char *)op->data + n0 * op->nb[0]);
-            thread_local std::vector<float> scratch;
-            if (M > 1 && nn != N) scratch.resize(nn * M);
-            float *obuf = M > 1 && nn != N ? scratch.data() : dst;
-            Buf2 o(obuf, halide_type_t(halide_type_float, 32), nn, M, nn);
-            if (int e = k.f(&w.b, &a.b, &o.b)) {
-                fprintf(stderr, "ggml-halide: %s error %d\n", k.name, e);
-                abort();
+        if (ith != 0) {
+            // (each job's tasks, until thread 0's kernel returns)
+            while (!p->finished.load(std::memory_order_acquire)) {
+                if (!p->work()) cpu_relax();
             }
-            if (obuf != dst) {
-                for (int64_t m = 0; m < M; m++) {
-                    memcpy((char *)dst + m * op->nb[1], obuf + m * nn, nn * sizeof(float));
-                }
-            }
+            return true;
+        }
+        const int64_t K = src0->ne[0], N = src0->ne[1], M = src1->ne[1];
+        // (a group of fs.rows rows: one row of records of fs.rows blocks)
+        Buf2 w(src0->data, k.md()->arguments[0].type, K / ggml_blck_size(src0->type), N / fs.rows, src0->nb[1] / ggml_type_size(src0->type));
+        Buf2 a(src1->data, halide_type_t(halide_type_float, 32), K, M, src1->nb[1] / sizeof(float));
+        Buf2 o(op->data, halide_type_t(halide_type_float, 32), N, M, op->nb[1] / sizeof(float));
+        if (halide_get_num_threads() != nth) halide_set_num_threads(nth);
+        pool = p;
+        int e = k.f(&w.b, &a.b, &o.b);
+        pool = nullptr;
+        p->finished.store(true, std::memory_order_release);
+        if (e) {
+            fprintf(stderr, "ggml-halide: %s error %d\n", k.name, e);
+            abort();
         }
         return true;
     }
 };
 
-const MulMat *mul_mat_for(ggml_type t) {
-    for (const MulMat &k : mul_mats) {
-        if (k.weight == t && ggml_get_type_traits_cpu(t)->vec_dot_type == k.act) return &k;
-    }
-    return nullptr;
-}
-
-Traits *traits_for(ggml_type t) {
+// The first kernel in GGML_HALIDE_MUL_MATS for a weight of type t with N rows
+// (2D; a multiple of its format's rows) and GGML's act type
+Traits *traits_for(ggml_type t, int64_t N) {
     static std::vector<std::unique_ptr<Traits>> ts = [] {
-        std::vector<std::unique_ptr<Traits>> ts(GGML_TYPE_COUNT);
-        for (int i = 0; i < GGML_TYPE_COUNT; i++) {
-            if (const MulMat *k = mul_mat_for((ggml_type)i)) ts[i] = std::make_unique<Traits>(*k);
+        std::vector<std::unique_ptr<Traits>> ts;
+        for (const MulMat &k : mul_mats) {
+            if (ggml_get_type_traits_cpu(k.weight)->vec_dot_type == k.act) ts.push_back(std::make_unique<Traits>(k));
         }
         return ts;
     }();
-    return ts[t].get();
+    for (auto &tr : ts) {
+        if (tr->k.weight == t && N % tr->fs.rows == 0) return tr.get();
+    }
+    return nullptr;
 }
 
 ggml_backend_buffer_type_t halide_buffer_type();
 
 enum ggml_status init_tensor(ggml_backend_buffer_t, ggml_tensor *t) {
-    t->extra = traits_for(t->type);
+    t->extra = ggml_n_dims(t) == 2 ? traits_for(t->type, t->ne[1]) : nullptr;
     return GGML_STATUS_SUCCESS;
+}
+
+// Weights to their kernel's format (GGML's repack's, by the harness's
+// transcription of it), whole; others as the CPU buffer's
+void set_tensor(ggml_backend_buffer_t, ggml_tensor *t, const void *data, size_t offset, size_t size) {
+    const Traits *tr = (const Traits *)t->extra;
+    if (tr && tr->fs.rows > 1) {
+        GGML_ASSERT(offset == 0 && size == ggml_nbytes(t));
+        if (!gq::relayout(tr->fs, t->type, (const uint8_t *)data, (uint8_t *)t->data, t->ne[1], t->ne[0])) {
+            GGML_ABORT("ggml-halide: no %s layout for %s", tr->k.spec, t->name);
+        }
+        return;
+    }
+    memcpy((char *)t->data + offset, data, size);
 }
 
 ggml_backend_buffer_t alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
@@ -209,6 +286,10 @@ ggml_backend_buffer_t alloc_buffer(ggml_backend_buffer_type_t buft, size_t size)
     if (!b) return nullptr;
     b->buft = buft;
     b->iface.init_tensor = init_tensor;
+    b->iface.set_tensor = set_tensor;
+    // (as CPU_REPACK's: the relaid bytes aren't the tensor's)
+    b->iface.get_tensor = nullptr;
+    b->iface.cpy_tensor = nullptr;
     return b;
 }
 
@@ -216,7 +297,7 @@ class ExtraBufferType : public ggml::cpu::extra_buffer_type {
     bool supports_op(ggml_backend_dev_t, const ggml_tensor *op) override {
         const ggml_tensor *src0 = op->src[0], *src1 = op->src[1];
         return op->op == GGML_OP_MUL_MAT && src0->buffer && src0->buffer->buft == halide_buffer_type() &&
-               ggml_n_dims(src0) == 2 && traits_for(src0->type) && src1->type == GGML_TYPE_F32 &&
+               ggml_n_dims(src0) == 2 && traits_for(src0->type, src0->ne[1]) && src1->type == GGML_TYPE_F32 &&
                src1->ne[2] == 1 && src1->ne[3] == 1 && ggml_is_contiguous(src1) && ggml_is_contiguous(op) &&
                (!src1->buffer || ggml_backend_buft_is_host(src1->buffer->buft));
     }
@@ -254,10 +335,9 @@ extern "C" ggml_backend_buffer_type_t ggml_backend_cpu_halide_buffer_type(void);
 extern "C" ggml_backend_buffer_type_t ggml_backend_cpu_halide_buffer_type(void) {
     static const bool on = [] {
         if (!enabled("mul_mat")) return false;
-        halide_set_num_threads(1);
-        halide_set_custom_do_par_for(serial_do_par_for);
+        halide_set_custom_do_par_for(do_par_for);
         for (const MulMat &k : mul_mats) {
-            if (mul_mat_for(k.weight) == &k) fprintf(stderr, "ggml-halide: mul_mat %s\n", k.name);
+            fprintf(stderr, "ggml-halide: mul_mat %s\n", k.name);
         }
         return true;
     }();

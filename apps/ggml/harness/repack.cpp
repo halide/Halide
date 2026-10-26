@@ -543,6 +543,10 @@ bool quantize_mat(const FormatSpec &f, ggml_type t, const float *x, uint8_t *dst
 
 }  // namespace gq
 
+// (GQ_RELAYOUT_ONLY: without the live GGML references, which need libggml,
+// for apps/ggml/llama's ggml-cpu)
+#ifndef GQ_RELAYOUT_ONLY
+
 // GGML's (src/ggml-cpu/repack.cpp: the gemm's act quantizer, by its chunk)
 template<int64_t INTER_SIZE, ggml_type PARAM_TYPE>
 void ggml_quantize_mat_t(const float *x, void *vy, int64_t nrow, int64_t n_per_row);
@@ -587,3 +591,5 @@ std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_
 }
 
 }  // namespace gq
+
+#endif
