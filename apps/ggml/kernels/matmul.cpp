@@ -72,10 +72,13 @@ public:
         Expr wj = per > 1 ? r.x + r.y % per * block : r.x, wb = per > 1 ? r.y / per : r.y;
         dots[0](n, m) += W(wj, wb, n) * X(r.x, r.y, m);  // from 0; out writes each output once
         if (fc.rows > 1) {
-            // Act records of several rows (as GGML's x4 activations): the
-            // rows in whole records from them (dots[1]; rows past M repeat the
-            // last one), the others one row per record.
-            Expr M = row(a[0]).extent(), Mr = M / fc.rows * fc.rows;
+            // Act records of several rows (as GGML's x4 activations): for
+            // M > 1, all the rows from them (dots[1]; the last record's rows
+            // past M repeat the last one, their outputs unwritten), so the
+            // weights stream once (a tail of the rows past whole records, on
+            // the gemv, streamed them again: q4_0.i4.4x8 at M = 5 2.3x M =
+            // 4's time); M = 1 one row per record (dots[0], the gemv).
+            Expr M = row(a[0]).extent(), Mr = select(M > 1, M, 0);
             Xrf(k, m) = operand(fa, a, k, clamp(m, 0, M - 1));
             view(Xr, Xrf, block);
             dots.push_back(Func("dotr"));

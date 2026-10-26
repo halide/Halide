@@ -2137,8 +2137,9 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (per-format parameters). Edge
 // tiles shift inwards: any N, M at least the tile's. With act records of
 // r = fmt.act_rows > 1 rows, out's first update is the rows in whole records
-// (dots[1]) on gemm tiles starting on a record, its second the others
-// (dots[0], < r rows) on gemv tiles.
+// (dots[1]; for M > 1, all of them, the last record's rows past M
+// unwritten) on gemm tiles starting on a record, its second M = 1's row
+// (dots[0]) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
                     bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true,
@@ -2161,21 +2162,20 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     bool integer = fmt.act_block == fmt.block, whole = fmt.act_rows > 1;
-    Expr Mr = M / fmt.act_rows * fmt.act_rows;
+    Expr Mr = select(M > 1, M, 0);  // (as matmul's: whole records' rows)
     const int fv = 4 * t.natural_vector_size<float>();
     for (size_t i = 0; i < staged.size(); i++) {
         // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks
         // of their blocks (work in values), so even a few records (small M)
-        // spread over the threads. The rows past Mr (staged[0] for whole
-        // records), up to 3 and often none, one per task (the fused loop would
-        // encode a row even for none).
+        // spread over the threads. With whole records, staged[0] is M = 1's
+        // row, one per task (the fused loop would encode a row even for none).
         Func e = staged[i];
         Var b = e.args()[0], rec = e.args().back(), bo("bo"), t("t");
         Stage s = e.compute_root().specialize(M > 1);
         if (whole && !i) {
             s.parallel(rec);
         } else {
-            Expr B = r.y.extent(), recs = whole ? Mr / fmt.act_rows : M;
+            Expr B = r.y.extent(), recs = whole ? (Mr + fmt.act_rows - 1) / fmt.act_rows : M;
             std::vector<int> cs;
             for (int c = 1; c <= 16; c++) {
                 cs.push_back(c);
@@ -2218,13 +2218,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     auto fits = [&](const Tiles &ts, Expr m) { return whole ? N % ts.nt == 0 && N >= ts.nt : N >= ts.nt && m >= ts.mt; };
     // Whole records' row tiles: 12, 16 or 20 rows cost about the same per row,
     // so the one computing the fewest rows past Mr (ties: 16, then 20); one
-    // record, 16 x 4 (16 accumulators, no rows past Mr); two, 8 rows. Each
+    // record, 16 x 4 (16 accumulators); two, 8 rows. Each
     // task's tiles cover up to 128 rows, so the weights stream once (M <= 128).
     // A chain, so the later branches learn each condition false (dr's bound).
     Tiles t16{4, 16, 1, 32, 128, 2}, t20{4, 20, 1, 32, 120, 2}, t12{4, 12, 1, 32, 120, 2}, t8{4, 8, 1, 32, 128, 2}, wide{16, 4, 1, 32, 128, 2};
     auto padded = [&](const Tiles &ts) { return (Mr + ts.mt - 1) / ts.mt * ts.mt; };
     Expr fewest = min(padded(t12), padded(t16), padded(t20)), odd_n = !fits(gemm, Mr);
-    Chain tiles{{Mr == wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
+    Chain tiles{{Mr <= wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
     if (whole && rmmla) {  // N a multiple of the records' rows
         dr.bound_extent(dr.args()[1], rm.mt);
     } else if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
@@ -2250,8 +2250,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm, false, false, gemm_index_words);
-    // The rows past Mr (fewer than a record's): no tasks when there are none.
-    Expr rest = whole ? M % fmt.act_rows != 0 : Expr();
+    // The rows past Mr (with whole records, M = 1's): no tasks when there are none.
+    Expr rest = whole ? M == 1 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
         Tiles rt{fmt.rows, 1, 2, 16, 0, 0, rest};
         // (a two-level record, 8 rows of q4_K: 1152 bytes, one per iteration)
