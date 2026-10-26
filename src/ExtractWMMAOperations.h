@@ -3,9 +3,11 @@
 
 /** \file
  * Defines the lowering pass that injects calls to the warp-level matrix
- * multiply-accumulate intrinsics that drive NVIDIA tensor cores.
+ * multiply-accumulate intrinsics that drive NVIDIA tensor cores and Apple
+ * simdgroup matrices.
  */
 
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "MultiRamp.h"
 
@@ -16,9 +18,16 @@ struct Call;
 struct Store;
 
 /** Rewrite matrix multiplies that accumulate into Tile memory as
- * calls to the wmma intrinsics understood by the PTX backend, and wrap them in
- * a loop over the 32 lanes of a warp. */
+ * calls to the wmma intrinsics understood by the PTX and Metal backends, and
+ * wrap them in a loop over the 32 lanes of a warp. */
 Stmt extract_wmma_operations(const Stmt &s);
+
+/** Whether Tile memory in GPU code for the given device API is held by a
+ * matrix unit whose fragments are striped across the 32 lanes of a warp, so
+ * that extract_wmma_operations wraps the statements that touch it in a loop
+ * over lanes. That's NVIDIA tensor cores on CUDA, and simdgroup matrices on
+ * Metal. */
+bool device_api_has_lane_matrix_unit(DeviceAPI api);
 
 /** Whether a Call is one of the wmma intrinsics produced by the pass above. */
 bool is_wmma_intrinsic(const Call *op);
