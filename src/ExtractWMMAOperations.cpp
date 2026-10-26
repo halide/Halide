@@ -12,15 +12,20 @@
 #include "Util.h"
 
 #include <map>
+#include <sstream>
 
-/** \file Support extraction of NVIDIA tensor core (wmma) instructions.
+/** \file Support extraction of the SIMT matrix multiply instructions of GPUs:
+ * NVIDIA tensor core (wmma) instructions, and Apple simdgroup_matrix
+ * operations on Metal.
  *
- * The wmma instructions are warp-level: the 32 lanes of a warp cooperate to
- * hold a tile of a matrix, and each instruction is executed by the warp as a
- * whole. The layout of the tile across the lanes' registers is not specified
- * by the architecture, so the only way to get data into or out of a tile is
- * with the wmma load and store instructions, which move a tile between the
- * registers of a warp and a 2D array in memory.
+ * Both are warp-level: the 32 lanes of a warp (a SIMD-group, on Metal)
+ * cooperate to hold a tile of a matrix, and each instruction is executed by the
+ * warp as a whole. The layout of the tile across the lanes' registers is not
+ * specified by the architecture, so the only way to get data into or out of a
+ * tile is with the load and store instructions, which move a tile between the
+ * registers of a warp and a 2D array in memory. The two differ only in the tile
+ * shapes and types they support and in how many elements of a fragment each
+ * lane holds, which is what the MatrixUnit table below describes.
  *
  * A tile allocation holds one of the three matrices of a multiply, and
  * which one follows from how it is used. An allocation accumulated into by a
@@ -50,11 +55,9 @@ using std::vector;
 
 namespace {
 
-// The tile shapes the hardware supports, in the order we try them.
 struct Shape {
     int M, N, K;
 };
-const Shape supported_shapes[] = {{16, 16, 16}, {32, 8, 16}, {8, 32, 16}};
 
 // A matrix operand is stored either with its rows contiguous or its columns
 // contiguous.
@@ -95,21 +98,47 @@ const char *role_name(Role role) {
     }
 }
 
-// Every warp is 32 lanes, and an accumulator tile holds 256 elements whatever
-// its shape, so each lane holds 8 of them whatever their type.
+// Every warp is 32 lanes, on both CUDA and Metal.
 constexpr int warp_lanes = 32;
-constexpr int accumulator_elements = 8;
+
+// What the SIMT matrix unit of one GPU API can do. Everything about the
+// lowering that differs between targets is in here.
+struct MatrixUnit {
+    DeviceAPI device_api;
+    // What to call the hardware and its fragments in error messages.
+    const char *name;
+    // The tile shapes the hardware supports, in the order we try them, and a
+    // human-readable list of them.
+    vector<Shape> shapes;
+    const char *shape_list;
+    // The multiplicand and accumulator type combinations the hardware has an
+    // instruction for.
+    bool (*types_supported)(Type operand, Type accumulator);
+    // The element types a fragment may hold.
+    bool (*fragment_type_supported)(Type t);
+    // How many elements of a fragment each lane holds.
+    int (*elements_per_lane)(Role role, const Shape &shape, Type t);
+};
+
+// The shape of the matrix each fragment is taken out of.
+void fragment_matrix_shape(Role role, const Shape &shape, int *rows, int *cols) {
+    *rows = role == Role::B ? shape.K : shape.M;
+    *cols = role == Role::A ? shape.K : shape.N;
+}
+
+// An NVIDIA tensor core accumulator tile holds 256 elements whatever its
+// shape, so each lane holds 8 of them whatever their type.
+constexpr int cuda_accumulator_elements = 8;
 // Half precision operand fragments are eight 32-bit registers per lane
 // whatever the shape, which is sixteen elements. For the shapes that hold
 // fewer than that the hardware replicates elements across lanes.
-constexpr int half_operand_elements = 16;
+constexpr int cuda_half_operand_elements = 16;
 
-// The multiplicand and accumulator type combinations the tensor cores have an
-// instruction for. Half precision multiplicands accumulate into halves or
-// floats, brain floats accumulate into floats, and eight-bit integers
-// accumulate into 32-bit ones. The multiplicands must match each other: at
-// this shape there is no instruction for mixed signedness.
-bool wmma_types_supported(Type operand, Type accumulator) {
+// The tensor cores multiply half precision into halves or floats, brain
+// floats into floats, and eight-bit integers into 32-bit ones. The
+// multiplicands must match each other: at these shapes there is no
+// instruction for mixed signedness.
+bool cuda_types_supported(Type operand, Type accumulator) {
     if (operand == Float(16)) {
         return accumulator == Float(16) || accumulator == Float(32);
     } else if (operand == BFloat(16)) {
@@ -120,25 +149,79 @@ bool wmma_types_supported(Type operand, Type accumulator) {
     return false;
 }
 
-// The shape of the matrix each fragment is taken out of.
-void fragment_matrix_shape(Role role, const Shape &shape, int *rows, int *cols) {
-    *rows = role == Role::B ? shape.K : shape.M;
-    *cols = role == Role::A ? shape.K : shape.N;
+bool cuda_fragment_type_supported(Type t) {
+    return t == Float(32) || t == Float(16) || t == BFloat(16) ||
+           t == Int(32) || t == Int(8) || t == UInt(8);
 }
 
-// How many elements of a fragment each lane holds. Every type but half
-// precision holds exactly its share of the matrix, so this follows from the
-// shape; half precision is the fixed size above however small the shape is.
-int elements_per_lane(Role role, const Shape &shape, Type t) {
+// Every type but half precision holds exactly its share of the matrix, so
+// this follows from the shape; half precision is the fixed size above however
+// small the shape is.
+int cuda_elements_per_lane(Role role, const Shape &shape, Type t) {
     if (role == Role::Accumulator) {
-        return accumulator_elements;
+        return cuda_accumulator_elements;
     }
     if (t == Float(16)) {
-        return half_operand_elements;
+        return cuda_half_operand_elements;
     }
     int rows, cols;
     fragment_matrix_shape(role, shape, &rows, &cols);
     return rows * cols / warp_lanes;
+}
+
+// Metal's simdgroup_matrix multiplies half or float matrices, into a half or
+// float accumulator. (MSL also lets the two multiplicands differ in type, and
+// has bfloat on newer hardware, but neither is exposed here.)
+bool metal_types_supported(Type operand, Type accumulator) {
+    if (operand == Float(16)) {
+        return accumulator == Float(16) || accumulator == Float(32);
+    } else if (operand == Float(32)) {
+        return accumulator == Float(32);
+    }
+    return false;
+}
+
+bool metal_fragment_type_supported(Type t) {
+    return t == Float(32) || t == Float(16);
+}
+
+// A simdgroup_matrix is always 8x8, so each of the 32 lanes holds two
+// elements of it, whatever its role or type.
+int metal_elements_per_lane(Role role, const Shape &shape, Type t) {
+    int rows, cols;
+    fragment_matrix_shape(role, shape, &rows, &cols);
+    return rows * cols / warp_lanes;
+}
+
+const MatrixUnit cuda_matrix_unit{
+    DeviceAPI::CUDA,
+    "tensor core",
+    {{16, 16, 16}, {32, 8, 16}, {8, 32, 16}},
+    "16x16x16, 32x8x16, or 8x32x16",
+    cuda_types_supported,
+    cuda_fragment_type_supported,
+    cuda_elements_per_lane,
+};
+
+const MatrixUnit metal_matrix_unit{
+    DeviceAPI::Metal,
+    "simdgroup matrix",
+    {{8, 8, 8}},
+    "8x8x8",
+    metal_types_supported,
+    metal_fragment_type_supported,
+    metal_elements_per_lane,
+};
+
+const MatrixUnit *matrix_unit_for(DeviceAPI api) {
+    switch (api) {
+    case DeviceAPI::CUDA:
+        return &cuda_matrix_unit;
+    case DeviceAPI::Metal:
+        return &metal_matrix_unit;
+    default:
+        return nullptr;
+    }
 }
 
 // One operand of a matrix multiply, described in the canonical [K, N, M]
@@ -196,11 +279,11 @@ Expr make_lane(const string &name) {
     return Variable::make(Int(32), name);
 }
 
-Stmt in_lane_loop(const Expr &lane, Stmt s) {
+Stmt in_lane_loop(const MatrixUnit &unit, const Expr &lane, Stmt s) {
     const Variable *v = lane.as<Variable>();
-    internal_assert(v) << "the lane of a tensor core operation is not a variable\n";
+    internal_assert(v) << "the lane of a " << unit.name << " operation is not a variable\n";
     return For::make(v->name, 0, warp_lanes - 1, ForType::GPULane, Partition::Never,
-                     DeviceAPI::CUDA, std::move(s));
+                     unit.device_api, std::move(s));
 }
 
 // The matrix a wmma load or store moves, described as a Load of every element
@@ -227,7 +310,7 @@ Expr make_matrix_address(const string &name, Type element_type, const Expr &base
                       const_true(lanes), ModulusRemainder(), false);
 }
 
-Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
+Expr make_matrix_to_fragment(const MatrixUnit &unit, Role role, const Shape &shape, Layout layout,
                              const Load *load, const Expr &base, const Expr &stride,
                              const Expr &lane) {
     int rows, cols;
@@ -235,7 +318,7 @@ Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
     Expr address = make_matrix_address(load->name, load->type.element_of(), base,
                                        rows, cols, layout, stride, load->image, load->param);
     Type type = load->type.element_of().with_lanes(
-        elements_per_lane(role, shape, load->type.element_of()));
+        unit.elements_per_lane(role, shape, load->type.element_of()));
     return Call::make(type, intrinsic_for_role(role),
                       {shape.M, shape.N, shape.K, std::move(address), lane},
                       Call::Intrinsic);
@@ -252,7 +335,7 @@ struct MatmulInfo {
     vector<std::pair<string, Expr>> peeled_lets;
 };
 
-MatmulInfo analyze_matmul(const Store *op) {
+MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     // We expect the pattern:
     //
     // out[idx] = reduce_add(widen(lhs[multiramp]) * widen(rhs[multiramp])) + out[idx]
@@ -260,7 +343,7 @@ MatmulInfo analyze_matmul(const Store *op) {
     // Though either operand may have been hoisted out to a broadcast or had a
     // lane permutation left on it by vectorization.
 
-    auto fail = [&](const char *reason) -> MatmulInfo {
+    auto fail = [&](const std::string &reason) -> MatmulInfo {
         user_error << "Matrix multiply not recognized. Store to a Tile "
                    << "allocation must be a zero-initialization, a fill from a matrix "
                    << "in memory, or a sum of a vector reduce op and a load from the "
@@ -332,9 +415,12 @@ MatmulInfo analyze_matmul(const Store *op) {
     if (info.rhs.load->type.element_of() != operand_type) {
         return fail("the matrix multiply operands do not have the same type");
     }
-    if (!wmma_types_supported(operand_type, info.accumulator_type)) {
-        return fail("there is no tensor core instruction that multiplies these "
-                    "operands into an accumulator of this type");
+    if (!unit.types_supported(operand_type, info.accumulator_type)) {
+        user_error << "Matrix multiply not recognized. There is no " << unit.name
+                   << " instruction on " << unit.device_api << " that multiplies "
+                   << operand_type << " operands into a " << info.accumulator_type
+                   << " accumulator:\n"
+                   << Stmt(op);
     }
 
     // In a matrix multiply with row-major inputs and outputs, the algorithm
@@ -353,7 +439,7 @@ MatmulInfo analyze_matmul(const Store *op) {
     // Deduce which operand is which and what tile shape this is by trying each
     // supported shape and seeing which one the access patterns fit.
     const Shape *shape = nullptr;
-    for (const Shape &candidate : supported_shapes) {
+    for (const Shape &candidate : unit.shapes) {
         if (candidate.M * candidate.N != MN || candidate.K != K) {
             continue;
         }
@@ -376,9 +462,11 @@ MatmulInfo analyze_matmul(const Store *op) {
     }
 
     if (!shape) {
-        return fail("the operands' access patterns do not describe a matrix "
-                    "multiply of a tile shape the tensor cores support (16x16x16, "
-                    "32x8x16, or 8x32x16)");
+        std::ostringstream reason;
+        reason << "the operands' access patterns do not describe a matrix multiply "
+               << "of a tile shape the " << unit.name << " instructions on "
+               << unit.device_api << " support (" << unit.shape_list << ")";
+        return fail(reason.str());
     }
     info.shape = *shape;
     return info;
@@ -395,10 +483,10 @@ bool is_fill(const Store *op) {
     return load && load->name != op->name;
 }
 
-Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
+Stmt convert_to_tile_store(const MatrixUnit &unit, const Store *op, const Expr &store_index,
                            const string &new_name, const Shape &shape) {
     auto fail = [&](const char *reason) {
-        user_error << "Store of a tensor core accumulator to memory not supported. "
+        user_error << "Store of a " << unit.name << " accumulator to memory not supported. "
                    << reason << ".\n"
                    << Stmt(op);
         return Stmt{};
@@ -422,8 +510,9 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
     // accumulator.
     Expr index = make_matrix_index(mem.base, shape.M, shape.N, layout, mem.stride);
     Type element_type = op->value.type().element_of();
-    Expr frag = Load::make(element_type.with_lanes(accumulator_elements), new_name,
-                           Ramp::make(0, 1, accumulator_elements));
+    const int frag_lanes = unit.elements_per_lane(Role::Accumulator, shape, element_type);
+    Expr frag = Load::make(element_type.with_lanes(frag_lanes), new_name,
+                           Ramp::make(0, 1, frag_lanes));
     const int lanes = shape.M * shape.N;
     Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
     Expr matrix = Call::make(element_type.with_lanes(lanes), Call::wmma_fragment_to_matrix_d,
@@ -431,7 +520,7 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
                              Call::Intrinsic);
     Expr owned = Call::make(UInt(1, lanes), Call::wmma_lane_owns,
                             {shape.M, shape.N, shape.K, lane}, Call::Intrinsic);
-    return in_lane_loop(lane,
+    return in_lane_loop(unit, lane,
                         Store::make(op->name, std::move(matrix), std::move(index),
                                     op->param, std::move(owned), ModulusRemainder(),
                                     op->is_streaming));
@@ -442,6 +531,8 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
 // in, so neither is known until those have been found.
 struct Fragment {
     string name;
+    // The matrix unit of the GPU API the fragment's allocation is in.
+    const MatrixUnit *unit = nullptr;
     // The prefix of the names of the per-fragment allocations this one becomes.
     string fragment_name;
     Type element_type;
@@ -454,7 +545,7 @@ struct Fragment {
 
     Type value_type() const {
         return element_type.with_lanes(
-            elements_per_lane(role, shape, element_type));
+            unit->elements_per_lane(role, shape, element_type));
     }
 };
 
@@ -553,15 +644,16 @@ class ExtractWMMAOperations : public IRMutator {
 
     // The value a matrix multiply uses for one of its operands: the fragment it
     // was staged in, or a load synthesized here if it wasn't staged.
-    Expr operand_value(const Operand &operand, Role role, const Shape &shape,
-                       Layout layout, const Expr &stride, const Expr &lane) {
+    Expr operand_value(const MatrixUnit &unit, const Operand &operand, Role role,
+                       const Shape &shape, Layout layout, const Expr &stride,
+                       const Expr &lane) {
         if (Fragment *f = find_fragment(operand.load->name)) {
             const int lanes = f->value_type().lanes();
             const string name =
                 operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
             return Load::make(f->value_type(), name, Ramp::make(0, 1, lanes));
         }
-        return make_matrix_to_fragment(role, shape, layout, operand.load,
+        return make_matrix_to_fragment(unit, role, shape, layout, operand.load,
                                        operand.mr.base, stride, lane);
     }
 
@@ -615,21 +707,24 @@ class ExtractWMMAOperations : public IRMutator {
                              "shape");
             } else {
                 value = make_matrix_to_fragment(
-                    f->role, f->shape, mem.row_major ? Layout::Row : Layout::Col,
+                    *f->unit, f->role, f->shape, mem.row_major ? Layout::Row : Layout::Col,
                     matrix, mem.base, mem.stride, lane);
             }
         }
         return in_lane_loop(
-            lane, Store::make(name, std::move(value), Ramp::make(0, 1, lanes)));
+            *f->unit, lane, Store::make(name, std::move(value), Ramp::make(0, 1, lanes)));
     }
 
     Stmt convert_to_matmul(const Store *op, Fragment *f, const MatmulInfo &info) {
         Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
-        Expr a = operand_value(info.lhs, Role::A, info.shape, info.lhs_layout, info.lda, lane);
-        Expr b = operand_value(info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb, lane);
+        const MatrixUnit &unit = *f->unit;
+        Expr a = operand_value(unit, info.lhs, Role::A, info.shape, info.lhs_layout, info.lda, lane);
+        Expr b = operand_value(unit, info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb, lane);
 
-        Type acc_type = info.accumulator_type.with_lanes(accumulator_elements);
-        Expr frag_idx = Ramp::make(0, 1, accumulator_elements);
+        const int acc_lanes =
+            unit.elements_per_lane(Role::Accumulator, info.shape, info.accumulator_type);
+        Type acc_type = info.accumulator_type.with_lanes(acc_lanes);
+        Expr frag_idx = Ramp::make(0, 1, acc_lanes);
         const string name = subtile_name(f, op->index);
         Expr c = Load::make(acc_type, name, frag_idx);
 
@@ -640,7 +735,7 @@ class ExtractWMMAOperations : public IRMutator {
                               Call::Intrinsic);
 
         Stmt store = in_lane_loop(
-            lane, Store::make(name, std::move(mma), frag_idx));
+            unit, lane, Store::make(name, std::move(mma), frag_idx));
         for (const auto &[let_name, v] : reverse_view(info.peeled_lets)) {
             store = LetStmt::make(let_name, v, store);
         }
@@ -664,20 +759,20 @@ class ExtractWMMAOperations : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        user_assert(device_api == DeviceAPI::CUDA)
+        const MatrixUnit *unit = matrix_unit_for(device_api);
+        user_assert(unit)
             << op->name << " is stored in Tile memory inside GPU code for "
-            << device_api << ", but tensor core tiles are only supported on CUDA.\n";
+            << device_api << ", but GPU matrix tiles are only supported on CUDA "
+            << "(tensor cores) and Metal (simdgroup matrices).\n";
 
-        user_assert(op->type == Float(32) || op->type == Float(16) ||
-                    op->type == BFloat(16) || op->type == Int(32) ||
-                    op->type == Int(8) || op->type == UInt(8))
-            << "Tensor core fragments must hold 32-bit or 16-bit floats, 16-bit brain "
-            << "floats, 32-bit integers, or 8-bit integers, but " << op->name
-            << " holds " << op->type << ".\n";
+        user_assert(unit->fragment_type_supported(op->type))
+            << op->name << " is stored in Tile memory, but " << unit->name
+            << " fragments on " << device_api << " can't hold " << op->type << ".\n";
 
         Fragment &f = fragments[op->name];
         if (pass == 0) {
             f.name = op->name;
+            f.unit = unit;
             f.fragment_name = op->name + ".wmma.";
             f.element_type = op->type;
         }
@@ -765,7 +860,7 @@ class ExtractWMMAOperations : public IRMutator {
                     << "The tensor core fragment " << src->name << " is copied out to "
                     << "memory, but it holds " << role_name(src->role) << " of a matrix "
                     << "multiply. Only an accumulator can be copied out.\n";
-                return convert_to_tile_store(op, store_index,
+                return convert_to_tile_store(*src->unit, op, store_index,
                                              subtile_name(src, load->index), src->shape);
             }
             // Not a copy of a tile out to memory. Recurse, so that any use of a
@@ -780,7 +875,7 @@ class ExtractWMMAOperations : public IRMutator {
             return pass == 0 ? Stmt(op) : convert_to_fill(op, f);
         }
 
-        MatmulInfo info = analyze_matmul(op);
+        MatmulInfo info = analyze_matmul(*f->unit, op);
         if (pass == 0) {
             set_role(f, Role::Accumulator);
             set_shape(f, info.shape);
@@ -808,6 +903,10 @@ Stmt extract_wmma_operations(const Stmt &s) {
     mutator(s);
     mutator.next_pass();
     return mutator(s);
+}
+
+bool device_api_has_lane_matrix_unit(DeviceAPI api) {
+    return matrix_unit_for(api) != nullptr;
 }
 
 bool is_wmma_intrinsic(const Call *op) {
