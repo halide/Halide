@@ -1727,49 +1727,301 @@ inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<
     dot.compute_at(out, ni);
 }
 
-// Metal (Apple GPUs), as GGML's kernel_mul_mv_q4_0_f32: threadgroups of `sg`
-// simdgroups (gpu_threads), each `nr` rows of one column of out. A lane takes
-// half a block (one of its two 8-byte halves: 16 values) of every 16th block,
-// accumulating the rows in registers (the codes' sum per block, then times
-// its scale; an affine weight's min times the act's sum alongside, as
-// block_dot); the lanes' sums then reduce across the simdgroup (an atomic
-// update over the gpu lanes: simd shuffles) and lane 0 writes. For M > 1,
-// each simdgroup takes rows x cols of out (up to 8 columns, fewer rows for
-// more), a lane per value of every block (coalesced loads), its products in
-// registers (each decoded weight used cols times, each act value rows times),
-// reduced the same way (the gemv lanes' act loads, 16 values of blocks 16
-// apart, are strided: far slower for that many columns). Each kernel has both
-// trees, behind uniform flags (dot's specialization, done on the host).
-inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int nr = 4, int sg = 2) {
-    Var n = out.args()[0], m = out.args()[1], ns("ns"), uh("uh"), ub("ub"), u("u"), l("l");
-    RVar rx = r.x, ry = r.y, rxn("rxn"), rxh("rxh"), rxi("rxi"), ryo("ryo"), ryi("ryi"), rl("rl");
+// Of the bits of a block's value index (r.x, in [0, 2^bits)) from `low` up,
+// per bit how many of dot's code loads (its decode inlined: loads of the
+// encoded ports, at an index that varies within the first `low` bits: not
+// a scale's, nor a field of fewer values' bits) it leaves in place: values
+// differing only in it read the same bytes (q4_0's bit 4, a byte's two
+// nibbles; q6_K's 5 and 6, ql's nibbles and qh's pairs).
+inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) {
+    using namespace Internal;
+    Expr e = dot.update_value();
+    for (;;) {
+        std::optional<Function> g;
+        visit_with(e, [&](auto *self, const Call *c) {
+            if (!g && c->call_type == Call::Halide && c->func.defined()) {
+                Function f(c->func);
+                if (!f.has_update_definition() && !f.has_extern_definition()) g = f;
+            }
+            self->visit_base(c);
+        });
+        if (!g) break;
+        e = inline_function(e, *g);
+    }
+    e = remove_promises(remove_likelies(substitute_in_all_lets(e)));
+    std::vector<int> count(bits, 0);
+    visit_with(e, [&](auto *self, const Call *c) {
+        // (a struct field's element: the struct's args, the field, the element)
+        const Call *s = c->is_intrinsic(Call::struct_field_read) ? c->args[0].as<Call>() : nullptr;
+        std::vector<Expr> args = s ? s->args : c->args;
+        if (s) args.insert(args.end(), c->args.begin() + 1, c->args.end());
+        if (s || c->call_type == Call::Image || c->call_type == Call::Halide) {
+            auto leaves = [&](int b) {
+                for (int j = 0; j < 1 << bits; j++) {
+                    if (j >> b & 1) continue;
+                    for (const Expr &a : args) {
+                        if (!is_const_zero(simplify(substitute(r.x.name(), j, a) - substitute(r.x.name(), j | 1 << b, a)))) return false;
+                    }
+                }
+                return true;
+            };
+            bool code = false;
+            for (int b = 0; b < low && !code; b++) {
+                code = !leaves(b);
+            }
+            for (int b = low; code && b < bits; b++) {
+                count[b] += leaves(b);
+            }
+        }
+        self->visit_base(c);
+    });
+    return count;
+}
+
+// Metal (no register table lookup, as NEON's tbl): each decode's codebook,
+// a mux of n > 32 / bits integer constants (iq4_nl's, iq4_xs's and mxfp4's
+// kvalues), a lookup in 32-bit words of 32 / bits of them packed: the word a
+// tree of selects on the index's high bits, the value shifted out of it (the
+// index clamped as mux's: a min the simplifier drops where the index is a bit
+// field). Lowered as is, a mux is a chain of n compares and selects per
+// value: gemv (M3 Max, f32 acts) 0.58-0.69x of GGML's (a threadgroup memory
+// table) to 0.73-0.92x, M = 2..4 1.05-1.45x to 1.12-1.61x.
+inline void packed_muxes(const std::vector<ApproximationResult> &rs) {
+    using namespace Internal;
+    auto pack = [](const Expr &e) {
+        return mutate_with(e, [&](auto *self, const Call *c) -> Expr {
+            if (!c->is_intrinsic(Call::mux)) return self->visit_base(c);
+            Expr idx = self->mutate(c->args[0]);
+            const int n = (int)c->args.size() - 1, bits = c->type.bits();
+            std::vector<int64_t> vals;
+            for (int i = 1; i <= n; i++) {
+                if (auto v = as_const_int(c->args[i])) {
+                    vals.push_back(*v);
+                } else if (auto u = as_const_uint(c->args[i])) {
+                    vals.push_back((int64_t)*u);
+                }
+            }
+            if (!c->type.is_scalar() || !(c->type.is_int() || c->type.is_uint()) || bits > 16 || n <= 32 / bits ||
+                (int)vals.size() != n || !idx.type().is_uint()) {
+                return self->visit_base(c);
+            }
+            int lk = 0;  // log2 of the values per word
+            while ((bits << (lk + 1)) <= 32)
+                lk++;
+            const int k = 1 << lk;
+            std::vector<Expr> cur;
+            for (int w = 0; w * k < n; w++) {
+                uint32_t word = 0;
+                for (int j = 0; j < k && w * k + j < n; j++) {
+                    word |= (uint32_t)(vals[w * k + j] & ((1 << bits) - 1)) << (j * bits);
+                }
+                cur.push_back(make_const(UInt(32), word));
+            }
+            Expr u = min(cast<uint32_t>(idx), make_const(UInt(32), n - 1)), hi = u >> lk;
+            for (int b = 0; cur.size() > 1; b++) {
+                std::vector<Expr> next;
+                for (size_t i = 0; i < cur.size(); i += 2) {
+                    next.push_back(i + 1 < cur.size() ? select(((hi >> b) & 1) != 0, cur[i + 1], cur[i]) : cur[i]);
+                }
+                cur = next;
+            }
+            return cast(c->type, cur[0] >> ((u & (k - 1)) * bits));
+        });
+    };
+    for (Func f : decoders(rs)) {
+        for (Expr &v : f.function().definition().values()) {
+            v = pack(v);
+        }
+    }
+}
+
+// Metal (Apple GPUs), as GGML's kernel_mul_mv_*_f32 (q4_0's, q4_K's, ...):
+// threadgroups of `sg` simdgroups (gpu_threads), each rows of one column of
+// out. A lane takes 2^vals values of a block (16 of 32, 32 of 256: a block's
+// 2 or 8 lanes), of every (32 / its lanes)-th block: runs of 8 (contiguous
+// bytes) times each value sharing their bytes (shared_bits(), the most
+// shared first; to `vals`, the highest bits): q4_0's two halves of a byte's
+// nibbles, q4_K's sub-blocks 2i, 2i + 1 (a byte's nibbles), 2i + 4 and
+// 2i + 5, as GGML's; the rest of the bits, the block's lanes. Its rows: `nr`
+// for 16 values, half for 32 (the same registers; for 256-value blocks, 4
+// rows of 32 values are 0.65-0.9x of 2 on M3 Max, as GGML's N_R0 = 2). It
+// accumulates the rows in registers: for two-level weights (values per
+// sub-block `sub`), per sub-block a lane takes, the codes' dot (inner) times
+// its scale (part); summed per block, then times the block's (an affine
+// weight's min times the act's sum alongside, as block_dot); the lanes' sums
+// then reduce across the simdgroup (an atomic update over the gpu lanes:
+// simd shuffles) and lane 0 writes. For M > 1, each simdgroup takes rows x
+// cols of out (up to 8 columns, fewer rows for more), a lane per value of
+// every 32 of a block (coalesced loads), its products in registers (each
+// decoded weight used cols times, each act value rows times), reduced the
+// same way (the gemv lanes' act loads, 16 values of blocks 16 apart, are
+// strided: far slower for that many columns; for 256-value blocks the gemv
+// lanes on tiles of 2-4 columns were no faster: 0.5-1.4x). Each kernel has
+// both trees, behind uniform flags (dot's specialization, done on the host).
+inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int sub = 0, int nr = 4, int sg = 2) {
+    Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
+    RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
+    std::optional<int64_t> bx = Internal::as_const_int(r.x.extent());
+    int bits = 0;
+    while (bx && (1 << bits) < *bx)
+        bits++;
+    if (!bx || *bx != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
+    const int run = 3, vals = std::min(5, bits - 1);
+    nr = std::max(1, nr >> (vals - 4));
+    // the bits each kind: run, shared, the lane's
+    enum Kind { Run,
+                Shared,
+                Lane };
+    std::vector<Kind> kind(bits, Lane);
+    for (int b = 0; b < run; b++) {
+        kind[b] = Run;
+    }
+    std::vector<int> count = shared_bits(dot, r, bits, run), order;
+    for (int b = run; b < bits; b++) {
+        if (count[b]) order.push_back(b);
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return count[a] > count[b]; });
+    for (int b = bits; b-- > run;) {
+        if (!count[b]) order.push_back(b);
+    }
+    for (int i = 0; i < vals - run; i++) {
+        kind[order[i]] = Shared;
+    }
     metal_tiles(out, dot, nr, sg, [](int cols) { return cols > 4 ? 2 : 4; });
     Var lx("lx");
-    RVar ryk("ryk"), ryu("ryu");
+    RVar ryk("ryk"), ryu("ryu"), rxo("rxo"), rxl("rxl");
     Stage sm = dot.update().specialize(M >= 2);
-    Func lanes = sm.rfactor(rx, lx);
-    sm.atomic().gpu_lanes(rx);
+    if (bits > 5) sm.split(rx, rxo, rxl, 32);
+    Func lanes = sm.rfactor(bits > 5 ? rxl : rx, lx);
+    sm.atomic().gpu_lanes(bits > 5 ? rxl : rx);
     lanes.compute_at(out, ns).gpu_lanes(lx).unroll(n).unroll(m);
-    lanes.update().split(ry, ryk, ryu, 4, TailStrategy::GuardWithIf).reorder(n, m, ryu, ryk, lx).gpu_lanes(lx).unroll(n).unroll(m).unroll(ryu);
+    Stage ls = lanes.update().split(ry, ryk, ryu, std::max(1, 4 >> (bits - 5)), TailStrategy::GuardWithIf);
+    if (bits > 5) {
+        ls.reorder(n, m, rxo, ryu, ryk, lx).unroll(rxo);
+    } else {
+        ls.reorder(n, m, ryu, ryk, lx);
+    }
+    ls.gpu_lanes(lx).unroll(n).unroll(m).unroll(ryu);
     Stage s = dot.update();
-    // value j = rxn * 16 + rxh * 8 + rxi: the low (rxn 0) and high nibbles of byte rxh * 8 + rxi
-    s.split(rx, rxn, rx, 16).split(rx, rxh, rxi, 8);
-    Func blk = s.rfactor({{rxh, uh}, {ry, u}}), rest, mid;
+    // r.x in segments of one kind, from the lowest
+    struct Seg {
+        RVar r;
+        Kind kind;
+    };
+    std::vector<Seg> segs;
+    RVar rest_x = rx;
+    for (int b = 0; b < bits;) {
+        int e = b + 1;
+        while (e < bits && kind[e] == kind[b])
+            e++;
+        std::string name = std::string(kind[b] == Run ? "rxi" : kind[b] == Shared ? "rxn" :
+                                                                                    "rxh") +
+                           std::to_string(segs.size());
+        if (e < bits) {
+            RVar in(name), o("rx" + std::to_string(segs.size()) + "o");
+            s.split(rest_x, o, in, 1 << (e - b));
+            segs.push_back({in, kind[b]});
+            rest_x = o;
+        } else {
+            segs.push_back({rest_x, kind[b]});
+        }
+        b = e;
+    }
+    std::vector<std::pair<RVar, Var>> lane_vars, acc_vars, sub_vars;
+    std::vector<RVar> lane_rs, inner_rs, sub_rs;
+    // (runs first: innermost)
+    std::stable_partition(segs.begin(), segs.end(), [](const Seg &g) { return g.kind == Run; });
+    for (const Seg &g : segs) {
+        if (g.kind == Lane) {
+            lane_vars.emplace_back(g.r, Var("uh" + std::to_string(lane_vars.size())));
+            acc_vars.emplace_back(g.r, Var("ua" + std::to_string(acc_vars.size())));
+            lane_rs.push_back(g.r);
+        } else if (sub && g.kind == Shared) {
+            sub_vars.emplace_back(g.r, Var("v" + std::to_string(sub_vars.size())));
+            sub_rs.push_back(g.r);
+        } else {
+            inner_rs.push_back(g.r);
+        }
+    }
+    lane_vars.emplace_back(ry, u);
+    Func blk = s.rfactor(lane_vars), rest, mid;
     Func codes = block_dot(blk, rs, false, rest, mid, affine(rs));
-    s.split(ry, ryo, ryi, 16, TailStrategy::GuardWithIf);
-    Func acc = s.rfactor({{rxh, uh}, {ryi, ub}});
-    s.fuse(rxh, ryi, rl).atomic().gpu_lanes(rl);
-    acc.reorder_storage(uh, ub, n, m).compute_at(out, ns);
-    acc.fuse(uh, ub, l).reorder(n, m, l).gpu_lanes(l).unroll(n);
-    acc.update().fuse(uh, ub, l).reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
+    // per sub-block (v): its scale times its codes' dot (inner)
+    std::vector<std::tuple<Func, Func, Func>> subs;
+    for (Func f : {codes, rest}) {
+        if (sub_vars.empty() || !f.defined()) continue;
+        Func part = f.update().rfactor(sub_vars);
+        subs.emplace_back(f, part, part.update().hoist_invariants()[0]);
+    }
+    s.split(ry, ryo, ryi, 1 << (5 + vals - bits), TailStrategy::GuardWithIf);
+    acc_vars.emplace_back(ryi, ub);
+    Func acc = s.rfactor(acc_vars);
+    // the lane: its segments, then its block (lowest first)
+    RVar fr = lane_rs[0];
+    Var fv = acc_vars[0].second;
+    std::vector<Var> storage;
+    for (size_t i = 0; i < acc_vars.size(); i++) {
+        storage.push_back(acc_vars[i].second);
+    }
+    storage.insert(storage.end(), {n, m});
+    acc.reorder_storage(storage).compute_at(out, ns);
+    std::vector<RVar> lrs = lane_rs;
+    lrs.push_back(ryi);
+    Stage au = acc.update();
+    for (size_t i = 1; i < lrs.size(); i++) {
+        RVar f(i + 1 < lrs.size() ? "rl" + std::to_string(i) : "rl");
+        s.fuse(fr, lrs[i], f);
+        fr = f;
+        Var g(i + 1 < lrs.size() ? "l" + std::to_string(i) : "l");
+        acc.fuse(fv, acc_vars[i].second, g);
+        au.fuse(fv, acc_vars[i].second, g);
+        fv = g;
+    }
+    s.atomic().gpu_lanes(rl);
+    acc.reorder(n, m, l).gpu_lanes(l).unroll(n);
+    au.reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
     // store_at: works around halide/Halide#9571; bound_storage: also in the K tail: registers
     for (Func f : {blk, mid, codes, rest}) {
         if (f.defined()) f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);
     }
     blk.update().unroll(blk.args()[0]);
     for (Func f : {codes, rest}) {
-        if (f.defined()) f.update().reorder(f.args()[0], rxi, rxn).unroll(f.args()[0]).unroll(rxi).unroll(rxn);
+        if (!f.defined()) continue;
+        Stage fs = f.update();
+        if (!sub_vars.empty()) {
+            // per sub-block, its dot (inner), then times its scale (part)
+            std::vector<VarOrRVar> o{f.args()[0]};
+            o.insert(o.end(), sub_rs.begin(), sub_rs.end());
+            fs.reorder(o).unroll(f.args()[0]);
+            for (const RVar &v : sub_rs) {
+                fs.unroll(v);
+            }
+            continue;
+        }
+        std::vector<VarOrRVar> o{f.args()[0]};
+        o.insert(o.end(), inner_rs.begin(), inner_rs.end());
+        fs.reorder(o).unroll(f.args()[0]);
+        for (const RVar &v : inner_rs) {
+            fs.unroll(v);
+        }
+    }
+    for (auto [f, part, inner] : subs) {
+        for (Func g : {part, inner}) {
+            g.compute_at(f, sub_rs[0]).store_at(acc, l).bound_storage(u, 1);
+            for (int i = 0; i <= g.num_update_definitions(); i++) {
+                Stage gs = i ? g.update(i - 1) : Stage(g);
+                for (const Var &v : g.args()) {
+                    gs.unroll(v);
+                }
+            }
+        }
+        std::vector<VarOrRVar> o{inner.args()[0]};
+        o.insert(o.end(), inner_rs.begin(), inner_rs.end());
+        inner.update().reorder(o);
+        for (const RVar &v : inner_rs) {
+            inner.update().unroll(v);
+        }
     }
 }
 
@@ -1984,7 +2236,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             return;
         }
         if (!staged.empty()) throw std::invalid_argument("metal: blocked act formats stored as computed");
-        metal_rows(out, dots[0], r, rs);
+        packed_muxes(rs);
+        metal_rows(out, dots[0], r, rs, fmt.sub);
         return;
     }
     bool fold_gemm = fold_offsets == Fold::All, fold_gemv = fold_offsets != Fold::None;

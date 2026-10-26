@@ -99,6 +99,12 @@ set(GGML_FORMATS
     "q5_1 mul_mat f32,f16,q8_1 metal"
     "mxfp4 mul_mat f32,f16,q8_0 metal"
     "iq4_nl mul_mat f32,f16,q8_0 metal"
+    "q4_K mul_mat f32,f16,q8_K metal"
+    "q6_K mul_mat f32,f16,q8_K metal"
+    "q5_K mul_mat f32,f16,q8_K metal"
+    "iq4_xs mul_mat f32,f16,q8_K metal"
+    "q2_K mul_mat f32,f16,q8_K metal"
+    "q3_K mul_mat f32,f16,q8_K metal"
     "f16 mul_mat f16,f32,f32:f16 metal"
     "bf16 mul_mat bf16,f32,f32:bf16 metal"
 )
