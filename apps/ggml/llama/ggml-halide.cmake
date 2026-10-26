@@ -11,13 +11,13 @@
 #                           <weight>_f32_to_<act>_mul_mat_bench
 set(GGML_HALIDE_KERNEL_DIR "" CACHE PATH "apps/ggml build directory")
 set(GGML_HALIDE_INCLUDE_DIR "" CACHE PATH "Halide's include directory")
-set(GGML_HALIDE_VEC_DOTS "q4_0:q8_0;q8_0:q8_0;q4_K:q8_K;q6_K:q8_K;iq4_xs:q8_K"
+set(GGML_HALIDE_VEC_DOTS "q4_0:q8_0;q8_0:q8_0;q4_K:q8_K;q5_K:q8_K;q6_K:q8_K;iq4_xs:q8_K"
     CACHE STRING "weight:act vec_dot kernels"
 )
-set(GGML_HALIDE_MUL_MATS "q4_0:q8_0;q8_0:q8_0;q4_K:q8_K;q6_K:q8_K;iq4_xs:q8_K"
+set(GGML_HALIDE_MUL_MATS "q4_0:q8_0;q8_0:q8_0;q4_K:q8_K;q5_K:q8_K;q6_K:q8_K;iq4_xs:q8_K"
     CACHE STRING "weight:act mul_mat kernels"
 )
-set(GGML_HALIDE_BACKEND_MUL_MATS "q4_0:q8_0;q8_0:q8_0;q4_K:q8_K;q6_K:q8_K;iq4_xs:q8_K"
+set(GGML_HALIDE_BACKEND_MUL_MATS "q4_0:q8_0;q8_0:q8_0;q4_K:q8_K;q5_K:q8_K;q6_K:q8_K;iq4_xs:q8_K"
     CACHE STRING "weight:act backend mul_mat kernels"
 )
 
