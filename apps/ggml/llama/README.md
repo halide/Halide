@@ -30,6 +30,12 @@ unchanged):
 
 Weight types without a kernel, and other ops, stay GGML's.
 
+Metal isn't wired up yet. When it is, a weight with a compute-format library
+(e.g. `q4_0:f16`, the weights rounded to f16 as GGML's `kernel_mul_mm`) should
+dispatch on M per MUL_MAT as GGML does (mul_mv up to M = 16, then mul_mm): the
+exact library (`q4_0_f32_mul_mat_metal`) for M \<= 16, the compute format's for
+larger M. The harness's `halide-by-m-<name>` providers do this.
+
 ## Building
 
 `llama.cpp.patch` applies to llama.cpp `e117148a41d8` (the llama.cpp sync of
