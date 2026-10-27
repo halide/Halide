@@ -290,11 +290,26 @@ public:
      * Func's own reduction is the group's part.
      *
      * Each term is a product, a sum, or a difference of leaves; any other
-     * expression (a cast, a division, a select, a call, ...) is a single leaf,
-     * and a term calls a Func if a leaf calls it anywhere inside. For integer
-     * types the split is exact, wrapping or not. For floating-point types,
-     * multiplying out and reassociating may change rounding, the same caveat
-     * as for rfactor() and hoist_invariants().
+     * expression (a division, a select, a call, ...) is a single leaf, and a
+     * term calls a Func if a leaf calls it anywhere inside. Where it holds
+     * terms that call a group and terms that don't, a widening_mul(),
+     * widening_add(), or widening_sub() (or a cast of one to a type that
+     * represents its values) is also looked through, as the product, sum, or
+     * difference of its operands widened, which it is exactly. So is a cast
+     * of an integer sum to a type that represents every value of the sum's
+     * type (a wider integer type, or a float type that holds them exactly):
+     * cast<T>(x + c) becomes cast<T>(x) + cast<T>(c), but only if x + c
+     * provably cannot wrap in its type, by the constant bounds of x and c and
+     * of the values of the Funcs they call; otherwise the cast is a single
+     * leaf. For example, with q(r) in [0, 3] (say, q(x) = u8(x) & 3),
+     * f() += cast<float>(cast<int8_t>(q(r)) - 1) * p(r) splits on q as
+     * cast<float>(cast<int8_t>(q(r))) * p(r) - p(r), but with q(r) any
+     * uint8 it does not. For integer types the split is exact, wrapping or
+     * not, and so is looking through casts, widening ops included, for any
+     * type. For floating-point types, multiplying out and reassociating may
+     * change rounding, the same caveat as for rfactor() and
+     * hoist_invariants(). Leaves are kept as they are written unless they need
+     * to be split.
      *
      * It is an error if there are no groups, a group is empty or contains this
      * Func, the update is not a single-valued sum, or no term calls a group
@@ -317,7 +332,13 @@ public:
      * by tuple output index, then by outer-term order.
      *
      * A factor is hoistable if it does not depend on any RVar being reduced. It
-     * may be nested at any depth of an associative/commutative chain. Its
+     * may be nested at any depth of an associative/commutative chain, including
+     * inside a widening intrinsic of the inner combine (widening_mul() for a
+     * sum, widening_add() for a min or max), or a cast of one to a type that
+     * represents its values, which is looked through as the op on its widened
+     * operands where one of them is invariant and the other is not: e.g. the
+     * update f() += i32(widening_mul(s, x(r))) hoists i32(s) and accumulates
+     * i32(x(r)). This is exact. Its
      * integer and boolean subexpressions are simplified using the RVars' bounds
      * to decide this, so a factor that is invariant only within those bounds is
      * hoisted too. For example, after splitting r by 32 into ro and ri and

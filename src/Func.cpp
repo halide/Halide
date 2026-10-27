@@ -879,6 +879,61 @@ void flatten_associative_chain(const Expr &e, IRNodeType op, vector<Expr> &leave
     }
 }
 
+// widening_mul(a, b), widening_add(a, b), and widening_sub(a, b) are a*b, a + b,
+// and a - b computed exactly in their wider result type, so each is the Mul,
+// Add, or Sub of its operands cast to that type, with no overflow. So is a
+// cast of one to a type that represents every value of the result type (a
+// wider integer, or a float whose significand holds it), and the operands
+// too, as the operation on the operands cast to that type: for a float type,
+// the operands and the exact result are all representable, so the float op
+// is exact too. Returns that form of `e`, or an undefined Expr if `e` is none
+// of these.
+Expr exact_widening_form(const Expr &e) {
+    const Cast *cast_op = e.as<Cast>();
+    const Call *op = Call::as_intrinsic(cast_op ? cast_op->value : e,
+                                        {Call::widening_mul, Call::widening_add, Call::widening_sub});
+    if (!op) {
+        return Expr();
+    }
+    const Type t = e.type();
+    if (!t.can_represent(op->type) ||
+        !t.can_represent(op->args[0].type()) ||
+        !t.can_represent(op->args[1].type())) {
+        return Expr();
+    }
+    Expr a = cast(t, op->args[0]), b = cast(t, op->args[1]);
+    if (op->is_intrinsic(Call::widening_mul)) {
+        return Mul::make(a, b);
+    } else if (op->is_intrinsic(Call::widening_add)) {
+        return Add::make(a, b);
+    }
+    return Sub::make(a, b);
+}
+
+// Like flatten_associative_chain(), but also looks through a widening
+// intrinsic (or a cast of one) whose exact_widening_form() is an `op`, where
+// that separates leaves `wanted` accepts from others it doesn't. Otherwise it
+// is a single leaf, keeping its form.
+void flatten_exact_chain(const Expr &e, IRNodeType op, const std::function<bool(const Expr &)> &wanted,
+                         vector<Expr> &leaves) {
+    if (e.node_type() == op) {
+        auto [a, b] = *as_binary_operands(e);
+        flatten_exact_chain(a, op, wanted, leaves);
+        flatten_exact_chain(b, op, wanted, leaves);
+        return;
+    }
+    if (Expr exact = exact_widening_form(e); exact.defined() && exact.node_type() == op) {
+        vector<Expr> inner;
+        flatten_exact_chain(exact, op, wanted, inner);
+        const auto n = std::count_if(inner.begin(), inner.end(), wanted);
+        if (n > 0 && n < (std::ptrdiff_t)inner.size()) {
+            leaves.insert(leaves.end(), inner.begin(), inner.end());
+            return;
+        }
+    }
+    leaves.push_back(e);
+}
+
 struct HoistedFactor {
     IRNodeType op;
     Expr factor;      // The loop-invariant distributable factor, expressed in
@@ -1032,9 +1087,11 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
     // into leaves and partition by invariance. This is just
     // commutative-ring algebra: l1*l2*...*lN can always be regrouped
     // as (product of invariant leaves) * (product of dependent leaves),
-    // regardless of how the multiplication was parenthesized.
+    // regardless of how the multiplication was parenthesized. A widening
+    // intrinsic is looked through as its exact form where that separates an
+    // invariant leaf (e.g. int32(widening_mul(s, x_k)) = int32(s) * int32(x_k)).
     vector<Expr> leaves;
-    flatten_associative_chain(increment, law.inner_op, leaves);
+    flatten_exact_chain(increment, law.inner_op, [&](const Expr &leaf) { return invariant_form(leaf, reduction_vars, bounds).has_value(); }, leaves);
 
     vector<Expr> invariant_leaves, dependent_leaves;
     for (const Expr &leaf : leaves) {
@@ -1125,6 +1182,50 @@ Expr apply_hoisted_factor(const Expr &r, const optional<HoistedFactor> &factor) 
 // Selects the calls a part of hoist_invariants(parts) isolates.
 using CallSelector = std::function<bool(const Expr &)>;
 
+// Constant bounds of an integer Expr's value (see value_bounds_of_calls()).
+using ValueBounds = std::function<ConstantInterval(const Expr &)>;
+
+// Constant bounds of the values of the Funcs `e` calls, directly or not, for
+// constant_integer_bounds(). Each pure Func's integer values are bounded by
+// constant_integer_bounds() of their simplified definitions (which, e.g.,
+// turns a mask x & 3 into x % 4), given the bounds of the Funcs they call;
+// other Funcs are left unbounded (constant_integer_bounds() then uses their
+// type's bounds).
+FuncValueBounds value_bounds_of_calls(const Expr &e) {
+    map<string, Function> env;
+    vector<Function> called;
+    visit_with(e, [&](auto *self, const Call *op) {
+        if (op->call_type == Call::Halide && op->func.defined() && !env.count(op->name)) {
+            Function f(op->func);
+            called.push_back(f);
+            for (const auto &[name, g] : find_transitive_calls(f)) {
+                env.emplace(name, g);
+            }
+        }
+        self->visit_base(op);
+    });
+    FuncValueBounds fb;
+    if (called.empty()) {
+        return fb;
+    }
+    for (const string &name : topological_order(called, env)) {
+        const Function &f = env.at(name);
+        if (!f.is_pure()) {
+            continue;
+        }
+        for (int j = 0; j < f.outputs(); j++) {
+            const Expr &value = f.values()[j];
+            if (!value.type().is_int_or_uint()) {
+                continue;
+            }
+            ConstantInterval b = constant_integer_bounds(simplify(value), Scope<ConstantInterval>::empty_scope(), nullptr, &fb);
+            fb[{name, j}] = Interval(b.min_defined ? make_const(value.type(), b.min) : Interval::neg_inf(),
+                                     b.max_defined ? make_const(value.type(), b.max) : Interval::pos_inf());
+        }
+    }
+    return fb;
+}
+
 // A sum split by whether its terms make a selected call: the original equals
 // with + without, every term of `with` makes a selected call, and `without`
 // makes none. Either may be undefined, meaning zero.
@@ -1151,19 +1252,30 @@ Expr sub_terms(const Expr &a, const Expr &b) {
 // +, -, and * are looked through: (a + b) * c = a*c + b*c and
 // (a + b) - (c + d) = (a - c) + (b - d) hold in any commutative ring, so for
 // integers, wrapping or not, this is exact, and for floats it is the
-// reassociation hoist_invariants() already relies on. Any other node (a cast,
-// a division, a select, a call, ...) is a single term, selected if it makes a
-// selected call anywhere inside. Constant zero terms are dropped, as are
-// products with a constant zero factor unless they are floats.
-IsolatedTerms isolate_terms(const Expr &e, const CallSelector &selects) {
+// reassociation hoist_invariants() already relies on. So are, where they hold
+// terms of both kinds:
+// - a Let, as its body with the value substituted,
+// - a widening intrinsic, as its exact_widening_form(), and
+// - a cast of an integer x to a type that represents every value of x's type,
+//   split as cast(with) + cast(without) where `bounds` proves that
+//   with + without does not wrap in x's type. Then it is x (with + without is
+//   x modulo 2^bits, and both are in range), so the casts' sum is exactly the
+//   cast of x, for a float type too (every partial sum is an integer in x's
+//   type's range, which it represents).
+// Any other node (a division, a select, a call, ...) is a single term,
+// selected if it makes a selected call anywhere inside, and so is a node
+// above whose terms are all of one kind, keeping its form. Constant zero
+// terms are dropped, as are products with a constant zero factor unless they
+// are floats.
+IsolatedTerms isolate_terms(const Expr &e, const CallSelector &selects, const ValueBounds &bounds) {
     if (is_const_zero(e)) {
         return {};
     }
     if (e.node_type() == IRNodeType::Add || e.node_type() == IRNodeType::Sub ||
         e.node_type() == IRNodeType::Mul) {
         auto [a_expr, b_expr] = *as_binary_operands(e);
-        IsolatedTerms a = isolate_terms(a_expr, selects);
-        IsolatedTerms b = isolate_terms(b_expr, selects);
+        IsolatedTerms a = isolate_terms(a_expr, selects, bounds);
+        IsolatedTerms b = isolate_terms(b_expr, selects, bounds);
         auto is_zero = [](const IsolatedTerms &t) { return !t.with.defined() && !t.without.defined(); };
         const bool zero_operand = is_zero(a) || is_zero(b);
         if (e.node_type() == IRNodeType::Mul) {
@@ -1204,6 +1316,25 @@ IsolatedTerms isolate_terms(const Expr &e, const CallSelector &selects) {
         }
         return {sub_terms(a.with, b.with), sub_terms(a.without, b.without)};
     }
+    auto mixed = [](const IsolatedTerms &t) { return t.with.defined() && t.without.defined(); };
+    if (Expr exact = exact_widening_form(e); exact.defined()) {
+        if (IsolatedTerms t = isolate_terms(exact, selects, bounds); mixed(t)) {
+            return t;
+        }
+    } else if (const Let *op = e.as<Let>()) {
+        // E.g. from eager_inline(), which binds the inlined Func's args.
+        if (IsolatedTerms t = isolate_terms(substitute(op->name, op->value, op->body), selects, bounds); mixed(t)) {
+            return t;
+        }
+    } else if (const Cast *op = e.as<Cast>();
+               op && op->value.type().is_int_or_uint() && op->type.can_represent(op->value.type())) {
+        if (IsolatedTerms t = isolate_terms(op->value, selects, bounds); mixed(t)) {
+            const ConstantInterval sum = bounds(t.with) + bounds(t.without);
+            if (ConstantInterval::bounds_of_type(op->value.type()).contains(sum)) {
+                return {cast(op->type, t.with), cast(op->type, t.without)};
+            }
+        }
+    }
     bool selected = false;
     visit_with(e, [&](auto *self, const Call *op) {
         selected = selected || selects(op);
@@ -1240,7 +1371,7 @@ FactoredTerm factor_sum(const Expr &e, const InvariantForm &invariant);
 // sum that is one of its leaves.
 FactoredTerm factor_product(const Expr &e, const InvariantForm &invariant) {
     vector<Expr> leaves;
-    flatten_associative_chain(e, IRNodeType::Mul, leaves);
+    flatten_exact_chain(e, IRNodeType::Mul, [&](const Expr &leaf) { return invariant(leaf).has_value(); }, leaves);
     FactoredTerm result;
     for (const Expr &leaf : leaves) {
         if (optional<Expr> inv = invariant(leaf)) {
@@ -1937,8 +2068,18 @@ FuncVec Stage::hoist_invariants_impl(const vector<std::function<bool(const Expr 
         << "  " << function.name() << "(...) = " << definition.values()[0] << "\n";
 
     vector<Expr> part_exprs;
+    // The value bounds of the Funcs the increment calls, computed only if a
+    // cast needs them (see isolate_terms()).
+    optional<FuncValueBounds> func_bounds;
+    const Expr all_terms = increment;
+    ValueBounds bounds = [&](const Expr &e) {
+        if (!func_bounds) {
+            func_bounds = value_bounds_of_calls(all_terms);
+        }
+        return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &*func_bounds);
+    };
     for (size_t i = 0; i < parts.size(); i++) {
-        auto [with, without] = increment.defined() ? isolate_terms(increment, parts[i]) : IsolatedTerms{};
+        auto [with, without] = increment.defined() ? isolate_terms(increment, parts[i], bounds) : IsolatedTerms{};
         user_assert(with.defined())
             << "hoist_invariants() on " << name() << ": no term of the update calls "
             << part_names[i] << (i > 0 ? " (other than terms an earlier group took)" : "")
