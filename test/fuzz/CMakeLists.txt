@@ -11,6 +11,7 @@ tests(
     SOURCES
         bounds.cpp
         cse.cpp
+        in_clone.cpp
         lossless_cast.cpp
         simplify.cpp
         solve.cpp

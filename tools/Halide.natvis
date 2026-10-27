@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Natvis visualizers for Halide's data structures.
+
+  Load this in Visual Studio (copy into
+  "%USERPROFILE%\Documents\Visual Studio 20xx\Visualizers\", or add it to a
+  project) or in a JetBrains IDE such as CLion, whose bundled LLDB understands
+  Natvis (Settings | Build, Execution, Deployment | Debugger | Data Views |
+  Native | "Load Natvis files").
+
+  Natvis is declarative and cannot call functions, so it does not reproduce the
+  one-line IR rendering that the LLDB (tools/lldbhalide.py) and GDB
+  (tools/gdbhalide.py) helpers get from Halide::Internal::debug_string(). What
+  it does provide for IR is a structural, fully expandable tree: each Expr/Stmt
+  handle downcasts its IntrusivePtr to the concrete node using the node_type
+  discriminator and splices in that node's fields, whose Expr/Stmt members are
+  in turn visualized recursively. Because this uses no function calls, it works
+  even on a core dump or a process that isn't running.
+-->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" MenuName="Add to Image Watch"/>
+
+  <!-- ============================== IR handles ============================== -->
+  <!--
+    Expr and Stmt are IntrusivePtr<const IRNode> handles. IRNode::node_type is a
+    discriminator we use to downcast to the concrete CRTP node (BaseExprNode /
+    BaseStmtNode subclass) without RTTI. Leaf nodes get a value in their summary;
+    everything else shows the node kind and expands into the concrete node.
+  -->
+  <Type Name="Halide::Expr">
+    <DisplayString Condition="ptr == 0">&lt;undefined Expr&gt;</DisplayString>
+    <DisplayString Condition="ptr->node_type == Halide::Internal::IRNodeType::IntImm">{((Halide::Internal::IntImm *)ptr)->value}</DisplayString>
+    <DisplayString Condition="ptr->node_type == Halide::Internal::IRNodeType::UIntImm">{((Halide::Internal::UIntImm *)ptr)->value}</DisplayString>
+    <DisplayString Condition="ptr->node_type == Halide::Internal::IRNodeType::FloatImm">{((Halide::Internal::FloatImm *)ptr)->value}</DisplayString>
+    <DisplayString Condition="ptr->node_type == Halide::Internal::IRNodeType::StringImm">{((Halide::Internal::StringImm *)ptr)->value}</DisplayString>
+    <DisplayString Condition="ptr->node_type == Halide::Internal::IRNodeType::Variable">{((Halide::Internal::Variable *)ptr)->name}</DisplayString>
+    <DisplayString>{ptr->node_type}</DisplayString>
+    <Expand>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::IntImm">*(Halide::Internal::IntImm *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::UIntImm">*(Halide::Internal::UIntImm *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::FloatImm">*(Halide::Internal::FloatImm *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::StringImm">*(Halide::Internal::StringImm *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Broadcast">*(Halide::Internal::Broadcast *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Cast">*(Halide::Internal::Cast *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Reinterpret">*(Halide::Internal::Reinterpret *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Variable">*(Halide::Internal::Variable *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Add">*(Halide::Internal::Add *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Sub">*(Halide::Internal::Sub *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Mod">*(Halide::Internal::Mod *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Mul">*(Halide::Internal::Mul *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Div">*(Halide::Internal::Div *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Min">*(Halide::Internal::Min *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Max">*(Halide::Internal::Max *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::EQ">*(Halide::Internal::EQ *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::NE">*(Halide::Internal::NE *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::LT">*(Halide::Internal::LT *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::LE">*(Halide::Internal::LE *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::GT">*(Halide::Internal::GT *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::GE">*(Halide::Internal::GE *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::And">*(Halide::Internal::And *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Or">*(Halide::Internal::Or *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Not">*(Halide::Internal::Not *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Select">*(Halide::Internal::Select *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Load">*(Halide::Internal::Load *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Ramp">*(Halide::Internal::Ramp *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Call">*(Halide::Internal::Call *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Let">*(Halide::Internal::Let *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Shuffle">*(Halide::Internal::Shuffle *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::VectorReduce">*(Halide::Internal::VectorReduce *)ptr</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <Type Name="Halide::Internal::Stmt">
+    <DisplayString Condition="ptr == 0">&lt;undefined Stmt&gt;</DisplayString>
+    <DisplayString>{ptr->node_type}</DisplayString>
+    <Expand>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::LetStmt">*(Halide::Internal::LetStmt *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::AssertStmt">*(Halide::Internal::AssertStmt *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::ProducerConsumer">*(Halide::Internal::ProducerConsumer *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::For">*(Halide::Internal::For *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Acquire">*(Halide::Internal::Acquire *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Store">*(Halide::Internal::Store *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Provide">*(Halide::Internal::Provide *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Allocate">*(Halide::Internal::Allocate *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Free">*(Halide::Internal::Free *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Realize">*(Halide::Internal::Realize *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Block">*(Halide::Internal::Block *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Fork">*(Halide::Internal::Fork *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::IfThenElse">*(Halide::Internal::IfThenElse *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Evaluate">*(Halide::Internal::Evaluate *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Prefetch">*(Halide::Internal::Prefetch *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::Atomic">*(Halide::Internal::Atomic *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::StreamingStore">*(Halide::Internal::StreamingStore *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::StreamingLoads">*(Halide::Internal::StreamingLoads *)ptr</ExpandedItem>
+      <ExpandedItem Condition="ptr->node_type == Halide::Internal::IRNodeType::HoistedStorage">*(Halide::Internal::HoistedStorage *)ptr</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <!-- ================= Buffers (with Image Watch support) ================= -->
+
+  <Type Name="halide_buffer_t">
+    <UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+  </Type>
+
+  <Type Name="halide_buffer_t">
+    <DisplayString>{type} buffer, {dimensions} dims</DisplayString>
+    <Expand>
+      <Item Name="[type]">type</Item>
+      <Item Name="[channels]">dimensions &gt; 2 &amp;&amp; dim[2].extent &gt; 1 ? dim[2].extent : 1</Item>
+      <Item Name="[width]">dimensions &gt; 0 ? dim[0].extent : 1</Item>
+      <Item Name="[height]">dimensions &gt; 1 ? dim[1].extent : 1</Item>
+      <Item Name="[data]">host</Item>
+      <Item Name="[stride]">dimensions &gt; 1 ? dim[1].stride * type.bits / 8 : 0</Item>
+      <Item Name="dimensions">dimensions</Item>
+      <Item Name="dim">dim</Item>
+      <Item Name="host">host</Item>
+      <Item Name="device">device</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Halide::Runtime::Buffer&lt;*&gt;">
+    <UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+  </Type>
+
+  <Type Name="Halide::Runtime::Buffer&lt;*&gt;">
+    <DisplayString>{buf}</DisplayString>
+    <Expand>
+      <ExpandedItem>buf</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <Type Name="Halide::Buffer&lt;*&gt;">
+    <UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+  </Type>
+
+  <Type Name="Halide::Buffer&lt;*&gt;">
+    <DisplayString Condition="contents.ptr == 0">&lt;undefined buffer&gt;</DisplayString>
+    <DisplayString>{*(Halide::Internal::BufferContents *)contents.ptr}</DisplayString>
+    <Expand>
+      <ExpandedItem>(Halide::Internal::BufferContents *)contents.ptr</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <Type Name="Halide::Internal::BufferContents">
+    <DisplayString>{{ {name} : {buf.buf} }}</DisplayString>
+    <Expand>
+      <Item Name="name">name</Item>
+      <ExpandedItem>buf.buf</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <!-- ========================= Flat value types ========================= -->
+
+  <Type Name="halide_type_t">
+    <DisplayString Condition="code == 0 &amp;&amp; lanes == 1">int{bits}</DisplayString>
+    <DisplayString Condition="code == 1 &amp;&amp; lanes == 1">uint{bits}</DisplayString>
+    <DisplayString Condition="code == 2 &amp;&amp; lanes == 1">float{bits}</DisplayString>
+    <DisplayString Condition="code == 3 &amp;&amp; lanes == 1">handle{bits}</DisplayString>
+    <DisplayString Condition="code == 4 &amp;&amp; lanes == 1">bfloat{bits}</DisplayString>
+    <DisplayString Condition="code == 0">int{bits}x{lanes}</DisplayString>
+    <DisplayString Condition="code == 1">uint{bits}x{lanes}</DisplayString>
+    <DisplayString Condition="code == 2">float{bits}x{lanes}</DisplayString>
+    <DisplayString Condition="code == 3">handle{bits}x{lanes}</DisplayString>
+    <DisplayString Condition="code == 4">bfloat{bits}x{lanes}</DisplayString>
+    <DisplayString>code={code} bits={bits} lanes={lanes}</DisplayString>
+  </Type>
+
+  <Type Name="Halide::Type">
+    <DisplayString>{type}</DisplayString>
+    <Expand>
+      <ExpandedItem>type</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <Type Name="Halide::Var">
+    <DisplayString>{((Halide::Internal::Variable *)e.ptr)->name}</DisplayString>
+  </Type>
+
+  <Type Name="Halide::Internal::Dim">
+    <DisplayString>{var}</DisplayString>
+  </Type>
+
+  <Type Name="Halide::RVar">
+    <DisplayString>{_name}</DisplayString>
+  </Type>
+
+  <Type Name="Halide::Internal::ModulusRemainder">
+    <DisplayString>{{ modulus={modulus} remainder={remainder} }}</DisplayString>
+  </Type>
+
+  <Type Name="Halide::Internal::ConstantInterval">
+    <DisplayString Condition="min_defined &amp;&amp; max_defined">[{min}, {max}]</DisplayString>
+    <DisplayString Condition="min_defined">[{min}, +inf)</DisplayString>
+    <DisplayString Condition="max_defined">(-inf, {max}]</DisplayString>
+    <DisplayString>(-inf, +inf)</DisplayString>
+  </Type>
+
+</AutoVisualizer>

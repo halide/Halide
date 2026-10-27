@@ -94,6 +94,18 @@ extern int halide_metal_acquire_context(void *user_context, struct halide_metal_
  */
 extern int halide_metal_release_context(void *user_context);
 
+typedef int (*halide_metal_acquire_context_t)(void *,                                // user_context
+                                              struct halide_metal_device **,         // device out parameter
+                                              struct halide_metal_command_queue **,  // command queue out parameter
+                                              bool);                                 // should create a context if none exist
+typedef int (*halide_metal_release_context_t)(void * /* user_context */);
+
+/** Set custom methods to acquire and release Metal contexts and command queues */
+// @{
+extern halide_metal_acquire_context_t halide_set_metal_acquire_context(halide_metal_acquire_context_t handler);
+extern halide_metal_release_context_t halide_set_metal_release_context(halide_metal_release_context_t handler);
+// @}
+
 /** This function is called as part of the callback when a Metal command buffer completes.
  * The return value, if not halide_error_code_success, will be stashed in Metal runtime and returned
  * to the next call into the runtime, and the error string will be saved as well.

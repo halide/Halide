@@ -51,7 +51,7 @@ class SplitTuples : public IRMutator {
             }
             return body;
         } else {
-            return HoistedStorage::make(op->name, body);
+            return op->with(body);
         }
     }
 
@@ -181,11 +181,7 @@ class SplitTuples : public IRMutator {
                         aliases = aliases && (a[i] == b[i]);
                     }
                     // Might need some of the containing lets
-                    for (const auto &[var, value] : reverse_view(lets)) {
-                        if (expr_uses_var(aliases, var)) {
-                            aliases = Let::make(var, value, aliases);
-                        }
-                    }
+                    aliases = rewrap_used_lets(aliases, lets);
                     return !can_prove(!aliases);
                 }
 
@@ -281,17 +277,11 @@ class SplitTuples : public IRMutator {
                     provides.push_back(Provide::make(name, {val}, args, op->predicate));
                 }
 
-                s = Block::make(provides);
-
-                while (!lets.empty()) {
-                    auto p = lets.back();
-                    lets.pop_back();
-                    s = LetStmt::make(p.first, p.second, s);
-                }
+                s = rewrap_all_lets(Block::make(provides), lets);
             }
 
             if (atomic && separate_atomic_nodes_per_store) {
-                s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
+                s = atomic->with(s);
             }
 
             internal_assert(s.defined());
@@ -301,7 +291,7 @@ class SplitTuples : public IRMutator {
         {
             Stmt s = Block::make(result);
             if (atomic && !separate_atomic_nodes_per_store) {
-                s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
+                s = atomic->with(s);
             }
             return s;
         }
@@ -422,11 +412,7 @@ class SplitScatterGather : public IRMutator {
         body = substitute(op->name, gather_replacement, body);
         body = mutate(body);
 
-        for (const auto &[var, value] : reverse_view(lets)) {
-            body = LetStmt::make(var, value, body);
-        }
-
-        return body;
+        return rewrap_all_lets(body, lets);
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -451,11 +437,7 @@ class SplitScatterGather : public IRMutator {
             body = mutate(body);
         }
 
-        for (const auto &[var, value] : reverse_view(lets)) {
-            body = LetStmt::make(var, value, body);
-        }
-
-        return body;
+        return rewrap_all_lets(body, lets);
     }
 
     Stmt visit(const Provide *op) override {
@@ -489,7 +471,7 @@ class SplitScatterGather : public IRMutator {
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
-            provides.push_back(Provide::make(op->name, values, args, op->predicate));
+            provides.push_back(op->with(values, args, op->predicate));
         }
 
         Stmt s = Block::make(provides);
@@ -499,10 +481,7 @@ class SplitScatterGather : public IRMutator {
         bundle = common_subexpression_elimination(bundle);
 
         vector<pair<string, Expr>> lets;
-        while (const Let *let = bundle.as<Let>()) {
-            lets.emplace_back(let->name, let->value);
-            bundle = let->body;
-        }
+        bundle = peel_lets(bundle, &lets);
         const Call *c = bundle.as<Call>();
         internal_assert(c && c->is_intrinsic(Call::bundle));
         for (size_t i = 0; i < exprs.size(); i++) {
@@ -515,11 +494,7 @@ class SplitScatterGather : public IRMutator {
             }
         }
 
-        for (const auto &[var, value] : reverse_view(lets)) {
-            s = LetStmt::make(var, value, s);
-        }
-
-        return s;
+        return rewrap_all_lets(s, lets);
     }
 };
 

@@ -73,7 +73,7 @@ add_halide_test(
     adams2019_test_apps_autoscheduler
     COMMAND
         adams2019_test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>
-        $<TARGET_FILE_DIR:Halide_Adams2019>/baseline.weights
+        "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/baseline.weights"
     GROUPS adams2019 autoschedulers_cpu multithreaded
 )
 set_tests_properties(

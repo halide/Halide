@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -73,6 +74,20 @@ inline bool CheckFail(bool condition, const char *msg) {
 
 inline bool CheckReturn(bool condition, const char *msg) {
     return condition;
+}
+
+// Buffer strides are ints, so a dense buffer with these (positive) extents can
+// only be represented if every stride, i.e. the product of the extents of the
+// inner dimensions, fits in an int.
+inline bool dense_strides_fit_in_int(const std::vector<int> &extents) {
+    int64_t stride = 1;
+    for (size_t i = 0; i + 1 < extents.size(); i++) {
+        stride *= extents[i];
+        if (stride > std::numeric_limits<int>::max()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 template<typename To, typename From>
@@ -905,10 +920,21 @@ bool load_png(const std::string &filename, ImageType *im) {
     const int channels = png_get_channels(png_ptr, info_ptr);
     const int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
 
+    // Only 8- and 16-bit samples map to a supported buffer type. Sub-byte
+    // depths (1/2/4) keep a packed row layout, but the row reader below is
+    // selected as 16-bit for anything that isn't 8-bit, so it would read past
+    // the packed row and write past the buffer. Reject them here.
+    if (!check(bit_depth == 8 || bit_depth == 16, "Unsupported PNG bit depth")) {
+        return false;
+    }
+
     const halide_type_t im_type(halide_type_uint, bit_depth);
     std::vector<int> im_dimensions = {width, height};
     if (channels != 1) {
         im_dimensions.push_back(channels);
+    }
+    if (!check(Internal::dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        return false;
     }
 
     *im = ImageType(im_type, im_dimensions);
@@ -1036,6 +1062,10 @@ bool read_pnm_header(Internal::FileOpener &f, const std::string &hdr_fmt, int *w
         return false;
     }
 
+    if (!check(*width > 0 && *height > 0, "Invalid width or height")) {
+        return false;
+    }
+
     int maxval;
     if (!check(f.scan_line("%d", &maxval) == 1, "Could not read max value")) {
         return false;
@@ -1069,13 +1099,19 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
     if (channels > 1) {
         im_dimensions.push_back(channels);
     }
+    if (!check(Internal::dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        return false;
+    }
     *im = ImageType(im_type, im_dimensions);
 
     auto copy_to_image = bit_depth == 8 ?
                              Internal::read_big_endian_row<uint8_t, ImageType> :
                              Internal::read_big_endian_row<uint16_t, ImageType>;
 
-    std::vector<uint8_t> row(width * channels * (bit_depth / 8));
+    // read_big_endian_row walks this many bytes per row, so the product has to
+    // be formed in size_t: in int it wraps for a wide enough header, leaving a
+    // row buffer far shorter than the row the reader goes on to consume.
+    std::vector<uint8_t> row((size_t)width * channels * (bit_depth / 8));
     const int ymin = im->dim(1).min();
     const int ymax = im->dim(1).max();
     for (int y = ymin; y <= ymax; ++y) {
@@ -1228,8 +1264,12 @@ struct NpyHeader {
         }
         while (true) {
             char endian;
-            int consumed;
-            if (std::sscanf(ptr, "'descr': '%c%c%d'%n", &endian, &type_code, &type_bytes, &consumed) == 3) {
+            int consumed = 0;
+            // %n is not counted in sscanf's return value and is only reached
+            // if the trailing quote matches, so a descr missing its closing
+            // quote returns 3 with consumed still 0. Requiring consumed > 0
+            // avoids advancing ptr by an indeterminate amount.
+            if (std::sscanf(ptr, "'descr': '%c%c%d'%n", &endian, &type_code, &type_bytes, &consumed) == 3 && consumed > 0) {
                 if (endian != '<' && endian != '|') {
                     return false;
                 }
@@ -1339,6 +1379,12 @@ bool load_npy(const std::string &filename, ImageType *im) {
         return false;
     }
 
+    for (const int extent : h.extents) {
+        if (!check(extent > 0, "Bad extent in .npy file")) {
+            return false;
+        }
+    }
+
     halide_type_t im_type((halide_type_code_t)0, 0);
     for (const auto &d : npy_dtypes) {
         if (h.type_code == d.second.type_code && h.type_bytes == d.second.type_bytes) {
@@ -1347,6 +1393,9 @@ bool load_npy(const std::string &filename, ImageType *im) {
         }
     }
     if (!check(im_type.bits != 0, "Unsupported type in load_npy")) {
+        return false;
+    }
+    if (!check(dense_strides_fit_in_int(h.extents), "Image is too large")) {
         return false;
     }
 
@@ -1503,6 +1552,10 @@ bool load_jpg(const std::string &filename, ImageType *im) {
     if (channels > 1) {
         im_dimensions.push_back(channels);
     }
+    if (!check(Internal::dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        jpeg_destroy_decompress(&cinfo);
+        return false;
+    }
     *im = ImageType(im_type, im_dimensions);
 
     auto copy_to_image = Internal::read_big_endian_row<uint8_t, ImageType>;
@@ -1625,6 +1678,9 @@ bool load_tmp(const std::string &filename, ImageType *im) {
 
     const halide_type_t im_type = tmp_code_to_halide_type()[header[4]];
     std::vector<int> im_dimensions = {header[0], header[1], header[2], header[3]};
+    if (!check(dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        return false;
+    }
     *im = ImageType(im_type, im_dimensions);
 
     // This should never fail unless the default Buffer<> constructor behavior changes.
@@ -1781,6 +1837,15 @@ bool load_mat(const std::string &filename, ImageType *im) {
         if (!check(f.read_bytes(&padding, 4), "Could not read .mat header\n")) {
             return false;
         }
+    }
+
+    for (const int extent : extents) {
+        if (!check(extent > 0, "Bad extent in .mat file\n")) {
+            return false;
+        }
+    }
+    if (!check(dense_strides_fit_in_int(extents), "Image is too large\n")) {
+        return false;
     }
 
     // Skip over the name

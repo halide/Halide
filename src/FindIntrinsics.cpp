@@ -7,6 +7,8 @@
 #include "IRVisitor.h"
 #include "Simplify.h"
 
+#include <cmath>
+
 namespace Halide {
 namespace Internal {
 
@@ -21,6 +23,12 @@ bool find_intrinsics_for_type(const Type &t) {
 
 Expr widen(Expr a) {
     Type result_type = a.type().widen();
+    if (const Broadcast *b = a.as<Broadcast>()) {
+        // Widen the broadcast value, as the simplifier would: the intrinsics
+        // are lowered in codegen, after it runs, and LLVM does not sink a
+        // vector extension of a splat into the splat.
+        return Broadcast::make(Cast::make(result_type.with_lanes(b->value.type().lanes()), b->value), b->lanes);
+    }
     return Cast::make(result_type, std::move(a));
 }
 
@@ -48,6 +56,46 @@ bool no_overflow_int(Type t) {
 // Returns true iff t does not have a well defined overflow behavior.
 bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
+}
+
+// Match float(x) * 2^-k and (float(x) * y) * 2^-k, and rewrite them to
+// fixed_to_float(x, k) and fixed_to_float(x, k) * y. Moving a power-of-two
+// factor is exact except on overflow or underflow, which non-strict float
+// semantics lets us ignore.
+Expr find_fixed_to_float(const Expr &a, const Expr &b) {
+    auto f = as_const_float(b);
+    if (!f) {
+        return Expr();
+    }
+    int e = 0;
+    if (std::frexp(*f, &e) != 0.5) {
+        return Expr();
+    }
+    const int k = 1 - e;
+    if (k < 1 || k > a.type().bits()) {
+        return Expr();
+    }
+    auto fixed = [&](const Expr &c) -> Expr {
+        const Cast *cast = c.as<Cast>();
+        if (cast &&
+            cast->value.type().is_int_or_uint()) {
+            Expr bits = make_const(cast->value.type().with_code(halide_type_uint), k);
+            return Call::make(c.type(), Call::fixed_to_float, {cast->value, bits}, Call::PureIntrinsic);
+        }
+        return Expr();
+    };
+    if (Expr r = fixed(a); r.defined()) {
+        return r;
+    }
+    if (const Mul *m = a.as<Mul>()) {
+        if (Expr r = find_fixed_to_float(m->a, b); r.defined()) {
+            return Mul::make(r, m->b);
+        }
+        if (Expr r = find_fixed_to_float(m->b, b); r.defined()) {
+            return Mul::make(m->a, r);
+        }
+    }
+    return Expr();
 }
 
 // We want to find and remove an add of 'round' from e. This is not
@@ -439,6 +487,12 @@ protected:
 
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (op->type.is_float()) {
+            if (Expr r = find_fixed_to_float(a, b); r.defined()) {
+                return r;
+            }
+        }
 
         // Rewrite multiplies to shifts if possible.
         if (op->type.is_int() || op->type.is_uint()) {
@@ -1106,13 +1160,7 @@ protected:
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
         predicate = narrow_predicate(predicate, op->type);
-        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Load::make(op->type, op->name, std::move(index),
-                              op->image, op->param, std::move(predicate),
-                              op->alignment, op->is_streaming);
-        }
+        return op->with(index, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -1120,11 +1168,7 @@ protected:
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
         predicate = narrow_predicate(predicate, value.type());
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_streaming);
-        }
+        return op->with(value, index, predicate, op->alignment);
     }
 };
 
@@ -1585,6 +1629,12 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
     }
 }
 
+Expr lower_fixed_to_float(const Type &t, const Expr &x, const Expr &k) {
+    auto k_val = as_const_uint(k);
+    internal_assert(k_val) << "fixed_to_float requires a constant number of fractional bits: " << k << "\n";
+    return Cast::make(t, x) * make_const(t, std::ldexp(1.0, -(int)*k_val));
+}
+
 Expr lower_intrinsic(const Call *op) {
     if (op->is_intrinsic(Call::widen_right_add)) {
         internal_assert(op->args.size() == 2);
@@ -1640,6 +1690,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::mul_shift_right)) {
         internal_assert(op->args.size() == 3);
         return lower_mul_shift_right(op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::fixed_to_float)) {
+        internal_assert(op->args.size() == 2);
+        return lower_fixed_to_float(op->type, op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        internal_assert(op->args.size() == 1);
+        return lower_round_half_away_from_zero(op->args[0]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);

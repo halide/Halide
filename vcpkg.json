@@ -11,6 +11,10 @@
       "name": "dawn",
       "version": "20260624.223603",
       "port-version": 1
+    },
+    {
+      "name": "nanobind",
+      "version": "2.11.0"
     }
   ],
   "default-features": [
@@ -89,7 +93,7 @@
     "python-bindings": {
       "description": "Halide's native Python module (not the whole pip package)",
       "dependencies": [
-        "pybind11"
+        "nanobind"
       ]
     },
     "serialization": {

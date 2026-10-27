@@ -89,6 +89,16 @@ void load_plugin(const std::string &lib_name);
 
 namespace Internal {
 
+// Dispatches to multiple lambdas via function overloading (of `operator()`),
+// e.g. for use with std::visit on a std::variant.
+template<typename... Ts>
+struct LambdaOverloads : Ts... {
+    using Ts::operator()...;
+    explicit LambdaOverloads(Ts... ts)
+        : Ts(std::move(ts))... {
+    }
+};
+
 /** Some numeric conversions are UB if the value won't fit in the result;
  * safe_numeric_cast<>() is meant as a drop-in replacement for a C/C++ cast
  * that adds well-defined behavior for the UB cases, attempting to mimic
@@ -398,6 +408,12 @@ public:
  * could not be started. */
 int run_process(std::vector<std::string> args);
 
+/** As above, but redirect the child's stdout and/or stderr to the given
+ * files instead of inheriting the caller's. Pass an empty string for
+ * either path to leave that stream untouched. Passing the same path for
+ * both combines them into a single file, as with the shell's `2>&1`. */
+int run_process(std::vector<std::string> args, const std::string &stdout_path, const std::string &stderr_path);
+
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
 // @{
@@ -605,8 +621,13 @@ inline bool is_power_of_two(int64_t x) {
     return (x & (x - 1)) == 0;
 }
 
+/** Round x up to the next multiple of n. An n of zero imposes no alignment, and
+ * returns x unchanged. Works for integral types and for Expr. */
 template<typename T>
-inline T align_up(T x, int n) {
+inline T align_up(const T &x, int n) {
+    if (n == 0) {
+        return x;
+    }
     return (x + n - 1) / n * n;
 }
 

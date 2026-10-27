@@ -2,7 +2,9 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
+#include <set>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 #include "CSE.h"
@@ -13,8 +15,10 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "Interval.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -129,7 +133,8 @@ bool is_const(const Expr &e, int64_t value) {
     } else if (const FloatImm *i = e.as<FloatImm>()) {
         return i->value == value;
     } else if (const Cast *c = e.as<Cast>()) {
-        return is_const(c->value, value);
+        return c->type.can_represent(value) &&
+               is_const(c->value, value);
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return is_const(b->value, value);
     } else {
@@ -244,6 +249,65 @@ std::optional<int> is_const_power_of_two_integer(uint64_t val) {
 
 std::optional<int> is_const_power_of_two_integer(int64_t val) {
     return val < 0 ? std::nullopt : is_const_power_of_two_integer((uint64_t)val);
+}
+
+std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e) {
+    // We switch on the actual node type, so we can downcast e.get() directly
+    // rather than going through Expr::as<>(), which would redundantly re-check
+    // the node type the switch case has already established.
+    switch (e.node_type()) {
+#define HANDLE_BINARY_OP(NodeType)                        \
+    case IRNodeType::NodeType: {                          \
+        const NodeType *op = (const NodeType *)(e.get()); \
+        return std::pair{op->a, op->b};                   \
+    }
+        HANDLE_BINARY_OP(Add)
+        HANDLE_BINARY_OP(Sub)
+        HANDLE_BINARY_OP(Mul)
+        HANDLE_BINARY_OP(Div)
+        HANDLE_BINARY_OP(Mod)
+        HANDLE_BINARY_OP(Min)
+        HANDLE_BINARY_OP(Max)
+        HANDLE_BINARY_OP(EQ)
+        HANDLE_BINARY_OP(NE)
+        HANDLE_BINARY_OP(LT)
+        HANDLE_BINARY_OP(LE)
+        HANDLE_BINARY_OP(GT)
+        HANDLE_BINARY_OP(GE)
+        HANDLE_BINARY_OP(And)
+        HANDLE_BINARY_OP(Or)
+#undef HANDLE_BINARY_OP
+    default:
+        return std::nullopt;
+    }
+}
+
+Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b) {
+    switch (t) {
+#define HANDLE_BINARY_OP(NodeType) \
+    case IRNodeType::NodeType:     \
+        return NodeType::make(a, b);
+        HANDLE_BINARY_OP(Add)
+        HANDLE_BINARY_OP(Sub)
+        HANDLE_BINARY_OP(Mul)
+        HANDLE_BINARY_OP(Div)
+        HANDLE_BINARY_OP(Mod)
+        HANDLE_BINARY_OP(Min)
+        HANDLE_BINARY_OP(Max)
+        HANDLE_BINARY_OP(EQ)
+        HANDLE_BINARY_OP(NE)
+        HANDLE_BINARY_OP(LT)
+        HANDLE_BINARY_OP(LE)
+        HANDLE_BINARY_OP(GT)
+        HANDLE_BINARY_OP(GE)
+        HANDLE_BINARY_OP(And)
+        HANDLE_BINARY_OP(Or)
+#undef HANDLE_BINARY_OP
+    default:
+        internal_error << "make_binary_op: " << IRNodeType_string(t)
+                       << " is not a binary operator\n";
+        return Expr();
+    }
 }
 
 bool is_positive_const(const Expr &e) {
@@ -431,17 +495,18 @@ Expr const_false(int w) {
 Expr lossless_cast(Type t,
                    Expr e,
                    const Scope<ConstantInterval> &scope,
-                   std::map<Expr, ConstantInterval, ExprCompare> *cache) {
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache,
+                   const FuncValueBounds *func_bounds) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
     } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            return lossless_cast(t, c->value, scope, cache);
+            return lossless_cast(t, c->value, scope, cache, func_bounds);
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache);
+        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache, func_bounds);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         }
@@ -460,7 +525,7 @@ Expr lossless_cast(Type t,
     } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
-            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache));
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache, func_bounds));
             if (!vecs.back().defined()) {
                 return Expr();
             }
@@ -469,72 +534,72 @@ Expr lossless_cast(Type t,
     } else if (t.is_int_or_uint()) {
         // Check the bounds. If they're small enough, we can throw narrowing
         // casts around e, or subterms.
-        ConstantInterval ci = constant_integer_bounds(e, scope, cache);
+        ConstantInterval ci = constant_integer_bounds(e, scope, cache, func_bounds);
 
         if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
             // using some type, and the args are expressible using that type,
             // then the operation can just be done in that type.
             if (const Add *op = e.as<Add>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Sub *op = e.as<Sub>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Mul *op = e.as<Mul>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Min *op = e.as<Min>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Min::make(a, b);
                 }
             } else if (const Max *op = e.as<Max>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Max::make(a, b);
                 }
             } else if (const Mod *op = e.as<Mod>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mod::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add, Call::widen_right_add})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_sub, Call::widen_right_sub})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left,
                                                                Call::shift_right, Call::widening_shift_right})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
-                    ConstantInterval cb = constant_integer_bounds(b, scope, cache);
+                    ConstantInterval cb = constant_integer_bounds(b, scope, cache, func_bounds);
                     if (cb > -t.bits() && cb < t.bits()) {
                         if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
                             return a << b;
@@ -547,7 +612,7 @@ Expr lossless_cast(Type t,
                 if ((t.bits() > 1 && op->op == VectorReduce::Add) ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
-                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache, func_bounds);
                     if (v.defined()) {
                         auto reduce_op = op->op;
                         if (t.bits() == 1) {
@@ -577,6 +642,15 @@ Expr lossless_cast(Type t,
 }
 
 Expr lossless_negate(const Expr &x) {
+    if (x.type().is_uint()) {
+        // An unsigned type can only exactly represent the negation of zero:
+        // any other value would have to be negative, which doesn't fit. In
+        // particular, this rules out e.g. treating cast(uint8, -v) as if it
+        // were -cast(uint8, v) when v doesn't fit in a uint8 to begin with
+        // (the two differ by 256, not just in sign).
+        return is_const_zero(x) ? x : Expr();
+    }
+
     if (const Mul *m = x.as<Mul>()) {
         // Check the terms can't multiply to produce the most negative value.
         if (x.type().is_int() &&
@@ -968,7 +1042,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
 }
 
 Expr BufferBuilder::build() const {
-    std::vector<Expr> args(10);
+    std::vector<Expr> args(11);
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
     } else {
@@ -1006,7 +1080,11 @@ Expr BufferBuilder::build() const {
 
     args[5] = (int)type.code();
     args[6] = type.bits();
-    args[7] = dimensions;
+    // A struct element type carries its packed byte size in the ABI's info
+    // field; thread it through so the runtime buffer's type is faithful (and
+    // its element stride/allocation size correct). Zero for ordinary types.
+    args[7] = (int)type.to_abi().info;
+    args[8] = dimensions;
 
     std::vector<Expr> shape;
     for (size_t i = 0; i < (size_t)dimensions; i++) {
@@ -1034,11 +1112,11 @@ Expr BufferBuilder::build() const {
     }
     Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
     if (shape_memory.defined()) {
-        args[8] = shape_arg;
+        args[9] = shape_arg;
     } else if (dimensions == 0) {
-        args[8] = make_zero(type_of<halide_dimension_t *>());
+        args[9] = make_zero(type_of<halide_dimension_t *>());
     } else {
-        args[8] = shape_var;
+        args[9] = shape_var;
     }
 
     Expr flags = make_zero(UInt(64));
@@ -1052,7 +1130,7 @@ Expr BufferBuilder::build() const {
                                make_const(UInt(64), halide_buffer_flag_device_dirty),
                                make_zero(UInt(64)));
     }
-    args[9] = flags;
+    args[10] = flags;
 
     Expr e = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
 
@@ -1094,6 +1172,99 @@ T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &
 
 }  // namespace
 
+Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets) {
+    Expr body = e;
+    while (const Let *let = body.as<Let>()) {
+        lets->emplace_back(let->name, let->value);
+        body = let->body;
+    }
+    return body;
+}
+
+Stmt peel_lets(const Stmt &s, std::vector<std::pair<std::string, Expr>> *lets) {
+    Stmt body = s;
+    while (const LetStmt *let = body.as<LetStmt>()) {
+        lets->emplace_back(let->name, let->value);
+        body = let->body;
+    }
+    return body;
+}
+
+namespace {
+
+/** Gather the names an Expr or Stmt might get from a wrapping let: the names of
+ * Variables, and the buffer names of Loads and Stores. Conservatively assumes
+ * every such name refers to one of the peeled lets, even where an inner let
+ * shadows it. One instance is reused across an entire rewrap so that shared
+ * subexpressions are only visited once. */
+class CollectUsedNames : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Variable *op) override {
+        names.insert(op->name);
+    }
+
+    void visit(const Load *op) override {
+        names.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        names.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    std::set<std::string> names;
+};
+
+template<typename Body>
+Body rewrap_used_lets_impl(const Body &body,
+                           const std::vector<std::pair<std::string, Expr>> &lets) {
+    // The set of names the growing body refers to. Maintaining it as we go
+    // avoids rescanning the body once per let.
+    CollectUsedNames used;
+    body.accept(&used);
+    Body result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        if (used.names.count(name)) {
+            value.accept(&used);
+            if constexpr (std::is_same_v<Body, Expr>) {
+                result = Let::make(name, value, result);
+            } else {
+                result = LetStmt::make(name, value, result);
+            }
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
+Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    return rewrap_used_lets_impl(body, lets);
+}
+
+Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    return rewrap_used_lets_impl(body, lets);
+}
+
+Expr rewrap_all_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    Expr result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        result = Let::make(name, value, result);
+    }
+    return result;
+}
+
+Stmt rewrap_all_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    Stmt result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        result = LetStmt::make(name, value, result);
+    }
+    return result;
+}
+
 Expr remove_likelies(const Expr &e) {
     return remove_intrinsics(e, {Call::likely, Call::likely_if_innermost});
 }
@@ -1117,10 +1288,12 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
-Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
+Expr requirement_failed_error(const Expr &condition, const std::vector<Expr> &args) {
+    std::stringstream cond_str;
+    cond_str << condition;
     return Call::make(Int(32),
                       "halide_error_requirement_failed",
-                      {stringify({std::move(condition)}), combine_strings(args)},
+                      {cond_str.str(), combine_strings(args)},
                       Call::Extern);
 }
 
@@ -1566,8 +1739,8 @@ Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_
     return result;
 }
 
-Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {
-    return select(condition, (Expr)true_value, (Expr)false_value);
+Tuple select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {
+    return select(condition, Tuple(true_value), Tuple(false_value));
 }
 
 Expr mux(const Expr &id, const std::vector<Expr> &values) {
@@ -2393,6 +2566,16 @@ Expr round(Expr x) {
     return Call::make(t, Call::round, {std::move(x)}, Call::PureIntrinsic);
 }
 
+Expr round_half_away(Expr x) {
+    user_assert(x.defined()) << "round_half_away of undefined Expr\n";
+    Type t = x.type();
+    if (!t.is_float()) {
+        x = cast<float>(x);
+        t = x.type();
+    }
+    return Call::make(t, Call::round_half_away, {std::move(x)}, Call::PureIntrinsic);
+}
+
 Expr trunc(Expr x) {
     user_assert(x.defined()) << "trunc of undefined Expr\n";
     Type t = x.type();
@@ -2754,8 +2937,44 @@ Expr likely_if_innermost(Expr e) {
                       {std::move(e)}, Call::PureIntrinsic);
 }
 
+Tuple likely(const Tuple &t) {
+    Tuple result = t;
+    for (Expr &e : result) {
+        e = likely(e);
+    }
+    return result;
+}
+
+Tuple likely(const FuncRef &f) {
+    return likely(Tuple(f));
+}
+
+Tuple likely_if_innermost(const Tuple &t) {
+    Tuple result = t;
+    for (Expr &e : result) {
+        e = likely_if_innermost(e);
+    }
+    return result;
+}
+
+Tuple likely_if_innermost(const FuncRef &f) {
+    return likely_if_innermost(Tuple(f));
+}
+
 Expr strict_float(const Expr &e) {
     return strictify_float(e);
+}
+
+Tuple strict_float(const Tuple &t) {
+    Tuple result = t;
+    for (Expr &e : result) {
+        e = strict_float(e);
+    }
+    return result;
+}
+
+Tuple strict_float(const FuncRef &f) {
+    return strict_float(Tuple(f));
 }
 
 Expr undef(Type t) {
@@ -2788,6 +3007,16 @@ Expr gather(const std::vector<Expr> &args) {
     return make_scatter_gather(args);
 }
 
+Expr gather(int extent, const std::function<Expr(Expr)> &gen) {
+    user_assert(extent >= 1) << "gather() extent must be at least 1, got " << extent << ".\n";
+    std::vector<Expr> elems;
+    elems.reserve(extent);
+    for (int k = 0; k < extent; k++) {
+        elems.push_back(gen(make_const(Int(32), k)));
+    }
+    return make_scatter_gather(elems);
+}
+
 Expr extract_bits(Type t, const Expr &e, const Expr &lsb) {
     return Call::make(t, Call::extract_bits, {e, lsb}, Call::Intrinsic);
 }
@@ -2800,6 +3029,189 @@ Expr concat_bits(const std::vector<Expr> &e) {
         user_assert(e[i].type() == t) << "All arguments to concat_bits must have the same type\n";
     }
     return Call::make(t.with_bits(t.bits() * (int)e.size()), Call::concat_bits, e, Call::Intrinsic);
+}
+
+Expr FieldRef::read(const Expr &elem_index) const {
+    return Call::make(elem_type, Call::struct_field_read,
+                      {struct_value, make_const(Int(32), field_index), elem_index}, Call::PureIntrinsic);
+}
+
+FieldRef::FieldRef(Expr struct_value, int field_index, Type elem_type, std::optional<int> array_extent)
+    : struct_value(std::move(struct_value)), field_index(field_index), elem_type(elem_type), array_extent(array_extent) {
+}
+
+FieldRef::operator Expr() const {
+    user_assert(!array_extent.has_value())
+        << "This struct field is an array field; use operator[] to access an element of it, "
+        << "not an implicit conversion to Expr.\n";
+    return read(make_const(Int(32), 0));
+}
+
+Expr FieldRef::operator[](const Expr &i) const {
+    user_assert(array_extent.has_value())
+        << "This struct field is a scalar field; it can't be indexed with operator[].\n";
+    Expr idx = cast<int32_t>(i);
+    if (auto ci = as_const_int(idx)) {
+        user_assert(*ci >= 0 && *ci < *array_extent)
+            << "Struct array field index " << *ci << " is out of range [0, " << *array_extent << ").\n";
+    }
+    return read(idx);
+}
+
+namespace {
+FieldRef make_field_ref(const Expr &struct_value, int index) {
+    user_assert(struct_value.defined() && struct_value.type().is_struct())
+        << "field() requires an Expr of a struct type.\n";
+    const StructTypeInfo *info = struct_value.type().struct_type();
+    user_assert(index >= 0 && index < (int)info->fields.size())
+        << "Struct field index " << index << " is out of range; this struct has "
+        << info->fields.size() << " fields.\n";
+    const StructField &f = info->fields[index];
+    return FieldRef(struct_value, index, f.type, f.array_extent);
+}
+}  // namespace
+
+FieldRef field(const Expr &struct_value, const std::string &name) {
+    user_assert(struct_value.defined() && struct_value.type().is_struct())
+        << "field() requires an Expr of a struct type (see Type::Struct).\n";
+    int index = struct_value.type().struct_type()->find_field(name);
+    user_assert(index >= 0) << "Struct type has no field named \"" << name << "\".\n";
+    return make_field_ref(struct_value, index);
+}
+
+FieldRef field(const Expr &struct_value, int index) {
+    return make_field_ref(struct_value, index);
+}
+
+Expr pack_struct(const Type &t, const std::vector<Expr> &field_values) {
+    user_assert(t.is_struct()) << "pack_struct() requires a struct type.\n";
+    const StructTypeInfo &info = *t.struct_type();
+
+    size_t expected = 0;
+    for (const auto &f : info.fields) {
+        expected += (size_t)f.array_extent.value_or(1);
+    }
+    user_assert(field_values.size() == expected)
+        << "pack_struct() for a " << expected << "-element struct (counting array fields "
+        << "element-by-element) was given " << field_values.size() << " values.\n";
+
+    size_t idx = 0;
+    for (const auto &f : info.fields) {
+        int n = f.array_extent.value_or(1);
+        for (int i = 0; i < n; i++) {
+            user_assert(field_values[idx].defined() && field_values[idx].type() == f.type)
+                << "pack_struct(): value " << idx << " has type " << field_values[idx].type()
+                << " but struct field \"" << f.name << "\" has type " << f.type << ".\n";
+            idx++;
+        }
+    }
+
+    return Call::make(t, Call::struct_pack, field_values, Call::PureIntrinsic);
+}
+
+namespace {
+// Collect the distinct implicit-var names (`_`, `_0`, ...) appearing in an
+// Expr, in first-encountered order. These are the placeholder(s) a pack_struct
+// array-field initializer sweeps over its extent.
+class FindImplicitVars : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    std::set<std::string> seen;
+
+    void visit(const Variable *op) override {
+        if (Var::is_implicit(op->name) && seen.insert(op->name).second) {
+            names.push_back(op->name);
+        }
+    }
+
+public:
+    std::vector<std::string> names;
+};
+
+std::vector<std::string> find_implicit_vars(const Expr &e) {
+    FindImplicitVars finder;
+    e.accept(&finder);
+    return finder.names;
+}
+}  // namespace
+
+Expr pack_struct(const Type &t, const std::vector<StructFieldInit> &fields) {
+    user_assert(t.is_struct()) << "pack_struct() requires a struct type.\n";
+    const StructTypeInfo &info = *t.struct_type();
+
+    user_assert(fields.size() == info.fields.size())
+        << "pack_struct() for a " << info.fields.size() << "-field struct type was given "
+        << fields.size() << " field initializers. Supply exactly one initializer per field "
+        << "(an array field's elements go in a single gather() or a swept `_` expression).\n";
+
+    std::vector<Expr> flat;
+    for (size_t fi = 0; fi < info.fields.size(); fi++) {
+        const StructField &f = info.fields[fi];
+        const int extent = f.array_extent.value_or(1);
+        const bool is_array = f.array_extent.has_value();
+        const StructFieldInit &init = fields[fi];
+
+        if (init.source) {
+            // Copy a whole same-typed field out of another struct.
+            const FieldRef &r = *init.source;
+            user_assert(r.element_type() == f.type)
+                << "pack_struct(): field \"" << f.name << "\" of type " << f.type
+                << " is initialized from a field of type " << r.element_type() << ".\n";
+            user_assert(r.size() == extent)
+                << "pack_struct(): field \"" << f.name << "\" has " << extent
+                << " element(s), but is initialized from a field with " << r.size() << ".\n";
+            if (is_array) {
+                for (int k = 0; k < extent; k++) {
+                    flat.push_back(r[k]);
+                }
+            } else {
+                flat.push_back(Expr(r));
+            }
+            continue;
+        }
+
+        const Expr &e = *init.value;
+        if (const Call *g = e.as<Call>(); g != nullptr && g->is_intrinsic(Call::scatter_gather)) {
+            // An explicit gather() packet fills an array field's elements.
+            user_assert(is_array)
+                << "pack_struct(): scalar field \"" << f.name << "\" was given a gather() packet; "
+                << "a gather fills an array field.\n";
+            user_assert((int)g->args.size() == extent)
+                << "pack_struct(): array field \"" << f.name << "\" has extent " << extent
+                << ", but its gather() supplies " << g->args.size() << " element(s).\n";
+            flat.insert(flat.end(), g->args.begin(), g->args.end());
+            continue;
+        }
+
+        std::vector<std::string> implicit = find_implicit_vars(e);
+        user_assert(implicit.size() <= 1)
+            << "pack_struct(): the initializer for field \"" << f.name << "\" contains "
+            << implicit.size() << " placeholders (" << (implicit.empty() ? "" : implicit[0])
+            << " ...); an array field may sweep at most one.\n";
+
+        if (!implicit.empty()) {
+            // A single `_` placeholder swept over the field's extent.
+            user_assert(is_array)
+                << "pack_struct(): scalar field \"" << f.name << "\" was given a swept `_` "
+                << "expression; a placeholder sweep fills an array field.\n";
+            for (int k = 0; k < extent; k++) {
+                flat.push_back(substitute(implicit[0], make_const(Int(32), k), e));
+            }
+        } else {
+            // A plain value: only a scalar field.
+            user_assert(!is_array)
+                << "pack_struct(): array field \"" << f.name << "\" needs its " << extent
+                << " elements supplied via gather(), a swept `_` expression, or a field() copy, "
+                << "not a single value.\n";
+            flat.push_back(e);
+        }
+    }
+
+    // The flattened form does the final per-element type check and builds the node.
+    return pack_struct(t, flat);
+}
+
+Expr pack_struct(const Type &t, std::initializer_list<StructFieldInit> fields) {
+    return pack_struct(t, std::vector<StructFieldInit>(fields));
 }
 
 Expr target_arch_is(Target::Arch arch) {

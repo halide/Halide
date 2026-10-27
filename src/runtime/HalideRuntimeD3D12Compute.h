@@ -87,6 +87,18 @@ extern int halide_d3d12compute_acquire_context(void *user_context, struct halide
  */
 extern int halide_d3d12compute_release_context(void *user_context);
 
+typedef int (*halide_d3d12compute_acquire_context_t)(void *,                                       // user_context
+                                                     struct halide_d3d12compute_device **,         // device out parameter
+                                                     struct halide_d3d12compute_command_queue **,  // command queue out parameter
+                                                     bool);                                        // should create a context if none exist
+typedef int (*halide_d3d12compute_release_context_t)(void * /* user_context */);
+
+/** Set custom methods to acquire and release D3D12 Compute contexts and command queues */
+// @{
+extern halide_d3d12compute_acquire_context_t halide_set_d3d12compute_acquire_context(halide_d3d12compute_acquire_context_t handler);
+extern halide_d3d12compute_release_context_t halide_set_d3d12compute_release_context(halide_d3d12compute_release_context_t handler);
+// @}
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

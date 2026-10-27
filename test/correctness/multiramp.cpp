@@ -1,6 +1,7 @@
 #include "Halide.h"
 
 #include <cstdio>
+#include <numeric>
 #include <set>
 #include <vector>
 
@@ -212,11 +213,121 @@ void check_div_rejects_non_multiramp() {
 }
 
 void check_div_rejects_unaligned_base() {
-    // ramp(2,2,6)/4 = [0,1,1,2,2,3] would be a multiramp, but our algorithm
-    // requires the base to be a known multiple of the denominator, and 2 is
-    // not a multiple of 4.
+    // ramp(2,2,6)/4 = [0,1,1,2,2,3] would be a multiramp, but a base at
+    // position 2 of its bucket leaves a budget of 1, and even the split
+    // (p = 2) needs 2.
     MultiRamp A{2, {2}, {6}};
     CHECK(!A.div(4), "should reject div when base isn't aligned");
+}
+
+int64_t floor_div(int64_t a, int64_t b) {
+    return (a - (((a % b) + b) % b)) / b;
+}
+
+// Check that div and mod by k of a const MultiRamp are accepted (or not) as
+// expected, and when accepted, that they match per-lane Euclidean division.
+void check_div_mod_by(const MultiRamp &m, int k, bool expect_ok, int line) {
+    auto values = expand(m);
+    for (bool is_div : {true, false}) {
+        MultiRamp r = m;
+        bool ok = is_div ? r.div(k) : r.mod(k);
+        if (ok != expect_ok) {
+            printf("FAIL at %d: %s by %d %s\n", line, is_div ? "div" : "mod", k,
+                   ok ? "unexpectedly accepted" : "unexpectedly rejected");
+            failures++;
+            continue;
+        }
+        if (ok) {
+            std::vector<int> want;
+            for (int v : values) {
+                int64_t q = floor_div(v, k);
+                want.push_back((int)(is_div ? q : v - q * k));
+            }
+            check_seq(expand(r), want, is_div ? "div values" : "mod values", line);
+        }
+    }
+}
+
+#define CHECK_DIV_MOD(m, k, ok) check_div_mod_by((m), (k), (ok), __LINE__)
+
+void check_div_mod_unaligned_base() {
+    // Base at position r0 of its bucket leaves a budget of k-1-r0.
+    // ramp(1,1,2)/4: positions 1, 2. Budget 2, spends 1.
+    CHECK_DIV_MOD((MultiRamp{1, {1}, {2}}), 4, true);
+    // ramp(2,1,2)/4: positions 2, 3. Budget 1, spends exactly 1.
+    CHECK_DIV_MOD((MultiRamp{2, {1}, {2}}), 4, true);
+    // ramp(3,1,2)/4: positions 3, 4. Budget 0, crosses into the next bucket.
+    CHECK_DIV_MOD((MultiRamp{3, {1}, {2}}), 4, false);
+    // ramp(6,1,4)/4 = [1,1,2,2]: a split (p = 4) doesn't fit the budget of 1.
+    CHECK_DIV_MOD((MultiRamp{6, {1}, {4}}), 4, false);
+    // A split that exactly exhausts the budget: ramp(1,2,6)/4 = [0,0,1,1,2,2]
+    // has r0 = 1, so budget 2, and the inner half (p = 2) spends 2.
+    CHECK_DIV_MOD((MultiRamp{1, {2}, {6}}), 4, true);
+    // Two flex dims jointly exhausting the budget: base 2, strides [1, 2],
+    // lanes [2, 2], k = 6. Values 2, 3, 4, 5; budget 3 = 1 + 2.
+    CHECK_DIV_MOD((MultiRamp{2, {1, 2}, {2, 2}}), 6, true);
+    // ... and one more than the budget: values 3, 4, 5, 6.
+    CHECK_DIV_MOD((MultiRamp{3, {1, 2}, {2, 2}}), 6, false);
+    // A pure-carry outer dim spends nothing: base 5, strides [1, 8], lanes
+    // [3, 4], k = 8. Values 5..7, 13..15, ... Budget 2, inner spends 2.
+    CHECK_DIV_MOD((MultiRamp{5, {1, 8}, {3, 4}}), 8, true);
+    // A negative base.
+    CHECK_DIV_MOD((MultiRamp{-6, {1, 4}, {2, 3}}), 4, true);
+}
+
+void check_div_mod_negative_strides() {
+    // Strides are reduced to their Euclidean residue, so s = -3 behaves as
+    // one step down a bucket and 1 along it: ramp(0,-3,2) = [0,-3], /4 =
+    // [0,-1], %4 = [0,1].
+    CHECK_DIV_MOD((MultiRamp{0, {-3}, {2}}), 4, true);
+    // The same with r0 = 2, which exactly exhausts the budget of 1.
+    CHECK_DIV_MOD((MultiRamp{2, {-3}, {2}}), 4, true);
+    // ... and with r0 = 3, which overflows it.
+    CHECK_DIV_MOD((MultiRamp{3, {-3}, {2}}), 4, false);
+    // Pure-carry negative strides.
+    CHECK_DIV_MOD((MultiRamp{2, {1, -8}, {2, 3}}), 8, true);
+    // A descending dense run, ramp(3,-1,4) = [3,2,1,0], is constant under /4,
+    // but its residue 3 per step looks like a climb, so it's (conservatively)
+    // rejected.
+    CHECK_DIV_MOD((MultiRamp{3, {-1}, {4}}), 4, false);
+}
+
+void check_div_mod_symbolic_base_alignment() {
+    // A symbolic base whose residue only an alignment callback knows.
+    Var v("v");
+    AlignmentLookup v_is_8k_plus_4 = [](const std::string &name) {
+        return name == "v" ? ModulusRemainder{8, 4} : ModulusRemainder{};
+    };
+    MultiRamp A{v + 2, {1, 32}, {2, 3}};
+    {
+        MultiRamp r = A;
+        CHECK(!r.div(4), "unknown base residue rejects div");
+        CHECK(!r.mod(4), "unknown base residue rejects mod");
+    }
+    {
+        // (8k + 6) / 4 over lanes [2, 3]: positions 2, 3 fit the budget of 1.
+        MultiRamp r = A;
+        CHECK(r.div(4, v_is_8k_plus_4), "aligned base div");
+        CHECK(r.lanes.size() == 2 && r.lanes[0] == 2 && r.lanes[1] == 3, "aligned base div lanes");
+        if (r.strides.size() == 2) {
+            CHECK(is_const_zero(simplify(r.strides[0])), "aligned base div inner stride");
+            CHECK(is_const(simplify(r.strides[1]), 8), "aligned base div outer stride");
+        }
+        CHECK(equal(simplify(r.base), simplify((v + 2) / 4)), "aligned base div base");
+    }
+    {
+        MultiRamp r = A;
+        CHECK(r.mod(4, v_is_8k_plus_4), "aligned base mod");
+        CHECK_SEQ_LIT(expand(r), "aligned base mod values", 2, 3, 2, 3, 2, 3);
+    }
+    {
+        // Through is_multiramp: (ramp(v + 6, 1, 2) % 4) is ramp(2, 1, 2).
+        Expr e = Mod::make(Ramp::make(v + 6, 1, 2), Broadcast::make(4, 2));
+        MultiRamp m;
+        CHECK(!is_multiramp(e, Scope<Expr>::empty_scope(), &m), "is_multiramp needs the alignment");
+        CHECK(is_multiramp(e, Scope<Expr>::empty_scope(), &m, v_is_8k_plus_4), "is_multiramp with alignment");
+        CHECK_SEQ_LIT(expand(m), "is_multiramp with alignment values", 2, 3);
+    }
 }
 
 void check_div_rejects_symbolic_denominator() {
@@ -284,6 +395,29 @@ void check_recognize_nested_ramp() {
     if (m.lanes.size() == 2) {
         CHECK(m.lanes[0] == 2 && m.lanes[1] == 3, "nested ramp lanes");
     }
+}
+
+void check_matches_expr() {
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+    std::vector<MultiRamp> ms = {
+        MultiRamp(x, {1}, {8}),
+        MultiRamp(x, {1, 100}, {2, 3}),
+        MultiRamp(x, {1, 0, y}, {4, 2, 3}),
+        MultiRamp(x, {0, 1}, {2, 4}),
+    };
+    for (const MultiRamp &m : ms) {
+        CHECK(m.matches_expr(m.to_expr()), "matches its own to_expr");
+    }
+    const MultiRamp &m = ms[1];
+    Expr inner = Ramp::make(x, Expr(1), 2);
+    CHECK(!m.matches_expr(Ramp::make(inner, Broadcast::make(Expr(101), 2), 3)), "other stride");
+    CHECK(!m.matches_expr(Ramp::make(Ramp::make(y, Expr(1), 2), Broadcast::make(Expr(100), 2), 3)), "other base");
+    CHECK(!m.matches_expr(Ramp::make(Ramp::make(x, Expr(1), 3), Broadcast::make(Expr(100), 3), 2)), "other lanes");
+    Expr r = Ramp::make(Expr(0), Expr(1), 6);
+    Expr spelled = Broadcast::make(x, 6) + r % 2 + (r / 2) * 100;
+    CHECK(!m.matches_expr(spelled), "other spelling");
+    CHECK(!m.matches_expr(x), "scalar");
 }
 
 void check_recognize_add() {
@@ -583,6 +717,169 @@ void check_reject_non_multiramp_sum() {
     CHECK(!is_multiramp(sum, scope, &m), "reject coprime-shape add");
 }
 
+// ---- Shuffles ------------------------------------------------------------
+
+// Mirror Shuffle::make_transpose: view v as a row-major matrix with `cols`
+// columns and transpose it.
+std::vector<int> transpose_vec(const std::vector<int> &v, int cols) {
+    int rows = (int)v.size() / cols;
+    std::vector<int> result(v.size());
+    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+            result[j * rows + i] = v[i * cols + j];
+        }
+    }
+    return result;
+}
+
+// A mask whose strides are the prefix products of its lane counts, in some
+// order, is a permutation of the lanes. Build one from a dim order.
+MultiRamp permutation_mask(const std::vector<int> &shape, const std::vector<int> &order,
+                           Type t) {
+    std::vector<int64_t> flat(shape.size());
+    int64_t s = 1;
+    for (size_t i = 0; i < shape.size(); i++) {
+        flat[i] = s;
+        s *= shape[i];
+    }
+    std::vector<Expr> strides;
+    std::vector<int> lanes;
+    for (int d : order) {
+        strides.push_back(make_const(t, flat[d]));
+        lanes.push_back(shape[d]);
+    }
+    return MultiRamp(make_zero(t), strides, lanes);
+}
+
+// Apply a mask the slow way, for comparison.
+std::vector<int> apply_mask(const std::vector<int> &v, const MultiRamp &mask) {
+    std::vector<int> result;
+    for (int i : expand(mask)) {
+        result.push_back(v[i]);
+    }
+    return result;
+}
+
+void check_shuffle_case(const MultiRamp &m, const std::vector<int> &shape,
+                        const std::vector<int> &order, const char *msg) {
+    MultiRamp a = m;
+    MultiRamp mask = permutation_mask(shape, order, Int(32));
+    auto want = apply_mask(expand(a), mask);
+    if (!a.shuffle(mask)) {
+        printf("FAIL: %s: shuffle returned false\n", msg);
+        failures++;
+        return;
+    }
+    check_seq(expand(a), want, msg, __LINE__);
+}
+
+void check_shuffles() {
+    // The two-dimensional transpose the wmma pass does to an operand tile.
+    check_shuffle_case(MultiRamp{0, {1, 64}, {16, 16}}, {16, 16}, {1, 0},
+                       "transpose of a 2D tile");
+    // A transpose that falls inside a dim, so it has to be split.
+    check_shuffle_case(MultiRamp{0, {1}, {8}}, {4, 2}, {1, 0},
+                       "transpose splitting a dim");
+    // A permutation whose dims collapse to something coarser than the
+    // multiramp's, so both shapes need refining before they line up.
+    check_shuffle_case(MultiRamp{0, {1, 10, 100}, {2, 2, 3}}, {2, 2, 3}, {2, 0, 1},
+                       "permutation needing a common refinement");
+    // A broadcast dim has stride zero, which never merges with its neighbour.
+    check_shuffle_case(MultiRamp{0, {1, 64, 0}, {16, 16, 16}}, {16, 256}, {1, 0},
+                       "transpose of a broadcast tile");
+}
+
+void check_shuffle_rejects_gather() {
+    // Strides that aren't the prefix products of the lane counts don't
+    // describe a permutation.
+    MultiRamp A{0, {1, 100}, {4, 4}};
+    MultiRamp mask{0, {1, 2}, {4, 4}};
+    CHECK(!A.shuffle(mask), "shuffle rejects a non-permutation mask");
+}
+
+void check_shuffle_rejects_coprime_shapes() {
+    // Lane counts of 3 and 2 innermost have no common refinement.
+    MultiRamp A{0, {1, 100}, {2, 3}};
+    MultiRamp mask = permutation_mask({3, 2}, {1, 0}, Int(32));
+    CHECK(!A.shuffle(mask), "shuffle rejects coprime shapes");
+}
+
+void check_shuffle_rejects_wrong_size() {
+    MultiRamp A{0, {1, 100}, {4, 4}};
+    MultiRamp mask = permutation_mask({2, 2}, {1, 0}, Int(32));
+    CHECK(!A.shuffle(mask), "shuffle rejects a mask of the wrong size");
+}
+
+void check_recognize_transpose_shuffle() {
+    Expr e = Shuffle::make_transpose(Ramp::make(Expr(0), Expr(1), 12), 4);
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(is_multiramp(e, scope, &m), "recognize a transpose shuffle");
+    std::vector<int> in(12);
+    std::iota(in.begin(), in.end(), 0);
+    CHECK_SEQ(expand(m), transpose_vec(in, 4), "transpose shuffle values");
+}
+
+void check_recognize_reshaping_shuffle() {
+    // A shuffle of a 1D ramp whose lane indices are themselves a multiramp is
+    // a reshaping of the ramp rather than an arbitrary gather. Indices
+    // [0,2,4,6,1,3,5,7] have shape (4,2) and strides (2,1).
+    Expr r = Ramp::make(Expr(0), Expr(3), 8);
+    Expr e = Shuffle::make({r}, {0, 2, 4, 6, 1, 3, 5, 7});
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(is_multiramp(e, scope, &m), "recognize a reshaping shuffle");
+    CHECK_SEQ_LIT(expand(m), "reshaping shuffle values",
+                  0, 6, 12, 18, 3, 9, 15, 21);
+}
+
+void check_reject_gather_shuffle() {
+    // Lane indices that aren't a multiramp really are a gather.
+    Expr r = Ramp::make(Expr(0), Expr(3), 8);
+    Expr e = Shuffle::make({r}, {0, 3, 1, 7, 2, 5, 4, 6});
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(!is_multiramp(e, scope, &m), "reject a gather shuffle");
+}
+
+// ---- is_load_of_multiramp ------------------------------------------------
+
+Expr make_test_load(int lanes) {
+    return Load::make(Int(16, lanes), "buf", Ramp::make(Expr(0), Expr(1), lanes));
+}
+
+void check_load_under_cast_and_broadcast() {
+    // A broadcast of a load is a load at a stride-zero outer dim.
+    Expr e = Broadcast::make(Cast::make(Int(32, 4), make_test_load(4)), 3);
+    Scope<Expr> scope;
+    MultiRamp m;
+    const Load *load = is_load_of_multiramp(e, scope, &m);
+    CHECK(load && load->name == "buf", "see through cast and broadcast");
+    if (load) {
+        CHECK_SEQ_LIT(expand(m), "broadcast load addresses",
+                      0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3);
+    }
+}
+
+void check_load_under_shuffle() {
+    // Permuting the loaded values permutes the addresses loaded from.
+    Expr e = Shuffle::make_transpose(make_test_load(4), 2);
+    Scope<Expr> scope;
+    MultiRamp m;
+    const Load *load = is_load_of_multiramp(e, scope, &m);
+    CHECK(load && load->name == "buf", "see through a lane permutation");
+    if (load) {
+        CHECK_SEQ_LIT(expand(m), "permuted load addresses", 0, 2, 1, 3);
+    }
+}
+
+void check_reject_non_load() {
+    Scope<Expr> scope;
+    MultiRamp m;
+    CHECK(!is_load_of_multiramp(Ramp::make(Expr(0), Expr(1), 4), scope, &m),
+          "reject an Expr with no load underneath");
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -600,6 +897,9 @@ int main(int argc, char **argv) {
     check_div_rejects_non_multiramp();
     check_div_rejects_unaligned_base();
     check_div_rejects_symbolic_denominator();
+    check_div_mod_unaligned_base();
+    check_div_mod_negative_strides();
+    check_div_mod_symbolic_base_alignment();
 
     check_mod_basic();
     check_mod_with_split();
@@ -608,6 +908,7 @@ int main(int argc, char **argv) {
 
     check_recognize_1d_ramp();
     check_recognize_nested_ramp();
+    check_matches_expr();
     check_recognize_add();
     check_recognize_div_const();
     check_recognize_mod_const();
@@ -630,6 +931,19 @@ int main(int argc, char **argv) {
     check_rotate_stride_one_innermost_noop();
     check_roundtrips();
     check_reject_non_multiramp_sum();
+
+    check_shuffles();
+    check_shuffle_rejects_gather();
+    check_shuffle_rejects_coprime_shapes();
+    check_shuffle_rejects_wrong_size();
+
+    check_recognize_transpose_shuffle();
+    check_recognize_reshaping_shuffle();
+    check_reject_gather_shuffle();
+
+    check_load_under_cast_and_broadcast();
+    check_load_under_shuffle();
+    check_reject_non_load();
 
     if (failures) {
         printf("%d failures\n", failures);

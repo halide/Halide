@@ -2,7 +2,6 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "CompilerLogger.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 
@@ -118,8 +117,12 @@ std::map<std::string, size_t> write_string_table(std::ostream &out,
             out.put('\x0A');
         }
         size_t final_offset = out.tellp();
+        // Flush explicitly so a buffered write failure sets the stream state
+        // before seeking; filebuf seek implementations may lose that error.
+        out.flush();
         out.seekp(start_offset - 12);
         emit_padded(out, member_end - start_offset, 10);
+        out.flush();
         out.seekp(final_offset);
     }
     return string_to_offset_map;
@@ -243,14 +246,17 @@ void write_symbol_table(std::ostream &out,
 
     // Patch the size of the symbol table.
     const size_t member_header_size = 60;
+    out.flush();
     out.seekp(symbol_table_size_offset);
     emit_padded(out, member_end - member_header_size - header_start_offset, 10);
 
     // Patch the number of symbols.
+    out.flush();
     out.seekp(symbol_count_offset);
     emit_u32(out, name_to_member_index.size());
 
     // Seek back to where we left off.
+    out.flush();
     out.seekp(final_offset);
 }
 
@@ -299,6 +305,7 @@ void write_coff_archive(std::ostream &out,
     for (auto &it : patchers) {
         size_t i = it.first;
         for (auto &patcher : it.second) {
+            out.flush();
             out.seekp(patcher.pos);
             patcher.emit_u32(out, member_offset.at(i));
         }
@@ -354,8 +361,6 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // Make sure to run this with a large stack!
     debug(1) << "emit_file.Compiling to native code...\n";
     debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
-
-    auto time_start = std::chrono::high_resolution_clock::now();
 
     // Work on a copy of the module to avoid modifying the original.
     std::unique_ptr<llvm::Module> module = clone_module(module_in);
@@ -423,13 +428,6 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
 
     pass_manager.run(*module);
-
-    auto *logger = Internal::get_compiler_logger();
-    if (logger) {
-        auto time_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = time_end - time_start;
-        logger->record_compilation_time(Internal::CompilerLogger::Phase::LLVM, diff.count());
-    }
 
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
     llvm::reportAndResetTimings();
@@ -612,9 +610,11 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // the same as GNU ar format.
     if (Internal::get_triple_for_target(target).isWindowsMSVCEnvironment()) {
         std::ofstream f(dst_file, std::ios_base::trunc | std::ios_base::binary);
+        user_assert(f.is_open()) << "Failed to open archive for writing: " << dst_file << "\n";
         Internal::Archive::write_coff_archive(f, new_members);
         f.flush();
         f.close();
+        user_assert(f) << "Failed to write archive: " << dst_file << "\n";
         return;
     }
 

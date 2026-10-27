@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(hist.generator SOURCES hist_generator.cpp)
 
 # Filters
-add_halide_library(hist FROM hist.generator)
+add_halide_library(
+    hist_pipeline
+    FROM hist.generator
+    GENERATOR hist
+    FUNCTION_NAME hist
+    FILE_BASE_NAME hist
+)
 add_halide_library(
     hist_auto_schedule
     FROM hist.generator
@@ -26,13 +32,16 @@ add_halide_library(
 
 # Main executable
 add_executable(hist_filter filter.cpp)
-target_link_libraries(hist_filter PRIVATE Halide::ImageIO Halide::Tools hist hist_auto_schedule)
+target_link_libraries(
+    hist_filter
+    PRIVATE Halide::ImageIO Halide::Tools hist_pipeline hist_auto_schedule
+)
+add_custom_target(hist DEPENDS hist_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME hist_filter COMMAND hist_filter rgba.png out.png)
+    add_test(NAME hist_filter COMMAND hist_filter ${IMAGE} out.png)
     set_tests_properties(
         hist_filter
         PROPERTIES

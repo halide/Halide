@@ -1,0 +1,104 @@
+#include "PyTuple.h"
+#include <nanobind/make_iterator.h>
+
+namespace Halide {
+namespace PythonBindings {
+
+Tuple to_halide_tuple(const py::object &o) {
+    try {
+        Expr e = py::cast<Expr>(o);
+        return Tuple(e);
+    } catch (const py::cast_error &) {
+        // fall thru
+    }
+
+    try {
+        py::tuple t = py::cast<py::tuple>(o);
+        if (t.empty()) {
+            throw py::value_error("Cannot use a zero-length tuple-of-Expr");
+        }
+        std::vector<Expr> v(t.size());
+        for (size_t i = 0; i < t.size(); i++) {
+            v[i] = py::cast<Expr>(t[i]);
+        }
+        return Tuple(v);
+    } catch (const py::cast_error &) {
+        // fall thru
+    }
+
+    throw py::value_error("Expected an Expr or tuple-of-Expr.");
+}
+
+namespace {
+
+auto tuple_iterator(const Tuple &t) {
+    return py::make_iterator(py::type<Tuple>(), "TupleIterator", t.begin(), t.end());
+}
+
+}  // namespace
+
+void define_tuple(py::module_ &m) {
+    // Halide::Tuple isn't surfaced to the user in Python;
+    // we define it here to allow nanobind to do some automatic
+    // conversion from Python's built-in tuple type.
+    //
+    // TODO: AFAICT, there isn't a good way to auto-convert Halide::Tuple-as-return-type
+    // *TO* a py::tuple; call sites that return Halide::Tuple currently must manually
+    // do this (typically via a C++ lambda that calls to_python_tuple()).
+    auto tuple_class =
+        py::class_<Tuple>(m, "Tuple")
+            // for implicitly_convertible
+            .def("__init__", [](Tuple *self, const py::tuple &t) {
+                std::vector<Expr> v;
+                v.reserve(t.size());
+                for (const auto o : t) {
+                    v.push_back(py::cast<Expr>(o));
+                }
+                new (self) Tuple(Tuple(v));
+            })
+            .def("__init__", [](Tuple *self, const FuncRef &f) {
+                std::vector<Expr> v;
+                v.reserve(f.size());
+                if (f.size() == 1) {
+                    v.push_back(f);
+                } else {
+                    for (size_t i = 0; i < f.size(); ++i) {
+                        v.push_back(f[(int)i]);
+                    }
+                }
+                new (self) Tuple(Tuple(v));
+            })
+            .def("__init__", [](Tuple *self, const std::vector<Expr> &v) {
+                new (self) Tuple(Tuple(v));
+            })
+            .def("__len__", &Tuple::size)
+            .def("__getitem__", [](const Tuple &t, size_t i) -> Expr {
+                if (i >= t.size()) {
+                    throw py::index_error();
+                }
+                return t[i];
+            })
+            .def("__repr__", [](const Tuple &t) -> std::string {
+                std::ostringstream o;
+                o << "<halide.Tuple of size " << t.size() << ">";
+                return o.str();
+            })
+            .def("__str__", [](const Tuple &t) -> std::string {
+                std::ostringstream o;
+                o << t;
+                return o.str();
+            })
+            .def("__iter__", &tuple_iterator, py::keep_alive<0, 1>());
+
+    py::implicitly_convertible<py::tuple, Tuple>();
+
+    // If we autoconvert from vector<Expr>, we must also special-case FuncRef, alas
+    py::implicitly_convertible<FuncRef, Tuple>();
+
+    // We want to allow vector<Expr>->Tuple implicitly, so that
+    // custom classes that are tuple-like will autoconvert (see tutorial/lesson_13).
+    py::implicitly_convertible<std::vector<Expr>, Tuple>();
+}
+
+}  // namespace PythonBindings
+}  // namespace Halide

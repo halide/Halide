@@ -2,6 +2,7 @@
 #include "halide_test_dirs.h"
 
 #include <cstdio>
+#include <string_view>
 
 using namespace Halide;
 
@@ -14,6 +15,27 @@ std::string leaf_name(const std::string &path) {
 
 std::string get_output_path_prefix(const std::string &base) {
     return Internal::get_test_tmp_dir() + "halide_test_correctness_compile_to_multitarget_" + base;
+}
+
+// Verify that the header declares an entrypoint for the wrapper (fn_name) as
+// well as for each subtarget (fn_name + suffix, suitably legalized into a
+// valid identifier), so that callers can bypass the runtime-dispatching
+// wrapper and call a specific subtarget directly.
+void check_header_declares_all_entrypoints(const std::string &header_path,
+                                           const std::string &fn_name,
+                                           const std::vector<std::string> &suffixes) {
+    auto header_data = Internal::read_entire_file(header_path);
+    std::string_view header{header_data.data(), header_data.size()};
+
+    std::vector<std::string> expected_names = {fn_name};
+    for (const auto &suffix : suffixes) {
+        expected_names.push_back(fn_name + "_" + Internal::c_print_name(suffix, false));
+    }
+    for (const auto &name : expected_names) {
+        std::string decl = "int " + name + "(";
+        internal_assert(header.find(decl) != std::string::npos)
+            << "Did not find expected declaration '" << decl << "' in " << header_path;
+    }
 }
 
 void test_compile_to_static_library(Func j) {
@@ -74,6 +96,8 @@ void test_compile_to_object_files(Func j) {
     for (auto f : files) {
         Internal::assert_file_exists(f);
     }
+
+    check_header_declares_all_entrypoints(filename_prefix + ".h", j.name(), target_strings);
 }
 
 void test_compile_to_object_files_no_runtime(Func j) {
@@ -154,7 +178,7 @@ void test_compile_to_everything(Func j, bool do_object) {
     std::vector<std::string> files;
 
     // single-file outputs
-    for (const char *ext : {".h", ".halide_generated.cpp", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
+    for (const char *ext : {".h", ".halide_generated.cpp", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
         if (do_object && !strcmp(ext, a)) continue;
         files.push_back(filename_prefix + ext);
     }
@@ -182,11 +206,10 @@ void test_compile_to_everything(Func j, bool do_object) {
         return j.compile_to_module(args, name, target);
     };
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::assembly, filename_prefix + ".s"},                        // IsMulti
-        {OutputFileType::bitcode, filename_prefix + ".bc"},                        // IsMulti
-        {OutputFileType::c_header, filename_prefix + ".h"},                        // IsSingle
-        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},     // IsSingle
-        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},  // IsSingle
+        {OutputFileType::assembly, filename_prefix + ".s"},                     // IsMulti
+        {OutputFileType::bitcode, filename_prefix + ".bc"},                     // IsMulti
+        {OutputFileType::c_header, filename_prefix + ".h"},                     // IsSingle
+        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},  // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
         // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
@@ -210,19 +233,15 @@ void test_compile_to_everything(Func j, bool do_object) {
     } else {
         outputs.erase(OutputFileType::object);
     }
-    const CompilerLoggerFactory compiler_logger_factory =
-        [](const std::string &, const Target &) -> std::unique_ptr<Internal::CompilerLogger> {
-        // We don't care about the contents of the compiler log - only whether
-        // it exists or not --  so just fill in with arbitrary strings.
-        return std::unique_ptr<Internal::CompilerLogger>(new Internal::JSONCompilerLogger("generator_name", "function_name", "autoscheduler_name", Target(), "generator_args", false));
-    };
     // The first argument to compile_multitarget is *function* name, not filename
     std::string function_name = leaf_name(filename_prefix);
-    compile_multitarget(function_name, outputs, targets, target_strings, module_producer, compiler_logger_factory);
+    compile_multitarget(function_name, outputs, targets, target_strings, module_producer);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);
     }
+
+    check_header_declares_all_entrypoints(filename_prefix + ".h", function_name, target_strings);
 }
 
 int main(int argc, char **argv) {

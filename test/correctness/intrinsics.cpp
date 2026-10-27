@@ -117,7 +117,7 @@ Var x;
 Expr make_leaf(Type t, const char *name) {
     return Load::make(t, name, Ramp::make(x, 1, t.lanes()),
                       Buffer<>{}, Parameter{},
-                      const_true(t.lanes()), ModulusRemainder{});
+                      const_true(t.lanes()), ModulusRemainder{}, false);
 }
 
 int main(int argc, char **argv) {
@@ -145,6 +145,23 @@ int main(int argc, char **argv) {
     Expr bf16y = make_leaf(BFloat(16, 4), "bf16y");
     Expr f32x = make_leaf(Float(32, 4), "f32x");
     Expr f32y = make_leaf(Float(32, 4), "f32y");
+
+    // Check fixed-point to float conversions.
+    auto fixed_to_float = [](const Expr &x, int k, int float_bits = -1) {
+        Type t = Float(float_bits < 0 ? x.type().bits() : float_bits, x.type().lanes());
+        return Call::make(t, Call::fixed_to_float, {x, make_const(x.type().with_code(halide_type_uint), k)}, Call::PureIntrinsic);
+    };
+    check(f32(i32x) * 0.0625f, fixed_to_float(i32x, 4));
+    check(f32(u32x) * 0.5f, fixed_to_float(u32x, 1));
+    check(f32(i32x) * (1.0f / 4294967296.0f), fixed_to_float(i32x, 32));
+    check(f32(i16x) * 0.0625f, fixed_to_float(i16x, 4, 32));
+    check((f32(i32x) * f32y) * 0.125f, f32y * fixed_to_float(i32x, 3));
+    check((f32y * f32(i32x)) * 0.125f, f32y * fixed_to_float(i32x, 3));
+    check(((f32(i32x) * f32y) * f32y) * 0.125f,
+          f32y * (f32y * fixed_to_float(i32x, 3)));
+    check(f32(i32x) * 0.75f, f32(i32x) * 0.75f);
+    check(f32(i32x) * 2.0f, f32(i32x) * 2.0f);
+    check(f32(i32x) * (1.0f / 8589934592.0f), f32(i32x) * (1.0f / 8589934592.0f));
 
     // Check powers of two multiply/divide rewritten to shifts.
     check(i8x * 2, i8x << 1);
@@ -431,6 +448,30 @@ int main(int argc, char **argv) {
         f(x) = widening_mul(q(x), s(x));
 
         f.compile_jit();
+    }
+
+    // Lowering a widening op widens a broadcast operand's value, not the
+    // vector (as the simplifier would), so codegen emits no vector extension
+    // of a splat.
+    {
+        Expr s = Variable::make(UInt(16), "s");
+        Expr v = Variable::make(UInt(8, 2), "v");
+        auto check_lowered = [](const Expr &e, const Expr &expected) {
+            Expr result = lower_intrinsics(e);
+            if (!equal(result, expected)) {
+                std::cerr << "failure!\n"
+                          << "test: " << e << "\n"
+                          << "result: " << result << "\n"
+                          << "expected: " << expected << "\n";
+                abort();
+            }
+        };
+        check_lowered(widen_right_mul(u32x, Broadcast::make(s, 4)),
+                      u32x * Broadcast::make(u32(s), 4));
+        check_lowered(widening_mul(u16x, Broadcast::make(s, 4)),
+                      u32(u16x) * Broadcast::make(u32(s), 4));
+        check_lowered(widen_right_add(u16x, Broadcast::make(v, 2)),
+                      u16x + Broadcast::make(u16(v), 2));
     }
 
     printf("Success!\n");

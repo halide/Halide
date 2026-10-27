@@ -4,11 +4,40 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <functional>
 #include <numeric>
 #include <utility>
 
 namespace Halide {
 namespace Internal {
+
+namespace {
+
+bool all_same_as(const std::vector<Expr> &a, const std::vector<Expr> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (!a[i].same_as(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool all_same_as(const Region &a, const Region &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (!a[i].min.same_as(b[i].min) || !a[i].extent.same_as(b[i].extent)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
 
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
@@ -16,6 +45,7 @@ Expr Cast::make(Type t, Expr v) {
 
     Cast *node = new Cast;
     node->type = t;
+    node->set_hash(combine_hash(v.hash(), t.hash()));
     node->value = std::move(v);
     return node;
 }
@@ -32,6 +62,7 @@ Expr Reinterpret::make(Type t, Expr v) {
 
     Reinterpret *node = new Reinterpret;
     node->type = t;
+    node->set_hash(combine_hash(v.hash(), t.hash()));
     node->value = std::move(v);
     return node;
 }
@@ -43,6 +74,7 @@ Expr Add::make(Expr a, Expr b) {
 
     Add *node = new Add;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -55,6 +87,7 @@ Expr Sub::make(Expr a, Expr b) {
 
     Sub *node = new Sub;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -67,6 +100,7 @@ Expr Mul::make(Expr a, Expr b) {
 
     Mul *node = new Mul;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -79,6 +113,7 @@ Expr Div::make(Expr a, Expr b) {
 
     Div *node = new Div;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -91,6 +126,7 @@ Expr Mod::make(Expr a, Expr b) {
 
     Mod *node = new Mod;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -103,6 +139,7 @@ Expr Min::make(Expr a, Expr b) {
 
     Min *node = new Min;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -115,6 +152,7 @@ Expr Max::make(Expr a, Expr b) {
 
     Max *node = new Max;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -127,6 +165,7 @@ Expr EQ::make(Expr a, Expr b) {
 
     EQ *node = new EQ;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -139,6 +178,7 @@ Expr NE::make(Expr a, Expr b) {
 
     NE *node = new NE;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -151,6 +191,7 @@ Expr LT::make(Expr a, Expr b) {
 
     LT *node = new LT;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -163,6 +204,7 @@ Expr LE::make(Expr a, Expr b) {
 
     LE *node = new LE;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -175,6 +217,7 @@ Expr GT::make(Expr a, Expr b) {
 
     GT *node = new GT;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -187,6 +230,7 @@ Expr GE::make(Expr a, Expr b) {
 
     GE *node = new GE;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -201,6 +245,7 @@ Expr And::make(Expr a, Expr b) {
 
     And *node = new And;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -215,6 +260,7 @@ Expr Or::make(Expr a, Expr b) {
 
     Or *node = new Or;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -226,6 +272,7 @@ Expr Not::make(Expr a) {
 
     Not *node = new Not;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), 0));
     node->a = std::move(a);
     return node;
 }
@@ -241,6 +288,8 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
 
     Select *node = new Select;
     node->type = true_value.type();
+    node->set_hash(combine_hash(condition.hash(),
+                                true_value.hash(), false_value.hash()));
     node->condition = std::move(condition);
     node->true_value = std::move(true_value);
     node->false_value = std::move(false_value);
@@ -257,6 +306,8 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     Load *node = new Load;
     node->type = type;
     node->name = name;
+    node->set_hash(combine_hash((uint32_t)std::hash<std::string>{}(name),
+                                index.hash(), predicate.hash()));
     node->predicate = std::move(predicate);
     node->index = std::move(index);
     node->image = std::move(image);
@@ -264,6 +315,24 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     node->alignment = alignment;
     node->is_streaming = is_streaming;
     return node;
+}
+
+Expr Load::make(Type type, const std::string &name, Expr index) {
+    // Compute the lane count before moving out of index.
+    int lanes = type.lanes();
+    return make(type, name, std::move(index), Buffer<>(), Parameter(),
+                const_true(lanes), ModulusRemainder(), false);
+}
+
+Expr Load::with(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
+    if (index.same_as(this->index) &&
+        predicate.same_as(this->predicate) &&
+        alignment == this->alignment) {
+        return this;
+    }
+    // The element type is inherited, but the lane count comes from the index.
+    Type t = type.with_lanes(index.type().lanes());
+    return make(t, name, index, image, param, predicate, alignment, is_streaming);
 }
 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
@@ -274,6 +343,8 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
 
     Ramp *node = new Ramp;
     node->type = base.type().with_lanes(lanes * base.type().lanes());
+    node->set_hash(combine_hash((uint32_t)lanes,
+                                base.hash(), stride.hash()));
     node->base = std::move(base);
     node->stride = std::move(stride);
     node->lanes = lanes;
@@ -286,6 +357,7 @@ Expr Broadcast::make(Expr value, int lanes) {
 
     Broadcast *node = new Broadcast;
     node->type = value.type().with_lanes(lanes * value.type().lanes());
+    node->set_hash(combine_hash((uint32_t)lanes, value.hash()));
     node->value = std::move(value);
     node->lanes = lanes;
     return node;
@@ -298,9 +370,18 @@ Expr Let::make(const std::string &name, Expr value, Expr body) {
     Let *node = new Let;
     node->type = body.type();
     node->name = name;
+    node->set_hash(combine_hash((uint32_t)std::hash<std::string>{}(name),
+                                value.hash(), body.hash()));
     node->value = std::move(value);
     node->body = std::move(body);
     return node;
+}
+
+Expr Let::with(const Expr &value, const Expr &body) const {
+    if (value.same_as(this->value) && body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, value, body);
 }
 
 Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
@@ -314,6 +395,13 @@ Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
     return node;
 }
 
+Stmt LetStmt::with(const Expr &value, const Stmt &body) const {
+    if (value.same_as(this->value) && body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, value, body);
+}
+
 Stmt AssertStmt::make(Expr condition, Expr message) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
     internal_assert(message.type() == Int(32)) << "AssertStmt message must be an int:" << message << "\n";
@@ -324,6 +412,13 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
+Stmt AssertStmt::with(const Expr &condition, const Expr &message) const {
+    if (condition.same_as(this->condition) && message.same_as(this->message)) {
+        return this;
+    }
+    return make(condition, message);
+}
+
 Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body) {
     internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
@@ -332,6 +427,13 @@ Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body
     node->is_producer = is_producer;
     node->body = std::move(body);
     return node;
+}
+
+Stmt ProducerConsumer::with(const Stmt &body) const {
+    if (body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, is_producer, body);
 }
 
 Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body) {
@@ -364,6 +466,16 @@ Stmt For::make(const std::string &name,
     return node;
 }
 
+Stmt For::with(const Expr &min, const Expr &max, const Stmt &body) const {
+    if (min.same_as(this->min) &&
+        max.same_as(this->max) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, min, max, for_type, partition_policy,
+                device_api, body);
+}
+
 Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     internal_assert(semaphore.defined()) << "Acquire with undefined semaphore\n";
     internal_assert(body.defined()) << "Acquire with undefined body\n";
@@ -373,6 +485,15 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     node->count = std::move(count);
     node->body = std::move(body);
     return node;
+}
+
+Stmt Acquire::with(const Expr &semaphore, const Expr &count, const Stmt &body) const {
+    if (semaphore.same_as(this->semaphore) &&
+        count.same_as(this->count) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(semaphore, count, body);
 }
 
 Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
@@ -394,6 +515,24 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     return node;
 }
 
+Stmt Store::make(const std::string &name, Expr value, Expr index) {
+    // Compute the lane count before moving out of value.
+    int lanes = value.type().lanes();
+    return make(name, std::move(value), std::move(index), Parameter(),
+                const_true(lanes), ModulusRemainder(), false);
+}
+
+Stmt Store::with(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
+    if (value.same_as(this->value) &&
+        index.same_as(this->index) &&
+        predicate.same_as(this->predicate) &&
+        alignment == this->alignment) {
+        return this;
+    }
+    return make(name, value, index, param,
+                predicate, alignment, is_streaming);
+}
+
 Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
     internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
@@ -410,6 +549,16 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     node->args = args;
     node->predicate = predicate;
     return node;
+}
+
+Stmt Provide::with(const std::vector<Expr> &values, const std::vector<Expr> &args,
+                   const Expr &predicate) const {
+    if (all_same_as(values, this->values) &&
+        all_same_as(args, this->args) &&
+        predicate.same_as(this->predicate)) {
+        return this;
+    }
+    return make(name, values, args, predicate);
 }
 
 Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
@@ -437,6 +586,28 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     node->padding = padding;
     node->body = std::move(body);
     return node;
+}
+
+Stmt Allocate::with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+                    const Expr &new_expr) const {
+    if (all_same_as(extents, this->extents) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body) &&
+        new_expr.same_as(this->new_expr)) {
+        return this;
+    }
+    return make(name, type, memory_type, extents, condition,
+                body, new_expr, free_function, padding);
+}
+
+Stmt Allocate::with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const {
+    if (all_same_as(extents, this->extents) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, type, memory_type, extents, condition,
+                body, new_expr, free_function, padding);
 }
 
 int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
@@ -502,6 +673,15 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     return node;
 }
 
+Stmt Realize::with(const Region &bounds, const Expr &condition, const Stmt &body) const {
+    if (all_same_as(bounds, this->bounds) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, types, memory_type, bounds, condition, body);
+}
+
 Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
@@ -527,6 +707,15 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     node->condition = std::move(condition);
     node->body = std::move(body);
     return node;
+}
+
+Stmt Prefetch::with(const Region &bounds, const Expr &condition, const Stmt &body) const {
+    if (all_same_as(bounds, this->bounds) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, types, bounds, prefetch, condition, body);
 }
 
 Stmt Block::make(Stmt first, Stmt rest) {
@@ -558,6 +747,27 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
+std::vector<Stmt> Block::to_vector(const Stmt &s) {
+    std::vector<Stmt> result;
+    // Blocks are right-leaning: 'first' is never itself a Block.
+    Stmt rest = s;
+    while (const Block *b = rest.as<Block>()) {
+        result.push_back(b->first);
+        rest = b->rest;
+    }
+    if (rest.defined()) {
+        result.push_back(std::move(rest));
+    }
+    return result;
+}
+
+Stmt Block::with(const Stmt &first, const Stmt &rest) const {
+    if (first.same_as(this->first) && rest.same_as(this->rest)) {
+        return this;
+    }
+    return make(first, rest);
+}
+
 Stmt Fork::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Fork of undefined\n";
     internal_assert(rest.defined()) << "Fork of undefined\n";
@@ -576,6 +786,13 @@ Stmt Fork::make(Stmt first, Stmt rest) {
     return node;
 }
 
+Stmt Fork::with(const Stmt &first, const Stmt &rest) const {
+    if (first.same_as(this->first) && rest.same_as(this->rest)) {
+        return this;
+    }
+    return make(first, rest);
+}
+
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.
@@ -589,6 +806,15 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     return node;
 }
 
+Stmt IfThenElse::with(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const {
+    if (condition.same_as(this->condition) &&
+        then_case.same_as(this->then_case) &&
+        else_case.same_as(this->else_case)) {
+        return this;
+    }
+    return make(condition, then_case, else_case);
+}
+
 Stmt Evaluate::make(Expr v) {
     internal_assert(v.defined()) << "Evaluate of undefined\n";
 
@@ -597,14 +823,24 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
+Stmt Evaluate::with(const Expr &value) const {
+    if (value.same_as(this->value)) {
+        return this;
+    }
+    return make(value);
+}
+
+Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx,
+                bool follow_global_wrappers) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
+    FunctionPtr fp = func.get_contents();
+    fp.follow_global_wrappers = follow_global_wrappers;
     return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
-                func.get_contents(), idx, Buffer<>(), Parameter());
+                fp, idx, Buffer<>(), Parameter());
 }
 
 namespace {
@@ -626,14 +862,28 @@ constexpr const char *intrinsic_op_names[] = {
     "concat_bits",
     "count_leading_zeros",
     "count_trailing_zeros",
+    "cuda_await_copies",
+    "cuda_bypass_registers",
     "debug_to_file",
+    "declare_allocation",
+    "declare_box_required_at_production",
+    "declare_box_required_at_realization",
+    "declare_box_required_at_root",
+    "declare_box_required_inwards",
     "declare_box_touched",
+    "declare_stage",
     "div_round_to_zero",
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "fixed_to_float",
+    "get_runtime_streaming_vscale",
     "get_runtime_vscale",
     "get_user_context",
+    "gpu_shuffle_down",
+    "gpu_shuffle_idx",
+    "gpu_shuffle_up",
+    "gpu_shuffle_xor",
     "gpu_thread_barrier",
     "halving_add",
     "halving_sub",
@@ -654,6 +904,7 @@ constexpr const char *intrinsic_op_names[] = {
     "mod_round_to_zero",
     "mul_shift_right",
     "mux",
+    "offset_pointer",
     "popcount",
     "prefetch",
     "profiling_enable_instance_marker",
@@ -664,6 +915,7 @@ constexpr const char *intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "round",
+    "round_half_away",
     "rounding_halving_add",
     "rounding_mul_shift_right",
     "rounding_shift_left",
@@ -680,6 +932,7 @@ constexpr const char *intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
+    "specialization_branch_marker",
     "stream_store_fence",
     "strict_add",
     "strict_cast",
@@ -693,11 +946,14 @@ constexpr const char *intrinsic_op_names[] = {
     "strict_mul",
     "strict_sub",
     "stringify",
+    "struct_field_read",
+    "struct_pack",
     "target_arch_is",
     "target_bits",
     "target_has_feature",
     "target_natural_vector_size",
     "target_os_is",
+    "trace_bounds_required_marker",
     "undef",
     "unreachable",
     "unsafe_promise_clamped",
@@ -755,6 +1011,12 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     Call *node = new Call;
     node->type = type;
     node->name = name;
+    uint32_t h = combine_hash((uint32_t)std::hash<std::string>{}(name),
+                              (uint32_t)call_type, (uint32_t)value_index);
+    for (const auto &arg : args) {
+        h = combine_hash(h, arg.hash());
+    }
+    node->set_hash(h);
     node->args = args;
     node->call_type = call_type;
     node->func = std::move(func);
@@ -764,11 +1026,19 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     return node;
 }
 
+Expr Call::with(const std::vector<Expr> &args) const {
+    if (all_same_as(args, this->args)) {
+        return this;
+    }
+    return make(type, name, args, call_type, func, value_index, image, param);
+}
+
 Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;
     node->name = name;
+    node->set_hash((uint32_t)std::hash<std::string>{}(name));
     node->image = std::move(image);
     node->param = std::move(param);
     node->reduction_domain = std::move(reduction_domain);
@@ -791,6 +1061,14 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
 
     Shuffle *node = new Shuffle;
     node->type = element_ty.with_lanes((int)indices.size());
+    uint32_t h = 0;
+    for (int i : indices) {
+        h = combine_hash(h, (uint32_t)i);
+    }
+    for (const auto &v : vectors) {
+        h = combine_hash(h, v.hash());
+    }
+    node->set_hash(h);
     node->vectors = vectors;
     node->indices = indices;
     return node;
@@ -1002,6 +1280,20 @@ Stmt HoistedStorage::make(const std::string &name,
     return node;
 }
 
+Stmt Atomic::with(const Stmt &body) const {
+    if (body.same_as(this->body)) {
+        return this;
+    }
+    return make(producer_name, mutex_name, body);
+}
+
+Stmt HoistedStorage::with(const Stmt &body) const {
+    if (body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, body);
+}
+
 Expr VectorReduce::make(VectorReduce::Operator op,
                         Expr vec,
                         int lanes) {
@@ -1019,6 +1311,7 @@ Expr VectorReduce::make(VectorReduce::Operator op,
         << lanes << " " << vec.type().lanes() << "\n";
     VectorReduce *node = new VectorReduce;
     node->type = vec.type().with_lanes(lanes);
+    node->set_hash(combine_hash((uint32_t)op, vec.hash()));
     node->op = op;
     node->value = std::move(vec);
     return node;

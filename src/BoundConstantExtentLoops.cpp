@@ -62,9 +62,7 @@ protected:
             if (e == nullptr) {
                 // We're about to hard fail. Get really aggressive
                 // with the simplifier.
-                for (const auto &[var, value] : reverse_view(lets)) {
-                    extent = Let::make(var, value, extent);
-                }
+                extent = rewrap_used_lets(extent, lets);
                 extent = remove_likelies(extent);
                 extent = substitute_in_all_lets(extent);
                 extent = simplify(extent,
@@ -103,8 +101,7 @@ protected:
                 << "Loop over " << op->name << " has extent " << extent << ".\n";
             body = mutate(body);
 
-            return For::make(op->name, op->min, (op->min + e) - 1,
-                             op->for_type, op->partition_policy, op->device_api, std::move(body));
+            return op->with(op->min, (op->min + e) - 1, body);
         } else {
             return IRMutator::visit(op);
         }

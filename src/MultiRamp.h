@@ -7,6 +7,7 @@
  */
 
 #include "Expr.h"
+#include "ModulusRemainder.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -14,6 +15,7 @@ namespace Internal {
 
 class IRMutator;
 class IRVisitor;
+struct Load;
 
 /** A multi-dimensional ramp. I.e. a ramp of ramps of ramps of ramps...
  *
@@ -84,14 +86,15 @@ struct MultiRamp {
      * dim than the input (a single split may be introduced per input dim,
      * e.g. ramp(0,2,6)/4 requires splitting a dim of extent 6 into 2x3
      * because the quotient changes mid-dim). See div_or_mod_impl in
-     * MultiRamp.cpp for the derivation. O(d). */
-    bool div(const Expr &k);
+     * MultiRamp.cpp for the derivation. O(d). The optional callback gives
+     * the alignment of free variables in the base and strides. */
+    bool div(const Expr &k, const AlignmentLookup &alignment_of = nullptr);
 
     /** Euclidean mod by a scalar. Returns false if the denominator isn't a
      * positive integer constant, or if the remainder isn't a multiramp.
      * Same shape transformations as div. Rare cases where the remainder is
      * a multiramp but the quotient isn't are not recognized here. O(d). */
-    bool mod(const Expr &k);
+    bool mod(const Expr &k, const AlignmentLookup &alignment_of = nullptr);
 
     /** Construct an Expr which gives whether one multiramp is equal to
      * another in every lane. Assumes the total lane count matches. Returns
@@ -123,17 +126,17 @@ struct MultiRamp {
         int dim;
     };
 
-    /** Build an alias-free slice of *this by walking the dims innermost to
+    /** Build an alias-free slice of \*this by walking the dims innermost to
      * outermost and keeping each one only if the slice is still alias-free
      * after adding it. The kept dims are a *subset* of the original dims
      * (preserving their relative order), not necessarily a prefix — e.g. a
      * middle dim may be dropped while both inner and outer dims are kept.
-     * Replace *this with the resulting slice, and return a description of
-     * the dims that weren't kept (innermost first). Always succeeds; *this
+     * Replace \*this with the resulting slice, and return a description of
+     * the dims that weren't kept (innermost first). Always succeeds; \*this
      * may be reduced to a 0-dim scalar if no dim can be kept. The omitted
      * dims' contributions are NOT folded into base — callers usually want
      * to add back `var * omitted.stride` per omitted dim before using
-     * *this.
+     * \*this.
      *
      * All dimensions with stride zero or purely symbolic strides will be
      * peeled, and some constant stride dimensions may also be peeled if
@@ -151,6 +154,19 @@ struct MultiRamp {
      * a vector in the old lane order from one in the new order. */
     int rotate_stride_one_innermost();
 
+    /** Permute the lanes by a mask. `mask` gives, for each lane of the
+     * result, which lane of *this to take, so its lanes must be a permutation
+     * of [0, total_lanes()). That is the case exactly when its base is zero
+     * and its strides are the prefix products of its lane counts in some
+     * order, which makes it a reshaping of the lane index rather than a
+     * gather - a transpose being the two-dimensional example.
+     *
+     * The mask's dims and ours are refined against each other until both are
+     * groupings of a common shape, and the result is that shape reordered the
+     * way the mask asks for. Returns false, leaving *this unchanged, if the
+     * mask isn't a permutation or the two shapes have no common refinement. */
+    bool shuffle(const MultiRamp &mask);
+
     /** The dimensionality. May be lower than you expected, because this
      * gets flattened when possible by the operations above. */
     int dimensions() const;
@@ -160,6 +176,10 @@ struct MultiRamp {
 
     /** The multiramp as a nested series of ramps. */
     Expr to_expr() const;
+
+    /** Whether e is structurally equal to to_expr(), checked without
+     * constructing any IR. */
+    bool matches_expr(const Expr &e) const;
 
     /** Flatten the multiramp into a vector of 1D Ramps — one per outer
      * multi-index, each with inner_lanes = lanes[0] and stride =
@@ -210,9 +230,39 @@ struct MultiRamp {
                                         const std::vector<int> &pos) const;
 };
 
+/** Locate the subtile of a tile-memory allocation that an access refers to.
+ * Such an allocation may hold several tile registers as disjoint sub-tiles, and
+ * each one becomes its own allocation, so the accesses have to be partitioned
+ * between them.
+ *
+ * `subtiles` accumulates the distinct subtiles found so far. Returns the index
+ * within it of the one `index` refers to, appending a new one if this is the
+ * first access to it. Every subtile must have the same shape, and any two must
+ * be either identical or disjoint - a partial overlap can't be expressed as
+ * separate tile registers. Anything else is a user error, reported in terms of
+ * `description`, which should name the kind of memory (e.g. "AMX tile"). */
+int get_subtile(const Expr &index, const std::string &description,
+                std::vector<MultiRamp> *subtiles);
+
 /** Check if a vector Expr is a multiramp, and assign to result if so.
- * Returns false and leaves *result untouched if not. */
-bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
+ * Returns false and leaves *result untouched if not. The optional callback
+ * gives the alignment of free scalar variables, which can let a div or mod
+ * of a ramp with a symbolic base be recognized. */
+bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result,
+                  const AlignmentLookup &alignment_of = nullptr);
+
+/** Check if an Expr is a load of a multiramp, possibly wrapped in a cast, in
+ * broadcasts over dimensions the load doesn't depend on, and in the lane
+ * permutations the simplifier introduces when it rewrites a strided load as a
+ * dense load followed by a transpose. Returns the Load node underneath, with
+ * *result describing the addresses it loads in the lane order of `e`, or null
+ * if `e` isn't of that form (in which case *result is untouched).
+ *
+ * At most one cast is seen through, so `e.type().element_of()` and the
+ * returned Load's type together tell you whether the loaded values were cast,
+ * and to what. Callers that care about the type the values actually have -
+ * including its signedness - must use the former, not the Load's type. */
+const Load *is_load_of_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
 
 }  // namespace Internal
 }  // namespace Halide

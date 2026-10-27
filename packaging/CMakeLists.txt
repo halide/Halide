@@ -9,14 +9,22 @@ set(Halide_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Halide"
     CACHE STRING "Path to Halide CMake files"
 )
 
-set(Halide_INSTALL_HELPERSDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideHelpers"
-    CACHE STRING "Path to Halide platform-independent CMake files"
+set(Halide_INSTALL_COMPILERDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideCompiler"
+    CACHE STRING "Path to Halide's platform-specific compiled-library CMake files"
+)
+
+set(Halide_INSTALL_AUTOSCHEDULERSDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideAutoschedulers"
+    CACHE STRING "Path to Halide's autoscheduler plugin CMake files"
 )
 
 set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}" CACHE STRING "Path to Halide plugins folder")
 
 set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
     CACHE STRING "Path to Halide build-time tools and sources"
+)
+
+set(Halide_INSTALL_DOXYGENDIR "${CMAKE_INSTALL_DOCDIR}/html"
+    CACHE STRING "Path to Halide's generated documentation website (API reference and tutorial)"
 )
 
 ##
@@ -44,7 +52,7 @@ endfunction()
 
 install(
     TARGETS Halide Halide_Generator Halide_GenGen
-    EXPORT Halide_Targets
+    EXPORT HalideCompiler_Targets
     RUNTIME COMPONENT Halide_Runtime
     LIBRARY COMPONENT Halide_Runtime NAMELINK_COMPONENT Halide_Development
     ARCHIVE COMPONENT Halide_Development
@@ -54,9 +62,14 @@ install(
 if (WITH_AUTOSCHEDULERS)
     set(autoschedulers Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021)
 
+    # Autoscheduler plugins are compiled, platform-specific shared libraries,
+    # but they are dlopen()'d by the generator process at Generator run time
+    # and never linked, so they get their own export set/package
+    # (HalideAutoschedulers) instead of joining HalideCompiler's. See the
+    # ARCH_INDEPENDENT comment below for why that distinction matters.
     install(
         TARGETS ${autoschedulers}
-        EXPORT Halide_Interfaces
+        EXPORT HalideAutoschedulers_Targets
         LIBRARY
         DESTINATION ${Halide_INSTALL_PLUGINDIR}
         COMPONENT Halide_Runtime
@@ -76,11 +89,7 @@ endif ()
 # Runtime headers
 ##
 
-install(
-    TARGETS Halide_Runtime
-    EXPORT Halide_Interfaces
-    FILE_SET HEADERS COMPONENT Halide_Development
-)
+install(TARGETS Halide_Runtime EXPORT Halide_Targets FILE_SET HEADERS COMPONENT Halide_Development)
 
 ##
 # Halide tools
@@ -99,7 +108,7 @@ install(
 
 install(
     TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
-    EXPORT Halide_Interfaces
+    EXPORT Halide_Targets
     FILE_SET HEADERS COMPONENT Halide_Development DESTINATION ${Halide_INSTALL_TOOLSDIR}
 )
 
@@ -128,7 +137,7 @@ if (NOT CMAKE_INSTALL_RPATH)
     )
 endif ()
 
-install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
+install(TARGETS ${utils} EXPORT Halide_Targets COMPONENT Halide_Development)
 
 ##
 # READMEs and other top-level documentation
@@ -196,7 +205,15 @@ install(
     FILES
         "${Halide_SOURCE_DIR}/cmake/FindHalide_LLVM.cmake"
         "${Halide_SOURCE_DIR}/cmake/FindV8.cmake"
-    DESTINATION ${Halide_INSTALL_CMAKEDIR}
+    DESTINATION ${Halide_INSTALL_COMPILERDIR}
+    COMPONENT Halide_Development
+)
+
+install(
+    EXPORT HalideCompiler_Targets
+    DESTINATION ${Halide_INSTALL_COMPILERDIR}
+    NAMESPACE Halide::
+    FILE HalideCompiler-${type}-targets.cmake
     COMPONENT Halide_Development
 )
 
@@ -204,25 +221,48 @@ install(
     EXPORT Halide_Targets
     DESTINATION ${Halide_INSTALL_CMAKEDIR}
     NAMESPACE Halide::
-    FILE Halide-${type}-targets.cmake
+    FILE Halide-targets.cmake
     COMPONENT Halide_Development
 )
 
-install(
-    EXPORT Halide_Interfaces
-    DESTINATION ${Halide_INSTALL_HELPERSDIR}
-    NAMESPACE Halide::
-    FILE Halide-Interfaces.cmake
-    COMPONENT Halide_Development
-)
-
-write_basic_package_version_file(HalideConfigVersion.cmake COMPATIBILITY SameMajorVersion)
+if (WITH_AUTOSCHEDULERS)
+    install(
+        EXPORT HalideAutoschedulers_Targets
+        DESTINATION ${Halide_INSTALL_AUTOSCHEDULERSDIR}
+        NAMESPACE Halide::
+        FILE HalideAutoschedulers-targets.cmake
+        COMPONENT Halide_Development
+    )
+endif ()
 
 write_basic_package_version_file(
-    HalideHelpersConfigVersion.cmake
+    HalideConfigVersion.cmake
     COMPATIBILITY SameMajorVersion
     ARCH_INDEPENDENT
 )
+
+write_basic_package_version_file(HalideCompilerConfigVersion.cmake COMPATIBILITY SameMajorVersion)
+
+if (WITH_AUTOSCHEDULERS)
+    # Autoscheduler plugins are real compiled, platform-specific binaries, so
+    # this ARCH_INDEPENDENT is a deliberate abuse of the flag, not an oversight
+    # (contrast HalideCompilerConfigVersion.cmake just above, which is
+    # correctly *not* ARCH_INDEPENDENT for the same kind of compiled target).
+    # It's safe here specifically because nothing ever links against
+    # Halide::<Scheduler> -- add_halide_library(... AUTOSCHEDULER ...) only
+    # ever reads its $<TARGET_FILE:...> to pass to the generator executable's
+    # `-p` (plugin) command-line flag, which then dlopen()s it at Generator
+    # run time. That means this package's version check never needs to agree
+    # with the *consuming* project's word size, which is the one that
+    # matters when a baremetal/embedded toolchain file is in play -- e.g.
+    # CMAKE_SIZEOF_VOID_P reflects the cross-compiler's target ABI, not the
+    # host machine's, when CMAKE_CROSSCOMPILING is set.
+    write_basic_package_version_file(
+        HalideAutoschedulersConfigVersion.cmake
+        COMPATIBILITY SameMajorVersion
+        ARCH_INDEPENDENT
+    )
+endif ()
 
 if (WITH_PYTHON_BINDINGS)
     set(extra_paths Halide_Python_INSTALL_CMAKEDIR)
@@ -231,47 +271,66 @@ else ()
 endif ()
 
 configure_package_config_file(
-    common/HalideConfig.cmake HalideConfig.cmake
-    PATH_VARS Halide_INSTALL_HELPERSDIR ${extra_paths}
+    HalideConfig.cmake HalideConfig.cmake
+    PATH_VARS Halide_INSTALL_COMPILERDIR
     INSTALL_DESTINATION "${Halide_INSTALL_CMAKEDIR}"
     NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
 
 configure_package_config_file(
-    common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake
-    INSTALL_DESTINATION "${Halide_INSTALL_HELPERSDIR}"
-    NO_SET_AND_CHECK_MACRO
+    HalideCompilerConfig.cmake HalideCompilerConfig.cmake
+    PATH_VARS ${extra_paths}
+    INSTALL_DESTINATION "${Halide_INSTALL_COMPILERDIR}"
+    NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
+
+if (WITH_AUTOSCHEDULERS)
+    configure_package_config_file(
+        HalideAutoschedulersConfig.cmake HalideAutoschedulersConfig.cmake
+        INSTALL_DESTINATION "${Halide_INSTALL_AUTOSCHEDULERSDIR}"
+        NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    )
+endif ()
 
 install(
     FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
+        ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
+        ${Halide_SOURCE_DIR}/cmake/FindHalide_WebGPU.cmake
+        ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
+        ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
+        ${Halide_SOURCE_DIR}/cmake/MutexCopy.ps1
     DESTINATION ${Halide_INSTALL_CMAKEDIR}
     COMPONENT Halide_Development
 )
 
 install(
     FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfig.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfigVersion.cmake
-        ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
-        ${Halide_SOURCE_DIR}/cmake/FindHalide_WebGPU.cmake
-        ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
-        ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
-        ${Halide_SOURCE_DIR}/cmake/MutexCopy.ps1
-    DESTINATION ${Halide_INSTALL_HELPERSDIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/HalideCompilerConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/HalideCompilerConfigVersion.cmake
+    DESTINATION ${Halide_INSTALL_COMPILERDIR}
     COMPONENT Halide_Development
 )
 
+if (WITH_AUTOSCHEDULERS)
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/HalideAutoschedulersConfig.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/HalideAutoschedulersConfigVersion.cmake
+        DESTINATION ${Halide_INSTALL_AUTOSCHEDULERSDIR}
+        COMPONENT Halide_Development
+    )
+endif ()
+
 ##
-# Compute find_dependency calls for Halide
+# Compute find_dependency calls for HalideCompiler
 ##
 
 _Halide_install_pkgdeps(
-    FILE_NAME Halide-${type}-deps.cmake
-    EXPORT_FILE Halide-${type}-targets.cmake
-    DESTINATION "${Halide_INSTALL_CMAKEDIR}"
+    FILE_NAME HalideCompiler-${type}-deps.cmake
+    EXPORT_FILE HalideCompiler-${type}-targets.cmake
+    DESTINATION "${Halide_INSTALL_COMPILERDIR}"
     COMPONENT Halide_Development
 )
 
@@ -280,15 +339,11 @@ _Halide_install_pkgdeps(
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html TYPE DOC COMPONENT Halide_Documentation)
-endif ()
-
-##
-# Pip overrides
-##
-
-if (SKBUILD)
-    add_subdirectory(pip)
+    install(
+        DIRECTORY ${Halide_BINARY_DIR}/doc/sphinx/html/
+        DESTINATION ${Halide_INSTALL_DOXYGENDIR}
+        COMPONENT Halide_Doxygen
+    )
 endif ()
 
 ##
@@ -303,8 +358,8 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${Halide_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${Halide_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${Halide_VERSION_PATCH})
 set(CPACK_VERBATIM_VARIABLES YES)
-set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/common/Description.txt")
-set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/common/Welcome.txt")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/Description.txt")
+set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/Welcome.txt")
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
@@ -312,7 +367,7 @@ if (NOT CPACK_PACKAGE_FILE_NAME)
     set(arch_tag "${Halide_CMAKE_TARGET}")
     list(REMOVE_DUPLICATES arch_tag)
     list(SORT arch_tag)
-    if (arch_tag MATCHES "arm-64-osx;x86-64-osx")
+    if (arch_tag MATCHES "arm-64-macos;x86-64-macos")
         set(arch_tag "universal2")
     endif ()
     string(REPLACE ";" "_" arch_tag "${arch_tag}")
@@ -346,7 +401,19 @@ cpack_add_component(
 )
 
 cpack_add_component(
+    Halide_PythonRuntime
+    DISPLAY_NAME "Python runtime bindings"
+    DESCRIPTION "Python bindings for Halide runtime types and AOT modules"
+)
+
+cpack_add_component(
     Halide_Documentation
     DISPLAY_NAME "Halide documentation"
     DESCRIPTION "Documentation for Halide"
+)
+
+cpack_add_component(
+    Halide_Doxygen
+    DISPLAY_NAME "Halide documentation website"
+    DESCRIPTION "Generated Sphinx documentation website, including the API reference and tutorial (WITH_DOCS)"
 )

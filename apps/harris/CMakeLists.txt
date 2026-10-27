@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(harris.generator SOURCES harris_generator.cpp)
 
 # Filters
-add_halide_library(harris FROM harris.generator)
+add_halide_library(
+    harris_pipeline
+    FROM harris.generator
+    GENERATOR harris
+    FUNCTION_NAME harris
+    FILE_BASE_NAME harris
+)
 add_halide_library(
     harris_auto_schedule
     FROM harris.generator
@@ -26,13 +32,13 @@ add_halide_library(
 
 # Main executable
 add_executable(harris_filter filter.cpp)
-target_link_libraries(harris_filter PRIVATE Halide::ImageIO harris harris_auto_schedule)
+target_link_libraries(harris_filter PRIVATE Halide::ImageIO harris_pipeline harris_auto_schedule)
+add_custom_target(harris DEPENDS harris_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME harris_filter COMMAND harris_filter rgba.png out.png)
+    add_test(NAME harris_filter COMMAND harris_filter ${IMAGE} out.png)
     set_tests_properties(
         harris_filter
         PROPERTIES

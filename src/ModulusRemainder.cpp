@@ -25,8 +25,11 @@ public:
 
     ModulusRemainder result;
     Scope<ModulusRemainder> scope;
+    const AlignmentLookup *alignment_of = nullptr;
 
-    ComputeModulusRemainder(const Scope<ModulusRemainder> *s) {
+    ComputeModulusRemainder(const Scope<ModulusRemainder> *s,
+                            const AlignmentLookup *alignment_of = nullptr)
+        : alignment_of(alignment_of) {
         scope.set_containing_scope(s);
     }
 
@@ -114,6 +117,8 @@ void ComputeModulusRemainder::visit(const Reinterpret *) {
 void ComputeModulusRemainder::visit(const Variable *op) {
     if (const auto *m = scope.find(op->name)) {
         result = *m;
+    } else if (alignment_of && *alignment_of) {
+        result = (*alignment_of)(op->name);
     } else {
         result = ModulusRemainder{};
     }
@@ -309,6 +314,11 @@ ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> 
     return mr.analyze(e);
 }
 
+ModulusRemainder modulus_remainder(const Expr &e, const AlignmentLookup &alignment_of) {
+    ComputeModulusRemainder mr(nullptr, &alignment_of);
+    return mr.analyze(e);
+}
+
 bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
@@ -337,41 +347,20 @@ bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder, c
     }
 }
 
+bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder, const AlignmentLookup &alignment_of) {
+    ModulusRemainder result = modulus_remainder(expr, alignment_of);
+
+    if (mod(result.modulus, modulus) == 0) {
+        *remainder = mod(result.remainder, modulus);
+        return true;
+    } else {
+        return false;
+    }
+}
+
 ModulusRemainder ComputeModulusRemainder::analyze(const Expr &e) {
     e.accept(this);
     return result;
-}
-
-namespace {
-void check(const Expr &e, int64_t m, int64_t r) {
-    ModulusRemainder result = modulus_remainder(e);
-    if (result.modulus != m || result.remainder != r) {
-        std::cerr << "Test failed for modulus_remainder:\n";
-        std::cerr << "Expression: " << e << "\n";
-        std::cerr << "Correct modulus, remainder  = " << m << ", " << r << "\n";
-        std::cerr << "Computed modulus, remainder = "
-                  << result.modulus << ", "
-                  << result.remainder << "\n";
-        exit(1);
-    }
-}
-}  // namespace
-
-void modulus_remainder_test() {
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-
-    check((30 * x + 3) + (40 * y + 2), 10, 5);
-    check((6 * x + 3) * (4 * y + 1), 2, 1);
-    check(max(30 * x - 24, 40 * y + 31), 5, 1);
-    check(10 * x - 33 * y, 1, 0);
-    check(10 * x - 35 * y, 5, 0);
-    check(123, 0, 123);
-    check(Let::make("y", x * 3 + 4, y * 3 + 4), 9, 7);
-    // Check overflow
-    check((5045320 * x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
-
-    std::cout << "modulus_remainder test passed\n";
 }
 
 int64_t gcd(int64_t a, int64_t b) {

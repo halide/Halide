@@ -223,28 +223,26 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
+#else
+DECLARE_NO_INITMOD(arm)
+DECLARE_NO_INITMOD(arm_no_neon)
+#endif  // WITH_ARM
+
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
 DECLARE_CPP_INITMOD(arm_cpu_features)
 DECLARE_CPP_INITMOD(linux_arm_cpu_features)
 DECLARE_CPP_INITMOD(osx_arm_cpu_features)
 #else
-DECLARE_NO_INITMOD(arm)
-DECLARE_NO_INITMOD(arm_no_neon)
 DECLARE_NO_INITMOD(arm_cpu_features)
 DECLARE_NO_INITMOD(linux_arm_cpu_features)
 DECLARE_NO_INITMOD(osx_arm_cpu_features)
-#endif  // WITH_ARM
+#endif  // WITH_ARM || WITH_AARCH64
 
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
-DECLARE_CPP_INITMOD(aarch64_cpu_features)
-DECLARE_CPP_INITMOD(linux_aarch64_cpu_features)
-DECLARE_CPP_INITMOD(osx_aarch64_cpu_features)
 DECLARE_CPP_INITMOD_64(windows_aarch64_cpu_features_arm)
 #else
 DECLARE_NO_INITMOD(aarch64)
-DECLARE_NO_INITMOD(aarch64_cpu_features)
-DECLARE_NO_INITMOD(linux_aarch64_cpu_features)
-DECLARE_NO_INITMOD(osx_aarch64_cpu_features)
 DECLARE_NO_INITMOD(windows_aarch64_cpu_features_arm)
 #endif  // WITH_AARCH64
 
@@ -375,7 +373,7 @@ namespace {
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
-            if (target.os == Target::OSX) {
+            if (target.os == Target::MacOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
@@ -391,7 +389,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:32-n8:16:32-S128");
             }
         } else {  // 64-bit
-            if (target.os == Target::OSX) {
+            if (target.os == Target::MacOS) {
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
@@ -413,7 +411,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else {  // 64-bit
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
-            } else if (target.os == Target::OSX) {
+            } else if (target.os == Target::MacOS) {
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-n32:64-S128-Fn32");
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
@@ -491,7 +489,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNU);
-        } else if (target.os == Target::OSX) {
+        } else if (target.os == Target::MacOS) {
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::MacOSX);
         } else if (target.os == Target::Windows) {
@@ -549,7 +547,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             }
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
-        } else if (target.os == Target::OSX) {
+        } else if (target.os == Target::MacOS) {
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::MacOSX);
             triple.setArchName("arm64");
@@ -698,7 +696,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Comdats are left in for other platforms as they are required
     // for certain things on Windows and they are useful in general in
     // ELF based formats.
-    if (t.os == Target::IOS || t.os == Target::OSX) {
+    if (t.os == Target::IOS || t.os == Target::MacOS) {
         for (auto &global_obj : modules[0]->global_objects()) {
             global_obj.setComdat(nullptr);
         }
@@ -848,7 +846,7 @@ void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm
  * of mcjit, so we just rewrite uses of these functions to include an
  * underscore. */
 void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
-    string posix_fns[] = {"vsnprintf", "open", "close", "write", "fileno"};
+    string posix_fns[] = {"vsnprintf", "open", "close", "write", "fileno", "isatty"};
 
     string *posix_fns_begin = posix_fns;
     string *posix_fns_end = posix_fns + sizeof(posix_fns) / sizeof(posix_fns[0]);
@@ -1038,7 +1036,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
-            } else if (t.os == Target::OSX) {
+            } else if (t.os == Target::MacOS) {
                 add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
@@ -1300,24 +1298,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
             }
             if (t.arch == Target::ARM) {
-                if (t.bits == 64) {
-                    if (t.os == Target::Android || t.os == Target::Linux) {
-                        modules.push_back(get_initmod_linux_aarch64_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
-                        modules.push_back(get_initmod_osx_aarch64_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::Windows) {
-                        modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
-                    } else {
-                        modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
-                    }
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
+                } else if (t.os == Target::MacOS || t.os == Target::IOS) {
+                    modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
+                } else if (t.bits == 64 && t.os == Target::Windows) {
+                    modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
                 } else {
-                    if (t.os == Target::Android || t.os == Target::Linux) {
-                        modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
-                        modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
-                    } else {
-                        modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
-                    }
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
             }
             if (t.arch == Target::POWERPC) {

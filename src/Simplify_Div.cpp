@@ -84,11 +84,30 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
          rewrite(select(x, c0, c1) / c2, select(x, fold(c0 / c2), fold(c1 / c2))) ||
          (!op->type.is_float() &&
           rewrite(x / x, select(x == 0, 0, 1))) ||
+
+         // Facts learned higher up may say which side of a max or min
+         // survives the division. Test them before the rewrites below, which
+         // would destroy the form.
+         //
+         // For c0 > 0 and floor division, x >= y/c0 iff c0*x - y >= 1 - c0,
+         // and x <= y/c0 iff c0*x - y <= 0. The c0 on x isn't in x's own IR,
+         // so linear_{min,max}_diff take it explicitly. Learning peels
+         // divisions too, so a fact spelled either way round (c0*x < y or
+         // x < y/c0) is stored in the multiplied-out form asked for here.
+         // Unlike can_prove this only looks facts up, never building an Expr
+         // and so never recursing back into the simplifier.
+         (no_overflow(op->type) && has_facts() &&
+          (rewrite(max(x * c0, y) / c0, x, c0 > 0 && linear_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
+           rewrite(max(y, x * c0) / c0, x, c0 > 0 && linear_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
+           rewrite(min(x * c0, y) / c0, x, c0 > 0 && linear_max_diff(x, c0, y, 1, this) <= 0) ||
+           rewrite(min(y, x * c0) / c0, x, c0 > 0 && linear_max_diff(x, c0, y, 1, this) <= 0) ||
+           false)) ||
+
          (no_overflow(op->type) &&
           // Fold repeated division
           (rewrite((x / c0) / c2, x / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2)) ||
            rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2) && !overflows(c0 * c1)) ||
-           rewrite((x * c0) / c1, x / fold(c1 / c0), c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
+           rewrite((x * c0) / c1, x / fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
            // Pull out terms that are a multiple of the denominator
            rewrite((x * c0) / c1, x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite(min((x * c0), c1) / c2, min(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
@@ -99,6 +118,10 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((x * c1 - y) / c0, (0 - y) / c0 - x, c0 + c1 == 0) ||
            rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+
+           (!op->type.is_float() &&
+            (rewrite((x * c0 + y) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)) ||
+             rewrite((y + x * c0) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)))) ||
 
            rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
@@ -130,6 +153,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+
+           rewrite(((0 - x) - x) / 2, -x) ||
 
            /** In (x + c0) / c1, when can we pull the constant
                addition out of the numerator? An obvious answer is
@@ -204,9 +229,34 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            (op->type.is_float() && rewrite(x / c0, x * fold(1 / c0))))) ||
          (no_overflow_int(op->type) &&
           (rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), ramp(x / c1, fold(c0 / c1), lanes), (c0 % c1 == 0)) ||
-           rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), broadcast(x / c1, lanes),
-                   // First and last lanes are the same when...
-                   can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
+           // Every lane gives the same quotient when the base is a multiple of
+           // the denominator and the ramp doesn't span far enough to reach the
+           // next one. In the affine case the offset just has to leave room
+           // within its own multiple for the rest of the ramp.
+           rewrite(ramp(x * c1, c0, lanes) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 && c0 * (lanes - 1) < c2) ||
+           rewrite(ramp(x * c1 + c5, c0, lanes) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2) + fold(c5 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 &&
+                       c5 % c2 + c0 * (lanes - 1) < c2) ||
+           // The rules above require the numerator and the denominator to be
+           // vectorized the same way, which they aren't when the numerator is
+           // a nested vector. Push the division inwards to line them up.
+           rewrite(broadcast(x, c0) / broadcast(y, c1),
+                   broadcast(x / broadcast(y, fold(c1 / c0)), c0),
+                   c0 < c1 && c1 % c0 == 0) ||
+           // The same argument, for a ramp whose lanes are each repeated by an
+           // inner broadcast. Repeating a lane doesn't change the set of
+           // values, so the span condition is unchanged.
+           rewrite(ramp(broadcast(x * c1, c3), broadcast(c0, c3), c4) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 && c0 * (c4 - 1) < c2 &&
+                       c3 * c4 == lanes) ||
+           rewrite(ramp(broadcast(x * c1 + c5, c3), broadcast(c0, c3), c4) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2) + fold(c5 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 &&
+                       c5 % c2 + c0 * (c4 - 1) < c2 && c3 * c4 == lanes))) ||
          (no_overflow_scalar_int(op->type) &&
           (rewrite(x / -1, -x) ||
            (denominator_non_zero && rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1)) ||
@@ -217,7 +267,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
                    x * fold(c0 / c2) + fold(c1 / c2),
                    c2 > 0 && c0 % c2 == 0) ||
            // A very specific pattern that comes up in bounds in upsampling code.
-           rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
+           rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1) ||
+           rewrite((0 - x % 2) / 2, (0 - x % 2)) ||
+           false)))) {
         return mutate(rewrite.result, info);
     }
 

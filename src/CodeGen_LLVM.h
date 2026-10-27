@@ -38,6 +38,7 @@ class VectorType;
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <variant>
 #include <vector>
@@ -167,6 +168,14 @@ protected:
     void set_effective_vscale(int vscale);
 
     std::unique_ptr<llvm::Module> module;
+
+    /** The names of the symbols present in the initial (runtime-only) module,
+     * captured before any pipeline functions are emitted. Used to identify
+     * runtime-internal symbols for runtime-namespace renaming, including those
+     * (e.g. some GPU device-runtime helpers) that are neither halide_-prefixed
+     * nor in the Halide::Runtime::Internal namespace. */
+    std::set<std::string> runtime_symbols;
+
     llvm::Function *function = nullptr;
     llvm::LLVMContext *context = nullptr;
     std::unique_ptr<llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>> builder;

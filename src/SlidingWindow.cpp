@@ -2,7 +2,6 @@
 
 #include "Bounds.h"
 #include "CSE.h"
-#include "CompilerLogger.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -351,19 +350,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (monotonic_min == Monotonic::Increasing ||
                 monotonic_min == Monotonic::Constant) {
                 can_slide_up = true;
-            } else if (monotonic_min == Monotonic::Unknown) {
-                if (get_compiler_logger()) {
-                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, min_required);
-                }
             }
 
             if (monotonic_max == Monotonic::Decreasing ||
                 monotonic_max == Monotonic::Constant) {
                 can_slide_down = true;
-            } else if (monotonic_max == Monotonic::Unknown) {
-                if (get_compiler_logger()) {
-                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, max_required);
-                }
             }
 
             if (!can_slide_up && !can_slide_down) {
@@ -583,7 +574,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // Unpack it back into the for
             const LetStmt *l = s.as<LetStmt>();
             internal_assert(l);
-            return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, l->body);
+            return op->with(op->min, op->max, l->body);
         } else if (is_monotonic(min, loop_var) != Monotonic::Constant ||
                    is_monotonic(max, loop_var) != Monotonic::Constant) {
             debug(3) << "Not entering loop over " << op->name
@@ -610,11 +601,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             replacements.erase(iter);
         }
 
-        if (new_body.same_as(op->body) && value.same_as(op->value)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, value, new_body);
-        }
+        return op->with(value, new_body);
     }
 
 public:
@@ -739,10 +726,8 @@ class SubstitutePrefetchVar : public IRMutator {
                 p.from = new_var;
             }
             return Prefetch::make(op->name, op->types, op->bounds, p, op->condition, std::move(new_body));
-        } else if (!new_body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(new_body));
         } else {
-            return op;
+            return op->with(op->bounds, op->condition, new_body);
         }
     }
 
@@ -801,12 +786,7 @@ class SlidingWindow : public IRMutator {
             slid_dimensions.erase(slid_it);
         }
 
-        if (new_body.same_as(op->body)) {
-            return op;
-        } else {
-            return Realize::make(op->name, op->types, op->memory_type,
-                                 op->bounds, op->condition, new_body);
-        }
+        return op->with(op->bounds, op->condition, new_body);
     }
 
     Stmt visit(const For *op) override {
@@ -940,12 +920,7 @@ class AddLoopMinOrig : public IRMutator {
         Expr min = mutate(op->min);
         Expr max = mutate(op->max);
 
-        Stmt result;
-        if (body.same_as(op->body) && min.same_as(op->min) && max.same_as(op->max)) {
-            result = op;
-        } else {
-            result = For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
-        }
+        Stmt result = op->with(min, max, body);
         return LetStmt::make(op->name + ".loop_min.orig", op->min, result);
     }
 };

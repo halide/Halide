@@ -130,8 +130,6 @@ bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
                                        const std::vector<std::string> &order,
                                        const std::map<std::string, Function> &env);
 
-void propagate_estimate_test();
-
 }  // namespace Internal
 }  // namespace Halide
 

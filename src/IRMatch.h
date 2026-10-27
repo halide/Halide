@@ -54,8 +54,6 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Exp
  * for substituting the results of expr_match into a pattern expression. */
 Expr with_lanes(const Expr &x, int lanes);
 
-void expr_match_test();
-
 /** An alternative template-metaprogramming approach to expression
  * matching. Potentially more efficient. We lift the expression
  * pattern into a type, and then use force-inlined functions to
@@ -453,6 +451,15 @@ struct WildConst {
         return make_const_expr(val, type);
     }
 
+    // The matched value itself, no IR built. Integer constants only.
+    HALIDE_ALWAYS_INLINE
+    int64_t bound_const_int(MatcherState &state) const noexcept {
+        halide_scalar_value_t val;
+        Type type;
+        state.get_bound_const(i, val, type);
+        return val.u.i64;
+    }
+
     constexpr static bool foldable = true;
 
     [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
@@ -489,6 +496,13 @@ struct Wild {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, Type type_hint) const {
+        return state.get_binding(i);
+    }
+
+    // The bound node itself. Unlike make() this doesn't even touch a reference
+    // count, which lets predicates inspect what matched for free.
+    HALIDE_ALWAYS_INLINE
+    const BaseExprNode *bound_node(MatcherState &state) const noexcept {
         return state.get_binding(i);
     }
 
@@ -549,6 +563,12 @@ struct IntLiteral {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const IntLiteral &b, MatcherState &state) const noexcept {
         return v == b.v;
+    }
+
+    // The literal value itself, no IR built.
+    HALIDE_ALWAYS_INLINE
+    int64_t bound_const_int(MatcherState &state) const noexcept {
+        return v;
     }
 
     HALIDE_ALWAYS_INLINE
@@ -2556,7 +2576,7 @@ struct CanProve {
     // Includes a raw call to an inlined make method, so don't inline.
     [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
         Expr condition = a.make(state, {});
-        condition = prover->mutate(condition, nullptr);
+        condition = prover->simplify_can_prove_condition(condition);
         val.u.u64 = is_const_one(condition);
         ty = Bool(condition.type().lanes());
         return false;
@@ -2572,6 +2592,115 @@ HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<declt
 template<typename A, typename Prover>
 std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     s << "can_prove(" << op.a << ")";
+    return s;
+}
+
+// Detects patterns that can hand back the node they matched without building
+// anything. The predicates below are restricted to these, which is what makes
+// them allocation-free: it is a compile error to ask about a derived expression
+// like min_diff(x, y + 1). Put the offset on the other side of the comparison
+// instead: min_diff(x, y) >= 1.
+template<typename A, typename = void>
+struct has_bound_node : std::false_type {};
+
+template<typename A>
+struct has_bound_node<A, std::void_t<decltype(std::declval<const A &>().bound_node(std::declval<MatcherState &>()))>>
+    : std::true_type {};
+
+// As has_bound_node, for terms whose constant reads out as a plain int64_t.
+template<typename A, typename = void>
+struct has_bound_const_int : std::false_type {};
+
+template<typename A>
+struct has_bound_const_int<A, std::void_t<decltype(std::declval<const A &>().bound_const_int(std::declval<MatcherState &>()))>>
+    : std::true_type {};
+
+// Bounds on the linear combination (ca * a - cb * b) of two matched
+// expressions, derived from the facts the prover has learned. Used as
+// (min_diff(x, y, this) >= 0) and friends. ca and cb are constants already in
+// hand (matched WildConsts, typically) that sit outside a and b's own IR, so
+// peeling can't find them. Allocation-free: ca/cb read as raw ints, a/b as raw
+// bound nodes. When nothing is known the fold reports overflow, which the
+// rewriter already treats as a failed predicate, so the rule simply doesn't
+// fire.
+template<typename A, typename CA, typename B, typename CB, typename Prover, bool is_min>
+struct LinearDiffBound {
+    struct pattern_tag {};
+    A a;
+    CA ca;
+    B b;
+    CB cb;
+    Prover *prover;
+
+    static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
+                  "The a/b operands of min_diff/max_diff must be wildcards, so "
+                  "that testing the predicate doesn't have to construct any IR.");
+    static_assert(has_bound_const_int<CA>::value && has_bound_const_int<CB>::value,
+                  "The coefficient operands of linear_min_diff/linear_max_diff "
+                  "must be WildConsts or integer literals.");
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<CA>::mask | bindings<B>::mask | bindings<CB>::mask;
+
+    // An integer-valued term of a comparison.
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::IntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+        int64_t result = 0;
+        bool known;
+        if (is_min) {
+            known = prover->known_min_diff(a.bound_node(state), ca.bound_const_int(state),
+                                           b.bound_node(state), cb.bound_const_int(state), &result);
+        } else {
+            known = prover->known_max_diff(a.bound_node(state), ca.bound_const_int(state),
+                                           b.bound_node(state), cb.bound_const_int(state), &result);
+        }
+        val.u.i64 = result;
+        ty = Int(64);
+        // An unknown bound reports as overflow, failing the predicate.
+        return !known;
+    }
+};
+
+template<typename A, typename CA, typename B, typename CB, typename Prover>
+HALIDE_ALWAYS_INLINE auto linear_min_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, true> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb), p};
+}
+
+template<typename A, typename CA, typename B, typename CB, typename Prover>
+HALIDE_ALWAYS_INLINE auto linear_max_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, false> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb), p};
+}
+
+// Bounds on the plain difference (a - b).
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto min_diff(A &&a, B &&b, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, Prover, true> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}, p};
+}
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto max_diff(A &&a, B &&b, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, Prover, false> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}, p};
+}
+
+template<typename A, typename CA, typename B, typename CB, typename Prover, bool is_min>
+std::ostream &operator<<(std::ostream &s, const LinearDiffBound<A, CA, B, CB, Prover, is_min> &op) {
+    s << (is_min ? "linear_min_diff(" : "linear_max_diff(") << op.a << ", " << op.ca << ", " << op.b << ", " << op.cb << ")";
     return s;
 }
 
@@ -2607,6 +2736,60 @@ HALIDE_ALWAYS_INLINE auto is_float(A &&a) noexcept -> IsFloat<decltype(pattern_a
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
+    return s;
+}
+
+// Whether a matched expression is known to lie in the half-open range
+// [lo, hi), using only bounds the prover already has; nothing is simplified.
+// Used as in_range(y, 0, c0, this). The range is half-open so that a rule can
+// pass a matched constant as the end directly: lo and hi must be WildConsts or
+// integer literals (has_bound_const_int), so a folded bound such as
+// fold(c0 - 1) isn't accepted. Allocation-free: a is read as a raw bound node,
+// lo and hi as raw ints. Only an integer constant or a
+// variable with known constant bounds (or a broadcast of either) qualifies.
+// Anything else fails the predicate, so the rule simply doesn't fire.
+template<typename A, typename Lo, typename Hi, typename Prover>
+struct InRange {
+    struct pattern_tag {};
+    A a;
+    Lo lo;
+    Hi hi;
+    Prover *prover;
+
+    static_assert(has_bound_node<A>::value,
+                  "The first operand of in_range must be a wildcard, so that "
+                  "testing the predicate doesn't have to construct any IR.");
+    static_assert(has_bound_const_int<Lo>::value && has_bound_const_int<Hi>::value,
+                  "The range operands of in_range must be WildConsts or "
+                  "integer literals.");
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<Lo>::mask | bindings<Hi>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+        const BaseExprNode *node = a.bound_node(state);
+        val.u.u64 = prover->known_in_range(node, lo.bound_const_int(state), hi.bound_const_int(state));
+        ty = Bool(node->type.lanes());
+        return false;
+    }
+};
+
+template<typename A, typename Lo, typename Hi, typename Prover>
+HALIDE_ALWAYS_INLINE auto in_range(A &&a, Lo &&lo, Hi &&hi, Prover *p) noexcept
+    -> InRange<decltype(pattern_arg(a)), decltype(pattern_arg(lo)), decltype(pattern_arg(hi)), Prover> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), pattern_arg(lo), pattern_arg(hi), p};
+}
+
+template<typename A, typename Lo, typename Hi, typename Prover>
+std::ostream &operator<<(std::ostream &s, const InRange<A, Lo, Hi, Prover> &op) {
+    s << "in_range(" << op.a << ", " << op.lo << ", " << op.hi << ")";
     return s;
 }
 

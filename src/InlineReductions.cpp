@@ -40,12 +40,7 @@ private:
         internal.push(op->name);
         Expr body = mutate(op->body);
         internal.pop(op->name);
-        if (value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else {
-            return Let::make(op->name, value, body);
-        }
+        return op->with(value, body);
     }
 
     Expr visit(const Variable *v) override {

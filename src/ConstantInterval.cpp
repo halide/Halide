@@ -1,8 +1,10 @@
 #include "ConstantInterval.h"
 
+#include "ConstantBounds.h"
 #include "Error.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
@@ -101,6 +103,14 @@ bool ConstantInterval::contains(uint64_t x) const {
     }
 }
 
+bool ConstantInterval::contains(const ConstantInterval &other) const {
+    // Every value in `other` must lie within this interval. Where `other` is
+    // unbounded, this must be unbounded on the same side to contain it.
+    const bool too_small = min_defined && (!other.min_defined || other.min < min);
+    const bool too_large = max_defined && (!other.max_defined || other.max > max);
+    return !(too_small || too_large);
+}
+
 ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
     ConstantInterval result = a;
     result.include(b);
@@ -137,6 +147,17 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
     // happens when the intersected intervals do not overlap.
     internal_assert(!result.is_bounded() || result.min <= result.max)
         << "Empty ConstantInterval constructed in make_intersection";
+    return result;
+}
+
+ConstantInterval covering_constant_interval(const Interval &in) {
+    auto min_bounds = constant_integer_bounds(in.min);
+    auto max_bounds = constant_integer_bounds(in.max);
+    ConstantInterval result;
+    result.min = min_bounds.min;
+    result.min_defined = min_bounds.min_defined;
+    result.max = max_bounds.max;
+    result.max_defined = max_bounds.max_defined;
     return result;
 }
 

@@ -112,8 +112,6 @@ public:
     void mutate(IRMutator *);
 };
 
-void split_predicate_test();
-
 }  // namespace Internal
 }  // namespace Halide
 

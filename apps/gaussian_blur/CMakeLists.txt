@@ -40,15 +40,14 @@ file(GENERATE
 )
 
 # Main executable
-add_executable(gaussian_blur_filter filter.cpp)
-target_link_libraries(gaussian_blur_filter PRIVATE Halide::ImageIO ${VARIANTS})
-target_include_directories(gaussian_blur_filter PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+add_executable(gaussian_blur filter.cpp)
+target_link_libraries(gaussian_blur PRIVATE Halide::ImageIO ${VARIANTS})
+target_include_directories(gaussian_blur PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} gray.png COPYONLY)
-    add_test(NAME gaussian_blur_filter COMMAND gaussian_blur_filter gray.png 10)
+    add_test(NAME gaussian_blur_filter COMMAND gaussian_blur ${IMAGE} 10)
     set_tests_properties(
         gaussian_blur_filter
         PROPERTIES

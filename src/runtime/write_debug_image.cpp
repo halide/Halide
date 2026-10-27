@@ -371,6 +371,9 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         }
         uint32_t name_size = (uint32_t)(end - start);
         char array_name[256];
+        if (name_size > sizeof(array_name)) {
+            return halide_error_code_debug_to_file_failed;
+        }
         char *dst = array_name;
         while (start != end) {
             *dst++ = *start++;

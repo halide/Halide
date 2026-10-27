@@ -43,7 +43,8 @@ public:
     CodeGen_C(std::ostream &dest,
               const Target &target,
               OutputKind output_kind = CImplementation,
-              const std::string &include_guard = "");
+              const std::string &include_guard = "",
+              const std::string &runtime_prefixes_import_prefix = "");
     ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
@@ -53,8 +54,6 @@ public:
     const Target &get_target() const {
         return target;
     }
-
-    static void test();
 
 protected:
     enum class IntegerSuffixStyle {
@@ -93,6 +92,12 @@ protected:
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
     OutputKind output_kind;
+
+    /** If non-empty, the runtime's halide_-prefixed C ABI functions are renamed
+     * with this prefix (replacing the leading "halide_"), so the generated
+     * source imports a namespaced runtime rather than the stock one. Applies to
+     * C/C++ *implementation* output only. */
+    std::string runtime_prefixes_import_prefix;
 
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
@@ -306,6 +311,18 @@ protected:
                                       const MetadataNameMap &metadata_name_map);
     void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
 };
+
+/** @name Internal-only accessors for test/correctness/codegen_c.cpp
+ * The underlying binary2cpp-generated blobs aren't visible outside
+ * libHalide (they're filtered out of the exported-symbols list), so
+ * expose their (CRLF-normalized) contents through ordinary functions
+ * in the Halide::Internal namespace instead.
+ */
+///@{
+std::string codegen_c_test_prologue_source();
+std::string codegen_c_test_runtime_header_source();
+std::string codegen_c_test_inlined_c_source();
+///@}
 
 }  // namespace Internal
 }  // namespace Halide

@@ -95,12 +95,7 @@ protected:
             for (int ln = 0; ln < s->value.type().lanes(); ln++) {
                 scalar_stmts.push_back(IfThenElse::make(
                     extract_lane(s->predicate, ln),
-                    Store::make(s->name,
-                                mutate(extract_lane(s->value, ln)),
-                                mutate(extract_lane(s->index, ln)),
-                                s->param,
-                                const_true(),
-                                s->alignment + ln)));
+                    s->with(mutate(extract_lane(s->value, ln)), mutate(extract_lane(s->index, ln)), const_true(), s->alignment + ln)));
             }
             return Block::make(scalar_stmts);
         } else {
@@ -112,14 +107,7 @@ protected:
         if (!is_const_one(op->predicate)) {
             std::vector<Expr> lane_values;
             for (int ln = 0; ln < op->type.lanes(); ln++) {
-                Expr load_expr = Load::make(op->type.element_of(),
-                                            op->name,
-                                            extract_lane(op->index, ln),
-                                            op->image,
-                                            op->param,
-                                            const_true(),
-                                            op->alignment + ln,
-                                            op->is_streaming);
+                Expr load_expr = op->with(extract_lane(op->index, ln), const_true(), op->alignment + ln);
                 lane_values.push_back(Call::make(load_expr.type(),
                                                  Call::if_then_else,
                                                  {extract_lane(op->predicate, ln),

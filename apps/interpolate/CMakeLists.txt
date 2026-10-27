@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(interpolate.generator SOURCES interpolate_generator.cpp)
 
 # Filters
-add_halide_library(interpolate FROM interpolate.generator)
+add_halide_library(
+    interpolate_pipeline
+    FROM interpolate.generator
+    GENERATOR interpolate
+    FUNCTION_NAME interpolate
+    FILE_BASE_NAME interpolate
+)
 add_halide_library(
     interpolate_auto_schedule
     FROM interpolate.generator
@@ -29,15 +35,15 @@ target_link_libraries(
     interpolate_filter
     PRIVATE
     Halide::ImageIO
-    interpolate
+    interpolate_pipeline
     interpolate_auto_schedule
 )
+add_custom_target(interpolate DEPENDS interpolate_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME interpolate_filter COMMAND interpolate_filter rgba.png out.png)
+    add_test(NAME interpolate_filter COMMAND interpolate_filter ${IMAGE} out.png)
     set_tests_properties(
         interpolate_filter
         PROPERTIES

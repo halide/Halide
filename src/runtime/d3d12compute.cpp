@@ -3090,6 +3090,8 @@ WEAK halide_error_code_t d3d12_create_context(void *user_context) {
     }
 }
 
+WEAK int halide_default_d3d12compute_release_context(void *user_context);
+
 // The default implementation of halide_d3d12compute_acquire_context uses the global
 // pointers above, and serializes access with a mutex.
 // Overriding implementations of acquire/release must implement the following
@@ -3099,8 +3101,8 @@ WEAK halide_error_code_t d3d12_create_context(void *user_context) {
 // - A call to halide_acquire_d3d12compute_context is followed by a matching call to
 //   halide_release_d3d12compute_context. halide_acquire_d3d12compute_context should block while a
 //   previous call (if any) has not yet been released via halide_release_d3d12compute_context.
-WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12compute_device **device_ret,
-                                             halide_d3d12compute_command_queue **queue_ret, bool create) {
+WEAK int halide_default_d3d12compute_acquire_context(void *user_context, halide_d3d12compute_device **device_ret,
+                                                     halide_d3d12compute_command_queue **queue_ret, bool create) {
     TRACELOG;
 
 #ifdef HALIDE_D3D12_TRACE_TIME
@@ -3120,7 +3122,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     if (create && (device == nullptr)) {
         auto error = d3d12_create_context(user_context);
         if (error) {
-            (void)halide_d3d12compute_release_context(user_context);  // ignore error
+            (void)halide_default_d3d12compute_release_context(user_context);  // ignore error
             return error;
         }
     }
@@ -3135,10 +3137,48 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     return halide_error_code_success;
 }
 
-WEAK int halide_d3d12compute_release_context(void *user_context) {
+WEAK int halide_default_d3d12compute_release_context(void *user_context) {
     TRACELOG;
     halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
+}
+
+}  // extern "C"
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace D3D12Compute {
+
+WEAK halide_d3d12compute_acquire_context_t acquire_context = halide_default_d3d12compute_acquire_context;
+WEAK halide_d3d12compute_release_context_t release_context = halide_default_d3d12compute_release_context;
+
+}  // namespace D3D12Compute
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
+WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12compute_device **device_ret,
+                                             halide_d3d12compute_command_queue **queue_ret, bool create) {
+    return D3D12Compute::acquire_context(user_context, device_ret, queue_ret, create);
+}
+
+WEAK halide_d3d12compute_acquire_context_t halide_set_d3d12compute_acquire_context(halide_d3d12compute_acquire_context_t handler) {
+    halide_d3d12compute_acquire_context_t result = D3D12Compute::acquire_context;
+    D3D12Compute::acquire_context = handler;
+    return result;
+}
+
+WEAK int halide_d3d12compute_release_context(void *user_context) {
+    return D3D12Compute::release_context(user_context);
+}
+
+WEAK halide_d3d12compute_release_context_t halide_set_d3d12compute_release_context(halide_d3d12compute_release_context_t handler) {
+    halide_d3d12compute_release_context_t result = D3D12Compute::release_context;
+    D3D12Compute::release_context = handler;
+    return result;
 }
 
 }  // extern "C"

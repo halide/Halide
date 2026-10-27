@@ -173,10 +173,10 @@ Interval bounds_of_lanes(const Expr &e) {
         Interval ia = bounds_of_lanes(let->value);
         Interval ib = bounds_of_lanes(let->body);
         if (expr_uses_var(ib.min, let->name)) {
-            ib.min = Let::make(let->name, let->value, ib.min);
+            ib.min = let->with(let->value, ib.min);
         }
         if (expr_uses_var(ib.max, let->name)) {
-            ib.max = Let::make(let->name, let->value, ib.max);
+            ib.max = let->with(let->value, ib.max);
         }
         return ib;
     }
@@ -224,13 +224,16 @@ protected:
     }
 
     Expr visit(const Load *op) override {
-        return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_streaming);
+        return op->with(mutate_index(op->name, op->index),
+                        mutate(op->predicate),
+                        mutate_alignment(op->name, op->alignment));
     }
 
     Stmt visit(const Store *op) override {
-        return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_streaming);
+        return op->with(mutate(op->value),
+                        mutate_index(op->name, op->index),
+                        mutate(op->predicate),
+                        mutate_alignment(op->name, op->alignment));
     }
 
 public:
@@ -304,7 +307,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment, op->is_streaming);
+        return op->with(index, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -335,7 +338,7 @@ protected:
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
+        return op->with(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Call *op) override {
@@ -424,8 +427,36 @@ protected:
         if (value.same_as(op->value)) {
             return op;
         } else {
-            Type t = op->type.with_lanes(value.type().lanes());
-            return Reinterpret::make(t, value);
+            internal_assert(value.type().lanes() % op->value.type().lanes() == 0);
+            int widening = value.type().lanes() / op->value.type().lanes();
+            Type t = op->type.with_lanes(op->type.lanes() * widening);
+
+            // VectorSubs represents a vector-valued expression widened across
+            // a loop as one vector per original lane. A lane-changing
+            // reinterpret instead needs all source lanes for one loop
+            // iteration to be adjacent. Transpose to iteration-major order,
+            // reinterpret, then transpose the result back to the convention
+            // expected by the rest of vectorization.
+            if (widening > 1 && op->value.type().lanes() > 1) {
+                value = Shuffle::make_transpose(value, widening);
+            }
+
+            Expr result = Reinterpret::make(t, value);
+            if (widening > 1 && op->type.lanes() > 1) {
+                result = Shuffle::make_transpose(result, op->type.lanes());
+            }
+            return result;
+        }
+    }
+
+    Expr visit(const Ramp *op) override {
+        Expr base = mutate(op->base);
+        Expr stride = mutate(op->stride);
+        if (base.same_as(op->base) && stride.same_as(op->stride)) {
+            return op;
+        } else {
+            int lanes = std::max(base.type().lanes(), stride.type().lanes());
+            return Ramp::make(widen(base, lanes), widen(stride, lanes), op->lanes);
         }
     }
 
@@ -529,8 +560,7 @@ protected:
         } else {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
-            return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate, op->alignment, op->is_streaming);
+            return op->with(index, predicate, op->alignment);
         }
     }
 
@@ -545,6 +575,20 @@ protected:
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
+        // Profiler counter markers (declare_box_required_at_*) carry per-lane
+        // counter contributions encoded in their type's lane count, so they
+        // must be widened to the full lane count of the surrounding
+        // vectorized loop even when their args don't reference any
+        // vectorized vars.
+        if (op->is_intrinsic({Call::declare_box_required_at_realization,
+                              Call::declare_box_required_at_production,
+                              Call::declare_box_required_at_root})) {
+            max_lanes = 1;
+            for (const auto &vv : vectorized_vars) {
+                max_lanes *= vv.lanes;
+            }
+        }
+
         if (!changed && max_lanes <= 1) {
             return op;
         } else if (op->name == Call::trace) {
@@ -553,7 +597,8 @@ protected:
             if (*event == halide_trace_begin_realization ||
                 *event == halide_trace_end_realization ||
                 *event == halide_trace_begin_parallel_task ||
-                *event == halide_trace_end_parallel_task) {
+                *event == halide_trace_end_parallel_task ||
+                *event == halide_trace_bounds_required) {
                 // Call::trace vectorizes uniquely for begin/end scope events with min/extent pairs.
                 // We need to maintain the proper dimensionality count and instead aggregate the
                 // widened values into a single pair.
@@ -704,8 +749,10 @@ protected:
             int lanes = std::max({predicate.type().lanes(),
                                   value.type().lanes(),
                                   index.type().lanes()});
-            return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes), op->alignment, op->is_streaming);
+            return op->with(widen(value, lanes),
+                            widen(index, lanes),
+                            widen(predicate, lanes),
+                            op->alignment);
         }
     }
 
@@ -1002,7 +1049,7 @@ protected:
 
                 // We may still need the atomic node, if there was more
                 // parallelism than just the vectorization.
-                s = Atomic::make(op->producer_name, op->mutex_name, s);
+                s = op->with(s);
                 return s;
             }
 
@@ -1280,10 +1327,7 @@ protected:
                 store_index = store_mr.to_expr();
             }
 
-            Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
-                                       load_a->name, store_index, load_a->image,
-                                       load_a->param, const_true(output_lanes),
-                                       ModulusRemainder{}, load_a->is_streaming);
+            Expr new_load = load_a->with(store_index, const_true(output_lanes), ModulusRemainder{});
 
             Expr lhs = cast(b.type().with_lanes(output_lanes), new_load);
 
@@ -1291,8 +1335,7 @@ protected:
             if (unrolled_loops.empty()) {
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
-                s = Store::make(store->name, b, store_index, store->param,
-                                const_true(b.type().lanes()), store->alignment, store->is_streaming);
+                s = store->with(b, store_index, const_true(b.type().lanes()), store->alignment);
             } else {
                 // Wrap any containing loops we still need (unrolled). We
                 // enumerate the cartesian product of loop iteration values
@@ -1301,9 +1344,10 @@ protected:
                 std::string b_var_name = unique_name('b');
                 Expr b_var = Variable::make(b.type().with_lanes(output_lanes), b_var_name);
                 Stmt store_template =
-                    Store::make(store->name, cast(new_load.type(), binop(lhs, b_var)),
-                                store_index, store->param,
-                                const_true(output_lanes), ModulusRemainder{}, store->is_streaming);
+                    store->with(cast(new_load.type(), binop(lhs, b_var)),
+                                store_index,
+                                const_true(output_lanes),
+                                ModulusRemainder{});
                 std::string full_b_var_name = unique_name('b');
                 Expr full_b_var = Variable::make(b.type(), full_b_var_name);
 
@@ -1340,7 +1384,7 @@ protected:
 
             // We may still need the atomic node, if there was more
             // parallelism than just the vectorization.
-            s = Atomic::make(op->producer_name, op->mutex_name, s);
+            s = op->with(s);
 
             return s;
         } while (false);
@@ -1358,9 +1402,7 @@ protected:
             s = SerializeLoops()(s);
         }
         // We'll need the original scalar versions of any containing lets.
-        for (const auto &[var, value] : reverse_view(containing_lets)) {
-            s = LetStmt::make(var, value, s);
-        }
+        s = rewrap_all_lets(s, containing_lets);
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
@@ -1369,40 +1411,6 @@ protected:
         }
 
         return s;
-    }
-
-    Expr scalarize(Expr e) {
-        // This method returns a select tree that produces a vector lanes
-        // result expression
-        user_assert(replacements.size() == 1) << "Can't scalarize nested vectorization\n";
-        string var = replacements.begin()->first;
-        Expr replacement = replacements.begin()->second;
-
-        Expr result;
-        int lanes = replacement.type().lanes();
-
-        for (int i = lanes - 1; i >= 0; --i) {
-            // Hide all the vector let values in scope with a scalar version
-            // in the appropriate lane.
-            for (Scope<Expr>::const_iterator iter = scope.cbegin(); iter != scope.cend(); ++iter) {
-                e = substitute(iter.name(),
-                               get_lane(Variable::make(iter.value().type(), iter.name()), i),
-                               e);
-            }
-
-            // Replace uses of the vectorized variable with the extracted
-            // lane expression
-            e = substitute(var, i, e);
-
-            if (i == lanes - 1) {
-                result = Broadcast::make(e, lanes);
-            } else {
-                Expr cond = (replacement == Broadcast::make(i, lanes));
-                result = Select::make(cond, Broadcast::make(e, lanes), result);
-            }
-        }
-
-        return result;
     }
 
     // Recompute all replacements for vectorized vars based on
@@ -1606,13 +1614,8 @@ protected:
         finder.mutate(op->body);
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
         Stmt new_body = lifter.mutate(op->body);
-        new_body = Atomic::make(op->producer_name, op->mutex_name, new_body);
-        while (!lifter.lifted.empty()) {
-            auto p = lifter.lifted.back();
-            new_body = LetStmt::make(p.first, p.second, new_body);
-            lifter.lifted.pop_back();
-        }
-        return new_body;
+        new_body = op->with(new_body);
+        return rewrap_all_lets(new_body, lifter.lifted);
     }
 
     const map<string, Function> &env;

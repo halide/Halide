@@ -483,6 +483,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         // In OpenCL, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        // In OpenCL, round rounds ties away from zero
+        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -517,7 +521,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         internal_assert(op->type.is_vector());
 
         ostringstream rhs;
-        if ((op->alignment.modulus % op->type.lanes() == 0) &&
+        // OpenCL C pads a 3-component vector to the size and alignment of a
+        // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
+        // elements. Packed 3-lane data must go through vload3.
+        if (op->type.lanes() != 3 &&
+            (op->alignment.modulus % op->type.lanes() == 0) &&
             (op->alignment.remainder % op->type.lanes() == 0)) {
             // Get the rhs just for the cache.
             string id_ramp_base = print_expr(ramp_base / op->type.lanes());
@@ -586,7 +594,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         // Current only test for atomic add.
         Expr val_expr = op->value;
         Type t = val_expr.type();
-        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment, false);
         Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
         // For atomicAdd, we check if op->value - store[index] is independent of store.
         // The atomicAdd operations in OpenCL only supports integers so we also check that.
@@ -684,7 +692,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
 
-        if ((op->alignment.modulus % op->value.type().lanes() == 0) &&
+        // OpenCL C pads a 3-component vector to the size and alignment of a
+        // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
+        // elements. Packed 3-lane data must go through vstore3.
+        if (op->value.type().lanes() != 3 &&
+            (op->alignment.modulus % op->value.type().lanes() == 0) &&
             (op->alignment.remainder % op->value.type().lanes() == 0)) {
             string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
             string array_indexing = print_array_access(op->name, t, id_ramp_base);
@@ -780,7 +792,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
     user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n"
                                          << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -798,8 +810,15 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
+        // A struct is stored as a raw byte array (print_storage_type emits a byte
+        // element type), so size is an element count and must be scaled to bytes.
+        if (op->type.is_struct()) {
+            size *= op->type.bytes();
+        }
+
         stream << get_indent() << print_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
+
         stream << get_indent() << "#define " << get_memory_space(op->name) << " __private\n";
 
         Allocation alloc;
@@ -1063,7 +1082,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     const Allocate *shared_alloc = nullptr;
     shared_name = "__shared";
     visit_with(s, [&](auto *self, const Allocate *op) {
-        if (op->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(op->memory_type)) {
             internal_assert(shared_alloc == nullptr)
                 << "Found multiple shared allocations in metal kernel\n";
             shared_alloc = op;

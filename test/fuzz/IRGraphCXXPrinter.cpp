@@ -222,7 +222,8 @@ VISIT_NODE(Shuffle, op->vectors, op->indices)
 
 // --- 5. Complex Expressions ---
 VISIT_NODE(Select, op->condition, op->true_value, op->false_value)
-VISIT_NODE(Load, op->type, op->name, op->index, op->image, op->param, op->predicate, op->alignment)
+VISIT_NODE(Load, op->type, op->name, op->index, op->image, op->param, op->predicate, op->alignment,
+           op->is_streaming)
 VISIT_NODE(Ramp, op->base, op->stride, op->lanes)
 
 void IRGraphCXXPrinter::visit(const Call *op) {
@@ -236,7 +237,8 @@ void IRGraphCXXPrinter::visit(const Call *op) {
         // Variant 3: Convenience constructor for calls to other halide functions.
         // We wrap the FunctionPtr into a Function object to perfectly match
         // the expected `const Function &func` signature.
-        emit_node<Call>("Call", op, Internal::Function(op->func), op->args, op->value_index);
+        emit_node<Call>("Call", op, Internal::Function(op->func), op->args, op->value_index,
+                        op->func.follow_global_wrappers);
     } else if (op->is_intrinsic()) {
 
         emit_node<Call>("Call", op, op->type, op->name, op->args, op->call_type);
@@ -262,7 +264,8 @@ VISIT_NODE(IfThenElse, op->condition, op->then_case, op->else_case)
 VISIT_NODE(For, op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, op->body)
 
 // --- 7. Memory / Buffer Operations ---
-VISIT_NODE(Store, op->name, op->value, op->index, op->param, op->predicate, op->alignment)
+VISIT_NODE(Store, op->name, op->value, op->index, op->param, op->predicate, op->alignment,
+           op->is_streaming)
 VISIT_NODE(Provide, op->name, op->values, op->args, op->predicate)
 VISIT_NODE(Allocate, op->name, op->type, op->memory_type, op->extents, op->condition, op->body, op->new_expr, op->free_function)
 VISIT_NODE(Free, op->name)

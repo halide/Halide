@@ -164,6 +164,28 @@ void test_positive_const_multiplier_still_rewritten() {
                 (x != 2) || (Mod::make(seven, three) != 0));
 }
 
+// IROperator::is_const(e, -1) used to ignore signedness in casts. When `c`
+// was a cast from `-1` to uint8, Solve.cpp's `f(x) * c cmp b` rewrite for
+// `c == -1` treated `c` as -1 rather than the correct value (255).
+void test_cast_signedness_respected() {
+    // int32(uint8(-1_i8)) == 255, not -1.
+    Expr fake_negative_one = Cast::make(Int(32), Cast::make(UInt(8), -1));
+
+    // Let N = fake_negative_one.
+    // Broken: y < N * x ~> x < -y    ~> 1 < -100      ~> false
+    // Fixed:  y < N * x ~> x * N > y ~> 1 * 255 > 100 ~> true
+    std::map<std::string, Expr> vars{
+        {"x", Expr(1)},
+        {"y", Expr(100)},
+    };
+    check_solve_equivalent(y < fake_negative_one * x, vars);
+    check_solve_equivalent(y <= fake_negative_one * x, vars);
+    check_solve_equivalent(y > fake_negative_one * x, vars);
+    check_solve_equivalent(y >= fake_negative_one * x, vars);
+    check_solve_equivalent(y == fake_negative_one * x, vars);
+    check_solve_equivalent(y != fake_negative_one * x, vars);
+}
+
 // Solver used to rewrite `f(x) + f(x) -> f(x) * 2` via `operator*(Expr, int)`,
 // which rejects constants that don't fit in the expression type. For UInt(1),
 // the literal 2 isn't representable, aborting the whole solve. Use Mul::make
@@ -255,7 +277,7 @@ void test_simple_division_cases() {
     // Note: x + (x*2 - y)/2 == (x*4 - y)/2 for all integers (floor division);
     // the split form x*2 - y/2 is incorrect when y is odd.
     check_solve(x + (x * 2 - y) / 2, (x * 4 - y) / 2);
-    check_solve(x + (-(x * 2) / 2), x * 0 + 0);
+    check_solve(x + (-(x * 2) / 2), x * 0);
     check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
     check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
     check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,
@@ -398,6 +420,20 @@ void test_interval_solutions() {
 
     check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
     check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
+
+    // min/max of booleans are logical And/Or (and_condition_over_domain and the
+    // simplifier produce these). Solving must treat them as such so that Not
+    // distributes (De Morgan). Regression: !min(...) was solved like !a && !b
+    // instead of !a || !b.
+    // min(x<0, x<2) == (x<0), so !min(...) == (x>=0):
+    check_inner_interval(!min(x < 0, x < 2), 0, Interval::pos_inf());
+    check_outer_interval(!min(x < 0, x < 2), 0, Interval::pos_inf());
+    // max(x<0, x<2) == (x<2), so !max(...) == (x>=2):
+    check_inner_interval(!max(x < 0, x < 2), 2, Interval::pos_inf());
+    check_outer_interval(!max(x < 0, x < 2), 2, Interval::pos_inf());
+    // Non-negated forms: min(x<5,x<9) == (x<5); max(x<5,x<9) == (x<9):
+    check_outer_interval(min(x < 5, x < 9), Interval::neg_inf(), 4);
+    check_outer_interval(max(x < 5, x < 9), Interval::neg_inf(), 8);
 }
 
 void test_and_condition_over_domain() {
@@ -430,8 +466,8 @@ void test_and_condition_over_domain() {
 void test_regression_signed_integer_overflow_pow() {
     // This case used to break due to signed integer overflow in
     // the simplifier.
-    Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-    Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+    Expr a16 = Load::make(Int(16), "a", {x});
+    Expr b16 = Load::make(Int(16), "b", {x});
     Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
     Scope<Interval> s;
@@ -584,6 +620,57 @@ void test_outer_interval_max_min() {
     check_outer_interval(expr2, 2, Interval::pos_inf());
 }
 
+void test_solve_far_side_min_max() {
+    // Handle min/max on the far side of a comparison, as emitted by
+    // extent-clamped vector guards. Some decomposed terms no longer contain x.
+
+    // c <= min(a, b)  <=>  c <= a && c <= b
+    check_inner_interval(x * 8 + 7 <= min((x + 1) * 8, 100), Interval::neg_inf(), 11);
+    check_outer_interval(x * 8 + 7 <= min((x + 1) * 8, 100), Interval::neg_inf(), 11);
+
+    // c <= max(a, b)  <=>  c <= a || c <= b
+    check_inner_interval(x * 8 + 7 <= max((x - 1) * 8, 100), Interval::neg_inf(), 11);
+    check_outer_interval(x * 8 + 7 <= max((x - 1) * 8, 100), Interval::neg_inf(), 11);
+
+    // c >= min(a, b)  <=>  c >= a || c >= b
+    check_inner_interval(x * 8 >= min((x + 1) * 8, 100), 13, Interval::pos_inf());
+    check_outer_interval(x * 8 >= min((x + 1) * 8, 100), 13, Interval::pos_inf());
+
+    // c >= max(a, b)  <=>  c >= a && c >= b
+    check_inner_interval(x * 8 >= max((x - 1) * 8, 100), 13, Interval::pos_inf());
+    check_outer_interval(x * 8 >= max((x - 1) * 8, 100), 13, Interval::pos_inf());
+
+    // The same guard through a let binding.
+    Expr bound = Variable::make(Int(32), "b");
+    check_inner_interval(Let::make("b", min((x + 1) * 8, 100), x * 8 + 7 <= bound),
+                         Interval::neg_inf(), 11);
+    check_outer_interval(Let::make("b", min((x + 1) * 8, 100), x * 8 + 7 <= bound),
+                         Interval::neg_inf(), 11);
+}
+
+void test_solve_no_var_polarity() {
+    // A condition that doesn't mention the variable being solved for still has
+    // to respect the polarity we're solving for. Under a negation we want the
+    // region where the condition is false, so a provably-true subcondition
+    // contributes nothing rather than everything.
+    //
+    // All of these are tautologies, since a remainder mod 2 is always 0 or 1,
+    // so every value of x satisfies them.
+    Expr y = Variable::make(Int(32), "y");
+
+    // Only the outer interval is checked. An inner interval may always be
+    // conservatively empty, but an outer one that's empty claims the condition
+    // is nowhere true, which here would be wrong.
+    check_outer_interval(((y % 2) == 0) || ((y % 2) == 1),
+                         Interval::neg_inf(), Interval::pos_inf());
+
+    // The De Morgan dual of the above. The Not flips the polarity, and the
+    // comparisons underneath it are provable, so this used to come back as an
+    // empty interval.
+    check_outer_interval(!(((y % 2) != 1) && ((y % 2) != 0)),
+                         Interval::neg_inf(), Interval::pos_inf());
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -610,12 +697,15 @@ int main(int argc, char **argv) {
     test_unsigned_equality_still_rearranged();
     test_nonconstant_multiplier_not_rewritten();
     test_positive_const_multiplier_still_rewritten();
+    test_cast_signedness_respected();
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
     test_simplify_preserves_float_to_uint_cast_chain();
     test_float_mul_eq_zero_divisor_not_rewritten();
     test_float_select_condition_not_simplified();
     test_outer_interval_max_min();
+    test_solve_far_side_min_max();
+    test_solve_no_var_polarity();
     std::printf("Success!\n");
     return 0;
 }

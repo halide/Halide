@@ -60,11 +60,11 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
         uint64_t m;
         if ((m = (features[i] & cpu_features->known[i])) != 0) {
             if ((m & cpu_features->available[i]) != m) {
-                return 0;
+                return halide_can_use_target_never;
             }
         }
     }
 
-    return 1;
+    return halide_can_use_target_always;
 }
 }

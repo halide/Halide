@@ -410,7 +410,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         internal_assert(!workgroup_allocations.count(op->name));
         workgroup_allocations.insert({op->name, op});
         op->body.accept(this);
@@ -427,6 +427,12 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
+
+        // A struct is stored as a raw byte array (print_storage_type emits a byte
+        // element type), so size is an element count and must be scaled to bytes.
+        if (op->type.is_struct()) {
+            size *= op->type.bytes();
+        }
 
         stream << get_indent() << "var " << print_name(op->name)
                << " : array<" << print_type(op->type) << ", " << size << ">;\n";

@@ -294,6 +294,177 @@ void test_read_big_endian_row_channel_offset() {
     }
 }
 
+// A .npy whose 'descr' is missing its closing quote used to walk the header
+// parser's cursor off the end of the buffer (sscanf matched %c%c%d and returned
+// 3, but the %n was never reached, leaving the byte count uninitialized). The
+// loader should just reject the file.
+void test_malformed_npy_header() {
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "malformed_descr.npy";
+    std::string filename = o.str();
+
+    // v1 header: magic, version 1.0, 2-byte header length, then the dict.
+    // (6 + 2 + 2 + header_len) must be a multiple of 64.
+    std::string dict = "{'descr': '<f8";  // no closing quote after the type
+    const size_t header_len = 54;
+    dict.resize(header_len, ' ');
+
+    std::ofstream fs(filename.c_str(), std::ofstream::binary);
+    const char magic[8] = {'\x93', 'N', 'U', 'M', 'P', 'Y', '\x01', '\x00'};
+    fs.write(magic, 8);
+    const char len_le[2] = {(char)(header_len & 0xff), (char)((header_len >> 8) & 0xff)};
+    fs.write(len_le, 2);
+    fs.write(dict.data(), dict.size());
+    const std::vector<char> payload(64, 0);
+    fs.write(payload.data(), payload.size());
+    fs.close();
+
+    Buffer<> im;
+    if (Tools::load<Buffer<>>(filename, &im)) {
+        std::cout << "Malformed .npy header was accepted by the loader\n";
+        exit(1);
+    }
+}
+
+void write_file(const std::string &filename, const std::string &contents) {
+    std::ofstream fs(filename.c_str(), std::ofstream::binary);
+    if (!fs) {
+        std::cout << "Cannot write " << filename << "\n";
+        exit(1);
+    }
+    fs.write(contents.data(), contents.size());
+}
+
+void expect_load_fails(const std::string &filename, const char *what) {
+    Halide::Runtime::Buffer<> img;
+    bool loaded = Tools::load<Halide::Runtime::Buffer<>, Tools::Internal::CheckReturn>(filename, &img);
+    if (loaded) {
+        std::cout << "Expected loading " << what << " to fail, but it succeeded\n";
+        exit(1);
+    } else {
+        std::cout << "Testing invalid: Correctly rejected " << what << "\n";
+    }
+}
+
+template<typename T>
+void append_scalar(std::string *s, T value) {
+    s->append((const char *)&value, sizeof(value));
+}
+
+// A negative extent in a file header used to reach Buffer's shape arithmetic
+// unchecked. size_in_bytes() then wraps to just under SIZE_MAX, allocate()
+// rounds that up to zero and hands back a single alignment block, and the
+// payload read runs off the end of it. Every loader that takes its extents
+// from the file should reject the header instead.
+void test_negative_extents() {
+    const std::string payload(4096, '\xab');
+
+    std::ostringstream npy_name;
+    npy_name << Internal::get_test_tmp_dir() << "test_negative_extents.npy";
+    std::string dict = "{'descr': '|u1', 'fortran_order': False, 'shape': (4, -1), }";
+    while ((6 + 2 + 2 + dict.size()) % 64 != 0) {
+        dict.push_back(' ');
+    }
+    std::string npy("\x93NUMPY", 6);
+    append_scalar<uint8_t>(&npy, 1);  // major version
+    append_scalar<uint8_t>(&npy, 0);  // minor version
+    append_scalar<uint16_t>(&npy, (uint16_t)dict.size());
+    npy += dict;
+    npy += payload;
+    write_file(npy_name.str(), npy);
+    expect_load_fails(npy_name.str(), "a .npy with a negative extent");
+
+    std::ostringstream mat_name;
+    mat_name << Internal::get_test_tmp_dir() << "test_negative_extents.mat";
+    std::string mat(128, '\0');           // descriptive header, unread
+    append_scalar<uint32_t>(&mat, 14);    // miMATRIX
+    append_scalar<uint32_t>(&mat, 1024);  // size of the rest, unread
+    append_scalar<uint32_t>(&mat, 6);     // miUINT32
+    append_scalar<uint32_t>(&mat, 8);     // array flags size
+    append_scalar<uint32_t>(&mat, 9);     // mxUINT8_CLASS
+    append_scalar<uint32_t>(&mat, 0);
+    append_scalar<uint32_t>(&mat, 5);  // miINT32
+    append_scalar<uint32_t>(&mat, 8);  // two extents
+    append_scalar<int32_t>(&mat, 4);
+    append_scalar<int32_t>(&mat, -1);
+    append_scalar<uint32_t>(&mat, 1);  // miINT8 name, ...
+    append_scalar<uint32_t>(&mat, 0);  // ... of length zero
+    append_scalar<uint32_t>(&mat, 2);  // miUINT8 payload
+    append_scalar<uint32_t>(&mat, (uint32_t)payload.size());
+    mat += payload;
+    write_file(mat_name.str(), mat);
+    expect_load_fails(mat_name.str(), "a .mat with a negative extent");
+
+    std::ostringstream pgm_name;
+    pgm_name << Internal::get_test_tmp_dir() << "test_negative_extents.pgm";
+    write_file(pgm_name.str(), "P5\n4 -1\n255\n" + payload);
+    expect_load_fails(pgm_name.str(), "a .pgm with a negative extent");
+}
+
+// Buffer strides are ints. A 65536x65535 RGB image has a channel stride of
+// 65536 * 65535, which doesn't fit, so the loader must reject the header
+// rather than build a buffer whose channel planes land outside its allocation.
+// The ~4GB allocation such a buffer would need is refused here, so a loader
+// that gets that far fails the test before it writes any pixels.
+void *refuse_huge_allocation(size_t size) {
+    if (size > ((size_t)1 << 31)) {
+        std::cout << "Loader tried to allocate " << size << " bytes for an image it should reject\n";
+        exit(1);
+    }
+    return malloc(size);
+}
+
+void test_overflowing_strides() {
+    std::ostringstream ppm_name;
+    ppm_name << Internal::get_test_tmp_dir() << "test_overflowing_strides.ppm";
+    write_file(ppm_name.str(), "P6\n65536 65535\n255\n" + std::string(65536 * 3, '\xab'));
+    Halide::Runtime::Buffer<>::set_default_allocate_fn(refuse_huge_allocation);
+    expect_load_fails(ppm_name.str(), "a .ppm whose channel stride overflows int");
+    Halide::Runtime::Buffer<>::set_default_allocate_fn(nullptr);
+}
+
+#ifndef HALIDE_NO_PNG
+void test_png_unsupported_bit_depth() {
+    // A 1-bit grayscale PNG is a valid file, but load_png only supports 8- and
+    // 16-bit samples. Before the fix it selected the 16-bit row reader and read
+    // past the packed row buffer; now it should reject the file cleanly.
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "test_1bit.png";
+    std::string filename = o.str();
+
+    const int width = 64, height = 8;
+    FILE *fp = fopen(filename.c_str(), "wb");
+    if (!fp) {
+        std::cout << "Cannot write " << filename << "\n";
+        exit(1);
+    }
+    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    png_infop info = png_create_info_struct(png);
+    if (setjmp(png_jmpbuf(png))) {
+        std::cout << "Failed to write " << filename << "\n";
+        exit(1);
+    }
+    png_init_io(png, fp);
+    png_set_IHDR(png, info, width, height, 1, PNG_COLOR_TYPE_GRAY,
+                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    png_write_info(png, info);
+    std::vector<uint8_t> row((width + 7) / 8, 0xaa);
+    for (int y = 0; y < height; y++) {
+        png_write_row(png, row.data());
+    }
+    png_write_end(png, nullptr);
+    png_destroy_write_struct(&png, &info);
+    fclose(fp);
+
+    Halide::Runtime::Buffer<> img;
+    bool loaded = Tools::load<Halide::Runtime::Buffer<>, Tools::Internal::CheckReturn>(filename, &img);
+    if (loaded) {
+        std::cout << "Expected loading a 1-bit PNG to fail, but it succeeded\n";
+        exit(1);
+    }
+}
+#endif
+
 int main(int argc, char **argv) {
     do_test<int8_t>();
     do_test<int16_t>();
@@ -310,6 +481,12 @@ int main(int argc, char **argv) {
     do_test<double>();
     test_mat_header();
     test_read_big_endian_row_channel_offset();
+    test_malformed_npy_header();
+#ifndef HALIDE_NO_PNG
+    test_png_unsupported_bit_depth();
+#endif
+    test_negative_extents();
+    test_overflowing_strides();
     printf("Success!\n");
     return 0;
 }

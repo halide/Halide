@@ -14,7 +14,9 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "InjectHostDevBufferCopies.h"
+#include "ModulusRemainder.h"
 #include "OffloadGPULoops.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -77,7 +79,7 @@ protected:
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
                                                    << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (allocate->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(allocate->memory_type)) {
             internal_assert(allocate->extents.size() == 1);
             shared_mem_size += allocate->extents[0] * allocate->type.bytes();
             found_shared = true;
@@ -94,12 +96,12 @@ protected:
     map<string, bool> state_needed;
 
     const Target &target;
+    const std::map<std::string, Function> &env;
 
     Expr get_state_var(const string &name) {
         // Expr v = Variable::make(type_of<void *>(), name);
         state_needed[name] = true;
-        return Load::make(type_of<void *>(), name, 0,
-                          Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        return Load::make(type_of<void *>(), name, 0);
     }
 
     Expr make_state_var(const string &name) {
@@ -171,10 +173,28 @@ protected:
         // compile the kernel
         string kernel_name = c_print_name(unique_name("kernel_" + loop->name));
 
+        // The loop the kernel is made from is named after the Func it came
+        // from, so the schedule that asked for a register cap can be found
+        // again here, where the kernel is handed to the backend.
+        int max_registers = 0;
+        {
+            const std::string &n = loop->name;
+            for (size_t i = 0; i + 2 < n.size(); i++) {
+                if (n[i] == '.' && n[i + 1] == 's' && isdigit(n[i + 2])) {
+                    auto it = env.find(n.substr(0, i));
+                    if (it != env.end()) {
+                        max_registers = it->second.schedule().gpu_max_registers();
+                    }
+                    break;
+                }
+            }
+        }
+
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api].get();
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
+        gpu_codegen->set_kernel_max_registers(max_registers);
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop
@@ -187,18 +207,23 @@ protected:
         vector<Expr> args, arg_types_or_sizes, arg_is_buffer;
         for (const DeviceArgument &i : closure_args) {
             Expr val;
+            Type runtime_arg_type = i.type;
             if (i.is_buffer) {
                 val = Variable::make(Handle(), i.name + ".buffer");
             } else {
                 val = Variable::make(i.type, i.name);
+                runtime_arg_type = gpu_codegen->kernel_run_scalar_arg_type(i.type);
+                if (runtime_arg_type != i.type) {
+                    val = cast(runtime_arg_type, val);
+                }
                 val = Call::make(type_of<void *>(), Call::make_struct, {val}, Call::Intrinsic);
             }
             args.emplace_back(val);
 
             if (runtime_run_takes_types) {
-                arg_types_or_sizes.emplace_back(i.type.to_abi());
+                arg_types_or_sizes.emplace_back(runtime_arg_type.to_abi());
             } else {
-                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
+                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : runtime_arg_type.bytes()));
             }
 
             arg_is_buffer.emplace_back(make_const(UInt(8), (int)i.is_buffer));
@@ -246,8 +271,9 @@ protected:
     }
 
 public:
-    InjectGpuOffload(const Target &target, bool any_strict_float)
-        : target(target) {
+    InjectGpuOffload(const Target &target, bool any_strict_float,
+                     const std::map<std::string, Function> &env)
+        : target(target), env(env) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
         // generated kernel code unintentionally having any dependence on the
@@ -318,10 +344,74 @@ public:
     }
 };
 
+// Fold the aliasing allocations left behind by GPU allocation fusing back into
+// direct offset accesses of their backing allocation, and drop the aliasing
+// Allocate nodes. This reproduces the flat representation the device code
+// generators expect, and runs just before them so that everything upstream
+// (the profiler, the conceptual stmt) still sees per-Func allocation names.
+class FlattenAliasedAllocations : public IRMutator {
+    using IRMutator::visit;
+
+    struct Alias {
+        std::string backing;
+        Expr offset;
+    };
+    Scope<Alias> aliases;
+
+    Stmt visit(const Allocate *op) override {
+        // offset_pointer is a (non-pure) Intrinsic specifically so CSE/LICM
+        // won't lift it out of new_expr, so it's still a direct call here.
+        const Call *c = op->new_expr.defined() ? op->new_expr.as<Call>() : nullptr;
+        if (c && c->is_intrinsic(Call::offset_pointer)) {
+            const Variable *base = c->args[0].as<Variable>();
+            internal_assert(base) << "offset_pointer base must be a Variable\n";
+            ScopedBinding<Alias> bind(aliases, op->name, Alias{base->name, c->args[1]});
+            return mutate(op->body);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Free *op) override {
+        if (aliases.contains(op->name)) {
+            return Evaluate::make(0);
+        }
+        return IRMutator::visit(op);
+    }
+
+    // Adding the offset into the backing allocation shifts the index, so the
+    // load/store alignment relative to the backing base must be recomputed from
+    // the original alignment and the alignment of the offset.
+    ModulusRemainder shift_alignment(const ModulusRemainder &alignment, const Expr &offset) {
+        return alignment + modulus_remainder(offset);
+    }
+
+    Expr visit(const Load *op) override {
+        if (aliases.contains(op->name)) {
+            const Alias &a = aliases.get(op->name);
+            return Load::make(op->type, a.backing, mutate(op->index) + a.offset,
+                              op->image, op->param, mutate(op->predicate),
+                              shift_alignment(op->alignment, a.offset), false);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        if (aliases.contains(op->name)) {
+            const Alias &a = aliases.get(op->name);
+            return Store::make(a.backing, mutate(op->value), mutate(op->index) + a.offset,
+                               op->param, mutate(op->predicate),
+                               shift_alignment(op->alignment, a.offset), false);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
 }  // namespace
 
-Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
-    return InjectGpuOffload(host_target, any_strict_float).inject(s);
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float,
+                        const std::map<std::string, Function> &env) {
+    Stmt flattened = FlattenAliasedAllocations()(s);
+    return InjectGpuOffload(host_target, any_strict_float, env).inject(flattened);
 }
 
 }  // namespace Internal

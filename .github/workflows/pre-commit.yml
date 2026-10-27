@@ -22,7 +22,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.head_ref }}
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
       - uses: astral-sh/setup-uv@v7
 
       - name: Run pre-commit

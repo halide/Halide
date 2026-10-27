@@ -3,8 +3,6 @@ get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_
 
 set(RUNTIME_CPP
     # keep-sorted start ignore_prefixes=#
-    # TODO(https://github.com/halide/Halide/issues/7248)
-    aarch64_cpu_features
     alignment_128
     alignment_32
     alignment_64
@@ -37,7 +35,6 @@ set(RUNTIME_CPP
     hexagon_dma_pool
     hexagon_host
     ios_io
-    linux_aarch64_cpu_features
     linux_arm_cpu_features
     linux_arm_thread_id
     linux_clock
@@ -55,7 +52,6 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    osx_aarch64_cpu_features
     osx_arm_cpu_features
     osx_clock
     osx_get_symbol
@@ -366,8 +362,8 @@ set(RT_BC "${CMAKE_CURRENT_SOURCE_DIR}/nvidia_libdevice_bitcode/libdevice.10.bc"
 add_custom_command(
     OUTPUT "_initmod_ptx_libdevice.cpp"
     COMMAND
-        binary2cpp "halide_internal_initmod_ptx_libdevice_ll" < "$<SHELL_PATH:${RT_BC}>" >
-        "_initmod_ptx_libdevice.cpp"
+        binary2cpp "halide_internal_initmod_ptx_libdevice_ll" < "$<SHELL_PATH:${RT_BC}>"
+        > "_initmod_ptx_libdevice.cpp"
     DEPENDS binary2cpp "${RT_BC}"
     VERBATIM
 )
@@ -376,8 +372,8 @@ target_sources(Halide_initmod PRIVATE "_initmod_ptx_libdevice.cpp")
 add_custom_command(
     OUTPUT "_initmod_inlined_c.cpp"
     COMMAND
-        binary2cpp "halide_internal_initmod_inlined_c" <
-        "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
+        binary2cpp "halide_internal_initmod_inlined_c"
+        < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
     DEPENDS "halide_buffer_t.cpp" binary2cpp
     VERBATIM
 )
@@ -388,8 +384,8 @@ foreach (i IN LISTS RUNTIME_HEADER_FILES)
     add_custom_command(
         OUTPUT "_initmod_${SYM_NAME}.cpp"
         COMMAND
-            binary2cpp "halide_internal_runtime_header_${SYM_NAME}" <
-            "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
+            binary2cpp "halide_internal_runtime_header_${SYM_NAME}"
+            < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
         DEPENDS "${i}" binary2cpp
         VERBATIM
     )

@@ -1,7 +1,6 @@
 #include "SimplifyCorrelatedDifferences.h"
 
 #include "CSE.h"
-#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -53,6 +52,13 @@ protected:
                 rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1)))) ||
                 rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
                 rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
+
+                //   min(x + c0, y) - max(x, z)
+                // = min(x, y - c0) - max(x, z) + c0
+                // = min(min(x, y - c0) - max(x, z), 0) + c0
+                // = min(min(x, y - c0) - max(x, z) + c0, c0)
+                // = min(min(x + c0, y) - max(x, z), c0)
+                rewrite(min(x + c0, y) - max(x, z), min(min(x, y) - max(x, z), c0)) ||
 
                 rewrite(min(x + c0, y) - select(z, min(x, y) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
                 rewrite(min(y, x + c0) - select(z, min(y, x) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
@@ -230,16 +236,16 @@ protected:
             e = PartiallyCancelDifferences()(e);
             e = simplify(e);
 
-            const bool check_non_monotonic = debug_is_active(1) || get_compiler_logger() != nullptr;
-            if (check_non_monotonic &&
-                is_monotonic(e, loop_var) == Monotonic::Unknown) {
-                // Might be a missed simplification opportunity. Log to help improve the simplifier.
-                if (get_compiler_logger()) {
-                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, e);
+            debug(1, "non-monotonic") << [&]() -> std::string {
+                if (is_monotonic(e, loop_var) != Monotonic::Unknown) {
+                    return "";
                 }
-                debug(1) << "Warning: expression is non-monotonic in loop variable "
-                         << loop_var << ": " << e << "\n";
-            }
+                // Might be a missed simplification opportunity.
+                std::ostringstream ss;
+                ss << "Warning: expression is non-monotonic in loop variable "
+                   << loop_var << ": " << e << "\n";
+                return ss.str();
+            }();
         }
         return e;
     }

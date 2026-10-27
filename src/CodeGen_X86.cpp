@@ -27,53 +27,6 @@ using namespace llvm;
 
 namespace {
 
-// Populate feature flags in a target according to those implied by
-// existing flags, so that instruction patterns can just check for the
-// oldest feature flag that supports an instruction.
-Target complete_x86_target(Target t) {
-    if (t.has_feature(Target::AVX10_1)) {
-        if (t.vector_bits >= 256) {
-            t.set_feature(Target::AVX2);
-        }
-        if (t.vector_bits >= 512) {
-            t.set_feature(Target::AVX512_SapphireRapids);
-        }
-    }
-    if (t.has_feature(Target::AVX512_SapphireRapids)) {
-        t.set_feature(Target::AVX512_Zen4);
-        t.set_feature(Target::AVXVNNI);
-    }
-    if (t.has_feature(Target::AVX512_Zen5)) {
-        t.set_feature(Target::AVX512_Zen4);
-        t.set_feature(Target::AVXVNNI);
-    }
-    if (t.has_feature(Target::AVX512_Zen4)) {
-        t.set_feature(Target::AVX512_Cannonlake);
-    }
-    if (t.has_feature(Target::AVX512_Cannonlake)) {
-        t.set_feature(Target::AVX512_Skylake);
-    }
-    if (t.has_feature(Target::AVX512_Cannonlake) ||
-        t.has_feature(Target::AVX512_Skylake) ||
-        t.has_feature(Target::AVX512_KNL)) {
-        t.set_feature(Target::AVX512);
-    }
-    if (t.has_feature(Target::AVX512)) {
-        t.set_feature(Target::AVX2);
-    }
-    if (t.has_feature(Target::AVX2)) {
-        t.set_feature(Target::AVX);
-        // All AVX2-enabled architectures have F16C and FMA
-        t.set_feature(Target::F16C);
-        t.set_feature(Target::FMA);
-    }
-    if (t.has_feature(Target::AVX)) {
-        t.set_feature(Target::SSE41);
-    }
-
-    return t;
-}
-
 /** A code generator that emits x86 code from a given Halide stmt. */
 class CodeGen_X86 : public CodeGen_CPU {
 public:
@@ -122,7 +75,7 @@ private:
 };
 
 CodeGen_X86::CodeGen_X86(Target t)
-    : CodeGen_CPU(complete_x86_target(t)) {
+    : CodeGen_CPU(t) {
 }
 
 const int max_intrinsic_args = 6;
@@ -1741,7 +1694,7 @@ string CodeGen_X86::mcpu_target() const {
     } else if (target.has_feature(Target::AVX2)) {
         // x86-64-v3: SSE4.2, POPCNT, AVX, AVX2, BMI1/2, F16C, FMA,
         // LZCNT, MOVBE. Also covers AVX512 / AVX512_KNL, since both
-        // imply AVX2 (via complete_x86_target), but neither requires
+        // imply AVX2 (via set_implied_features), but neither requires
         // BW/DQ/VL which would come for free with v4.
         return "x86-64-v3";
     } else if (target.has_feature(Target::AVX)) {
@@ -1864,15 +1817,12 @@ string CodeGen_X86::mattrs() const {
     }
 
     // AVX512 features. Any AVX512 variant implies AVX2 (via
-    // complete_x86_target), so the mcpu baseline is at least
+    // set_implied_features), so the mcpu baseline is at least
     // x86-64-v3. Skylake-and-above selects x86-64-v4, which already
     // includes F/CD/BW/DQ/VL, but we still add those features
     // explicitly so the bare AVX512 / AVX512_KNL paths (which use
     // x86-64-v3) also get them.
-    if (target.has_feature(Target::AVX512) ||
-        target.has_feature(Target::AVX512_KNL) ||
-        target.has_feature(Target::AVX512_Skylake) ||
-        target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX512)) {
         attrs.emplace_back("+avx512f");
         attrs.emplace_back("+avx512cd");
     }
@@ -1880,8 +1830,7 @@ string CodeGen_X86::mattrs() const {
         attrs.emplace_back("+avx512pf");
         attrs.emplace_back("+avx512er");
     }
-    if (target.has_feature(Target::AVX512_Skylake) ||
-        target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX512_Skylake)) {
         attrs.emplace_back("+avx512vl");
         attrs.emplace_back("+avx512bw");
         attrs.emplace_back("+avx512dq");
@@ -1938,13 +1887,9 @@ bool CodeGen_X86::use_soft_float_abi() const {
 int CodeGen_X86::native_vector_bits() const {
     if (target.has_feature(Target::AVX10_1)) {
         return target.vector_bits;
-    } else if (target.has_feature(Target::AVX512) ||
-               target.has_feature(Target::AVX512_Skylake) ||
-               target.has_feature(Target::AVX512_KNL) ||
-               target.has_feature(Target::AVX512_Cannonlake)) {
+    } else if (target.has_feature(Target::AVX512)) {
         return 512;
-    } else if (target.has_feature(Target::AVX) ||
-               target.has_feature(Target::AVX2)) {
+    } else if (target.has_feature(Target::AVX)) {
         return 256;
     } else {
         return 128;

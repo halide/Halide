@@ -43,8 +43,7 @@ target_link_libraries(
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} gray.png COPYONLY)
-    add_test(NAME wavelet COMMAND wavelet gray.png .)
+    add_test(NAME wavelet COMMAND wavelet ${IMAGE} .)
     set_tests_properties(
         wavelet
         PROPERTIES

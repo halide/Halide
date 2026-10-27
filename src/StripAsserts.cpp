@@ -87,7 +87,7 @@ class StripAsserts : public IRMutator {
             return body;
         } else {
             mutate(op->value);
-            return LetStmt::make(op->name, op->value, body);
+            return op->with(op->value, body);
         }
     }
 

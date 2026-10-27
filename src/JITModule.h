@@ -124,6 +124,64 @@ struct JITHandlers {
      * stream to use. The cuda context and stream are both modelled
      * as a void *, to avoid a dependence on the cuda headers. */
     int32_t (*custom_cuda_get_stream)(JITUserContext *user_context, void *cuda_context, void **stream_ptr){nullptr};
+
+    /** A custom method for the Halide runtime to acquire an OpenCL
+     * context and command queue. Both are modelled as a void *, to
+     * avoid a dependence on the OpenCL headers. If the create argument
+     * is set to true, a context should be created if one does not
+     * already exist. */
+    int32_t (*custom_opencl_acquire_context)(JITUserContext *user_context, void **cl_context_ptr, void **cl_command_queue_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with an OpenCL
+     * context. The default implementation does nothing. */
+    int32_t (*custom_opencl_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a Metal device
+     * and command queue. Both are modelled as a void *, to avoid a
+     * dependence on the Metal headers. If the create argument is set to
+     * true, a context should be created if one does not already exist. */
+    int32_t (*custom_metal_acquire_context)(JITUserContext *user_context, void **metal_device_ptr, void **metal_command_queue_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a Metal
+     * context. The default implementation does nothing. */
+    int32_t (*custom_metal_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a Direct3D 12
+     * device and command queue. Both are modelled as a void *, to
+     * avoid a dependence on the Direct3D headers. If the create
+     * argument is set to true, a context should be created if one does
+     * not already exist. */
+    int32_t (*custom_d3d12compute_acquire_context)(JITUserContext *user_context, void **d3d12_device_ptr, void **d3d12_command_queue_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a Direct3D 12
+     * context. The default implementation does nothing. */
+    int32_t (*custom_d3d12compute_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a Vulkan
+     * context. The allocator and the various Vulkan handles are all
+     * modelled as a void *, to avoid a dependence on the Vulkan
+     * headers. If the create argument is set to true, a context should
+     * be created if one does not already exist. */
+    int32_t (*custom_vulkan_acquire_context)(JITUserContext *user_context, void **allocator_ptr, void **instance_ptr, void **device_ptr, void **physical_device_ptr, void **queue_ptr, uint32_t *queue_family_index_ptr, void **messenger_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a Vulkan
+     * context. The dispatchable Vulkan handles are modelled as a void *,
+     * to avoid a dependence on the Vulkan headers. The debug messenger is
+     * a non-dispatchable handle, which is a 64-bit integer rather than a
+     * pointer on 32-bit targets, so it is modelled as a uint64_t. The
+     * default implementation does nothing. */
+    int32_t (*custom_vulkan_release_context)(JITUserContext *user_context, void *instance, void *device, void *queue, uint64_t messenger){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a WebGPU
+     * context. The instance, adapter, device, and staging buffer are
+     * all modelled as a void *, to avoid a dependence on the WebGPU
+     * headers. If the create argument is set to true, a context should
+     * be created if one does not already exist. */
+    int32_t (*custom_webgpu_acquire_context)(JITUserContext *user_context, void **instance_ptr, void **adapter_ptr, void **device_ptr, void **staging_buffer_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a WebGPU
+     * context. The default implementation does nothing. */
+    int32_t (*custom_webgpu_release_context)(JITUserContext *user_context){nullptr};
 };
 
 namespace Internal {
@@ -136,6 +194,24 @@ struct JITErrorBuffer;
 struct JITUserContext {
     Internal::JITErrorBuffer *error_buffer{nullptr};
     JITHandlers handlers;
+};
+
+/** Hold a reference on the JIT thread pool's keep-awake count for the lifetime
+ * of this object, so that back-to-back small parallel loops don't pay to wake
+ * up the pool's threads. Instances may be nested, and may live on different
+ * threads. Idle threads keep their cores busy while any instance is alive, so
+ * hold one only around phases that run many short parallel loops. See
+ * halide_thread_pool_keep_awake in HalideRuntime.h for details. This is the
+ * JIT equivalent of Halide::Runtime::ThreadPoolKeepAwake, which is for AOT
+ * code. See also Internal::JITSharedRuntime::thread_pool_keep_awake. */
+class ThreadPoolKeepAwake {
+public:
+    ThreadPoolKeepAwake();
+    ~ThreadPoolKeepAwake();
+    ThreadPoolKeepAwake(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake &operator=(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake(ThreadPoolKeepAwake &&) = delete;
+    ThreadPoolKeepAwake &operator=(ThreadPoolKeepAwake &&) = delete;
 };
 
 namespace Internal {
@@ -247,11 +323,19 @@ struct JITModule {
     /** See JITSharedRuntime::reuse_device_allocations */
     void reuse_device_allocations(bool) const;
 
+    /** See JITSharedRuntime::set_trace_file */
+    void set_trace_file(int fd) const;
+
     /** See JITSharedRuntime::get_num_threads */
     int get_num_threads() const;
 
     /** See JITSharedRuntime::set_num_threads */
     int set_num_threads(int) const;
+
+    /** Call this module's halide_thread_pool_keep_awake, if it has one, and
+     * return its result. Returns 0 otherwise. Prefer
+     * JITSharedRuntime::thread_pool_keep_awake. */
+    int thread_pool_keep_awake(bool) const;
 
     /** Return true if compile_module has been called on this module. */
     bool compiled() const;
@@ -284,6 +368,12 @@ public:
      * instead. */
     static void reuse_device_allocations(bool);
 
+    /** Set the file descriptor that JIT-compiled pipelines write binary
+     * trace events to. Applies to the shared runtime now if it exists,
+     * and whenever it is created later. Pass -1 to restore the default
+     * behavior. See halide_set_trace_file in HalideRuntime.h. */
+    static void set_trace_file(int fd);
+
     static void release_all();
 
     /** Get the number of threads in the Halide thread pool. Includes the
@@ -297,6 +387,16 @@ public:
      * avoid deadlock when using the async scheduling directive. Returns the old
      * number. */
     static int set_num_threads(int);
+
+    /** Acquire (true) or release (false) a reference on the keep-awake count of
+     * the shared JIT runtime's thread pool, and return the new number of
+     * references held through this function. See halide_thread_pool_keep_awake
+     * in HalideRuntime.h. The references are tracked here, so they may be
+     * acquired before any JIT code has run: they are applied when the shared
+     * runtime is created, and carried over to a new shared runtime after
+     * release_all. Releasing a reference that isn't held is a user error. Most
+     * code should use Halide::ThreadPoolKeepAwake instead. */
+    static int thread_pool_keep_awake(bool);
 
     /** Search the shared JIT runtime for `target` for a symbol with the
      * given name. Returns the first match's address, or nullptr if no

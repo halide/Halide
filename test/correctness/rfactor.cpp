@@ -61,6 +61,53 @@ int simple_rfactor_test() {
 }
 
 template<bool compile_module>
+int rfactor_wrapper_test() {
+    // A global wrapper on an rfactor intermediate. The reducing Func's call to
+    // the intermediate must follow the wrapper (external edge), but the
+    // intermediate's self-reference in its own update must not (following would
+    // make intm -> wrapper -> intm a cycle).
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    g(x, y) = 40;
+    RDom r(10, 20, 30, 40);
+    g(r.x, r.y) = max(g(r.x, r.y) + f(r.x, r.y), g(r.x, r.y));
+    g.reorder_storage(y, x);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(r.y, u);
+    Func intm_w = intm.in();
+    intm.compute_root();
+    intm_w.compute_root();
+
+    if (compile_module) {
+        // g calls the wrapper (not intm directly); the wrapper calls intm; and
+        // intm still self-references intm rather than the wrapper.
+        CallGraphs expected = {
+            {g.name(), {intm_w.name(), g.name()}},
+            {intm_w.name(), {intm.name()}},
+            {intm.name(), {f.name(), intm.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(g, expected) != 0) {
+            return 1;
+        }
+    } else {
+        Buffer<int> im = g.realize({80, 80});
+        auto func = [](int x, int y, int z) {
+            return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
+        };
+        if (check_image(im, func)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+template<bool compile_module>
 int reorder_split_rfactor_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
@@ -1310,6 +1357,8 @@ int main(int argc, char **argv) {
         {"self assignment rfactor test", self_assignment_rfactor_test},
         {"simple rfactor test: checking call graphs...", simple_rfactor_test<true>},
         {"simple rfactor test: checking output img correctness...", simple_rfactor_test<false>},
+        {"rfactor wrapper test: checking call graphs...", rfactor_wrapper_test<true>},
+        {"rfactor wrapper test: checking output img correctness...", rfactor_wrapper_test<false>},
         {"reorder split rfactor test: checking call graphs...", reorder_split_rfactor_test<true>},
         {"reorder split rfactor test: checking output img correctness...", reorder_split_rfactor_test<false>},
         {"multiple split rfactor test: checking call graphs...", multi_split_rfactor_test<true>},

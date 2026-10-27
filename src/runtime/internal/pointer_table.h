@@ -244,7 +244,7 @@ void PointerTable::remove(void *user_context, size_t index, size_t entry_count) 
                             << "dst_offset=" << (int32_t)dst_offset << " "
                             << "bytes=" << (int32_t)bytes << ")...\n";
 #endif
-        memmove(ptr + dst_offset, ptr + src_offset, bytes);
+        memmove(offset_address(ptr, dst_offset), offset_address(ptr, src_offset), bytes);
     }
     resize(user_context, last_index - entry_count);
 }
@@ -276,7 +276,7 @@ void PointerTable::insert(void *user_context, size_t index, const void **array, 
         size_t src_offset = index * sizeof(void *);
         size_t dst_offset = (index + array_size) * sizeof(void *);
         size_t bytes = (last_index - index) * sizeof(void *);
-        memmove(ptr + dst_offset, ptr + src_offset, bytes);
+        memmove(offset_address(ptr, dst_offset), offset_address(ptr, src_offset), bytes);
     }
     replace(user_context, index, array, array_size);
 }
@@ -336,9 +336,12 @@ void PointerTable::allocate(void *user_context, size_t new_capacity) {
         debug(user_context) << "PointerTable: Allocating (bytes=" << (int32_t)bytes << " allocator=" << (void *)allocator.allocate << ")...\n";
 #endif
 
+        // resize() assigns the requested count before growing, so the existing
+        // allocation may hold fewer than count entries.
+        size_t copy_count = min(count, capacity);
         void *new_ptr = bytes ? allocator.allocate(user_context, bytes) : nullptr;
-        if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
-            memcpy(new_ptr, ptr, count * sizeof(void *));
+        if (copy_count != 0 && ptr != nullptr && new_ptr != nullptr) {
+            memcpy(new_ptr, ptr, copy_count * sizeof(void *));
         }
         if (ptr != nullptr) {
             halide_debug_assert(user_context, allocator.deallocate != nullptr);

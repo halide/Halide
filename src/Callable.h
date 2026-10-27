@@ -82,10 +82,17 @@ struct HalideBufferStaticTypeAndDims<::Halide::Runtime::Buffer<T, Dims>> {
 class Callable {
 private:
     friend class Pipeline;
+    friend class ProfilerScope;
     friend struct CallableContents;
     friend class PythonBindings::PyCallable;
 
     Internal::IntrusivePtr<CallableContents> contents;
+
+    // For ProfilerScope
+    int &profiler_scopes() const;
+    Internal::JITCache &jit_cache() const;
+    const JITHandlers &saved_jit_handlers() const;
+    const std::string &name() const;
 
     // ---------------------------------
 

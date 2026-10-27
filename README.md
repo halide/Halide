@@ -36,11 +36,21 @@ We provide binary wheels on PyPI. Halide provides bindings for C++ and Python.
 Even if you only intend to use Halide from C++, pip may be the easiest way to
 get a binary build of Halide.
 
-Full releases may be installed with `pip` like so:
+Full releases may be installed with `pip` or added to a uv project like so:
 
 ```shell
 $ pip install halide
+$ uv add halide
 ```
+
+The published Python artifacts are split into three distributions that share the
+`halide` import package. The `halide` distribution provides the compiler Python
+API and depends on matching versions of `halide-bin` (the compiler, headers,
+tools, and CMake package) and `halide-runtime` (the standalone `halide.runtime`
+API). Most users should install only `halide`; the package manager installs its
+two dependencies automatically. Deployments that only call precompiled AOT
+pipelines can instead install `halide-runtime`, avoiding the compiler and LLVM
+entirely.
 
 Every commit to `main` is published to our [package index][halide-pypi] as a
 development version. If you use [uv](https://docs.astral.sh/uv/), you can pin
@@ -158,13 +168,19 @@ any platform. From the Halide source tree, install with
 [uv](https://docs.astral.sh/uv/):
 
 ```shell
-$ uv sync --group ci-llvm-22 --no-install-project
+$ uv sync --frozen --group ci-llvm-22 --no-install-workspace
 $ export Halide_LLVM_ROOT=$(halide-llvm --prefix)
 ```
 
 Replace `22` with the desired LLVM major version (`21`, `22`, `23`, or `main`).
-Binary wheels are available for Linux (x86-64, x86-32, AArch64, ARMv7), macOS
-(x86-64, ARM64), and Windows (x86-64, x86-32).
+The repository root is a uv workspace containing the three Python distributions.
+`--no-install-workspace` installs only the development tools and LLVM package
+needed for a normal CMake build; `--frozen` uses the committed lockfile without
+evaluating or building the workspace packages. To build and install all three
+workspace packages into the uv environment instead, run
+`uv sync --all-packages`; this includes a full compiler build. Binary wheels are
+available for Linux (x86-64, x86-32, AArch64, ARMv7), macOS (x86-64, ARM64), and
+Windows (x86-64, x86-32).
 
 On macOS, [Homebrew](https://brew.sh) is also a good option:
 `brew install llvm`. On Debian flavors of Linux, the
@@ -239,8 +255,8 @@ After [acquiring LLVM](#acquiring-llvm), change directory to the Halide
 repository and run:
 
 ```shell
-$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
-$ cmake --build build
+$ cmake --preset release -DHalide_LLVM_ROOT=$LLVM_ROOT
+$ cmake --build build/release
 ```
 
 Setting `-DHalide_LLVM_ROOT` is not required if you have a suitable system-wide
@@ -252,8 +268,8 @@ If you use [Homebrew](https://brew.sh/) on macOS, you can use the provided CMake
 preset:
 
 ```shell
-$ cmake --preset=macOS -S . -B build
-$ cmake --build build
+$ cmake --preset=macOS
+$ cmake --build build/macOS
 ```
 
 This automatically finds LLVM from Homebrew's install path.
@@ -297,8 +313,15 @@ Halide includes a `vcpkg-configuration.json` that automatically configures
 [overlay ports](https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports)
 and overlay triplets. These overlays redirect LLVM and Python to system
 installations, so vcpkg only builds the smaller dependencies (flatbuffers, wabt,
-pybind11, etc.). You must have LLVM and Python installed separately (see
+nanobind, etc.). You must have LLVM and Python installed separately (see
 [Acquiring LLVM](#acquiring-llvm) above).
+
+If CMake does not find your LLVM installation automatically, pass its absolute
+path as `-DHalide_LLVM_ROOT`, for example:
+
+```
+D:\Halide> cmake --preset=release-vcpkg -DHalide_LLVM_ROOT=D:/llvm-install
+```
 
 #### Building Halide
 
@@ -309,31 +332,77 @@ that was run earlier.
 ```
 D:\Halide> cmake -G Ninja -S . -B build ^
                  --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
-                 -DCMAKE_BUILD_TYPE=Release
+                 -DCMAKE_BUILD_TYPE=Release ^
+                 -DVCPKG_MANIFEST_FEATURES=developer
 ```
 
 Or use a CMake preset (e.g. for a Visual Studio build):
 
 ```
 D:\Halide> cmake --preset=win64  &:: or win32 for 32-bit
-D:\Halide> cmake --build build\win64
+D:\Halide> cmake --build build\win64 --config Release
 ```
 
-For a Ninja-based build with vcpkg:
+For a Ninja-based build with vcpkg (needs `VCPKG_ROOT` set in the environment):
 
 ```
-D:\Halide> cmake --preset=release-vcpkg -S . -B build
-D:\Halide> cmake --build build
+D:\Halide> cmake --preset=release-vcpkg
+D:\Halide> cmake --build build\release-vcpkg
 ```
 
 To run all the tests:
 
 ```
-D:\Halide> ctest --test-dir build --output-on-failure
+D:\Halide> ctest --test-dir build\release-vcpkg --output-on-failure
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
-`generator`, `error`, and the other directory names under `tests/`.
+`generator`, and the other directory names under `tests/`.
+
+To build the apps, you must first install Halide to a local prefix and record
+that prefix in `CMAKE_PREFIX_PATH` (or set as `-DCMAKE_PREFIX_PATH` on the CMake
+command line):
+
+```
+D:\Halide> cmake --build build\release-vcpkg --target install
+```
+
+By default, this will install to `D:\Halide\install\release-vcpkg`. You can
+choose a different install prefix by manually calling `cmake --install` with
+`--prefix <path>`.
+
+Then move to the `apps` folder:
+
+```
+D:\Halide> cd apps
+D:\Halide\apps> cmake --preset=release-vcpkg
+D:\Halide\apps> cmake --build --preset=release-vcpkg
+```
+
+These commands configure all apps and resolve the dependencies in
+`apps/vcpkg.json`; vcpkg may build both Debug and Release versions of those
+dependencies. To build a single app without configuring the full apps project,
+configure from that app's directory instead. To build just one app in an
+already-configured apps project, pass its directory name as the build target,
+for example `cmake --build --preset=release-vcpkg --target blur`. This builds
+all targets needed by that app; the app-named target may be an executable or a
+custom target aggregating several targets.
+
+For example, to build `blur` standalone with dependencies already installed in
+the selected vcpkg triplet:
+
+```
+D:\Halide\apps\blur> cmake -G Ninja -S . -B build ^
+                          --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+                          -DVCPKG_MANIFEST_MODE=OFF ^
+                          -DCMAKE_BUILD_TYPE=Release ^
+                          -DHalide_ROOT=D:/Halide/install/release-vcpkg
+D:\Halide\apps\blur> cmake --build build
+```
+
+`VCPKG_MANIFEST_MODE=OFF` makes vcpkg use dependencies already installed for the
+selected triplet instead of installing all dependencies from `apps/vcpkg.json`.
+Install any dependencies required by the chosen app first.
 
 <details>
 <summary>Building LLVM from source on Windows (advanced)</summary>
@@ -390,23 +459,13 @@ build its own LLVM.
 
 </details>
 
-#### If all else fails...
-
-Do what the buildbots do: https://buildbot.halide-lang.org/master/#/builders
-
-If the row that best matches your system is red, then maybe things aren't just
-broken for you. If it's green, then you can click through to the latest build
-and see the commands that the build bots run. Open a step ("Configure Halide" is
-useful) and look at the "stdio" logs in the viewer. These logs contain the full
-commands that were run, as well as the environment variables they were run with.
-
 ## Building Halide with make
 
 > [!WARNING] We do not provide support for the Makefile. Feel free to use it,
 > but if anything goes wrong, switch to the CMake build. Note also that the
 > Makefile cannot build the Python bindings or produce install packages.
 
-*TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
+*TL;DR*: Have LLVM 22 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 By default, `make` will use the `llvm-config` tool found in the `PATH`. If you
@@ -440,7 +499,22 @@ $ make -f ../Halide/Makefile
 `HL_JIT_TARGET=...` will set Halide's JIT compilation target.
 
 `HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is compiling.
-Higher numbers will print more detail.
+Higher numbers will print more detail. The output can be filtered by source
+location using the grammar `verbosity[,filename[:line_low[-line_high]]][@func]`,
+with rules separated by `;` and OR-ed together (filenames and function names are
+matched as suffixes). For example, `HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180`
+prints verbosity-3 output only from lines 100–180 of `Simplify.cpp`. A handful
+of call sites are also given a stable tag (their second `debug()` argument, e.g.
+`debug(1, "counterexample")`), independent of file/line, selectable via a
+`tag:name` rule (e.g. `HL_DEBUG_CODEGEN=tag:counterexample`, or
+`HL_DEBUG_CODEGEN=tag:counterexample,non-monotonic` to select either); a tag
+rule fires whenever one of its names matches, regardless of verbosity. See
+[doc/Testing.md](doc/Testing.md) for more, including the LLDB/GDB debugger
+helpers. `HL_DEBUG_CODEGEN` output goes to stderr by default; set
+`HL_DEBUG_CODEGEN_LOG_FILE=<path>` to append it to a file instead (the file is
+never truncated). The values `/dev/stdout` and `/dev/stderr` are recognized
+explicitly and remapped to `std::cout`/`std::cerr` on all platforms, including
+Windows, which has no `/dev` filesystem to fall back on.
 
 `HL_NUM_THREADS=...` specifies the number of threads to create for the thread
 pool. When the async scheduling directive is used, more threads than this number
@@ -452,6 +526,10 @@ default, the number of cores on the host is used.)
 output can be parsed programmatically by starting from the code in
 `utils/HalideTraceViz.cpp`.
 
+`HL_CACHE_DIR=...` enables the opt-in generator compile cache, restoring a
+generator's previously emitted artifacts instead of recompiling when its inputs
+are unchanged. See [Generator cache](doc/GeneratorCache.md).
+
 # Further references
 
 We have more documentation in `doc/`, the following links might be helpful:
@@ -460,6 +538,7 @@ We have more documentation in `doc/`, the following links might be helpful:
 | --------------------------------------------- | ------------------------------------------------------------------------- |
 | [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
 | [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
+| [Generator cache](doc/GeneratorCache.md)      | How to speed up rebuilds with the opt-in generator compile cache.         |
 | [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
 | [Python](doc/Python.md)                       | Documentation for the Python bindings.                                    |
 | [RunGen](doc/RunGen.md)                       | How to use the RunGen interface to run and benchmark arbitrary pipelines. |

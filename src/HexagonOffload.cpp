@@ -781,9 +781,8 @@ class InjectHexagonRpc : public IRMutator {
             if (i->second == scalars_buffer_type) {
                 int index = scalars_buffer_init.size();
                 scalars_buffer_init.push_back(Store::make(scalars_buffer_name, Variable::make(scalars_buffer_type, i->first),
-                                                          index, Parameter(), const_true(), ModulusRemainder()));
-                Expr replacement = Load::make(scalars_buffer_type, scalars_buffer_name, index, Buffer<>(),
-                                              Parameter(), const_true(), ModulusRemainder());
+                                                          index));
+                Expr replacement = Load::make(scalars_buffer_type, scalars_buffer_name, index);
                 body = LetStmt::make(i->first, replacement, body);
 
                 i = c.vars.erase(i);

@@ -6,11 +6,12 @@ set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
 
 # weights
 set(WF_CPP baseline.cpp)
-configure_file(baseline.weights baseline.weights COPYONLY)
 add_custom_command(
     OUTPUT ${WF_CPP}
-    COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
-    DEPENDS baseline.weights binary2cpp
+    COMMAND
+        binary2cpp baseline_weights < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights>"
+        > ${WF_CPP}
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights" binary2cpp
     VERBATIM
 )
 
@@ -25,16 +26,16 @@ add_halide_library(
     FROM anderson2021_cost_model.generator
     GENERATOR cost_model
     FUNCTION_NAME cost_model
-    FEATURES[x86-64-osx] avx2 sse41
-    FEATURES[arm-64-osx] arm_dot_prod-arm_fp16
+    FEATURES[x86-64-macos] avx2 sse41
+    FEATURES[arm-64-macos] arm_dot_prod-arm_fp16
 )
 add_halide_library(
     anderson2021_train_cost_model
     FROM anderson2021_cost_model.generator
     GENERATOR train_cost_model
     FUNCTION_NAME train_cost_model
-    FEATURES[x86-64-osx] avx2 sse41
-    FEATURES[arm-64-osx] arm_dot_prod-arm_fp16
+    FEATURES[x86-64-macos] avx2 sse41
+    FEATURES[arm-64-macos] arm_dot_prod-arm_fp16
     USE_RUNTIME anderson2021_cost_model.runtime
 )
 

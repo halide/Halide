@@ -423,6 +423,45 @@ extern int halide_get_num_threads();
 extern int halide_set_num_threads(int n);
 // @}
 
+/** Acquire (keep_awake = true) or release (keep_awake = false) a reference on
+ * the default thread pool's process-wide keep-awake count, and return the new
+ * count.
+ *
+ * Normally, a thread pool thread that runs out of work spins briefly and then
+ * goes to sleep, so a parallel loop that starts after the pool has been idle
+ * for more than a few microseconds pays to wake its threads up. While the
+ * keep-awake count is positive, idle threads (workers, and threads waiting for
+ * parallel loops they started to finish) instead keep polling for work,
+ * calling halide_thread_yield() between polls. This makes back-to-back small
+ * parallel loops, separated by serial work, much cheaper. The cost is that
+ * those threads keep their cores busy while the count is held, even with no
+ * work to do, so hold it only around phases that run many short parallel loops
+ * (e.g. a benchmark, or a model's inference loop) and release it afterwards.
+ * Workers blocked on a semaphore of an async pipeline still go to sleep.
+ *
+ * Holders compose: the pool stays awake until every reference is released.
+ * When the count returns to zero, spinning threads go to sleep on their next
+ * poll. As a backstop against leaked references, and against competing for
+ * cores with other thread pools for long periods, an idle thread goes to sleep
+ * anyway after polling a few thousand times without finding work (a few
+ * milliseconds, depending on the cost of halide_thread_yield); the next
+ * parallel loop wakes it as usual.
+ *
+ * Threads that are already asleep when the first reference is acquired start
+ * polling once the next parallel loop wakes them. Releasing a reference that
+ * isn't held is an error: it calls halide_error, leaves the count at zero,
+ * and returns halide_error_code_generic_error.
+ *
+ * The count is independent of halide_set_num_threads, and survives
+ * halide_shutdown_thread_pool (which still wakes and joins all threads). This
+ * function may be called from any thread. Custom thread pools (see
+ * halide_set_custom_do_par_for) are not affected, and on platforms without
+ * threads this only maintains the count. C++ code can use the RAII wrapper
+ * Halide::Runtime::ThreadPoolKeepAwake. In JIT code, use
+ * Halide::ThreadPoolKeepAwake instead (hl.ThreadPoolKeepAwake in Python).
+ */
+extern int halide_thread_pool_keep_awake(bool keep_awake);
+
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and
  * halide_set_custom_free, or (on platforms that support weak
@@ -499,6 +538,8 @@ typedef enum halide_type_code_t
     halide_type_float = 2,   ///< IEEE floating point numbers
     halide_type_handle = 3,  ///< opaque pointer type (void *)
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
+    halide_type_struct = 5,  ///< a packed, by-value aggregate; its total byte
+                             ///< size is carried in halide_type_t::info
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -532,22 +573,24 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** Reserved for future element-kind payloads. */
+    /** Element-kind payload. For a struct type (code == halide_type_struct)
+     * this holds the total packed byte size of the aggregate; the ordinary
+     * `bits` field is not meaningful for a struct. Zero for all other types. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t reserved;
+    uint16_t info;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Construct a runtime representation of a Halide element type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits)
-        : code(code), bits(bits), reserved(0) {
+        : code(code), bits(bits), info(0) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t()
-        : code((halide_type_code_t)0), bits(0), reserved(0) {
+        : code((halide_type_code_t)0), bits(0), info(0) {
     }
 
     /** Compare two types for equality. */
@@ -563,9 +606,11 @@ struct halide_type_t {
         return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element of this type. */
+    /** Size in bytes for a single element of this type. For a struct type the
+     * packed aggregate size is carried in `info` rather than derived from
+     * `bits`. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
-        return (bits + 7) / 8;
+        return code == halide_type_struct ? info : (bits + 7) / 8;
     }
 
     HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
@@ -575,7 +620,7 @@ struct halide_type_t {
         // (At -O0 it will look awful.)
         return static_cast<uint8_t>(code) |
                static_cast<uint16_t>(bits) << 8 |
-               static_cast<uint32_t>(reserved) << 16;
+               static_cast<uint32_t>(info) << 16;
     }
 #endif
 };
@@ -596,7 +641,8 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_pipeline = 9,
                                  halide_trace_tag = 10,
                                  halide_trace_begin_parallel_task = 11,
-                                 halide_trace_end_parallel_task = 12 };
+                                 halide_trace_end_parallel_task = 12,
+                                 halide_trace_bounds_required = 13 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -670,9 +716,13 @@ struct halide_trace_event_t {
  * +--tag (if any)
  * +--tag (if any)
  * ...
+ * +--bounds_required (if any)
+ * ...
  * +--(begin_realization|produce|consume)
+ * |  +-- bounds_required (if any)
  * |  +-- ... recursively more realizations/produces/consumes ...
  * |      +-- begin_parallel_task
+ * |      |   +-- bounds_required (if any)
  * |      |   +-- load
  * |      |   +-- store
  * |      |   +-- ... recursively more realization/produce/consume events ...
@@ -696,6 +746,21 @@ struct halide_trace_event_t {
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
+ *
+ * A bounds_required event gives, as min/extent pairs, the region of a Func
+ * that must be computed within an iteration of a loop that contains a
+ * production of that Func. It is emitted at the start of that iteration, before
+ * the realization of the Func, and its parent is the innermost enclosing event
+ * (or begin_pipeline, after any tags, for the outermost loop level). Stores
+ * to the Func within that iteration that fall outside the region (e.g. due to
+ * TailStrategy::RoundUp in a consumer) do not affect the output, and may be
+ * computed from uninitialized memory. Values stored in earlier iterations may
+ * still be loaded (e.g. due to sliding window).
+ *
+ * A trace function returns the id of the event, which must be
+ * non-negative. A negative return value is treated as an error code:
+ * the pipeline stops and returns it. The trace function should call
+ * halide_error first to describe the failure.
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
@@ -740,7 +805,7 @@ struct halide_trace_packet_t {
         struct {
             /** The (scalar) element type code of the access (see halide_trace_event_t).
              * Unpacked from halide_type_t rather than storing it directly, since
-             * halide_type_t's `reserved` field carries no meaning here. */
+             * halide_type_t's `info` field carries no meaning here. */
             uint8_t type_code;
             /** The bit-width of the element type of the access. */
             uint8_t type_bits;
@@ -831,11 +896,13 @@ static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size misma
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
  * information to stdout in a human-readable format. If never called,
- * Halide checks the for existence of an environment variable called
- * HL_TRACE_FILE and opens that file. If HL_TRACE_FILE is not defined,
- * it outputs trace information to stdout in a human-readable
- * format. */
-extern void halide_set_trace_file(int fd);
+ * or called with -1, Halide checks the for existence of an environment
+ * variable called HL_TRACE_FILE and opens that file. If HL_TRACE_FILE
+ * is not defined, it outputs trace information to stdout in a
+ * human-readable format. Trace data buffered for the previous file is
+ * flushed to it first, and a file opened via HL_TRACE_FILE is
+ * closed. Must not be called while a traced pipeline is running. */
+extern void halide_set_trace_file(void *user_context, int fd);
 
 /** Halide calls this to retrieve the file descriptor to write binary
  * trace events to. The default implementation returns the value set
@@ -845,8 +912,9 @@ extern void halide_set_trace_file(int fd);
  * information to stdout. */
 extern int halide_get_trace_file(void *user_context);
 
-/** If tracing is writing to a file. This call closes that file
- * (flushing the trace). Returns zero on success. */
+/** Flush any buffered trace data, close the trace file if it was
+ * opened via HL_TRACE_FILE, and reset to the state before any call to
+ * halide_set_trace_file. Returns zero on success. */
 extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
@@ -1350,6 +1418,10 @@ enum halide_error_code_t {
 
     /** Profiling failed for a pipeline invocation. */
     halide_error_code_cannot_profile_pipeline = -48,
+
+    /** "vscale" value of Streaming Scalable Vector detected in runtime does not
+     * match the streaming vscale value used in compilation. */
+    halide_error_code_streaming_vscale_invalid = -49,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1426,6 +1498,8 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_trace_failed(void *user_context, const char *reason);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1457,16 +1531,20 @@ typedef enum halide_target_feature_t {
     halide_target_feature_vsx,              ///< Use VSX instructions. Only relevant on POWERPC.
     halide_target_feature_power_arch_2_07,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
-    halide_target_feature_cuda,               ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-    halide_target_feature_cuda_capability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
-    halide_target_feature_cuda_capability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
-    halide_target_feature_cuda_capability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
-    halide_target_feature_cuda_capability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
-    halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
-    halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
-    halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
-    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda,                ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30,   ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32,   ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35,   ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50,   ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda_capability61,   ///< Enable CUDA compute capability 6.1 (Pascal)
+    halide_target_feature_cuda_capability70,   ///< Enable CUDA compute capability 7.0 (Volta)
+    halide_target_feature_cuda_capability75,   ///< Enable CUDA compute capability 7.5 (Turing)
+    halide_target_feature_cuda_capability80,   ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,   ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda_capability89,   ///< Enable CUDA compute capability 8.9 (Ada)
+    halide_target_feature_cuda_capability90,   ///< Enable CUDA compute capability 9.0 (Hopper)
+    halide_target_feature_cuda_capability100,  ///< Enable CUDA compute capability 10.0 (Blackwell)
+    halide_target_feature_cuda_capability120,  ///< Enable CUDA compute capability 12.0 (Blackwell)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
@@ -1499,6 +1577,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
+    halide_target_feature_trace_bounds_required,  ///< Trace the bounds required of each Func at each loop level containing a production of it. Equivalent to calling Func::trace_bounds_required on every non-inlined Func.
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
     halide_target_feature_hvx_v68,                ///< Enable Hexagon v68 architecture.
@@ -1518,6 +1597,12 @@ typedef enum halide_target_feature_t {
     halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
+    halide_target_feature_sme2,                   ///< Enable ARM Scalable Matrix Extensions v2
+    halide_target_feature_sme_svl128,             ///< Assume ARM SME streaming vector length is 128 bits.
+    halide_target_feature_sme_svl256,             ///< Assume ARM SME streaming vector length is 256 bits.
+    halide_target_feature_sme_svl512,             ///< Assume ARM SME streaming vector length is 512 bits.
+    halide_target_feature_sme_svl1024,            ///< Assume ARM SME streaming vector length is 1024 bits.
+    halide_target_feature_sme_svl2048,            ///< Assume ARM SME streaming vector length is 2048 bits.
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
@@ -1559,20 +1644,53 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hlsl_sm67,              ///< Enable D3D12 Shader Model 6.7
     halide_target_feature_hlsl_sm68,              ///< Enable D3D12 Shader Model 6.8
     halide_target_feature_hlsl_sm69,              ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
+    halide_target_feature_no_metadata,            ///< Don't emit the _argv() and _metadata() entry points for exported functions, keeping the argument names and target string out of the binary.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
+
+/** The specific processor a compilation Target can be tuned for.
+ *
+ * Be sure to keep this in sync with the Processor enum in Target.h if you add
+ * a new processor.
+ */
+typedef enum halide_target_processor_t {
+    halide_target_processor_generic = 0,  ///< Do not tune for any specific CPU.
+    halide_target_processor_k8,           ///< AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
+    halide_target_processor_k8_sse3,      ///< Later AMD K8 CPU with SSE3 support.
+    halide_target_processor_amdfam10,     ///< AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
+    halide_target_processor_btver1,       ///< AMD Bobcat CPU (AMD Family 14h, launched 2011).
+    halide_target_processor_bdver1,       ///< AMD Bulldozer CPU (AMD Family 15h, launched 2011).
+    halide_target_processor_bdver2,       ///< AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
+    halide_target_processor_bdver3,       ///< AMD Steamroller CPU (AMD Family 15h (3rd-gen), launched 2014).
+    halide_target_processor_bdver4,       ///< AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
+    halide_target_processor_btver2,       ///< AMD Jaguar CPU (AMD Family 16h, launched 2013).
+    halide_target_processor_znver1,       ///< AMD Zen CPU (AMD Family 17h, launched 2017).
+    halide_target_processor_znver2,       ///< AMD Zen 2 CPU (AMD Family 17h, launched 2019).
+    halide_target_processor_znver3,       ///< AMD Zen 3 CPU (AMD Family 19h, launched 2020).
+    halide_target_processor_znver4,       ///< AMD Zen 4 CPU (AMD Family 19h, launched 2022).
+    halide_target_processor_znver5,       ///< AMD Zen 5 CPU (AMD Family 1Ah, launched 2024).
+} halide_target_processor_t;
 
 /** This function is called internally by Halide in some situations to determine
  * if the current execution environment can support the given set of
  * halide_target_feature_t flags. The implementation must do the following:
  *
- * -- If there are flags set in features that the function knows *cannot* be supported, return 0.
- * -- Otherwise, return 1.
+ * -- If there are flags set in features that the function knows *cannot* be supported, return 0 (never) or 2 (not right now).
+ * -- Otherwise, return 1 (always) or 3 (for the moment).
  * -- Note that any flags set in features that the function doesn't know how to test should be ignored;
- * this implies that a return value of 1 means "not known to be bad" rather than "known to be good".
+ * this implies that a return value of 1 or 3 means "not known to be bad" rather than "known to be good".
  *
- * In other words: a return value of 0 means "It is not safe to use code compiled with these features",
- * while a return value of 1 means "It is not obviously unsafe to use code compiled with these features".
+ * In other words: a return value of 0 or 2 means "It is not safe to use code compiled with these features",
+ * while a return value of 1 or 3 means "It is not obviously unsafe to use code compiled with these features".
+ *
+ * Notice that there are four values to chose from: permanent decisions (0:never and 1:always) and temporary
+ * decisions (2:not_right_now and 3:for_the_moment). Halide multi-target pipeline wrappers select which version
+ * of the pipeline can be run based on halide_can_use_target_features. Historically, they would cache this
+ * decision in a global variable. With the introduction of the two non-permanent decision values, one can
+ * control the whether or not this procedure will be called again next invocation of a pipeline to determine
+ * which version is eligible for calling.
+ *
+ * You may use the convenience enum below to write your return statements.
  *
  * The default implementation simply calls halide_default_can_use_target_features.
  *
@@ -1580,6 +1698,12 @@ typedef enum halide_target_feature_t {
  * bits to represent all the currently known features. Any excess bits must be set to zero.
  */
 // @{
+enum {
+    halide_can_use_target_never = 0,
+    halide_can_use_target_always = 1,
+    halide_can_use_target_not_right_now = 2,
+    halide_can_use_target_for_the_moment = 3,
+};
 extern int halide_can_use_target_features(int count, const uint64_t *features);
 typedef int (*halide_can_use_target_features_t)(int count, const uint64_t *features);
 extern halide_can_use_target_features_t halide_set_custom_can_use_target_features(halide_can_use_target_features_t);
@@ -1593,7 +1717,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *     int halide_can_use_target_features(int count, const uint64_t *features) {
  *          if (features[halide_target_somefeature >> 6] & (1LL << (halide_target_somefeature & 63))) {
  *              if (!can_use_somefeature()) {
- *                  return 0;
+ *                  return halide_can_use_target_never;
  *              }
  *          }
  *          return halide_default_can_use_target_features(count, features);
@@ -1965,9 +2089,29 @@ enum halide_profiler_func_kind {
 };
 
 /** Per-Func state tracked by the sampling profiler. */
+// These fields fall into groups that aggregate differently across the
+// pipeline's runs (see halide_profiler_pipeline_stats::runs). Read them
+// accordingly -- in particular the counters are *totals over all runs*, so
+// most consumers want to divide them by the run count:
+//   - Identity (name, parent, canonical_id, kind, buffer_func_id): fixed.
+//   - Peaks (memory_peak, stack_peak): the maximum over all runs. A peak,
+//     not a sum -- do not divide by runs.
+//   - Counters (everything from memory_total to the end of the struct, and
+//     time): summed over every run. Divide by the pipeline's `runs` to get a
+//     per-run value. `time` is the exception: it is summed only over runs
+//     that produced a sample, so divide it by `billed_runs` instead.
+//     active_threads_{numerator,denominator} are summed as a pair; their
+//     ratio is already an average, so do not divide it further.
+//   - memory_current is a live snapshot (roughly zero once a run finishes),
+//     not aggregated.
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
     const char *name;
+
+    /** The name of this Func in the IR. Differs from name when the Func has a
+     * profiler display name (e.g. inputs and wrappers). A global constant
+     * string. */
+    const char *ir_name;
 
     /** The id of the parent Func (the one which this is compute_at). -1 if the
      * Func is compute_root. */
@@ -1986,47 +2130,131 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * canonical id of the Func whose buffer is being copied. -1 otherwise. */
     int buffer_func_id;
 
-    /** Total time taken evaluating this Func (in nanoseconds). */
+    /** A bitmask flagging which of this Func's aggregated counters are
+     * conservative upper bounds rather than exact values. Bit i corresponds
+     * to the i'th counter passed to halide_profiler_update_counters, in the
+     * order of the counter enum in src/Profiling.cpp (bit 0 = memory_total,
+     * 1 = num_allocs, ... covering all the summed counters below, from
+     * memory_total through productions_if_inwards). active_threads_numerator
+     * and _denominator are sampled at runtime rather than summed over loops,
+     * so they are never approximated and have no bit. A set bit only happens
+     * on GPU, where a guarded contribution can't be summed exactly and is
+     * bounded instead; the reporter marks such columns with a leading '<'. */
+    uint32_t counters_approximated;
+
+    /** Total time (nanoseconds) spent evaluating this Func, summed across
+     * all runs that produced a profiler sample. Divide by the pipeline's
+     * billed_runs (not runs) for a per-run time. */
     uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
-    /** The current memory allocation of this Func. */
+    /** This Func's live heap allocation at the instant the report is taken;
+     * normally near zero once a run has finished. A snapshot, not aggregated. */
     uint64_t memory_current;
 
-    /** The peak memory allocation of this Func. */
+    /** The peak heap allocation of this Func: the maximum over all runs (a
+     * peak, not a sum -- do not divide by runs). */
     uint64_t memory_peak;
 
-    /** The peak stack allocation of this Func's threads. */
+    /** The peak stack allocation of this Func's threads, as a maximum over
+     * all runs (like memory_peak). */
     uint64_t stack_peak;
+
+    // Every field after this point is a counter: summed across every run
+    // (and across a Func's instances). Divide by the pipeline's `runs` for a
+    // per-run value.
 
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
-    /** The average number of thread pool worker threads active while computing
-     * this Func. */
+    /** The average number of thread pool worker threads active while
+     * computing this Func is numerator / denominator. Both are summed across
+     * runs, so the ratio is already an average -- do not divide it by runs. */
     uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The total number of times heap storage for this Func was allocated. */
     uint64_t num_allocs;
+
+    /** The number of parallel loops launched to compute some of this
+     * Func. I.e. the number of times halide_do_par_for was called due to one of
+     * this Func's parallel loops. Next, the total number of iterations of those
+     * loops. */
+    uint64_t parallel_loops, parallel_tasks;
+
+    /** The number of points required of this Func at root. Will be less than
+     * points_required when there is redundant recompute due to use of
+     * compute_at. */
+    uint64_t points_required_at_root;
+
+    /** The number of points actually computed by this Func's pure
+     * definition (its stage-0 stores), weighted by vector lane count.
+     * Captures forms of over-computation that the box-required counters
+     * miss: tail strategies like RoundUp that write past the requested
+     * extent, and cases where sliding-window failed so each produce-node
+     * iteration computes the full required box. Counting just stage-0
+     * stores keeps update definitions from being conflated as
+     * "recompute". */
+    uint64_t points_computed;
+
+    /** The number of loads of various kinds done while computing this Func,
+     * classified by the index expression: scalar (a scalar index),
+     * vector (a unit-stride ramp), or gather (anything else). bytes_loaded
+     * is the total number of bytes loaded across all three. */
+    uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
+
+    /** The number of stores of various kinds done while computing this Func,
+     * classified the same way (scalar / unit-stride vector / scatter), plus
+     * the total bytes stored. */
+    uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
+
+    /** The number of times heap storage for this Func was realized (a
+     * store_at site) and produced (a compute_at site). */
+    uint64_t realizations, productions;
+
+    /** The total number of points required of this Func aggregated across all
+     * realizations (store_at sites) and, separately, across all productions
+     * (compute_at sites). When sliding-window succeeds, the production total
+     * is less than the per-production naive sum. */
+    uint64_t points_required_at_realization, points_required_at_production;
+
+    /** The number of points that would be required, and the number of times
+     * the Func would be produced, if it were computed one loop level further
+     * inwards than its current compute_at. Used to evaluate whether computing
+     * further in might be a good idea. */
+    uint64_t points_required_inwards, productions_if_inwards;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
- * in a linked list. */
+ * in a linked list. The fields aggregate across `runs` the same way as in
+ * halide_profiler_func_stats: `time` is summed over `billed_runs` (divide by
+ * that for per-run), `memory_peak` is a maximum (not a sum), the remaining
+ * counters are summed over `runs` (divide by `runs` for per-run), the
+ * active_threads pair is a ready-made average, and `memory_current` is a
+ * live snapshot. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
-    /** Total time spent in this pipeline (in nanoseconds) */
+    /** Total time (nanoseconds) spent in this pipeline, summed across the
+     * runs that produced a sample. Divide by billed_runs for a per-run time. */
     uint64_t time;
 
-    /** The current memory allocation of funcs in this pipeline. */
+    /** Live heap allocation across this pipeline's funcs at report time; a
+     * snapshot, not aggregated. */
     uint64_t memory_current;
 
-    /** The peak memory allocation of funcs in this pipeline. */
+    /** The peak heap allocation of funcs in this pipeline: the maximum over
+     * all runs (a peak, not a sum). */
     uint64_t memory_peak;
 
-    /** The total memory allocation of funcs in this pipeline. */
+    /** The total memory allocated by funcs in this pipeline, summed across
+     * all runs. Divide by `runs` for a per-run value. */
     uint64_t memory_total;
 
-    /** The average number of thread pool worker threads doing useful
-     * work while computing this pipeline. */
+    /** The average number of thread pool worker threads doing useful work
+     * while computing this pipeline is numerator / denominator; the ratio is
+     * already an average (do not divide by runs). */
     uint64_t active_threads_numerator, active_threads_denominator;
+
+    /** The native vector width for the target this pipeline ran on, in
+     * bytes. This is used to drive some performance warnings. */
+    uint64_t native_vector_bytes;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
@@ -2179,6 +2407,12 @@ extern void halide_profiler_shutdown(void);
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
+
+/** Set the path of the JSON file that halide_profiler_report writes the raw
+ * statistics to, overriding the HL_PROFILER_JSON_OUTPUT environment
+ * variable. The path is copied. Pass nullptr to revert to the environment
+ * variable. */
+extern void halide_profiler_set_json_output(const char *path);
 
 /** These routines are called to temporarily disable and then re-enable
  * the profiler. */
@@ -2350,6 +2584,38 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
 
 #ifndef COMPILING_HALIDE_RUNTIME
 
+namespace Halide {
+namespace Runtime {
+
+/** Hold a reference on the default thread pool's keep-awake count (see
+ * halide_thread_pool_keep_awake) for the lifetime of this object. Instances
+ * may be nested, and may live on different threads. For example:
+ \code
+ {
+     Halide::Runtime::ThreadPoolKeepAwake keep_awake;
+     for (int i = 0; i < 1000; i++) {
+         my_small_parallel_pipeline(...);
+     }
+ }
+ \endcode
+ * For JIT-compiled code, use Halide::ThreadPoolKeepAwake instead. */
+class ThreadPoolKeepAwake {
+public:
+    ThreadPoolKeepAwake() {
+        (void)halide_thread_pool_keep_awake(true);
+    }
+    ~ThreadPoolKeepAwake() {
+        (void)halide_thread_pool_keep_awake(false);
+    }
+    ThreadPoolKeepAwake(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake &operator=(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake(ThreadPoolKeepAwake &&) = delete;
+    ThreadPoolKeepAwake &operator=(ThreadPoolKeepAwake &&) = delete;
+};
+
+}  // namespace Runtime
+}  // namespace Halide
+
 // These structures are used by `function_info_header` files
 // (generated by passing `-e function_info_header` to a Generator).
 // The generated files contain documentation on the proper usage.
@@ -2381,6 +2647,8 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "(void*)";
     case halide_type_bfloat:
         return os << "bfloat" << (int)type.bits;
+    case halide_type_struct:
+        return os << "struct(" << (int)type.info << " bytes)";
     }
     return os;
 }

@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 
 # Filters
-add_halide_library(bgu FROM bgu.generator)
+add_halide_library(
+    bgu_pipeline
+    FROM bgu.generator
+    GENERATOR bgu
+    FUNCTION_NAME bgu
+    FILE_BASE_NAME bgu
+)
 add_halide_library(
     bgu_auto_schedule
     FROM bgu.generator
@@ -34,13 +40,13 @@ add_halide_library(
 
 # Main executable
 add_executable(bgu_filter filter.cpp)
-target_link_libraries(bgu_filter PRIVATE Halide::ImageIO bgu bgu_auto_schedule)
+target_link_libraries(bgu_filter PRIVATE Halide::ImageIO bgu_pipeline bgu_auto_schedule)
+add_custom_target(bgu DEPENDS bgu_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME bgu_filter COMMAND bgu_filter rgb.png out.png)
+    add_test(NAME bgu_filter COMMAND bgu_filter ${IMAGE} out.png)
     set_tests_properties(
         bgu_filter
         PROPERTIES

@@ -124,20 +124,62 @@ int multiple_funcs_sharing_clone_test() {
     return 0;
 }
 
-int update_defined_after_clone_test() {
+int clone_same_func_into_different_funcs_test() {
+    Func f("f"), g0("g0"), g1("g1"), g2("g2"), h("h");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    g0(x, y) = f(x, y);
+    g1(x, y) = f(x, y);
+    g2(x, y) = f(x, y);
+    h(x, y) = g0(x, y) + g1(x, y) + g2(x, y);
+
+    // Cloning the same Func into two different callers should register two
+    // independent clones without tripping over each other's wrappers.
+    Func f_clone_in_g0 = f.clone_in(g0).compute_root();
+    Func f_clone_in_g1 = f.clone_in(g1).compute_root();
+    f.compute_root();
+    g0.compute_root();
+    g1.compute_root();
+    g2.compute_root();
+
+    // Expect g0 and g1 to call their own clones, and g2 to call f directly.
+    CallGraphs expected = {
+        {h.name(), {g0.name(), g1.name(), g2.name()}},
+        {g0.name(), {f_clone_in_g0.name()}},
+        {g1.name(), {f_clone_in_g1.name()}},
+        {g2.name(), {f.name()}},
+        {f_clone_in_g0.name(), {}},
+        {f_clone_in_g1.name(), {}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(h, expected) != 0) {
+        return 1;
+    }
+
+    Buffer<int> im = h.realize({200, 200});
+    auto func = [](int x, int y) { return 3 * (x + y); };
+    if (check_image(im, func)) {
+        return 1;
+    }
+    return 0;
+}
+
+int clone_of_func_with_update_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
     f(x, y) = x + y;
     g(x, y) = f(x, y);
 
-    Func clone = f.clone_in(g);
-
-    // Update of 'g' is defined after f.clone_in(g) is called. g's updates should
-    // still call f's clone.
+    // clone_in() rewrites the call graph eagerly, so it only affects the stages
+    // of 'g' that exist when it is called. Define g's update first, then clone;
+    // both of g's calls to f are then redirected to the clone.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
     g(r.x, r.y) += 2 * f(r.x, r.y);
+
+    Func clone = f.clone_in(g);
 
     Param<bool> param;
 
@@ -346,8 +388,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("Running update is defined after clone test\n");
-    if (update_defined_after_clone_test() != 0) {
+    printf("Running clone same func into different funcs test\n");
+    if (clone_same_func_into_different_funcs_test() != 0) {
+        return 1;
+    }
+
+    printf("Running clone of func with update test\n");
+    if (clone_of_func_with_update_test() != 0) {
         return 1;
     }
 

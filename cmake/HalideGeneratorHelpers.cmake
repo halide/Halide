@@ -7,6 +7,41 @@ option(Halide_NO_DEFAULT_FLAGS
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
+##
+# Generator compile cache (opt-in via the HL_CACHE_DIR environment variable or
+# -DHalide_CACHE_DIR). When set, generators serialize their pipeline and reuse
+# previously emitted artifacts from this directory instead of recompiling. See
+# the HL_CACHE_DIR docs for details.
+##
+
+set(Halide_CACHE_DIR "$ENV{HL_CACHE_DIR}"
+    CACHE PATH
+    "Directory for the Halide generator compile cache; empty disables it (see HL_CACHE_DIR)."
+)
+
+# Produce the command prefix used to invoke a generator executable target. When
+# a cache directory or environment is configured, the invocation is wrapped in
+# `cmake -E env ... --` so the values reach the generator process,
+# and the executable is referenced by file (a bare target name only
+# auto-resolves as the first token of a COMMAND). When neither is configured
+# the bare target is returned, so the emitted command is identical to before.
+# In both cases the caller is responsible for listing the target in DEPENDS.
+function(_Halide_generator_invocation OUT_VAR GEN_TARGET)
+    cmake_parse_arguments(PARSE_ARGV 2 ARG "" "" "ENVIRONMENT")
+    set(env_assignments ${ARG_ENVIRONMENT})
+    if (Halide_CACHE_DIR)
+        list(PREPEND env_assignments "HL_CACHE_DIR=${Halide_CACHE_DIR}")
+    endif ()
+    if (env_assignments)
+        set(${OUT_VAR}
+            ${CMAKE_COMMAND} -E env ${env_assignments} -- "$<TARGET_FILE:${GEN_TARGET}>"
+            PARENT_SCOPE
+        )
+    else ()
+        set(${OUT_VAR} "${GEN_TARGET}" PARENT_SCOPE)
+    endif ()
+endfunction()
+
 define_property(  # nolint
     TARGET
     PROPERTY Halide_RT_TARGETS
@@ -117,9 +152,17 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             add_executable(${gen} ALIAS ${TARGET})
+            list(LENGTH Halide_CMAKE_TARGET num_platforms)
+            if (
+                APPLE
+                AND num_platforms GREATER 1
+                AND Halide_HOST_TARGET MATCHES "^(arm|x86)-64-macos$"
+            )
+                _Halide_set_osx_arch("${TARGET}" "${Halide_HOST_TARGET}")
+            endif ()
 
             if (NOT TARGET Halide::Generator)
-                find_package(Halide REQUIRED)
+                find_package(HalideCompiler REQUIRED)
             endif ()
             target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
@@ -179,19 +222,38 @@ function(add_halide_generator TARGET)
         )
         file(CONFIGURE OUTPUT "${stub_file}" CONTENT "${stub_text}" @ONLY)
 
-        Python_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
+        find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+        if (
+            NOT Python_INTERPRETER_ID STREQUAL "Python"
+            OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t"
+        )
+            message(
+                FATAL_ERROR "Halide Python stubs require regular (GIL-enabled) CPython 3.12 or newer."
+            )
+        endif ()
+        Python_add_library(
+            ${TARGET}_pystub
+            MODULE
+            USE_SABI 3.12
+            WITH_SOABI "${stub_file}" ${ARG_SOURCES}
+        )
         set_target_properties(${TARGET}_pystub
             PROPERTIES
             CXX_VISIBILITY_PRESET hidden
             VISIBILITY_INLINES_HIDDEN ON
             POSITION_INDEPENDENT_CODE ON
         )
+
+        if (NOT TARGET Halide::PyStubs)
+            find_package(HalideCompiler REQUIRED COMPONENTS Python)
+        endif ()
         target_link_libraries(
             ${TARGET}_pystub
             PRIVATE Halide::PyStubs Halide::Halide ${ARG_LINK_LIBRARIES}
         )
         set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
         _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
+        _Halide_place_dll(${TARGET}_pystub)
     endif ()
 endfunction()
 
@@ -225,7 +287,7 @@ endfunction()
 
 function(_Halide_library_from_generator TARGET)
     cmake_parse_arguments(
-        PARSE_ARGV 1 ARG ""
+        PARSE_ARGV 1 ARG "INTERNAL"
         "FILE_BASE_NAME;FUNCTION_NAME;GENERATOR;GRADIENT_DESCENT;OUTPUT_DIR;TYPE;USE_RUNTIME"
         "COMMAND;DEPENDS;EXTRA_OUTPUTS;PARAMS;PLUGINS;TARGETS"
     )
@@ -253,7 +315,6 @@ function(_Halide_library_from_generator TARGET)
     set(bitcode_extension ".bc")
     # set(c_header_extension ".h")  # handled specially
     set(c_source_extension ".halide_generated.cpp")
-    set(compiler_log_extension ".halide_compiler_log")
     set(conceptual_stmt_extension ".conceptual.stmt")
     set(conceptual_stmt_html_extension ".conceptual.stmt.html")
     # set(cpp_stub_extension ".stub.h")  # handled by add_halide_stub()
@@ -277,8 +338,13 @@ function(_Halide_library_from_generator TARGET)
         message(FATAL_ERROR "`${ARG_TYPE}` not among: c_source, object, static_library")
     endif ()
 
-    ## Validate plugins
+    ## Validate plugins, lazily loading autoscheduler plugins that live in
+    # their own package (e.g. when named directly via PLUGINS instead of the
+    # add_halide_library(... AUTOSCHEDULER ...) convenience keyword).
     foreach (plugin IN LISTS ARG_PLUGINS)
+        if (NOT TARGET "${plugin}" AND "${plugin}" MATCHES "::")
+            find_package(HalideAutoschedulers QUIET)
+        endif ()
         if (NOT TARGET "${plugin}")
             message(FATAL_ERROR "Plugin `${plugin}` is not a target.")
         endif ()
@@ -354,12 +420,16 @@ function(_Halide_library_from_generator TARGET)
 
     foreach (out file IN ZIP_LISTS outputs output_files)
         list(APPEND "local_out_${out}" "${file}")
-        list(APPEND "OUT_${out}" "${file}")
+        if (NOT ARG_INTERNAL)
+            list(APPEND "OUT_${out}" "${file}")
+        endif ()
     endforeach ()
 
-    foreach (out IN LISTS outputs)
-        set("OUT_${out}" "${OUT_${out}}" PARENT_SCOPE)
-    endforeach ()
+    if (NOT ARG_INTERNAL)
+        foreach (out IN LISTS outputs)
+            set("OUT_${out}" "${OUT_${out}}" PARENT_SCOPE)
+        endforeach ()
+    endif ()
 
     # Create the filter's library target
     if (ARG_TYPE STREQUAL "static_library")
@@ -394,11 +464,13 @@ function(_Halide_library_from_generator TARGET)
         _Halide_add_targets_to_runtime("${ARG_USE_RUNTIME}" TARGETS ${ARG_TARGETS})
     endif ()
 
-    target_sources(
-        "${TARGET}"
-        INTERFACE
-        FILE_SET HEADERS BASE_DIRS "${ARG_OUTPUT_DIR}" FILES "${local_out_c_header}"
-    )
+    if (NOT ARG_INTERNAL)
+        target_sources(
+            "${TARGET}"
+            INTERFACE
+            FILE_SET HEADERS BASE_DIRS "${ARG_OUTPUT_DIR}" FILES "${local_out_c_header}"
+        )
+    endif ()
 endfunction()
 
 function(_Halide_lipo)
@@ -467,7 +539,7 @@ function(_Halide_lipo)
 endfunction()
 
 function(_Halide_compute_generator_cmd)
-    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "FROM;OUT_COMMAND;OUT_DEPENDS" "")
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "FROM;OUT_COMMAND;OUT_DEPENDS" "ENVIRONMENT")
 
     if (NOT ARG_FROM)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
@@ -486,7 +558,8 @@ function(_Halide_compute_generator_cmd)
 
     get_property(py_src TARGET "${ARG_FROM}" PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (NOT py_src)
-        set("${ARG_OUT_COMMAND}" "${ARG_FROM}" PARENT_SCOPE)
+        _Halide_generator_invocation(gen_cmd "${ARG_FROM}" ENVIRONMENT ${ARG_ENVIRONMENT})
+        set("${ARG_OUT_COMMAND}" ${gen_cmd} PARENT_SCOPE)
         set("${ARG_OUT_DEPENDS}" "${ARG_FROM}" PARENT_SCOPE)
         return()
     endif ()
@@ -503,20 +576,25 @@ function(_Halide_compute_generator_cmd)
         message(FATAL_ERROR "Missing Python::Interpreter. Missing call to find_package(Python 3)?")
     endif ()
 
+    set(cache_env_assign "")
+    if (Halide_CACHE_DIR)
+        set(cache_env_assign "HL_CACHE_DIR=${Halide_CACHE_DIR}")
+    endif ()
+
     set("${ARG_OUT_COMMAND}"
         ${CMAKE_COMMAND} -E env
-        "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" --
-        ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" $<SHELL_PATH:${py_src}>
-        PARENT_SCOPE
+        "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" ${cache_env_assign}
+        ${ARG_ENVIRONMENT} -- ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>"
+        $<SHELL_PATH:${py_src}> PARENT_SCOPE
     )
     set("${ARG_OUT_DEPENDS}" ${ARG_FROM} Halide::Python ${py_src} PARENT_SCOPE)
 endfunction()
 
 function(_Halide_set_osx_arch TARGET TRIPLE)
     if (APPLE)
-        if (TRIPLE STREQUAL "arm-64-osx")
+        if (TRIPLE STREQUAL "arm-64-macos" OR TRIPLE STREQUAL "arm-64-osx")
             set_property(TARGET "${TARGET}" PROPERTY OSX_ARCHITECTURES "arm64")
-        elseif (TRIPLE STREQUAL "x86-64-osx")
+        elseif (TRIPLE STREQUAL "x86-64-macos" OR TRIPLE STREQUAL "x86-64-osx")
             set_property(TARGET "${TARGET}" PROPERTY OSX_ARCHITECTURES "x86_64")
         else ()
             message(FATAL_ERROR "Could not set OSX_ARCHITECTURES for ${TRIPLE}")
@@ -649,7 +727,7 @@ function(add_halide_library TARGET)
     set(features_args FEATURES)
     foreach (arch IN ITEMS x86 arm powerpc hexagon wasm riscv)
         foreach (bits IN ITEMS 32 64)
-            foreach (os IN ITEMS linux windows osx android ios qurt noos fuchsia wasmrt)
+            foreach (os IN ITEMS linux windows macos osx android ios qurt noos fuchsia wasmrt)
                 list(APPEND features_args "FEATURES[${arch}-${bits}-${os}]")
             endforeach ()
         endforeach ()
@@ -660,7 +738,7 @@ function(add_halide_library TARGET)
         FILE_BASE_NAME FROM GENERATOR FUNCTION_NAME NAMESPACE OUTPUT_DIR USE_RUNTIME AUTOSCHEDULER
         HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS
     )
-    set(multiValueArgs DEPENDS TARGETS PARAMS PLUGINS ${features_args})
+    set(multiValueArgs DEPENDS ENVIRONMENT TARGETS PARAMS PLUGINS ${features_args})
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT "${ARG_UNPARSED_ARGUMENTS}" STREQUAL "")
@@ -697,6 +775,7 @@ function(add_halide_library TARGET)
 
     cmake_path(SET ARG_OUTPUT_DIR "${ARG_OUTPUT_DIR}")
     cmake_path(ABSOLUTE_PATH ARG_OUTPUT_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
+    file(MAKE_DIRECTORY "${ARG_OUTPUT_DIR}")
 
     if (ARG_NAMESPACE)
         set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
@@ -790,6 +869,12 @@ function(add_halide_library TARGET)
 
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
+            # Autoscheduler plugins are compiled targets that live in their own
+            # HalideAutoschedulers package; lazily load it if it hasn't already
+            # been (e.g. while cross-compiling).
+            if (NOT TARGET "${ARG_AUTOSCHEDULER}")
+                find_package(HalideAutoschedulers REQUIRED)
+            endif ()
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
                 message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
             endif ()
@@ -810,8 +895,16 @@ function(add_halide_library TARGET)
     # Main library target for filter.
     ##
 
+    foreach (assignment IN LISTS ARG_ENVIRONMENT)
+        if (NOT assignment MATCHES "^[A-Za-z_][A-Za-z0-9_]*=")
+            message(
+                FATAL_ERROR "ENVIRONMENT entries must have the form VAR=value, got: ${assignment}"
+            )
+        endif ()
+    endforeach ()
     _Halide_compute_generator_cmd(
         FROM "${ARG_FROM}"
+        ENVIRONMENT ${ARG_ENVIRONMENT}
         OUT_COMMAND generator_cmd
         OUT_DEPENDS generator_cmd_deps
     )
@@ -820,7 +913,6 @@ function(add_halide_library TARGET)
         COMMAND ${generator_cmd}  #
         DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS}  #
         EXTRA_OUTPUTS ${extra_outputs}  #
-        FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"  #
         FUNCTION_NAME "${ARG_FUNCTION_NAME}"  #
         GENERATOR "${ARG_GENERATOR}"  #
         GRADIENT_DESCENT "${ARG_GRADIENT_DESCENT}"  #
@@ -842,6 +934,7 @@ function(add_halide_library TARGET)
     if (common_triple STREQUAL "cmake" AND num_platforms GREATER 1)
         set(merged_base "")
         set(merged_libs "")
+        set(have_public_outputs FALSE)
 
         foreach (triple IN LISTS Halide_CMAKE_TARGET)
             set(features_arch "ARG_FEATURES[${triple}]")
@@ -855,6 +948,7 @@ function(add_halide_library TARGET)
             list(TRANSFORM targets_arch APPEND "-${ARG_FEATURES}")
             list(TRANSFORM targets_arch REPLACE "-$" "")
 
+            set(slice_args "")
             if (NOT merged_base AND NOT ARG_C_BACKEND)
                 set(this_lib "${TARGET}")
                 set(merged_base "${this_lib}")
@@ -863,8 +957,20 @@ function(add_halide_library TARGET)
                 list(APPEND merged_libs "${this_lib}")
             endif ()
 
+            if (NOT have_public_outputs)
+                set(file_base_name "${ARG_FILE_BASE_NAME}")
+                set(have_public_outputs TRUE)
+            else ()
+                set(file_base_name "${ARG_FILE_BASE_NAME}-${triple}")
+                list(APPEND slice_args INTERNAL)
+            endif ()
+
             # Appends to OUT_c_header, OUT_<extra-output>, etc.
-            _Halide_library_from_generator("${this_lib}" ${generator_args} TARGETS ${targets_arch})
+            _Halide_library_from_generator(
+                "${this_lib}" ${generator_args}
+                FILE_BASE_NAME "${file_base_name}"
+                TARGETS ${targets_arch} ${slice_args}
+            )
             _Halide_set_osx_arch("${this_lib}" "${triple}")
         endforeach ()
 
@@ -881,7 +987,11 @@ function(add_halide_library TARGET)
         endif ()
 
         # Appends to OUT_c_header, OUT_<extra-output>, etc.
-        _Halide_library_from_generator("${TARGET}" ${generator_args} TARGETS ${ARG_TARGETS})
+        _Halide_library_from_generator(
+            "${TARGET}" ${generator_args}
+            FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"
+            TARGETS ${ARG_TARGETS}
+        )
     endif ()
 
     # Save metadata on the library target for downstream helpers.
@@ -966,6 +1076,8 @@ function(add_halide_python_extension_library TARGET)
         message(FATAL_ERROR "HALIDE_LIBRARIES must be specified")
     endif ()
 
+    _Halide_generator_invocation(genrt_cmd Halide::GenRT)
+
     set(runtimes "")
     set(pycpps "")
     set(function_names "")  # space-separated X-macros
@@ -1011,14 +1123,31 @@ function(add_halide_python_extension_library TARGET)
     add_custom_command(
         OUTPUT ${pyext_module_definition_src}
         COMMAND
-            Halide::GenRT -r "${pyext_runtime_name}" -e python_extension
-            -o "${CMAKE_CURRENT_BINARY_DIR}" target=host
+            ${genrt_cmd} -r "${pyext_runtime_name}" -e python_extension -o "${CMAKE_CURRENT_BINARY_DIR}"
+            target=host
         DEPENDS Halide::GenRT
         VERBATIM
     )
 
-    Python_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+    if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
+        message(
+            FATAL_ERROR "Halide Python extensions require regular (GIL-enabled) CPython 3.12 or newer."
+        )
+    endif ()
+    Python_add_library(
+        ${TARGET}
+        MODULE
+        USE_SABI 3.12
+        WITH_SOABI ${pycpps} ${pyext_module_definition_src}
+    )
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
+    # Generated modules expose halide.runtime.Kernel objects. Keep an in-tree
+    # runtime module available for tests; installed consumers satisfy this as a
+    # Python package dependency instead of a native link dependency.
+    if (TARGET Halide_PythonRuntime)
+        add_dependencies(${TARGET} Halide_PythonRuntime)
+    endif ()
     target_compile_definitions(
         ${TARGET}
         PRIVATE
@@ -1080,12 +1209,14 @@ endfunction()
 function(add_halide_runtime RT)
     set(options NO_DEFAULT_TARGETS)
     set(oneValueArgs FILE_BASE_NAME NO_THREADS NO_DL_LIBS OUTPUT_DIR)
-    set(multiValueArgs TARGETS)
+    set(multiValueArgs TARGETS PARAMS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT ARG_FILE_BASE_NAME)
         set(ARG_FILE_BASE_NAME "${RT}")
     endif ()
+
+    _Halide_generator_invocation(genrt_cmd Halide::GenRT)
 
     # OUTPUT_DIR is an absolute path. Compute a relative prefix for
     # add_custom_command OUTPUT paths to avoid Xcode .rule file collisions.
@@ -1133,8 +1264,9 @@ function(add_halide_runtime RT)
         add_custom_command(
             OUTPUT "${GEN_OUTS}"
             COMMAND
-                Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
+                ${genrt_cmd} -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
                 "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                ${ARG_PARAMS}
             DEPENDS Halide::GenRT
             VERBATIM
         )
@@ -1168,8 +1300,9 @@ function(add_halide_runtime RT)
                 add_custom_command(
                     OUTPUT "${output_prefix}${this_rt}${object_extension}"
                     COMMAND
-                        Halide::GenRT -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
+                        ${genrt_cmd} -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
                         "target=$<JOIN:$<REMOVE_DUPLICATES:${arch_target_list}>,$<COMMA>>"
+                        ${ARG_PARAMS}
                     DEPENDS Halide::GenRT
                     VERBATIM
                 )
@@ -1186,8 +1319,9 @@ function(add_halide_runtime RT)
             add_custom_command(
                 OUTPUT "${output_prefix}${ARG_FILE_BASE_NAME}${object_extension}"
                 COMMAND
-                    Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
+                    ${genrt_cmd} -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
                     "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                    ${ARG_PARAMS}
                 DEPENDS Halide::GenRT
                 VERBATIM
             )

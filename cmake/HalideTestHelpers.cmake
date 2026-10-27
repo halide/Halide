@@ -102,13 +102,6 @@ function(add_halide_test TARGET)
         set_tests_properties(${TARGET} PROPERTIES PASS_REGULAR_EXPRESSION "Success!")
     endif ()
 
-    set_target_properties(${TARGET}
-        PROPERTIES
-        CXX_VISIBILITY_PRESET hidden
-        VISIBILITY_INLINES_HIDDEN TRUE
-    )
-
-
     if (WITH_SERIALIZATION AND WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
         if (NOT Halide_TARGET MATCHES "wasm")
             target_compile_definitions(${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)

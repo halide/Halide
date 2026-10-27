@@ -22,9 +22,8 @@ namespace Halide {
  * bit vectors. For 32-bit vectors on x86 you're better off using
  * native integer division.
  *
- * Also, this routine treats division by zero as division by
- * 256. I.e. it interprets the uint8 divisor as a number from 1 to 256
- * inclusive.
+ * Like Halide's ordinary division operator, a denominator of zero gives
+ * a result of zero.
  */
 Expr fast_integer_divide(const Expr &numerator, const Expr &denominator);
 
@@ -33,7 +32,9 @@ Expr fast_integer_divide(const Expr &numerator, const Expr &denominator);
 Expr fast_integer_divide_round_to_zero(const Expr &numerator, const Expr &denominator);
 
 /** Use the fast integer division tables to implement a modulo
- * operation via the Euclidean identity: a%b = a - (a/b)*b
+ * operation via the Euclidean identity: a%b = a - (a/b)*b. Like
+ * Halide's ordinary modulo operator, a denominator of zero gives a
+ * result of zero.
  */
 Expr fast_integer_modulo(const Expr &numerator, const Expr &denominator);
 

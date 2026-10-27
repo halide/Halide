@@ -8,6 +8,7 @@
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
+#include "ImageParam.h"
 #include "InferArguments.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
@@ -151,6 +152,14 @@ struct PipelineContents {
 
     bool trace_pipeline = false;
 
+    /** The number of live ProfilerScopes for this pipeline. While
+     * nonzero, realize leaves the profiler's statistics in place. */
+    int profiler_scopes = 0;
+
+    /** Optional prefixes used to rename halide_-prefixed runtime symbols.
+     * Empty unless set via Pipeline::apply_runtime_prefixes(). */
+    RuntimePrefixParams runtime_prefixes_params;
+
     PipelineContents()
         : module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
@@ -215,8 +224,8 @@ Pipeline::Pipeline(const std::vector<Func> &outputs, const std::vector<Internal:
     }
 }
 
-vector<Func> Pipeline::outputs() const {
-    vector<Func> funcs;
+FuncVec Pipeline::outputs() const {
+    FuncVec funcs;
     for (const Function &f : contents->outputs) {
         funcs.emplace_back(f);
     }
@@ -225,6 +234,101 @@ vector<Func> Pipeline::outputs() const {
 
 std::vector<Internal::Stmt> Pipeline::requirements() const {
     return contents->requirements;
+}
+
+namespace {
+
+SeverResult sever_impl(const Pipeline &pipeline, const vector<Func> &to_sever,
+                       const vector<ImageParam> *bind_to) {
+    vector<Function> output_funcs;
+    for (const Func &f : pipeline.outputs()) {
+        output_funcs.push_back(f.function());
+    }
+    std::map<string, Function> env = build_environment(output_funcs);
+
+    // Everything transitively reachable from to_sever (to_sever itself, plus
+    // anything only *it* depends on, e.g. a per-block reduction Func, or
+    // another Func one of to_sever's own definitions reads) is
+    // part of the offline half and must keep computing its true values --
+    // none of it should have its calls redirected to an online stand-in,
+    // even if it's also present in `env` because it used to be reachable
+    // from *this's outputs before severing.
+    vector<Function> to_sever_funcs;
+    to_sever_funcs.reserve(to_sever.size());
+    for (const Func &f : to_sever) {
+        to_sever_funcs.push_back(f.function());
+    }
+    std::map<string, Function> offline_env = build_environment(to_sever_funcs);
+
+    if (bind_to) {
+        user_assert(bind_to->size() == to_sever.size())
+            << "Pipeline::sever(): bind_to has " << bind_to->size()
+            << " ImageParams, but to_sever has " << to_sever.size() << " Funcs\n";
+    }
+
+    std::map<FunctionPtr, FunctionPtr> substitutions;
+    vector<ImageParam> online_inputs;
+    online_inputs.reserve(to_sever.size());
+    for (size_t i = 0; i < to_sever.size(); i++) {
+        const Func &f = to_sever[i];
+        user_assert(f.types().size() == 1)
+            << "Pipeline::sever() requires single-valued Funcs, but "
+            << f.name() << " has " << f.types().size() << " values\n";
+
+        ImageParam im = bind_to ? (*bind_to)[i] : ImageParam(f.types()[0], f.dimensions(), f.name() + "_im");
+        if (bind_to) {
+            user_assert(im.type() == f.types()[0] && im.dimensions() == f.dimensions())
+                << "Pipeline::sever(): bind_to[" << i << "] (" << im.name()
+                << ") has type/dimensionality mismatched with " << f.name() << "\n";
+        }
+
+        Func stand_in(f.name() + "_offline_input");
+        vector<Var> args = f.args();
+        vector<Expr> args_as_exprs(args.begin(), args.end());
+        stand_in(args) = im(args_as_exprs);
+
+        substitutions[f.function().get_contents()] = stand_in.function().get_contents();
+        online_inputs.push_back(im);
+    }
+
+    for (auto &entry : env) {
+        if (offline_env.count(entry.first)) {
+            continue;
+        }
+        entry.second.substitute_calls(substitutions);
+    }
+
+    return {Pipeline(to_sever), std::move(online_inputs)};
+}
+
+}  // namespace
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever) {
+    return sever_impl(*this, to_sever, nullptr);
+}
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever, const vector<ImageParam> &bind_to) {
+    return sever_impl(*this, to_sever, &bind_to);
+}
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever, std::initializer_list<string> names) {
+    return sever(to_sever, vector<string>(names));
+}
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever, const vector<string> &names) {
+    user_assert(names.size() == to_sever.size())
+        << "Pipeline::sever(): names has " << names.size()
+        << " entries, but to_sever has " << to_sever.size() << " Funcs\n";
+    vector<ImageParam> bind_to;
+    bind_to.reserve(to_sever.size());
+    for (size_t i = 0; i < to_sever.size(); i++) {
+        const Func &f = to_sever[i];
+        user_assert(f.types().size() == 1)
+            << "Pipeline::sever() requires single-valued Funcs, but "
+            << f.name() << " has " << f.types().size() << " values\n";
+        bind_to.emplace_back(f.types()[0], f.dimensions(), names[i]);
+    }
+    return sever_impl(*this, to_sever, &bind_to);
 }
 
 /* static */
@@ -264,6 +368,14 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
     return results;
 }
 
+void Pipeline::apply_runtime_prefixes(const Target &target, const RuntimePrefixParams &runtime_prefixes_params) const {
+    user_assert(!runtime_prefixes_params.prefixes.empty()) << "apply_runtime_prefixes was called with no namespace prefixes specified.";
+    user_assert(!target.has_feature(Target::JIT))
+        << "Runtime namespace prefixes are not supported for JIT targets: the JIT resolves runtime "
+        << "calls against a process-global shared runtime that is not namespaced. Use an AOT target instead.";
+    contents->runtime_prefixes_params = runtime_prefixes_params;
+}
+
 /* static */
 void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
     auto &m = get_autoscheduler_map();
@@ -284,7 +396,13 @@ Func Pipeline::get_func(size_t index) {
     user_assert(index < order.size())
         << "Index value passed is " << index << "; however, there are only "
         << order.size() << " functions in the pipeline.\n";
-    return Func(env.find(order[index])->second);
+    // Return a stable handle to the named Func. The environment is built by
+    // walking Call nodes, whose FunctionPtrs may be marked to follow global
+    // wrappers; a Func handle must not follow, or it would silently shift to a
+    // wrapper created later (e.g. by a subsequent Func::in()).
+    FunctionPtr ptr = env.find(order[index])->second.get_contents();
+    ptr.follow_global_wrappers = false;
+    return Func(Function(ptr));
 }
 
 void Pipeline::compile_to(const std::map<OutputFileType, std::string> &output_files,
@@ -531,7 +649,10 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     const Module &old_module = contents->module;
 
-    bool same_compile = !old_module.functions().empty() && old_module.target() == target;
+    // A lowered module stores the target with implied features set, so compare
+    // against the same normalized form of the requested target.
+    bool same_compile = !old_module.functions().empty() &&
+                        old_module.target() == target.with_implied_features();
     // Either generated name or one of the LoweredFuncs in the existing module has the same name.
     same_compile = same_compile && fn_name.empty();
     bool found_name = false;
@@ -547,7 +668,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // The initial args are the same.
     same_compile = same_compile && std::equal(lowering_args.begin(), lowering_args.end(), old_module.functions().front().args.begin());
     // Linkage is the same.
-    same_compile = same_compile && old_module.functions().front().linkage == linkage_type;
+    same_compile = same_compile && old_module.functions().front().linkage == linkage_for_target(linkage_type, target);
     // The outputs of a Pipeline cannot change, so no need to test them.
 
     if (same_compile) {
@@ -563,6 +684,17 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                  linkage_type, contents->requirements, contents->trace_pipeline,
                                  custom_passes);
     }
+
+    if (!contents->runtime_prefixes_params.prefixes.empty()) {
+        // JIT cannot honor renamed runtime symbols (they'd be unresolved against
+        // the shared runtime), so reject it explicitly rather than silently
+        // producing a module that fails to link at run time.
+        user_assert(!target.has_feature(Target::JIT))
+            << "Runtime namespace prefixes are not supported when JIT-compiling a Pipeline.";
+    }
+    // Carry the (possibly empty) prefixes onto the Module so codegen can rename
+    // halide_-prefixed runtime symbols. Empty is a no-op.
+    contents->module.set_runtime_prefixes_map(contents->runtime_prefixes_params.prefixes);
 
     return contents->module;
 }
@@ -805,7 +937,9 @@ Realization Pipeline::realize(JITUserContext *context,
     }
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    if (contents->profiler_scopes == 0) {
+        contents->jit_cache.finish_profiling(context);
+    }
     jit_context.finalize(exit_status);
 
     // Crop back to the requested size if necessary
@@ -866,6 +1000,149 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
 void Pipeline::trace_pipeline() {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->trace_pipeline = true;
+}
+
+void Pipeline::halidoscope(std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope(nullptr, std::move(sizes), options, target);
+}
+
+void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope(nullptr, std::move(output), options, target);
+}
+
+void Pipeline::halidoscope(JITUserContext *context, std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    auto prepare = [&](Pipeline &p, const Target &t) {
+        return HalidoscopeRunner{[&p, t, &sizes](JITUserContext *c) { p.realize(c, sizes, t); },
+                                 std::make_unique<ProfilerScope>(p)};
+    };
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
+}
+
+void Pipeline::halidoscope(JITUserContext *context, RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    Realization r = output.r   ? *output.r :
+                    output.buf ? Realization(Buffer<>(*output.buf)) :
+                                 Realization(std::move(*output.buffer_list));
+    auto prepare = [&](Pipeline &p, const Target &t) {
+        return HalidoscopeRunner{[&p, t, &r](JITUserContext *c) { p.realize(c, r, t); },
+                                 std::make_unique<ProfilerScope>(p)};
+    };
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
+}
+
+ProfilerScope::ProfilerScope(Pipeline p)
+    : source(std::move(p)) {
+    user_assert(std::get<Pipeline>(source).defined()) << "Pipeline is undefined\n";
+    scope_count()++;
+}
+
+ProfilerScope::ProfilerScope(Func &f)
+    : ProfilerScope(f.pipeline()) {
+}
+
+ProfilerScope::ProfilerScope(Callable c)
+    : source(std::move(c)) {
+    user_assert(std::get<Callable>(source).defined()) << "Callable is undefined\n";
+    scope_count()++;
+}
+
+ProfilerScope::~ProfilerScope() {
+    if (--scope_count() > 0) {
+        return;
+    }
+    // Report and reset as a run outside of any scope would have.
+    JITUserContext context{};
+    JITFuncCallContext jit_context(&context, jit_handlers());
+    jit_cache().finish_profiling(&context);
+    jit_context.finalize(0);
+}
+
+int &ProfilerScope::scope_count() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->profiler_scopes;
+    }
+    return std::get<Callable>(source).profiler_scopes();
+}
+
+JITCache &ProfilerScope::jit_cache() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->jit_cache;
+    }
+    return std::get<Callable>(source).jit_cache();
+}
+
+const JITHandlers &ProfilerScope::jit_handlers() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->jit_handlers;
+    }
+    return std::get<Callable>(source).saved_jit_handlers();
+}
+
+std::string ProfilerScope::function_name() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->generate_function_name();
+    }
+    return std::get<Callable>(source).name();
+}
+
+const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
+    const JITCache &cache = jit_cache();
+    if (!cache.jit_target.has_feature(Target::Profile) &&
+        !cache.jit_target.has_feature(Target::ProfileByTimer)) {
+        return nullptr;
+    }
+    // The profiler lives in the shared JIT runtime, which the wasm
+    // module does not link against, so the symbols may not exist.
+    using GetStateFn = halide_profiler_state *(*)();
+    using LockFn = void (*)(halide_profiler_state *);
+    auto find = [&](const char *symbol) {
+        return cache.jit_module.find_symbol_by_name(symbol).address;
+    };
+    auto get_state = (GetStateFn)find("halide_profiler_get_state");
+    auto lock = (LockFn)find("halide_profiler_lock");
+    auto unlock = (LockFn)find("halide_profiler_unlock");
+    if (!get_state || !lock || !unlock) {
+        return nullptr;
+    }
+
+    // halide_profiler_get_pipeline_state compares names by pointer, so
+    // walk the list comparing by string instead. Recompiling the
+    // pipeline produces a new entry with the same name; the newest is
+    // at the head of the list.
+    const std::string name = function_name();
+    halide_profiler_state *state = get_state();
+    const halide_profiler_pipeline_stats *result = nullptr;
+    lock(state);
+    for (const halide_profiler_pipeline_stats *p = state->pipelines; p;
+         p = (const halide_profiler_pipeline_stats *)p->next) {
+        if (name == p->name) {
+            result = p;
+            break;
+        }
+    }
+    unlock(state);
+    return result;
+}
+
+const halide_profiler_func_stats *ProfilerScope::func_stats(const std::string &name) const {
+    const halide_profiler_pipeline_stats *p = pipeline_stats();
+    if (!p) {
+        return nullptr;
+    }
+    for (int i = 0; i < p->num_funcs; i++) {
+        const halide_profiler_func_stats &f = p->funcs[i];
+        if (f.kind == halide_profiler_func_kind_func &&
+            f.canonical_id == i &&
+            name == f.name) {
+            return &f;
+        }
+    }
+    return nullptr;
+}
+
+const halide_profiler_func_stats *ProfilerScope::func_stats(const Func &f) const {
+    // The profiler reports a Func under its display name if it has one.
+    const std::string &display_name = f.function().profiler_display_name();
+    return func_stats(display_name.empty() ? f.name() : display_name);
 }
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -1082,7 +1359,9 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    if (contents->profiler_scopes == 0) {
+        contents->jit_cache.finish_profiling(context);
+    }
 
     jit_call_context.finalize(exit_status);
 }

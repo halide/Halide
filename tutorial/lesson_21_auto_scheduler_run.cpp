@@ -1,4 +1,4 @@
-// Halide tutorial lesson 21: Auto-Scheduler
+// Halide tutorial lesson 21: Auto-Scheduler: running the compiled pipeline
 
 // Before reading this file, see lesson_21_auto_scheduler_generate.cpp
 

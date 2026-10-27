@@ -20,8 +20,11 @@ add_halide_generator(
 
 # Filters
 add_halide_library(
-    bilateral_grid
+    bilateral_grid_pipeline
     FROM bilateral_grid.generator
+    GENERATOR bilateral_grid
+    FUNCTION_NAME bilateral_grid
+    FILE_BASE_NAME bilateral_grid
     REGISTRATION bilateral_grid_registration
     STMT bilateral_grid_STMT
     SCHEDULE bilateral_grid_SCHEDULE
@@ -48,14 +51,13 @@ target_link_libraries(
     PRIVATE
     Halide::ImageIO  # For halide_image_io.h
     Halide::Tools  # For halide_benchmark.h
-    bilateral_grid bilateral_grid_auto_schedule
+    bilateral_grid_pipeline bilateral_grid_auto_schedule
 )
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/gray.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} gray.png COPYONLY)
-    add_test(NAME bilateral_grid_process COMMAND bilateral_grid_process gray.png out.png 0.1 10)
+    add_test(NAME bilateral_grid_process COMMAND bilateral_grid_process ${IMAGE} out.png 0.1 10)
     set_tests_properties(
         bilateral_grid_process
         PROPERTIES
@@ -68,9 +70,11 @@ endif ()
 # RunGen-based benchmark. Run every app benchmark at once with
 # `ctest -L benchmark_apps`.
 add_executable(bilateral_grid_rungen ${bilateral_grid_registration})
-target_link_libraries(bilateral_grid_rungen PRIVATE Halide::RunGenMain bilateral_grid)
+target_link_libraries(bilateral_grid_rungen PRIVATE Halide::RunGenMain bilateral_grid_pipeline)
 add_test(
     NAME bilateral_grid_benchmark
     COMMAND bilateral_grid_rungen --benchmarks=all --estimate_all --parsable_output
 )
 set_tests_properties(bilateral_grid_benchmark PROPERTIES LABELS "bilateral_grid;benchmark_apps")
+
+add_custom_target(bilateral_grid DEPENDS bilateral_grid_process bilateral_grid_rungen)

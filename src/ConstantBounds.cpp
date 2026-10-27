@@ -9,11 +9,12 @@ namespace Internal {
 namespace {
 ConstantInterval bounds_helper(const Expr &e,
                                Scope<ConstantInterval> &scope,
-                               std::map<Expr, ConstantInterval, ExprCompare> *cache) {
+                               std::map<Expr, ConstantInterval, ExprCompare> *cache,
+                               const FuncValueBounds *func_bounds) {
     internal_assert(e.defined());
 
     auto recurse = [&](const Expr &e) {
-        return bounds_helper(e, scope, cache);
+        return bounds_helper(e, scope, cache, func_bounds);
     };
 
     auto get_infinite_bounds = [&]() {
@@ -129,6 +130,13 @@ ConstantInterval bounds_helper(const Expr &e,
                 // We can't do much with the other bitwise ops, but we can treat
                 // bitwise_not as an all-ones bit pattern minus the argument.
                 return recurse(make_const(e.type(), -1) - op->args[0]);
+            } else if (func_bounds && op->call_type == Call::Halide && op->type.is_int_or_uint()) {
+                auto it = func_bounds->find({op->name, op->value_index});
+                if (it != func_bounds->end()) {
+                    return ConstantInterval::make_intersection(
+                        ConstantInterval::bounds_of_type(op->type),
+                        covering_constant_interval(it->second));
+                }
             }
             // If you add a new intrinsic here, also add it to the expression
             // generator in test/correctness/lossless_cast.cpp
@@ -163,10 +171,11 @@ ConstantInterval bounds_helper(const Expr &e,
 
 ConstantInterval constant_integer_bounds(const Expr &e,
                                          const Scope<ConstantInterval> &scope,
-                                         std::map<Expr, ConstantInterval, ExprCompare> *cache) {
+                                         std::map<Expr, ConstantInterval, ExprCompare> *cache,
+                                         const FuncValueBounds *func_bounds) {
     Scope<ConstantInterval> sub_scope;
     sub_scope.set_containing_scope(&scope);
-    return bounds_helper(e, sub_scope, cache);
+    return bounds_helper(e, sub_scope, cache, func_bounds);
 }
 
 }  // namespace Internal

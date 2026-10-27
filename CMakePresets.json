@@ -22,9 +22,9 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
-        "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
         "VCPKG_MANIFEST_FEATURES": "developer",
+        "VCPKG_USE_LEGACY_APPLOCAL": "ON",
         "Halide_BUILDING_IN_CI": "ON"
       }
     },
@@ -86,10 +86,11 @@
       "inherits": "base",
       "displayName": "vcpkg deps",
       "description": "Build dependencies (with Halide exclusions) with vcpkg",
+      "generator": "Ninja",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_MANIFEST_FEATURES": "developer",
-        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
+        "VCPKG_USE_LEGACY_APPLOCAL": "ON"
       }
     },
     {

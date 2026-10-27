@@ -427,7 +427,6 @@ BIN_DIR     = bin
 DISTRIB_DIR = distrib
 INCLUDE_DIR = include
 SHARE_DIR   = share
-DOC_DIR     = $(SHARE_DIR)/doc/Halide
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
@@ -447,6 +446,7 @@ SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AddSplitFactorChecks.cpp \
+  AddTypeChangeChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
@@ -463,6 +463,7 @@ SOURCE_FILES = \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
+  CheckGPUCrossTalk.cpp \
   ClampUnsafeAccesses.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
@@ -483,7 +484,6 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
-  CompilerLogger.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
@@ -518,6 +518,8 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   FuzzFloatStores.cpp \
   Generator.cpp \
+  GeneratorCache.cpp \
+  Halidoscope.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -543,6 +545,8 @@ SOURCE_FILES = \
   LoopCarry.cpp \
   Lower.cpp \
   LowerParallelTasks.cpp \
+  LowerSMEStreamingTasks.cpp \
+  LowerStructTypes.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -560,6 +564,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PromoteGPURegisters.cpp \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
   Qualify.cpp \
@@ -627,7 +632,6 @@ SOURCE_FILES = \
   Var.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
-  WrapCalls.cpp
 # keep-sorted end
 
  C_TEMPLATE_FILES = \
@@ -649,6 +653,7 @@ HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
   AddSplitFactorChecks.h \
+  AddTypeChangeChecks.h \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
@@ -665,6 +670,7 @@ HEADER_FILES = \
   Buffer.h \
   Callable.h \
   CanonicalizeGPUVars.h \
+  CheckGPUCrossTalk.h \
   ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
@@ -680,7 +686,6 @@ HEADER_FILES = \
   CodeGen_Targets.h \
   CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
-  CompilerLogger.h \
   ConciseCasts.h \
   ConstantBounds.h \
   ConstantInterval.h \
@@ -721,6 +726,8 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   FuzzFloatStores.h \
   Generator.h \
+  GeneratorCache.h \
+  Halidoscope.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -748,8 +755,9 @@ HEADER_FILES = \
   LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
+  LowerSMEStreamingTasks.h \
+  LowerStructTypes.h \
   LowerWarpShuffles.h \
-  MainPage.h \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \
@@ -767,6 +775,7 @@ HEADER_FILES = \
   Prefetch.h \
   PrefetchDirective.h \
   Profiling.h \
+  PromoteGPURegisters.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \
   Qualify.h \
@@ -816,7 +825,6 @@ HEADER_FILES = \
   Var.h \
   VectorizeLoops.h \
   WasmExecutor.h \
-  WrapCalls.h
 # keep-sorted end
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
@@ -824,7 +832,6 @@ HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 # keep-sorted start skip_lines=1
 RUNTIME_CPP_COMPONENTS = \
-  aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
   alignment_64 \
@@ -857,7 +864,6 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma_pool \
   hexagon_host \
   ios_io \
-  linux_aarch64_cpu_features \
   linux_arm_cpu_features \
   linux_arm_thread_id \
   linux_clock \
@@ -875,7 +881,6 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  osx_aarch64_cpu_features \
   osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \
@@ -995,7 +1000,7 @@ endif
 endif
 
 .PHONY: all
-all: distrib test_internal
+all: distrib
 
 # Depending on which linker we're using,
 # we need a different invocation to get the
@@ -1302,6 +1307,9 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+$(BUILD_DIR)/Halidoscope.o: CXX_FLAGS += -I$(SRC_DIR)/runtime
+
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -1328,10 +1336,12 @@ clean:
 
 CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(ROOT_DIR)/test/correctness/*.c)
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
-ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
 FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp %IRGraphCXXPrinter.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
+# Match the args used by the CMake build: 1000 runs per test, and no more than
+# five minutes of total time.
+FUZZ_TEST_ARGS ?= -runs=1000 -max_total_time=300
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
@@ -1342,7 +1352,6 @@ COMMON_AUTOSCHEDULER_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/common/*
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
-test_error: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_runtime: $(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=runtime_%)
 test_fuzz: $(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=fuzz_%)
@@ -1390,6 +1399,11 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOT
 # Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
+# runtime_prefixes_iso is a single combined test that already links both the
+# LLVM and C backends together (see the custom generator_aot rule below), so
+# there is no separate C++-backend-only variant.
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_runtime_prefixes_iso,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
@@ -1423,7 +1437,7 @@ test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT
 	$(FILTERS_DIR)/rungen_test
 	$(FILTERS_DIR)/registration_test
 
-ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_runtime test_generator
+ALL_TESTS = test_correctness test_tutorial test_warning test_runtime test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
@@ -1442,7 +1456,6 @@ run_tests: $(ALL_TESTS)
 .PHONY: build_tests
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
-	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
 	$(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=$(BIN_DIR)/fuzz_%) \
@@ -1483,10 +1496,6 @@ $(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -r runtime -o $(CURDIR)/$(BIN_DIR)/$* target=$*
 
-$(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(TEST_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
-
 ifneq (,$(shell which flatc))
 $(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir.fbs.h
 $(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir.fbs.h
@@ -1516,6 +1525,16 @@ $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer
 $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
+# The spirv_ir test needs access to the internal-only SpirvIR.h header and
+# the vendored SPIR-V headers used by the Vulkan backend.
+$(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
+$(BIN_DIR)/correctness_vulkan_bool_minmax: $(ROOT_DIR)/test/correctness/vulkan_bool_minmax.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
 # OpenCL runtime correctness test requires runtime.a to be linked.
 $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
@@ -1526,10 +1545,6 @@ $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 
 $(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.cpp $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.h $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
-
-# Error tests that link against libHalide
-$(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(TEST_DEPS)
-	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -1802,6 +1817,10 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI201
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
 
+$(FILTERS_DIR)/sever_dequantize.a: $(BIN_DIR)/sever.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g sever $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f sever_dequantize target=$(TARGET)-no_runtime direction=dequantize
+
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
 # nested_externs_generators.cpp is a counterexample, and thus requires
@@ -1871,12 +1890,84 @@ $(BIN_DIR)/$(TARGET)/generator_aotcpp_autograd: $(ROOT_DIR)/test/generator/autog
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
+# sever has additional deps to link in
+$(BIN_DIR)/$(TARGET)/generator_aot_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.a $(FILTERS_DIR)/sever_dequantize.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.halide_generated.cpp $(FILTERS_DIR)/sever_dequantize.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
 # nested_externs has additional deps to link in
 $(BIN_DIR)/$(TARGET)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.a $(FILTERS_DIR)/nested_externs_inner.a $(FILTERS_DIR)/nested_externs_combine.a $(FILTERS_DIR)/nested_externs_leaf.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.halide_generated.cpp $(FILTERS_DIR)/nested_externs_inner.halide_generated.cpp $(FILTERS_DIR)/nested_externs_combine.halide_generated.cpp $(FILTERS_DIR)/nested_externs_leaf.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# runtime_prefixes_iso builds one AOT test that links three separately
+# namespaced runtimes (stock "halide_", "runtime_a_", "runtime_b_") together with
+# both LLVM- and C-backend kernels for each, and checks that their runtime state
+# stays independent. This needs custom rules: three namespaced standalone
+# runtimes, and six kernels (LLVM + C backend) with distinct function names and
+# matching import/internal prefixes. See test/generator/CMakeLists.txt.
+$(FILTERS_DIR)/rniso_rt_none.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_none -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)
+
+$(FILTERS_DIR)/rniso_rt_a.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_a -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_prefixes.export=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_rt_b.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_b -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_prefixes.export=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# LLVM-backend kernels (static_library + header). -n sets the output file base
+# name (which otherwise defaults to the -f function name) so the emitted files
+# match these targets.
+$(FILTERS_DIR)/rniso_none.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_none -n rniso_none -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/rniso_a.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_a -n rniso_a -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_b.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_b -n rniso_b -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# C-backend kernels (c_source + header). The .h is produced by the same command.
+$(FILTERS_DIR)/rniso_none_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_none_c -n rniso_none_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/rniso_a_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_a_c -n rniso_a_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_b_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_b_c -n rniso_b_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# The C-backend headers are emitted alongside the .cpp above (not from a .a).
+$(FILTERS_DIR)/rniso_none_c.h: $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+$(FILTERS_DIR)/rniso_a_c.h: $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+$(FILTERS_DIR)/rniso_b_c.h: $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+
+RNISO_LLVM_LIBS = $(FILTERS_DIR)/rniso_none.a $(FILTERS_DIR)/rniso_a.a $(FILTERS_DIR)/rniso_b.a
+RNISO_C_SRCS = $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp
+RNISO_RUNTIMES = $(FILTERS_DIR)/rniso_rt_none.a $(FILTERS_DIR)/rniso_rt_a.a $(FILTERS_DIR)/rniso_rt_b.a
+RNISO_HEADERS = $(FILTERS_DIR)/rniso_none.h $(FILTERS_DIR)/rniso_a.h $(FILTERS_DIR)/rniso_b.h $(FILTERS_DIR)/rniso_none_c.h $(FILTERS_DIR)/rniso_a_c.h $(FILTERS_DIR)/rniso_b_c.h
+
+$(BIN_DIR)/$(TARGET)/generator_aot_runtime_prefixes_iso: $(ROOT_DIR)/test/generator/runtime_prefixes_iso_aottest.cpp $(RNISO_LLVM_LIBS) $(RNISO_C_SRCS) $(RNISO_HEADERS) $(RNISO_RUNTIMES) $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -2045,7 +2136,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(TEST_DEPS)
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
-		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@;\
@@ -2106,11 +2197,6 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21
         -lHalide $(TEST_LD_FLAGS) $(COMMON_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 	@-echo
 
-test_internal: $(BIN_DIR)/test_internal
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
-	@-echo
-
 correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
@@ -2121,13 +2207,25 @@ correctness_opencl_runtime: $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
+# auto_schedule_no_parallel/auto_schedule_no_reorder need to load the
+# Mullapudi2016 autoscheduler plugin to exercise their intended error, so
+# (unlike other correctness_% tests) they take the plugin path as argv[1].
+correctness_auto_schedule_no_parallel correctness_auto_schedule_no_reorder: correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016)
+	@-echo
+
 quiet_correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	@cd $(TMP_DIR) ; ( $(CURDIR)/$< 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
 
+quiet_correctness_auto_schedule_no_parallel quiet_correctness_auto_schedule_no_reorder: quiet_correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	@cd $(TMP_DIR) ; ( $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016) 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
+
 fuzz_%: $(BIN_DIR)/fuzz_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(FUZZ_TEST_ARGS)
 	@-echo
 
 valgrind_%: $(BIN_DIR)/correctness_%
@@ -2151,11 +2249,6 @@ valgrind_tracing_stack: $(BIN_DIR)/correctness_tracing_stack
 performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
-	@-echo
-
-error_%: $(BIN_DIR)/error_%
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|terminating due to uncaught exception|^terminate called|^Error|Assertion.*failed"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%
@@ -2367,7 +2460,6 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(PREFIX)/share/halide/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(PREFIX)/share/halide/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/*.cpp $(PREFIX)/share/halide/tutorial
-	cp $(ROOT_DIR)/tutorial/*.h $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(PREFIX)/share/halide/tools
@@ -2445,7 +2537,6 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(DISTRIB_DIR)/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(DISTRIB_DIR)/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/*.cpp $(DISTRIB_DIR)/tutorial
-	cp $(ROOT_DIR)/tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tutorial/*.sh $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(DISTRIB_DIR)/tools
@@ -2456,6 +2547,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
@@ -2555,58 +2647,3 @@ clang-tidy:
 .PHONY: clang-tidy-fix
 clang-tidy-fix:
 	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh -fix
-
-# Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
-# if you choose to edit it.
-
-# Copy ROOT_DIR to keep the following Doxyfile closer to CMake
-Halide_SOURCE_DIR=${ROOT_DIR}
-
-define Doxyfile
-# Keep the following in sync with doc/CMakeLists.txt
-ALPHABETICAL_INDEX     = NO
-BUILTIN_STL_SUPPORT    = YES
-CASE_SENSE_NAMES       = NO
-CLASS_DIAGRAMS         = NO
-DISTRIBUTE_GROUP_DOC   = YES
-EXAMPLE_PATH           = "${Halide_SOURCE_DIR}/tutorial"
-EXCLUDE                = bin
-EXCLUDE_PATTERNS       = README.md
-EXTRACT_ALL            = YES
-EXTRACT_LOCAL_CLASSES  = NO
-FILE_PATTERNS          = *.h *.md
-GENERATE_TREEVIEW      = YES
-HIDE_FRIEND_COMPOUNDS  = YES
-HIDE_IN_BODY_DOCS      = YES
-HIDE_UNDOC_CLASSES     = YES
-HIDE_UNDOC_MEMBERS     = YES
-JAVADOC_AUTOBRIEF      = YES
-MARKDOWN_ID_STYLE      = GITHUB
-QT_AUTOBRIEF           = YES
-QUIET                  = YES
-RECURSIVE              = YES
-REFERENCED_BY_RELATION = YES
-REFERENCES_RELATION    = YES
-SORT_BY_SCOPE_NAME     = YES
-SORT_MEMBER_DOCS       = NO
-SOURCE_BROWSER         = YES
-STRIP_CODE_COMMENTS    = NO
-
-# Makefile-specific options
-GENERATE_LATEX         = NO
-HAVE_DOT               = NO
-HTML_OUTPUT            = .
-INPUT                  = "${Halide_SOURCE_DIR}/doc" "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/test"
-OUTPUT_DIRECTORY       = ${DOC_DIR}
-PROJECT_NAME           = Halide
-endef
-
-# Make the above Doxyfile variable available to the doc target.
-export Doxyfile
-
-.PHONY: doc
-doc:
-	@-mkdir -p $(TMP_DIR)
-	echo "$$Doxyfile" > $(TMP_DIR)/Doxyfile
-	@-mkdir -p ${DOC_DIR}
-	doxygen $(TMP_DIR)/Doxyfile

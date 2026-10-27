@@ -44,7 +44,7 @@ class AllocationInference : public IRMutator {
         Box b = box_touched(op->body, op->name, empty_scope, func_bounds);
 
         Stmt new_body = mutate(op->body);
-        Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
+        Stmt stmt = op->with(op->bounds, op->condition, new_body);
 
         // If the realization is dead and there is no access to the
         // buffer (e.g. because we're in a specialization), then
@@ -57,10 +57,9 @@ class AllocationInference : public IRMutator {
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension
             Bound bound;
-            for (const auto &b : f.schedule().bounds()) {
-                if (f_args[i] == b.var) {
-                    bound = b;
-                }
+            auto it = f.schedule().bounds().find(f_args[i]);
+            if (it != f.schedule().bounds().end()) {
+                bound = it->second;
             }
 
             string prefix = op->name + "." + f_args[i];

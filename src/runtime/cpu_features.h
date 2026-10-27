@@ -28,6 +28,15 @@ ALWAYS_INLINE void halide_set_available_cpu_feature(CpuFeatures *features, int i
     features->available[i >> 6] |= ((uint64_t)1) << (i & 63);
 }
 
+// Common recording half of the shared host-CPU detection logic.
+struct AvailableCpuFeatureSink {
+    CpuFeatures *features;
+
+    ALWAYS_INLINE void set_feature(halide_target_feature_t feature) {
+        halide_set_available_cpu_feature(features, feature);
+    }
+};
+
 ALWAYS_INLINE bool halide_test_known_cpu_feature(CpuFeatures *features, int i) {
     return (features->known[i >> 6] & ((uint64_t)1) << (i & 63)) != 0;
 }

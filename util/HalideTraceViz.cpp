@@ -144,8 +144,9 @@ T get_value_as(const halide_trace_packet_t &p, int idx) {
     // so that value_as<>() won't complain under sanitizers.
     halide_scalar_value_t aligned_value;
     // Only copy the number of bytes in the type: the stream isn't guaranteed
-    // to be padded to sizeof(halide_scalar_value_t).
-    memcpy(&aligned_value, val, type.bits / 8);
+    // to be padded to sizeof(halide_scalar_value_t). type.bits comes from the
+    // stream, so cap the copy so a bogus type can't overrun aligned_value.
+    memcpy(&aligned_value, val, std::min<size_t>(type.bits / 8, sizeof(aligned_value)));
     return value_as<double>(type, aligned_value);
 }
 
@@ -925,16 +926,20 @@ struct Surface {
         }
     }
 
-    // TODO this doesn't bounds-check against frame_size
     void do_draw_pixel(const float zoom, const int x, const int y, const uint32_t color, uint32_t *dst) {
         const int izoom = (int)std::ceil(zoom);
-        const int y_advance = frame_size.x - izoom;
-        dst += frame_size.x * y + x;
-        for (int dy = 0; dy < izoom; dy++) {
-            for (int dx = 0; dx < izoom; dx++) {
-                *dst++ = color;
+        // Callers gate (x, y) against frame_size using the float zoom, but the
+        // filled block spans ceil(zoom) pixels, so a fractional zoom can reach
+        // one row/column past the frame. Clamp to frame_size like fill_rect.
+        const int x_min = std::max(x, 0);
+        const int x_end = std::min(x + izoom, frame_size.x);
+        const int y_min = std::max(y, 0);
+        const int y_end = std::min(y + izoom, frame_size.y);
+        for (int py = y_min; py < y_end; py++) {
+            uint32_t *row = dst + py * frame_size.x;
+            for (int px = x_min; px < x_end; px++) {
+                row[px] = color;
             }
-            dst += y_advance;
         }
     }
 
@@ -972,7 +977,12 @@ struct Surface {
     void do_fill_realization(uint32_t *dst, uint32_t color,
                              const FuncInfo &fi, const halide_trace_packet_t &p,
                              int current_dimension = 0, int x_off = 0, int y_off = 0) {
-        if (2 * current_dimension == p.dimensions) {
+        // Each dimension consumes a (min, extent) pair of coordinates. A
+        // realization packet from an untrusted trace can declare an odd number
+        // of coordinates, in which case an == test never matches and the
+        // recursion walks off the end of coordinates(); stop once fewer than a
+        // full pair remains.
+        if (2 * current_dimension + 1 >= p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
             const int izoom = (int)std::ceil(fi.config.zoom);
@@ -1400,15 +1410,29 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                     // Convert to 8-bit color.
                     uint8_t int_value = (uint8_t)value;
 
-                    if (fi.config.color_dim < 0) {
+                    // color_dim comes from a trace tag or the command line and
+                    // is not bounded by the packet's dimensionality, so a value
+                    // past the coordinates in this packet renders as grayscale
+                    // rather than indexing coords out of range.
+                    if (fi.config.color_dim < 0 ||
+                        fi.config.color_dim >= p.dimensions / p.lanes) {
                         // Grayscale
                         image_color = (int_value * 0x00010101) | 0xff000000;
                     } else {
-                        // Color
+                        // Color. The color_dim coordinate selects which byte of
+                        // the 32-bit pixel to write, so it must be in [0, 3]. The
+                        // value comes from the trace and is otherwise unbounded;
+                        // channel * 8 would then shift past the width of the pixel.
+                        // Treat an out-of-range channel as grayscale, like the
+                        // color_dim check above.
                         uint32_t channel = coords[fi.config.color_dim * p.lanes + lane];
-                        uint32_t mask = ~(255 << (channel * 8));
-                        image_color &= mask;
-                        image_color |= int_value << (channel * 8);
+                        if (channel >= 4) {
+                            image_color = (int_value * 0x00010101) | 0xff000000;
+                        } else {
+                            const uint32_t shift = channel * 8;
+                            image_color &= ~(uint32_t(255) << shift);
+                            image_color |= uint32_t(int_value) << shift;
+                        }
                     }
                     surface->draw_image_pixel(fi.config.zoom, x, y, image_color);
                 }
@@ -1436,6 +1460,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         case halide_trace_end_consume:
         case halide_trace_begin_parallel_task:
         case halide_trace_end_parallel_task:
+        case halide_trace_bounds_required:
         // Note that you can get nested pipeline begin/end events when you trace
         // something that has extern stages that are also Halide-being-traced;
         // these should just be ignored.
