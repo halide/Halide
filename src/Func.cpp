@@ -1142,7 +1142,10 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     SubstitutionMap rdom_promises;
     for (int i = 0; i < (int)rdom.domain().size(); i++) {
         const auto &[var, min, extent] = rdom.domain()[i];
-        rdom_promises.emplace(var, promise_clamped(RVar(rdom, i), min, min + extent - 1));
+        // The RVar is marked likely because the clamp only has an effect
+        // in the tail of a split RVar that doesn't divide its extent (which
+        // the intermediate guards off with a predicate).
+        rdom_promises.emplace(var, promise_clamped(likely(RVar(rdom, i)), min, min + extent - 1));
     }
 
     // Project the RDom into each side

@@ -290,6 +290,7 @@ tests(
     gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp
     growing_stack.cpp
+    guarded_rvar_tail_partition.cpp
     half_native_interleave.cpp
     halide_buffer.cpp
     halidoscope.cpp

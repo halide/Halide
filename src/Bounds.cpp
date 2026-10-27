@@ -1387,10 +1387,30 @@ protected:
                 return;
             }
 
-            // Unlike an explicit clamp, we are also permitted to
-            // assume the upper bound is greater than the lower bound.
-            interval.min = Interval::make_max(i.min, lower.min);
-            interval.max = Interval::make_min(i.max, upper.max);
+            // Preserve the value's likely tag on bounds where the promise
+            // introduces a clamp, so loop partitioning can remove the clamp
+            // from the steady state.
+            const bool likely_value =
+                op->is_intrinsic(Call::promise_clamped) &&
+                Call::as_intrinsic(op->args[0], {Call::likely});
+            auto clamp = [&](const Expr &e, const Expr &limit, bool is_max) {
+                Expr unclamped = e;
+                if (likely_value &&
+                    !is_const(e) &&
+                    // A bare symbol might already be clamped elsewhere.
+                    // Tagging it would hide that clamp from partitioning.
+                    !e.as<Variable>() &&
+                    !e.same_as(Interval::pos_inf()) &&
+                    !e.same_as(Interval::neg_inf()) &&
+                    !can_prove(is_max ? e >= limit : e <= limit)) {
+                    unclamped = likely(e);
+                }
+                // Unlike an explicit clamp, we are also permitted to
+                // assume the upper bound is greater than the lower bound.
+                return is_max ? Interval::make_max(unclamped, limit) : Interval::make_min(unclamped, limit);
+            };
+            interval.min = clamp(i.min, lower.min, true);
+            interval.max = clamp(i.max, upper.max, false);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
                    op->is_intrinsic(Call::bitwise_xor) ||
