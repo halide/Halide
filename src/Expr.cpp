@@ -20,6 +20,10 @@ const char *IRNodeType_string(IRNodeType type) {
     }
 }
 
+void unknown_node_type_error(IRNodeType type) {
+    internal_error << "Unknown IRNodeType: " << (int)type << "\n";
+}
+
 const IntImm *IntImm::make(Type t, int64_t value) {
     internal_assert(t.is_int() && t.is_scalar())
         << "IntImm must be a scalar Int\n";

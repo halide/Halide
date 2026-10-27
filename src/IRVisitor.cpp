@@ -6,6 +6,19 @@
 namespace Halide {
 namespace Internal {
 
+void IRVisitor::dispatch(const IRNode *op) {
+    switch (op->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        visit((const T *)op); \
+        return;
+        HALIDE_FOR_EACH_IR_NODE(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+    default:
+        unknown_node_type_error(op->node_type);
+    }
+}
+
 void IRVisitor::visit(const IntImm *) {
 }
 

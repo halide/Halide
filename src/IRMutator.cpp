@@ -6,11 +6,33 @@ namespace Internal {
 using std::vector;
 
 Expr IRMutator::mutate(const Expr &e) {
-    return e.defined() ? e.get()->mutate_expr(this) : Expr();
+    if (!e.defined()) {
+        return Expr();
+    }
+    switch (e->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        return visit((const T *)e.get());
+        HALIDE_FOR_EACH_IR_EXPR(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+    default:
+        unknown_node_type_error(e->node_type);
+    }
 }
 
 Stmt IRMutator::mutate(const Stmt &s) {
-    return s.defined() ? s.get()->mutate_stmt(this) : Stmt();
+    if (!s.defined()) {
+        return Stmt();
+    }
+    switch (s->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        return visit((const T *)s.get());
+        HALIDE_FOR_EACH_IR_STMT(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+    default:
+        unknown_node_type_error(s->node_type);
+    }
 }
 
 Expr IRMutator::visit(const IntImm *op) {

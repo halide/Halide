@@ -35,17 +35,16 @@ public:
     }
 
 protected:
-    // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
-    template<typename T>
-    friend struct ExprNode;
-
-    template<typename T>
-    friend struct StmtNode;
-
 #define HALIDE_DECL_VISIT(T) \
     virtual void visit(const T *op);
     HALIDE_FOR_EACH_IR_NODE(HALIDE_DECL_VISIT)
 #undef HALIDE_DECL_VISIT
+
+private:
+    friend struct IRNode;
+
+    /** Call the visit method corresponding to op's node_type. */
+    void dispatch(const IRNode *op);
 };
 
 /** A lambda-based IR visitor that accepts multiple lambdas for different

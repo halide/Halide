@@ -93,20 +93,26 @@ enum class IRNodeType : uint8_t {
 
 const char *IRNodeType_string(IRNodeType type);
 
+/** Report an internal error for an out-of-range IRNodeType. Kept out of line
+ * so that switch-based dispatch on IRNodeType needs no stack frame. */
+[[noreturn]] void unknown_node_type_error(IRNodeType type);
+
 constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
 
-    /** We use the visitor pattern to traverse IR nodes throughout the
-     * compiler, so we have a virtual accept method which accepts
-     * visitors.
-     */
-    virtual void accept(IRVisitor *v) const = 0;
+    /** Dispatch to the visit method of the visitor corresponding to this
+     * node's type. IR nodes have no vtable. Visitors dispatch on node_type
+     * instead (see IRVisitor.h). */
+    template<typename Visitor>
+    void accept(Visitor *v) const {
+        v->IRVisitor::dispatch(this);
+    }
+
     IRNode(IRNodeType t)
         : hash((uint32_t)t) {
     }
-    virtual ~IRNode() = default;
 
     /** These classes are all managed with intrusive reference
      * counting, so we also track a reference count. It's mutable
@@ -119,9 +125,8 @@ struct IRNode {
      * values to do runtime type identification. We don't compile with rtti
      * because that injects run-time type identification stuff everywhere (and
      * often breaks when linking external libraries compiled without it), and we
-     * only want it for IR nodes. One might want to put this value in the
-     * vtable, but that adds another level of indirection, and for Exprs we have
-     * 32 free bits in between the ref count and the Type field anyway. We use
+     * only want it for IR nodes. IR nodes have no vtable, so this field is
+     * also what visitors and the deleter dispatch on. We use
      * the first 8 to store the node type, and the next 24 as a hash of the
      * children of the node, to make syntactic comparisons faster. */
     union {
@@ -150,10 +155,9 @@ inline RefCount &ref_count<IRNode>(const IRNode *t) noexcept {
     return t->ref_count;
 }
 
+/** Deletes the node as its concrete type, found by switching on node_type. */
 template<>
-inline void destroy<IRNode>(const IRNode *t) {
-    delete t;
-}
+void destroy<IRNode>(const IRNode *t);
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
@@ -167,7 +171,6 @@ struct BaseStmtNode : public IRNode {
     BaseStmtNode(IRNodeType t)
         : IRNode(t) {
     }
-    virtual Stmt mutate_stmt(IRMutator *v) const = 0;
 };
 
 /** A base class for expression nodes. They all contain their types
@@ -176,7 +179,6 @@ struct BaseExprNode : public IRNode {
     BaseExprNode(IRNodeType t)
         : IRNode(t) {
     }
-    virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
 };
 
@@ -198,28 +200,21 @@ HALIDE_ALWAYS_INLINE uint32_t combine_hash(uint32_t hash, uint32_t child_hash, R
 
 /** We use the "curiously recurring template pattern" to avoid
    duplicated code in the IR Nodes. These classes live between the
-   abstract base classes and the actual IR Nodes in the
-   inheritance hierarchy. It provides an implementation of the
-   accept function necessary for the visitor pattern to work, and
-   a concrete instantiation of a unique IRNodeType per class. */
+   base classes and the actual IR Nodes in the inheritance
+   hierarchy. They provide a concrete instantiation of a unique
+   IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    void accept(IRVisitor *v) const override;
-    Expr mutate_expr(IRMutator *v) const override;
     ExprNode()
         : BaseExprNode(T::_node_type) {
     }
-    ~ExprNode() override = default;
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(IRVisitor *v) const override;
-    Stmt mutate_stmt(IRMutator *v) const override;
     StmtNode()
         : BaseStmtNode(T::_node_type) {
     }
-    ~StmtNode() override = default;
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -237,7 +232,8 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     /** Dispatch to the correct visitor method for this node. E.g. if
      * this node is actually an Add node, then this will call
      * IRVisitor::visit(const Add *) */
-    void accept(IRVisitor *v) const {
+    template<typename Visitor>
+    void accept(Visitor *v) const {
         ptr->accept(v);
     }
 
