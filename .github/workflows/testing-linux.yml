@@ -88,7 +88,7 @@ jobs:
       - name: Sync CI environment
         run: |
           setarch ${{ matrix.arch }} bash -ec "
-            CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' \
+            CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' AR=gcc-ar RANLIB=gcc-ranlib \
             uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
             echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
             echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
