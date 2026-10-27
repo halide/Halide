@@ -301,6 +301,8 @@ tests(
     histogram.cpp
     histogram_equalize.cpp
     hoist_invariants.cpp
+    hoist_invariants_casts.cpp
+    hoist_invariants_funcs.cpp
     hoist_loop_invariant_if_statements.cpp
     hoist_storage.cpp
     hoist_storage_extern.cpp
@@ -522,6 +524,7 @@ tests(
     stable_realization_order.cpp
     stack_allocations.cpp
     stage_strided_loads.cpp
+    stage_value.cpp
     stencil_chain_in_update_definitions.cpp
     stmt_to_html.cpp
     storage_folding.cpp

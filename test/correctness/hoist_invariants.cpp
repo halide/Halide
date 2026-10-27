@@ -464,6 +464,39 @@ int hoist_invariants_predicated_rdom_test() {
     return 0;
 }
 
+// A term that doesn't use the RVars still runs once per point of the predicated
+// domain, so its intermediate must keep the RDom predicate. Here k(x) is added
+// for the 6 of 9 values of r that pass, not all 9.
+int hoist_invariants_predicated_rvar_free_term_test() {
+    const int W = 5, K = 9;
+    Var x{"x"};
+    RDom r(0, K, "r");
+    r.where(r % 3 != 0);
+    Func a{"a"}, s{"s"}, k{"k"};
+    a(x, _) = x * 7 - _0 * 3 + 1;
+    s(x) = x - 2;
+    k(x) = 3 * x + 4;
+
+    Func f{"f"};
+    f(x) = 0;
+    f(x) += a(x, r) * s(x) + k(x);
+    f.update().hoist_invariants();
+
+    Buffer<int> out = f.realize({W});
+    for (int i = 0; i < W; i++) {
+        int ref = 0;
+        for (int j = 0; j < K; j++) {
+            if (j % 3 != 0) {
+                ref += (i * 7 - j * 3 + 1) * (i - 2) + 3 * i + 4;
+            }
+        }
+        internal_assert(out(i) == ref)
+            << "hoist_invariants predicated RVar-free term: result at " << i
+            << " was " << out(i) << ", expected " << ref << "\n";
+    }
+    return 0;
+}
+
 // hoist_invariants() composes with rfactor(): rfactor first preserves r.y as a
 // pure Var u, so scale(u) becomes invariant over the intermediate's remaining
 // reduction over r.x and can then be hoisted from that intermediate.
@@ -1141,6 +1174,7 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (or/and)", hoist_invariants_or_test},
         {"hoist_invariants test (strict_float preserved)", hoist_invariants_strict_float_test},
         {"hoist_invariants test (predicated RDom)", hoist_invariants_predicated_rdom_test},
+        {"hoist_invariants test (predicated RDom, RVar-free term)", hoist_invariants_predicated_rvar_free_term_test},
         {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
         {"hoist_invariants test (block index, divisible)", [] { return hoist_invariants_block_index_test(false, 128); }},
         {"hoist_invariants test (block index, tail)", [] { return hoist_invariants_block_index_test(false, 100); }},

@@ -17,6 +17,8 @@
 #include "Tuple.h"
 #include "Var.h"
 
+#include <functional>
+#include <initializer_list>
 #include <map>
 #include <type_traits>
 #include <utility>
@@ -94,6 +96,9 @@ class Stage {
     std::pair<std::vector<Internal::Split>, std::vector<Internal::Split>>
     rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result);
 
+    FuncVec hoist_invariants_impl(const std::vector<std::function<bool(const Expr &)>> &parts,
+                                  const std::vector<std::string> &part_names);
+
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
         : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
@@ -118,6 +123,20 @@ public:
 
     /** Return the name of this stage, e.g. "f.update(2)" */
     std::string name() const;
+
+    /** The right-hand side of the definition this Stage refers to: the pure
+     * definition for Stage(f), the update definition for f.update(i), and the
+     * specialization's own definition for a Stage returned by specialize()
+     * (whereas Func::value() and Func::update_value() always return the
+     * unspecialized definition). The result reflects every schedule-time
+     * rewrite of that definition so far, e.g. by eager_inline(), rfactor(),
+     * or hoist_invariants(). It may contain Let nodes. value() is an error if
+     * the definition is Tuple-valued; values() returns a Tuple with one
+     * element for a single-valued definition. */
+    // @{
+    Expr value() const;
+    Tuple values() const;
+    // @}
 
     /** Calling rfactor() on an associative update definition a Func will split
      * the update into an intermediate which computes the partial results and
@@ -222,6 +241,88 @@ public:
     eager_inline(const Func &first, Args &&...args);
     // @}
 
+    /** Split a sum reduction into one reduction per group of Funcs, holding
+     * the terms that call any Func of the group, plus one for the remaining
+     * terms, and hoist the loop-invariant factors out of each. Like rfactor(),
+     * this must be called on an update definition. The update must be a
+     * single-valued sum, f(...) = f(...) + increment, f(...) += increment, or
+     * f(...) -= increment.
+     *
+     * The groups are taken in order. The increment is split into the terms
+     * that call the first group and the rest, multiplying out a product over a
+     * sum only where it would otherwise mix the two, and the rest is split
+     * again by the second group, and so on. Then each part's factors that do
+     * not depend on the update's RVars (as for hoist_invariants()) and that are
+     * common to all of its terms are hoisted out of its reduction. The result
+     * does not depend on how the sum is spelled, only on which terms call which
+     * Funcs. For example:
+     * \code
+     * f() = 0;
+     * f() += (d * q(r) + m) * (e * p(r));
+     * auto intms = f.update().hoist_invariants({q, p});
+     * \endcode
+     * (one group for q, then one for p) rewrites f as if it were:
+     * \code
+     * f_intm0() = 0;
+     * f_intm0() += q(r) * p(r);
+     * f_intm1() = 0;
+     * f_intm1() += p(r);
+     *
+     * f() = 0;
+     * f() += d * e * f_intm0() + m * e * f_intm1();
+     * \endcode
+     * where d, m, and e do not depend on r. The terms with p are those
+     * left without q, so q * p goes to q's part. Spelling the update
+     * d*e*q(r)*p(r) + m*e*p(r), or e*(p(r)*m + d*(p(r)*q(r))), gives the same
+     * split.
+     *
+     * Returns one Func per group, in the same order, followed by one for the
+     * residual: the terms calling none of them. The FuncVec always has one more
+     * entry than there are groups; the last is an undefined Func() if there is
+     * no residual. A part's Func accumulates its terms with the common
+     * invariant factors removed, over the same RVars and predicate, with this
+     * update's schedule; the update itself becomes a write-back that adds up
+     * the parts scaled by their factors, as for hoist_invariants().
+     *
+     * There is nothing to split if there is a single group and every term
+     * calls it. Then this stage is left as it is (no factor is hoisted) and the
+     * result is {the Func this stage belongs to, an undefined Func()}: the
+     * Func's own reduction is the group's part.
+     *
+     * Each term is a product, a sum, or a difference of leaves; any other
+     * expression (a division, a select, a call, ...) is a single leaf, and a
+     * term calls a Func if a leaf calls it anywhere inside. Where it holds
+     * terms that call a group and terms that don't, a widening_mul(),
+     * widening_add(), or widening_sub() (or a cast of one to a type that
+     * represents its values) is also looked through, as the product, sum, or
+     * difference of its operands widened, which it is exactly. So is a cast
+     * of an integer sum to a type that represents every value of the sum's
+     * type (a wider integer type, or a float type that holds them exactly):
+     * cast<T>(x + c) becomes cast<T>(x) + cast<T>(c), but only if x + c
+     * provably cannot wrap in its type, by the constant bounds of x and c and
+     * of the values of the Funcs they call; otherwise the cast is a single
+     * leaf. For example, with q(r) in [0, 3] (say, q(x) = u8(x) & 3),
+     * f() += cast<float>(cast<int8_t>(q(r)) - 1) * p(r) splits on q as
+     * cast<float>(cast<int8_t>(q(r))) * p(r) - p(r), but with q(r) any
+     * uint8 it does not. For integer types the split is exact, wrapping or
+     * not, and so is looking through casts, widening ops included, for any
+     * type. For floating-point types, multiplying out and reassociating may
+     * change rounding, the same caveat as for rfactor() and
+     * hoist_invariants(). Leaves are kept as they are written unless they need
+     * to be split.
+     *
+     * It is an error if there are no groups, a group is empty or contains this
+     * Func, the update is not a single-valued sum, or no term calls a group
+     * (other than terms already in the part of an earlier group). Calls are
+     * matched by Func name; an ImageParam may be passed for its calls. */
+    // @{
+    FuncVec hoist_invariants(const std::vector<std::vector<Func>> &groups);
+    /** One group per Func: hoist_invariants({q, p}) is
+     * hoist_invariants({{q}, {p}}). (A braced list of single Funcs, or of
+     * singleton groups, picks this overload; both mean the same split.) */
+    FuncVec hoist_invariants(std::initializer_list<Func> funcs);
+    // @}
+
     /** Hoist loop-invariant factors out of an associative reduction by applying
      * the distributive law of a semiring. Like rfactor(), this must be called on
      * an update definition; it splits the update into an intermediate that
@@ -231,7 +332,13 @@ public:
      * by tuple output index, then by outer-term order.
      *
      * A factor is hoistable if it does not depend on any RVar being reduced. It
-     * may be nested at any depth of an associative/commutative chain. Its
+     * may be nested at any depth of an associative/commutative chain, including
+     * inside a widening intrinsic of the inner combine (widening_mul() for a
+     * sum, widening_add() for a min or max), or a cast of one to a type that
+     * represents its values, which is looked through as the op on its widened
+     * operands where one of them is invariant and the other is not: e.g. the
+     * update f() += i32(widening_mul(s, x(r))) hoists i32(s) and accumulates
+     * i32(x(r)). This is exact. Its
      * integer and boolean subexpressions are simplified using the RVars' bounds
      * to decide this, so a factor that is invariant only within those bounds is
      * hoisted too. For example, after splitting r by 32 into ro and ri and
