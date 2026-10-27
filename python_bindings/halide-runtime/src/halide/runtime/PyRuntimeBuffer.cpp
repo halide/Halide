@@ -84,7 +84,7 @@ public:
         return *this;
     }
 
-    Buffer(PythonBuffer source, std::string name, bool reverse_axes)
+    Buffer(const PythonBuffer &source, std::string name, bool reverse_axes)
         : identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
         PythonArray array = source.request(true);
         owner_ = py::cast(array, py::rv_policy::reference);

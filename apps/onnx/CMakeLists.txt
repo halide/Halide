@@ -127,7 +127,8 @@ endif ()
 
 nanobind_add_module(
     model_cpp
-    STABLE_ABI model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
+    STABLE_ABI
+    NB_SUPPRESS_WARNINGS model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
 )
 target_link_libraries(model_cpp PRIVATE Halide::Halide onnx_app::oclib)
 add_dependencies(onnx model_cpp)

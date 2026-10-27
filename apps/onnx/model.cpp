@@ -599,6 +599,7 @@ void print_lowered_statement(const HalideModel &pipeline) {
 
 }  // namespace
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 NB_MODULE(model_cpp, m) {
     if (const auto autoscheduler = Halide::Internal::get_env_variable("MODEL_AUTOSCHEDULER");
         !autoscheduler.empty()) {

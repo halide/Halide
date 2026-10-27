@@ -1,4 +1,4 @@
-nanobind_add_module(Halide_Python STABLE_ABI)
+nanobind_add_module(Halide_Python STABLE_ABI NB_SUPPRESS_WARNINGS)
 add_library(Halide::Python ALIAS Halide_Python)
 
 set_target_properties(Halide_Python PROPERTIES OUTPUT_NAME halide_ EXPORT_NAME Python)

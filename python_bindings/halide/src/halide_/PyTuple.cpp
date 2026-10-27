@@ -31,7 +31,7 @@ Tuple to_halide_tuple(const py::object &o) {
 
 namespace {
 
-py::object tuple_iterator(const Tuple &t) {
+auto tuple_iterator(const Tuple &t) {
     return py::make_iterator(py::type<Tuple>(), "TupleIterator", t.begin(), t.end());
 }
 

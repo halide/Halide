@@ -5,7 +5,7 @@
 # libHalide, so it can be imported standalone to call precompiled AOT kernels.
 ##
 
-nanobind_add_module(Halide_PythonRuntime STABLE_ABI)
+nanobind_add_module(Halide_PythonRuntime STABLE_ABI NB_SUPPRESS_WARNINGS)
 add_library(Halide::PythonRuntime ALIAS Halide_PythonRuntime)
 
 set_target_properties(Halide_PythonRuntime

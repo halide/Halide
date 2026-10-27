@@ -32,6 +32,7 @@
 #define HALIDE_PYBIND_MODULE_NAME halide_
 #endif
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 NB_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     using namespace Halide::PythonBindings;
 

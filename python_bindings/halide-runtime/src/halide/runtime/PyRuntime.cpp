@@ -571,6 +571,7 @@ std::shared_ptr<Kernel> load(const std::filesystem::path &path_obj, const py::ob
 
 }  // namespace
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 NB_MODULE(_runtime, m) {
     m.doc() = "Standalone Halide runtime: load and call precompiled AOT kernels "
               "without depending on libHalide.";
