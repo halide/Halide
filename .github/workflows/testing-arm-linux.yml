@@ -40,7 +40,7 @@ jobs:
         include:
           - bits: 32
             arch: armv7l
-            python: 3.12-armv7-gnueabihf  # needed for piwheels
+            python: 3.13-armv7-gnueabihf  # needed for piwheels
           - bits: 64
             arch: aarch64
             python: linux-aarch64-gnu

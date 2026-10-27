@@ -81,17 +81,42 @@ jobs:
       - name: Sync CI environment
         run: |
           # Tooling runs on supported 64-bit Python; LLVM and C++ remain 32-bit.
-          LLVM_VER=$(uv export --group '${{ matrix.uv_group }}' --no-emit-project \
-            | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
           uv sync --frozen --python '${{ matrix.python }}' --group ci-base --no-install-workspace
-          uv pip install --python-platform i686-unknown-linux-gnu --only-binary :all: \
-            --extra-index-url https://pypi.halide-lang.org/simple/ \
-            "halide-llvm==${LLVM_VER}"
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
       - name: Configure LLVM
-        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+        run: |
+          LLVM_VER=$(uv export --frozen --group '${{ matrix.uv_group }}' --no-emit-project \
+            | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
+          # uv cannot target Linux i686 from a 64-bit interpreter. Extract the
+          # locked target wheel directly; only its native LLVM payload is needed.
+          LLVM_VER="$LLVM_VER" python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import tomllib
+          import urllib.request
+          import zipfile
+
+          with open("uv.lock", "rb") as f:
+              packages = tomllib.load(f)["package"]
+          llvm = next(p for p in packages if p["name"] == "halide-llvm" and p["version"] == os.environ["LLVM_VER"])
+          wheel = next(w for w in llvm["wheels"] if w["url"].endswith("-manylinux_2_28_i686.whl"))
+          archive = Path(os.environ["RUNNER_TEMP"]) / "llvm.whl"
+          urllib.request.urlretrieve(wheel["url"], archive)
+          with archive.open("rb") as f:
+              if hashlib.file_digest(f, "sha256").hexdigest() != wheel["hash"].removeprefix("sha256:"):
+                  raise RuntimeError("LLVM wheel checksum mismatch")
+          destination = archive.with_suffix("")
+          with zipfile.ZipFile(archive) as f:
+              for info in f.infolist():
+                  path = Path(f.extract(info, destination))
+                  if (info.external_attr >> 16) & 0o111:
+                      path.chmod(path.stat().st_mode | 0o111)
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              print(f"Halide_LLVM_ROOT={destination / 'halide_llvm' / 'data'}", file=f)
+          PY
 
       - name: Configure CMake
         run: cmake --preset ci-linux-x86-${{ matrix.bits }}

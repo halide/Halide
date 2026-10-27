@@ -1,4 +1,0 @@
-# Hosted image added after the pinned actionlint release.
-self-hosted-runner:
-  labels:
-    - ubuntu-26.04
