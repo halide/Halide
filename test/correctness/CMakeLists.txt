@@ -15,6 +15,7 @@ tests(
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
     argmax.cpp
+    arm_bit_field_shift.cpp
     arm_cpu_detect.cpp
     arm_dot_product_by_element.cpp
     associativity.cpp

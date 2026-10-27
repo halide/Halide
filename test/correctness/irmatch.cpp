@@ -62,6 +62,43 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    IRMatcher::WildConst<0> c0;
+    IRMatcher::WildConst<1> c1;
+    for (int bits : {8, 16, 32, 64}) {
+        for (halide_type_code_t code : {halide_type_int, halide_type_uint}) {
+            for (int lanes : {1, 4}) {
+                Type t(code, bits, lanes);
+                Expr a = Variable::make(t, "a");
+                Expr b = Variable::make(t, "b");
+                Expr and_expr = a & b;
+                auto and_rewrite = IRMatcher::rewriter(and_expr);
+                if (!and_rewrite(v0 & v1, v1 & v0) ||
+                    !equal(and_rewrite.result, b & a)) {
+                    std::cout << "bitwise_and matching or reconstruction failed for " << t << "\n";
+                    return 1;
+                }
+
+                Expr constants = make_const(t, 0xab) & make_const(t, 0x96);
+                auto fold_rewrite = IRMatcher::rewriter(constants);
+                if (!fold_rewrite(IRMatcher::bitwise_and(c0, c1), IRMatcher::fold(c0 & c1)) ||
+                    !equal(fold_rewrite.result, make_const(t, 0x82))) {
+                    std::cout << "bitwise_and constant folding failed for " << t << "\n";
+                    return 1;
+                }
+
+                Expr shifts = (a >> make_const(t, 1)) << make_const(t, 2);
+                auto shift_rewrite = IRMatcher::rewriter(shifts);
+                if (!shift_rewrite((v0 >> 1) << 2, IRMatcher::shift_left(IRMatcher::shift_right(v0, 1), 2)) ||
+                    !equal(shift_rewrite.result, shifts) ||
+                    !shift_rewrite(IRMatcher::shift_left(IRMatcher::shift_right(v0, 1), 2), (v0 >> 1) << 2) ||
+                    !equal(shift_rewrite.result, shifts)) {
+                    std::cout << "Shift operator matching or reconstruction failed for " << t << "\n";
+                    return 1;
+                }
+            }
+        }
+    }
+
     std::cout << "Success!\n";
     return 0;
 }
