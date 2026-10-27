@@ -25,7 +25,7 @@ repos:
         exclude: \.patch$
 
   - repo: https://github.com/rhysd/actionlint
-    rev: 60be20184d723e812b8454fe72e1ef3740ce050e  # rhysd/actionlint#683: Ubuntu 26.04 support
+    rev: v1.7.12
     hooks:
       - id: actionlint
 
