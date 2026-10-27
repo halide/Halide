@@ -535,6 +535,19 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Integer tensor core instructions need compute capability 7.2, which
+    // Halide rounds up to 7.5, and brain floats need 8.0.
+    const int capability = target.get_cuda_capability_lower_bound();
+    auto supported = [&](Type operand) {
+        if (operand == BFloat(16)) {
+            return capability >= 80;
+        } else if (operand.is_int_or_uint()) {
+            return capability >= 75;
+        } else {
+            return true;
+        }
+    };
+
     auto make_params = [](const auto &set) {
         Params p;
         set(p);
@@ -608,18 +621,22 @@ int main(int argc, char **argv) {
     params.push_back(make_params([&](Params &p) { p.M = 32; p.N = 128; p.K = 256; }));
 
     for (const Params &p : params) {
-        if (!test(p)) {
+        if (supported(p.operand) && !test(p)) {
             printf("Failed!\n");
             return 1;
         }
     }
 
+    auto staged_operands = [&](Type operand, int tile_m, int tile_n) {
+        return !supported(operand) || test_staged_operands(operand, tile_m, tile_n);
+    };
+
     if (!test_block_level_accumulator() ||
-        !test_staged_operands(Float(16), 16, 16) ||
+        !staged_operands(Float(16), 16, 16) ||
         // Fragments of packed bytes, including one that is a single register.
-        !test_staged_operands(UInt(8), 16, 16) ||
-        !test_staged_operands(Int(8), 8, 32) ||
-        !test_staged_operands(BFloat(16), 32, 8) ||
+        !staged_operands(UInt(8), 16, 16) ||
+        !staged_operands(Int(8), 8, 32) ||
+        !staged_operands(BFloat(16), 32, 8) ||
         !test_operand_hoisted_out_of_loop()) {
         printf("Failed!\n");
         return 1;

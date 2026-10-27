@@ -680,6 +680,12 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
         // operands, which for us are always the same type. Everything else
         // names it after the multiplicands, which are in args 5 and 6.
         const Type operand_type = op->args[5].type().element_of();
+        const int required = (operand_type == BFloat(16)    ? 80 :
+                              operand_type.is_int_or_uint() ? 75 :
+                                                              70);
+        user_assert(target.get_cuda_capability_lower_bound() >= required)
+            << "Tensor core matrix multiplies of " << operand_type
+            << " require the cuda_capability_" << required << " target feature.\n";
         std::string signature;
         if (operand_type == Float(16)) {
             const std::string acc = wmma_type_suffix(op->type.element_of());
@@ -1357,7 +1363,7 @@ string CodeGen_PTX_Dev::mattrs() const {
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "+ptx63";
     } else if (target.has_feature(Target::CUDACapability70)) {
-        return "+ptx60";
+        return "+ptx61";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
