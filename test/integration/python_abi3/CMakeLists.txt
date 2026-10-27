@@ -33,7 +33,13 @@ add_halide_library(runtimeadd FROM runtimeadd.generator)
 add_library(runtimeadd_module MODULE "${bindings}/halide-runtime/test/aot_module_stub.c")
 target_link_libraries(runtimeadd_module PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,runtimeadd>")
 target_link_options(runtimeadd_module PRIVATE "$<$<C_COMPILER_ID:MSVC>:/INCREMENTAL:NO>")
-set_target_properties(runtimeadd_module PROPERTIES PREFIX "" OUTPUT_NAME runtimeadd)
+# Keep the Windows import library distinct from the runtimeadd static library.
+set_target_properties(runtimeadd_module
+    PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME runtimeadd
+    ARCHIVE_OUTPUT_NAME runtimeadd_module
+)
 
 install(
     TARGETS abi3.generator_pystub abi3_pipeline runtimeadd_module
