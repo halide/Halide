@@ -320,6 +320,13 @@ inline bool use_tables(const Target &t) {
     return !t.has_gpu_feature();
 }
 
+// Whether a kernel decodes codebooks (iq4_nl's, iq4_xs's, mxfp4's kvalues)
+// through staged tables (codebook(); see metal_luts): on Metal, which has no
+// register table lookup (NEON's tbl) for their mux.
+inline bool use_luts(const Target &t) {
+    return t.has_feature(Target::Metal);
+}
+
 // The table decoders that tables() stages: all but tables of one value per
 // index (nvfp4's scales), which stay inline: each read a scalar load where
 // it is used.
@@ -1781,60 +1788,18 @@ inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) 
     return count;
 }
 
-// Metal (no register table lookup, as NEON's tbl): each decode's codebook,
-// a mux of n > 32 / bits integer constants (iq4_nl's, iq4_xs's and mxfp4's
-// kvalues), a lookup in 32-bit words of 32 / bits of them packed: the word a
-// tree of selects on the index's high bits, the value shifted out of it (the
-// index clamped as mux's: a min the simplifier drops where the index is a bit
-// field). Lowered as is, a mux is a chain of n compares and selects per
-// value: gemv (M3 Max, f32 acts) 0.58-0.69x of GGML's (a threadgroup memory
-// table) to 0.73-0.92x, M = 2..4 1.05-1.45x to 1.12-1.61x.
-inline void packed_muxes(const std::vector<ApproximationResult> &rs) {
-    using namespace Internal;
-    auto pack = [](const Expr &e) {
-        return mutate_with(e, [&](auto *self, const Call *c) -> Expr {
-            if (!c->is_intrinsic(Call::mux)) return self->visit_base(c);
-            Expr idx = self->mutate(c->args[0]);
-            const int n = (int)c->args.size() - 1, bits = c->type.bits();
-            std::vector<int64_t> vals;
-            for (int i = 1; i <= n; i++) {
-                if (auto v = as_const_int(c->args[i])) {
-                    vals.push_back(*v);
-                } else if (auto u = as_const_uint(c->args[i])) {
-                    vals.push_back((int64_t)*u);
-                }
-            }
-            if (!c->type.is_scalar() || !(c->type.is_int() || c->type.is_uint()) || bits > 16 || n <= 32 / bits ||
-                (int)vals.size() != n || !idx.type().is_uint()) {
-                return self->visit_base(c);
-            }
-            int lk = 0;  // log2 of the values per word
-            while ((bits << (lk + 1)) <= 32)
-                lk++;
-            const int k = 1 << lk;
-            std::vector<Expr> cur;
-            for (int w = 0; w * k < n; w++) {
-                uint32_t word = 0;
-                for (int j = 0; j < k && w * k + j < n; j++) {
-                    word |= (uint32_t)(vals[w * k + j] & ((1 << bits) - 1)) << (j * bits);
-                }
-                cur.push_back(make_const(UInt(32), word));
-            }
-            Expr u = min(cast<uint32_t>(idx), make_const(UInt(32), n - 1)), hi = u >> lk;
-            for (int b = 0; cur.size() > 1; b++) {
-                std::vector<Expr> next;
-                for (size_t i = 0; i < cur.size(); i += 2) {
-                    next.push_back(i + 1 < cur.size() ? select(((hi >> b) & 1) != 0, cur[i + 1], cur[i]) : cur[i]);
-                }
-                cur = next;
-            }
-            return cast(c->type, cur[0] >> ((u & (k - 1)) * bits));
-        });
-    };
-    for (Func f : decoders(rs)) {
-        for (Expr &v : f.function().definition().values()) {
-            v = pack(v);
-        }
+// Metal: the codebooks' staged tables (use_luts), each copied per
+// threadgroup (at out's innermost gpu_blocks loop) into threadgroup memory,
+// an entry per thread, as GGML's kernel_mul_mv_iq4_nl_f32 copies
+// kvalues_iq4nl. (M3 Max, iq4_nl, iq4_xs and mxfp4 on f32 and q8 acts: gemv
+// 1.45-1.75x the speed of their mux as a select tree on words of the
+// constants packed, M = 4 1.12-1.18x; read in place from the table's device
+// buffer, or in the constant address space, gemv on N or K of 14336
+// 0.73-1.0x of staged.)
+inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
+    for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
+        Var p = f.args()[0], i = f.args()[1];
+        f.compute_at(out, Var("no")).store_in(MemoryType::GPUShared).reorder(i, p).gpu_threads(i);
     }
 }
 
@@ -2416,7 +2381,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             metal_flat(out, dots[0], r, staged);
             return;
         }
-        packed_muxes(rs);
+        metal_luts(out, rs);
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
             metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 8);
