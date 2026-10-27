@@ -7,6 +7,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "OptimizeShuffles.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -568,6 +569,37 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
+    if (op->is_intrinsic(Call::dynamic_shuffle) &&
+        op->type.is_vector() &&
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of(), target)) {
+        const int table_lanes = op->args[0].type().lanes();
+        const int lanes = op->type.lanes();
+        if (table_lanes > 16) {
+            Value *table = slice_vector(codegen(op->args[0]), 0, 64);
+            value = codegen_dynamic_shuffle(op, 64, "llvm.x86.avx512.permvar.qi.512", {table});
+        } else {
+            // pshufb looks up within each 128-bit lane, so for wider vectors
+            // the table must be replicated across lanes.
+            int slice_lanes = 16;
+            const char *intrin = "llvm.x86.ssse3.pshuf.b.128";
+            if (lanes >= 64 && target.has_feature(Target::AVX512_Skylake)) {
+                slice_lanes = 64;
+                intrin = "llvm.x86.avx512.pshuf.b.512";
+            } else if (lanes >= 32 && target.has_feature(Target::AVX2)) {
+                slice_lanes = 32;
+                intrin = "llvm.x86.avx2.pshuf.b";
+            }
+            Value *table = slice_vector(codegen(op->args[0]), 0, 16);
+            std::vector<int> indices(slice_lanes);
+            for (int i = 0; i < slice_lanes; i++) {
+                indices[i] = i % 16;
+            }
+            table = shuffle_vectors(table, indices);
+            value = codegen_dynamic_shuffle(op, slice_lanes, intrin, {table});
+        }
+        return;
+    }
+
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_CPU::visit(op);

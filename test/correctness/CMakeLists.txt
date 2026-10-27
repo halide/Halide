@@ -492,6 +492,7 @@ tests(
     sliding_reduction.cpp
     sliding_window.cpp
     sliding_window_cascade.cpp
+    small_table_lookup.cpp
     sme_streaming.cpp
     sme_streaming_without_target_feature.cpp
     solve.cpp
