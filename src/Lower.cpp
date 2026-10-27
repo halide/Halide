@@ -380,7 +380,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after unrolling:", s);
 
     debug(1) << "Vectorizing...\n";
-    s = vectorize_loops(s, env);
+    s = vectorize_loops(s, env, t);
     s = simplify(s);
     log("Lowering after vectorizing:", s);
 

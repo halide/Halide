@@ -160,6 +160,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::VTCM;
     case MemoryType::AMXTile:
         return Serialize::MemoryType::AMXTile;
+    case MemoryType::GPR:
+        return Serialize::MemoryType::GPR;
     default:
         user_error << "Unsupported memory type\n";
         return Serialize::MemoryType::Auto;
@@ -184,6 +186,8 @@ Serialize::ForType Serializer::serialize_for_type(const ForType &for_type) {
         return Serialize::ForType::GPUThread;
     case ForType::GPULane:
         return Serialize::ForType::GPULane;
+    case ForType::VectorizedSWAR:
+        return Serialize::ForType::VectorizedSWAR;
     default:
         user_error << "Unsupported for type\n";
         return Serialize::ForType::Serial;

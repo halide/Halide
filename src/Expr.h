@@ -452,6 +452,17 @@ enum class MemoryType {
      * global buffer, because that is all the hardware can do. On GPU APIs with
      * no such instruction this is ordinary shared memory. */
     GPUSharedAsync,
+
+    /** General-purpose register memory, on CPU targets. Like Register,
+     * but the allocation is held as integer words in the general-purpose
+     * registers rather than as vectors in the SIMD registers: each dense
+     * vector load or store of it is done as a single integer, so a
+     * consumer that reads it one element at a time extracts the elements
+     * with shifts and masks. Dense vector loads and stores of it must fit
+     * in one general-purpose register (32 or 64 bits, depending on the
+     * target). This is the natural storage for a Func vectorized with
+     * VectorizeIn::SWAR, though either choice works with the other. */
+    GPR,
 };
 
 /** Whether a MemoryType places an allocation in GPU shared memory. */
@@ -477,9 +488,11 @@ namespace Internal {
  * appear to have finished before the next begins. Parallel, GPUBlock,
  * and GPUThread are parallel and unordered: iterations may occur in
  * any order, and multiple iterations may occur
- * simultaneously. Vectorized and GPULane are parallel and
- * synchronous: they act as if all iterations occur at the same time
- * in lockstep. */
+ * simultaneously. Vectorized, VectorizedSWAR, and GPULane are parallel
+ * and synchronous: they act as if all iterations occur at the same time
+ * in lockstep. VectorizedSWAR loops are vectorized like Vectorized loops,
+ * but the lanes are packed into a single general-purpose integer
+ * register instead of a SIMD register. */
 enum class ForType {
     Serial,
     Parallel,
@@ -489,7 +502,11 @@ enum class ForType {
     GPUBlock,
     GPUThread,
     GPULane,
+    VectorizedSWAR,
 };
+
+/** Returns true if for_type is Vectorized or VectorizedSWAR. */
+bool is_vectorized(ForType for_type);
 
 /** Check if for_type executes for loop iterations in parallel and unordered. */
 bool is_unordered_parallel(ForType for_type);

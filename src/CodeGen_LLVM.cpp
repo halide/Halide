@@ -2375,6 +2375,20 @@ void CodeGen_LLVM::add_streaming_metadata(llvm::Instruction *inst) {
     inst->setMetadata(llvm::LLVMContext::MD_nontemporal, nontemporal_node);
 }
 
+llvm::Type *CodeGen_LLVM::gpr_word_type(const std::string &name, const Type &t, const Expr &index) {
+    const Ramp *ramp = index.as<Ramp>();
+    if (t.is_scalar() || !ramp || !is_const_one(ramp->stride) || !gpr_allocations.contains(name)) {
+        return nullptr;
+    }
+    const int bits = t.bits() * t.lanes();
+    user_assert(bits <= get_target().bits)
+        << "A dense " << bits << "-bit vector access to " << name
+        << " does not fit in a " << get_target().bits << "-bit general-purpose register. "
+        << "Dense vector loads and stores of an allocation in MemoryType::GPR must fit in one. "
+        << "Use MemoryType::Stack or MemoryType::Register instead.\n";
+    return llvm::Type::getIntNTy(*context, bits);
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
@@ -2388,6 +2402,15 @@ void CodeGen_LLVM::visit(const Load *op) {
     // Predicated load
     if (!is_const_one(op->predicate)) {
         codegen_predicated_load(op);
+        return;
+    }
+
+    if (llvm::Type *word_t = gpr_word_type(op->name, op->type, op->index)) {
+        // One integer load of the whole vector.
+        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), op->index.as<Ramp>()->base);
+        LoadInst *load = builder->CreateAlignedLoad(word_t, ptr, llvm::Align(op->type.bytes()));
+        add_tbaa_metadata(load, op->name, op->index);
+        value = builder->CreateBitCast(load, llvm_type_of(op->type));
         return;
     }
 
@@ -4547,6 +4570,12 @@ void CodeGen_LLVM::visit(const Store *op) {
     } else if (const Let *let = op->index.as<Let>()) {
         Stmt s = op->with(op->value, let->body, op->predicate, op->alignment);
         codegen(LetStmt::make(let->name, let->value, s));
+    } else if (llvm::Type *word_t = gpr_word_type(op->name, value_type, op->index)) {
+        // One integer store of the whole vector, so that LLVM holds the
+        // allocation in general-purpose registers.
+        Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), op->index.as<Ramp>()->base);
+        StoreInst *store = builder->CreateAlignedStore(builder->CreateBitCast(val, word_t), ptr, llvm::Align(value_type.bytes()));
+        annotate_store(store, op->index);
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();

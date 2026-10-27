@@ -129,6 +129,32 @@ enum class TailStrategy {
     Auto
 };
 
+/** How the lanes of a vectorized loop are computed on. See
+ * Func::vectorize. */
+enum class VectorizeIn {
+    /** Each lane occupies one lane of a SIMD register. This is the
+     * default. */
+    SIMD,
+
+    /** SIMD within a register: all lanes are packed into a single
+     * machine word, and lane-wise operations are
+     * implemented with ordinary scalar integer instructions. The
+     * vector must fit in one machine word (32 or 64 bits depending on
+     * the target), its lanes must be integers, and only a restricted
+     * set of operations is supported: dense loads and stores,
+     * broadcasts and ramps, bitwise operations, shifts by constant
+     * (possibly different per lane) or uniform amounts, multiplication,
+     * division, and modulo by constant powers of two, addition and
+     * subtraction, same-width casts and reinterprets, and selects.
+     * Anything else is a compile-time error. Selects on conditions that
+     * vary across the lanes at runtime, and loads and stores in vector
+     * tails predicated by the tail strategy, are done one lane at a
+     * time. Inside an enclosing SIMD-vectorized loop, each SIMD lane
+     * holds one such word. Where the words are stored between Funcs is
+     * a separate choice: see MemoryType::GPR. */
+    SWAR,
+};
+
 /** Different ways to handle the case when the start/end of the loops of stages
  * computed with (fused) are not aligned. */
 enum class LoopAlignStrategy {

@@ -757,7 +757,7 @@ protected:
 
     Stmt visit(const For *op) override {
         ScopedValue<bool> s(in_vector_loop,
-                            in_vector_loop || op->for_type == ForType::Vectorized);
+                            in_vector_loop || is_vectorized(op->for_type));
         bool old_inner_unbound_uses = inner_unbound_use_of_used_or_loaded_vars;
         inner_unbound_use_of_used_or_loaded_vars = false;
 
