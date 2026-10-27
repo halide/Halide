@@ -622,8 +622,21 @@ public:
         }
         args[1] = base_offset;
 
+        // A struct-typed buffer's prefetch is of its bytes: a record's bytes
+        // as the innermost dimension, the offset and strides in bytes.
+        Type t = op->types[0];
+        if (t.is_struct()) {
+            Expr bytes = make_const(base_offset.type(), t.bytes());
+            args[1] = base_offset * bytes;
+            for (size_t p = 3; p < args.size(); p += 2) {
+                args[p] = args[p] * t.bytes();
+            }
+            args.insert(args.begin() + 2, {t.bytes(), 1});
+            t = UInt(8);
+        }
+
         // TODO: Consider generating a prefetch call for each tuple element.
-        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        Stmt prefetch_call = Evaluate::make(Call::make(t, Call::prefetch, args, Call::Intrinsic));
         if (!is_const_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
         }
