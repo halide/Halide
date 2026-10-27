@@ -1,4 +1,4 @@
-# Hosted image added after the pinned actionlint release.
+# TODO: Remove when Ubuntu 26.04 support ships: https://github.com/rhysd/actionlint/pull/683
 self-hosted-runner:
   labels:
     - ubuntu-26.04

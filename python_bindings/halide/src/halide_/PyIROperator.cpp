@@ -83,10 +83,7 @@ py::object py_print(const py::args &args, F make_print) {
         return py::cast(make_print(collect_print_args(args)));
     }
     Tuple t = py::cast<Tuple>(args[0]);
-    auto rest = py::steal<py::tuple>(PyTuple_New(args.size() - 1));
-    for (size_t i = 1; i < args.size(); i++) {
-        PyTuple_SetItem(rest.ptr(), i - 1, Py_NewRef(args[i].ptr()));
-    }
+    py::tuple rest{py::handle(args)[py::slice(py::int_(1), py::none(), py::none())]};
     std::vector<Expr> v = t.as_vector();
     std::vector<Expr> extra = collect_print_args(rest);
     v.insert(v.end(), extra.begin(), extra.end());

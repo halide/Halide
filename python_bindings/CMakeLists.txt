@@ -46,6 +46,8 @@ if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpytho
 endif ()
 
 if (WITH_PYTHON_BINDINGS)
+    # Avoid backslash escapes in vcpkg's find_package wrapper on Windows.
+    file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
     find_package(nanobind 2.11...<2.12 CONFIG REQUIRED HINTS "${Python_SITEARCH}/nanobind/cmake")
 endif ()
 
@@ -68,6 +70,7 @@ include(AddPythonTest)
 set(Halide_Python_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/site-packages/halide")
 add_subdirectory(halide-bin)
 if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(common)
     add_subdirectory(halide-runtime)
 endif ()
 add_subdirectory(halide)

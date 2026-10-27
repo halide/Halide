@@ -1,5 +1,4 @@
 nanobind_add_module(Halide_Python STABLE_ABI)
-target_include_directories(Halide_Python PRIVATE "${Halide_Python_SOURCE_DIR}/common")
 add_library(Halide::Python ALIAS Halide_Python)
 
 set_target_properties(Halide_Python PROPERTIES OUTPUT_NAME halide_ EXPORT_NAME Python)
@@ -52,7 +51,7 @@ if (Halide_ASAN_ENABLED)
     target_link_options(Halide_Python PRIVATE -shared-libasan)
 endif ()
 
-target_link_libraries(Halide_Python PRIVATE Halide::Halide)
+target_link_libraries(Halide_Python PRIVATE Halide::Halide Halide::PythonCommon)
 add_dependencies(Halide_Python Halide_PythonBin_sources Halide_PythonRuntime)
 
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH

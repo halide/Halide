@@ -1,4 +1,3 @@
-#include "PyBufferProtocol.h"
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
@@ -13,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <random>
+#include <type_traits>
 #include <unordered_set>
 
 namespace py = nanobind;
@@ -297,8 +297,16 @@ py::object export_output(
     const std::vector<int> &output_shape) {
     // Keep NumPy responsible for allocating and owning the output storage.
     auto shape = output_shape.empty() ? std::vector<int>{1} : output_shape;
+    std::string dtype;
+    if constexpr (std::is_same_v<T, bool>) {
+        dtype = "bool";
+    } else {
+        dtype = std::string(std::is_floating_point_v<T> ? "float" : std::is_signed_v<T> ? "int" :
+                                                                                          "uint") +
+                std::to_string(sizeof(T) * 8);
+    }
     auto result = py::module_::import_("numpy").attr("empty")(
-        py::cast(shape), py::arg("dtype") = python_format<T>());
+        py::cast(shape), py::arg("dtype") = dtype);
     if (std::find(shape.begin(), shape.end(), 0) != shape.end()) {
         return result;
     }

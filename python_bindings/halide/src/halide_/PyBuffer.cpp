@@ -55,8 +55,7 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
     return s;
 }
 
-// PyBind11 doesn't have baked-in support for float16, so add just
-// enough special-case wrapping to support it.
+// Convert Halide's scalar float16_t through Python's float type.
 template<typename T>
 inline T value_cast(const py::object &value) {
     return py::cast<T>(value);
@@ -68,6 +67,7 @@ inline float16_t value_cast<float16_t>(const py::object &value) {
 }
 
 // TODO: https://github.com/halide/Halide/issues/6849
+// DLPack supports bfloat16, but PEP 3118 and nanobind's memoryview export do not.
 // template<>
 // inline bfloat16_t value_cast<bfloat16_t>(const py::object &value) {
 //     return bfloat16_t(py::cast<double>(value));

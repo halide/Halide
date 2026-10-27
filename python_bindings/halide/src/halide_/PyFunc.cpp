@@ -101,11 +101,11 @@ py::object evaluate_impl(const py::object &expr, bool may_gpu) {
     if (r->size() == 1) {
         return buffer_getitem_operator((*r)[0], {});
     } else {
-        auto result = py::steal<py::tuple>(PyTuple_New(r->size()));
+        py::list result;
         for (size_t i = 0; i < r->size(); i++) {
-            PyTuple_SetItem(result.ptr(), i, buffer_getitem_operator((*r)[i], {}).release().ptr());
+            result.append(buffer_getitem_operator((*r)[i], {}));
         }
-        return result;
+        return py::tuple(result);
     }
 }
 

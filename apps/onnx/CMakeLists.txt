@@ -108,7 +108,8 @@ if (NOT Python_FOUND)
     return()
 endif ()
 if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
-    message(FATAL_ERROR "ONNX bindings require regular (GIL-enabled) CPython 3.12 or newer.")
+    message(WARNING "ONNX bindings require regular (GIL-enabled) CPython 3.12 or newer.")
+    return()
 endif ()
 
 # Normalize to forward slashes before passing to find_package. vcpkg overrides
@@ -127,10 +128,6 @@ endif ()
 nanobind_add_module(
     model_cpp
     STABLE_ABI model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
-)
-target_include_directories(
-    model_cpp
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../python_bindings/common"
 )
 target_link_libraries(model_cpp PRIVATE Halide::Halide onnx_app::oclib)
 add_dependencies(onnx model_cpp)
