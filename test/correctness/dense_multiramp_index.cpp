@@ -194,10 +194,53 @@ int one_dim() {
     return 0;
 }
 
+int rfactor_lanes() {
+    // An rfactor intermediate summing 4 RVar lanes for each of 4 vectorized
+    // outputs, where output x reads at (x / 4) * 64 + (x % 4) * 4 + r. The
+    // 16 lanes for 4 consecutive outputs starting at a multiple of 4 are one
+    // dense run, which should be one dense load, also with rfactor()'s
+    // likely-tagged clamp on the RVar.
+    ImageParam in(Int(32), 1);
+    Func f;
+    Var x, u;
+    RVar ro, ri;
+    RDom r(0, 64);
+    f(x) = 0;
+    f(x) += in(r + (x % 4) * 4 + (x / 4) * 64);
+    f.update().split(r, ro, ri, 4);
+    Func intm = f.update().rfactor(ro, u);
+    f.vectorize(x, 4);
+    f.update().vectorize(x, 4);
+    intm.compute_at(f, x).vectorize(x);
+    intm.update().reorder(ri, x, u).atomic().vectorize(ri).vectorize(x);
+    f.output_buffer().dim(0).set_min(0);
+    in.dim(0).set_min(0);
+
+    if (!check_dense(f, "rfactor_lanes")) {
+        return 1;
+    }
+
+    Buffer<int> input(64 * 5), output(16);
+    input.fill([](int i) { return (i * 7) % 13 - 6; });
+    in.set(input);
+    f.realize(output);
+    for (int x = 0; x < 16; x++) {
+        int correct = 0;
+        for (int k = 0; k < 64; k++) {
+            correct += input(k + (x % 4) * 4 + (x / 4) * 64);
+        }
+        if (output(x) != correct) {
+            printf("output(%d) = %d instead of %d\n", x, output(x), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (fused_dims() || aligned_tiles() || one_dim()) {
+    if (fused_dims() || aligned_tiles() || one_dim() || rfactor_lanes()) {
         return 1;
     }
     printf("Success!\n");
