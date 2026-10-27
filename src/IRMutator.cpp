@@ -6,33 +6,41 @@ namespace Internal {
 using std::vector;
 
 Expr IRMutator::mutate(const Expr &e) {
+    // The switch is in a lambda so that clang simplifies it into a single
+    // indexed virtual call before it is inlined.
+    auto dispatch = [&](const BaseExprNode *op) -> Expr {
+        switch (op->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        return visit((const T *)op);
+            HALIDE_FOR_EACH_IR_EXPR(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+        default:
+            unknown_node_type_error(op->node_type);
+        }
+    };
     if (!e.defined()) {
         return Expr();
     }
-    switch (e->node_type) {
-#define HALIDE_VISIT_CASE(T) \
-    case IRNodeType::T:      \
-        return visit((const T *)e.get());
-        HALIDE_FOR_EACH_IR_EXPR(HALIDE_VISIT_CASE)
-#undef HALIDE_VISIT_CASE
-    default:
-        unknown_node_type_error(e->node_type);
-    }
+    return dispatch(e.get());
 }
 
 Stmt IRMutator::mutate(const Stmt &s) {
+    auto dispatch = [&](const BaseStmtNode *op) -> Stmt {
+        switch (op->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        return visit((const T *)op);
+            HALIDE_FOR_EACH_IR_STMT(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+        default:
+            unknown_node_type_error(op->node_type);
+        }
+    };
     if (!s.defined()) {
         return Stmt();
     }
-    switch (s->node_type) {
-#define HALIDE_VISIT_CASE(T) \
-    case IRNodeType::T:      \
-        return visit((const T *)s.get());
-        HALIDE_FOR_EACH_IR_STMT(HALIDE_VISIT_CASE)
-#undef HALIDE_VISIT_CASE
-    default:
-        unknown_node_type_error(s->node_type);
-    }
+    return dispatch(s.get());
 }
 
 Expr IRMutator::visit(const IntImm *op) {
