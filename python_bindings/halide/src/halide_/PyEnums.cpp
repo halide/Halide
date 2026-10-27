@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_enums(py::module &m) {
+void define_enums(py::module_ &m) {
     py::enum_<Argument::Kind>(m, "ArgumentKind")
         .value("InputScalar", Argument::Kind::InputScalar)
         .value("InputBuffer", Argument::Kind::InputBuffer)
@@ -116,16 +116,7 @@ void define_enums(py::module &m) {
             .value("NoOS", Target::OS::NoOS)
             .value("wasmrt", Target::OS::WebAssemblyRuntime);
 
-    // OSX is deprecated in C++ (identical to MacOS), but the Python binding
-    // is kept for one release for backwards compatibility.
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-    target_os.value("OSX", Target::OS::OSX);
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
+    // The deprecated OSX alias is provided by the Python package initializer.
 
     py::enum_<Target::Arch>(m, "TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)

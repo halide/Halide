@@ -5,11 +5,11 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_stage(py::module &m) {
+void define_stage(py::module_ &m) {
     auto stage_class =
         py::class_<Stage>(m, "Stage")
             // for implicitly_convertible
-            .def(py::init([](const Func &f) -> Stage { return f; }))
+            .def("__init__", [](Stage *self, const Func &f) { new (self) Stage(f); })
 
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)

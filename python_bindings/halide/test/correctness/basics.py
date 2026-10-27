@@ -1,4 +1,5 @@
 import re
+import struct
 from contextlib import contextmanager
 
 import halide as hl
@@ -33,6 +34,18 @@ def test_compiletime_error():
         "Error: Output buffer f has type uint16 but type of the buffer passed in is uint8",
     ):
         f.realize(buf)
+
+
+def test_float32_param_rounding():
+    def f32(value):
+        return struct.unpack("f", struct.pack("f", value))[0]
+
+    param = hl.Param(hl.Float(32), "rounded", 0.1)
+    assert hl.evaluate(param) == f32(0.1)
+    param.set(0.2)
+    assert hl.evaluate(param) == f32(0.2)
+    param.set_estimate(0.3)
+    assert hl.evaluate(param.parameter().estimate()) == f32(0.3)
 
 
 def test_runtime_error():
@@ -658,6 +671,7 @@ def test_split_storage():
 
 
 if __name__ == "__main__":
+    test_float32_param_rounding()
     test_compiletime_error()
     test_runtime_error()
     test_misused_and()

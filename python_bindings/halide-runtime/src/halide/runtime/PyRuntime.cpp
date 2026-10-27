@@ -1,7 +1,7 @@
 // The `halide.runtime` extension module.
 //
 // This module deliberately depends ONLY on the header-only Halide runtime
-// (HalideRuntime.h / HalideBuffer.h) and pybind11 -- it must NOT depend on
+// (HalideRuntime.h / HalideBuffer.h) and nanobind -- it must NOT depend on
 // libHalide. It provides just enough to load a precompiled AOT Halide kernel
 // (a shared object exporting `<name>_argv` and `<name>_metadata`) and call it
 // with buffer-protocol objects (e.g. NumPy arrays) and Python scalars.
@@ -11,9 +11,11 @@
 // `halide.Buffer` (from the compiler module) flows through a duck-typed,
 // named-capsule protocol, so no libHalide types cross the boundary.
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <pybind11/stl/filesystem.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <climits>
 #include <cstdint>
@@ -33,7 +35,7 @@
 #include <dlfcn.h>
 #endif
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 namespace {
 
@@ -516,7 +518,7 @@ private:
             void *ptr = PyCapsule_GetPointer(
                 capsule.ptr(), Halide::PythonRuntimeBindings::halide_buffer_capsule_name);
             if (!ptr) {
-                throw py::error_already_set();
+                throw py::python_error();
             }
             slot.capsule = std::move(capsule);
             return static_cast<halide_buffer_t *>(ptr);
@@ -529,7 +531,7 @@ private:
             slot.py_buf, slot.dims.data(), slot.buffer, slot.py_buf_valid,
             slot.needs_device_free);
         if (!ok) {
-            throw py::error_already_set();
+            throw py::python_error();
         }
         return &slot.buffer;
     }
@@ -616,7 +618,7 @@ PyObject *make_borrowed_kernel(const char *name,
         py::object result = py::cast(make_kernel(
             nullptr, argv_fn, md, name ? name : "", expose_user_context != 0));
         return result.release().ptr();
-    } catch (py::error_already_set &e) {
+    } catch (py::python_error &e) {
         e.restore();
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -671,18 +673,18 @@ std::shared_ptr<Kernel> load(const std::filesystem::path &path_obj, const py::ob
 
 }  // namespace
 
-PYBIND11_MODULE(_runtime, m) {
+NB_MODULE(_runtime, m) {
     m.doc() = "Standalone Halide runtime: load and call precompiled AOT kernels "
               "without depending on libHalide.";
 
     Halide::PythonRuntimeBindings::define_buffer(m);
 
-    py::class_<Kernel, std::shared_ptr<Kernel>>(m, "Kernel")
+    py::class_<Kernel>(m, "Kernel")
         .def("__call__", &Kernel::call)
-        .def_property_readonly("name", &Kernel::name)
-        .def_property_readonly("target", &Kernel::target)
-        .def_property_readonly("argument_names", &Kernel::argument_names)
-        .def_property_readonly("arguments", &Kernel::arguments)
+        .def_prop_ro("name", &Kernel::name)
+        .def_prop_ro("target", &Kernel::target)
+        .def_prop_ro("argument_names", &Kernel::argument_names)
+        .def_prop_ro("arguments", &Kernel::arguments)
         .def("__repr__", [](const Kernel &k) {
             return "<halide.runtime.Kernel '" + k.name() + "'>";
         });

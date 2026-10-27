@@ -5,7 +5,8 @@
 # libHalide, so it can be imported standalone to call precompiled AOT kernels.
 ##
 
-pybind11_add_module(Halide_PythonRuntime)
+nanobind_add_module(Halide_PythonRuntime STABLE_ABI)
+target_include_directories(Halide_PythonRuntime PRIVATE "${Halide_Python_SOURCE_DIR}/common")
 add_library(Halide::PythonRuntime ALIAS Halide_PythonRuntime)
 
 set_target_properties(Halide_PythonRuntime

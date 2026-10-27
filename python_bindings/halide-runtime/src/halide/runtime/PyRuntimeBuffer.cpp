@@ -1,7 +1,9 @@
 #include "PyRuntimeBuffer.h"
 
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
+#include "PyBufferProtocol.h"
+#include <nanobind/stl/pair.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <atomic>
 #include <cstdint>
@@ -15,7 +17,7 @@
 #include "Float16.h"
 #include "HalideBuffer.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 namespace Halide::PythonRuntimeBindings {
 namespace {
@@ -30,7 +32,7 @@ std::string unique_name() {
 
 template<typename T>
 std::string format_descriptor() {
-    return py::format_descriptor<T>::format();
+    return python_format<T>();
 }
 
 template<>
@@ -38,7 +40,7 @@ std::string format_descriptor<float16_t>() {
     return "e";
 }
 
-halide_type_t format_descriptor_to_type(std::string format, py::ssize_t itemsize) {
+halide_type_t format_descriptor_to_type(std::string format, Py_ssize_t itemsize) {
     char byte_order = '@';
     if (!format.empty() && std::strchr("@<>!=", format.front())) {
         byte_order = format.front();
@@ -113,12 +115,12 @@ std::string type_string(const halide_type_t &type) {
 
 template<typename T>
 T value_cast(const py::object &value) {
-    return value.cast<T>();
+    return py::cast<T>(value);
 }
 
 template<>
 float16_t value_cast<float16_t>(const py::object &value) {
-    return float16_t(value.cast<double>());
+    return float16_t(py::cast<double>(value));
 }
 
 class Buffer {
@@ -160,9 +162,12 @@ public:
         return *this;
     }
 
-    Buffer(py::buffer source, std::string name, bool reverse_axes)
-        : owner_(std::move(source)), identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
-        py::buffer_info info = py::reinterpret_borrow<py::buffer>(owner_).request(true);
+    Buffer(PythonBuffer source, std::string name, bool reverse_axes)
+        : owner_(py::steal(PyMemoryView_FromObject(source.ptr()))), identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
+        if (!owner_) {
+            throw py::python_error();
+        }
+        PythonBufferInfo info = py::borrow<PythonBuffer>(owner_).request(true);
         if (info.ndim < 0 || info.ndim > INT32_MAX) {
             throw py::value_error("Out of range dimensionality in buffer conversion.");
         }
@@ -205,7 +210,7 @@ public:
         Buffer result;
         result.borrowed_buffer_ = static_cast<RuntimeBuffer *>(PyCapsule_GetPointer(capsule.ptr(), runtime_buffer_capsule_name));
         if (!result.borrowed_buffer_) {
-            throw py::error_already_set();
+            throw py::python_error();
         }
         result.owner_ = std::move(owner);
         result.identity_ = std::make_shared<char>();
@@ -273,7 +278,7 @@ public:
         name_ = name;
     }
 
-    py::buffer_info buffer_info(bool reverse_axes) {
+    PythonBufferInfo buffer_info(bool reverse_axes) {
         require_defined();
         RuntimeBuffer &buffer = runtime_buffer();
         if (buffer.data() == nullptr) {
@@ -281,17 +286,17 @@ public:
         }
         const int d = buffer.dimensions();
         const int bytes = buffer.type().bytes();
-        std::vector<py::ssize_t> shape(d), strides(d);
+        std::vector<Py_ssize_t> shape(d), strides(d);
         for (int i = 0; i < d; ++i) {
             const int dst = reverse_axes ? d - i - 1 : i;
             shape[dst] = buffer.dim(i).extent();
-            strides[dst] = static_cast<py::ssize_t>(buffer.dim(i).stride()) * bytes;
+            strides[dst] = static_cast<Py_ssize_t>(buffer.dim(i).stride()) * bytes;
         }
-        return py::buffer_info(buffer.data(), bytes, type_to_format_descriptor(buffer.type()), d, shape, strides);
+        return PythonBufferInfo(buffer.data(), bytes, type_to_format_descriptor(buffer.type()), d, shape, strides);
     }
 
-    py::array numpy_view(bool reverse_axes) {
-        return py::array(buffer_info(reverse_axes), py::cast(this));
+    py::object numpy_view(bool reverse_axes) {
+        return python_numpy_view(py::cast(this, py::rv_policy::reference), reverse_axes);
     }
 
     py::object getitem(const std::vector<int> &pos) {
@@ -409,7 +414,7 @@ private:
                 std::ostringstream out;
                 out << "index " << pos[i] << " is out of bounds for axis " << i
                     << " with min=" << dim.min() << ", extent=" << dim.extent();
-                throw py::index_error(out.str());
+                throw py::index_error(out.str().c_str());
             }
         }
     }
@@ -422,19 +427,18 @@ private:
     bool defined_ = false;
 };
 
+PythonBufferInfo buffer_info(Buffer &b) {
+    return b.buffer_info(true);
+}
+
 }  // namespace
 
 void define_buffer(py::module_ &m) {
     py::class_<halide_type_t>(m, "Type")
-        .def(py::init([](int code, int bits) {
-                 return halide_type_t(static_cast<halide_type_code_t>(code), static_cast<uint8_t>(bits));
-             }),
-             py::arg("code"), py::arg("bits"))
+        .def("__init__", [](halide_type_t *self, int code, int bits) { new (self) halide_type_t(halide_type_t(static_cast<halide_type_code_t>(code), static_cast<uint8_t>(bits))); }, py::arg("code"), py::arg("bits"))
         .def("code", [](const halide_type_t &type) { return static_cast<int>(type.code); })
         .def("bits", [](const halide_type_t &type) { return type.bits; })
-        .def("__eq__", [](const halide_type_t &a, const py::object &other) {
-            return py::isinstance<halide_type_t>(other) && a == other.cast<halide_type_t>();
-        })
+        .def("__eq__", [](const halide_type_t &a, const py::object &other) { return py::isinstance<halide_type_t>(other) && a == py::cast<halide_type_t>(other); }, py::arg("other").none())
         .def("__str__", &type_string)
         .def("__repr__", &type_string);
 
@@ -444,10 +448,10 @@ void define_buffer(py::module_ &m) {
         .def("extent", &BufferDimension::extent)
         .def("max", &BufferDimension::max);
 
-    py::class_<Buffer>(m, "Buffer", py::buffer_protocol())
+    py::class_<Buffer>(m, "Buffer", py::type_slots(python_buffer_slots<Buffer, buffer_info>))
         .def(py::init<>())
         .def(py::init<const Buffer &>(), py::keep_alive<1, 2>())
-        .def(py::init<py::buffer, std::string, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
+        .def(py::init<PythonBuffer, std::string, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
         .def(py::init<halide_type_t, const std::vector<int> &, std::string>(),
              py::arg("type"), py::arg("sizes"), py::arg("name") = "")
         .def(py::init<halide_type_t, const std::vector<int> &, const std::vector<int> &, std::string>(),
@@ -458,7 +462,6 @@ void define_buffer(py::module_ &m) {
         .def_static("make_scalar", &Buffer::make_scalar, py::arg("type"), py::arg("name") = "")
         .def_static("make_interleaved", &Buffer::make_interleaved, py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
         .def_static("make_with_shape_of", &Buffer::make_with_shape_of, py::arg("src"), py::arg("name") = "")
-        .def_buffer([](Buffer &b) { return b.buffer_info(true); })
         .def("numpy_view", &Buffer::numpy_view, py::arg("reverse_axes") = true)
         .def("set_name", &Buffer::set_name)
         .def("name", &Buffer::name)
@@ -513,7 +516,7 @@ void define_buffer(py::module_ &m) {
         .def("transposed", [](const Buffer &b, int d1, int d2) { return b.view(b.runtime_buffer().transposed(d1, d2)); })
         .def("transposed", [](const Buffer &b, const std::vector<int> &order) { return b.view(b.runtime_buffer().transposed(order)); })
         .def("dim", [](Buffer &b, int dimension) { return b.runtime_buffer().dim(dimension); }, py::keep_alive<0, 1>())
-        .def("for_each_element", [](Buffer &b, const py::function &f) {
+        .def("for_each_element", [](Buffer &b, const py::callable &f) {
             std::vector<int> position(b.runtime_buffer().dimensions());
             b.runtime_buffer().for_each_element([&](const int *pos) {
                 std::copy(pos, pos + position.size(), position.begin());

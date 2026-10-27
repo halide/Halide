@@ -22,31 +22,26 @@
 #include "PyPipeline.h"
 #include "PyRDom.h"
 #include "PySerialization.h"
+#include "PyStub.h"
 #include "PyTarget.h"
 #include "PyTuple.h"
 #include "PyType.h"
 #include "PyVar.h"
 
-#if !defined(PYBIND11_VERSION_HEX) || PYBIND11_VERSION_HEX < 0x020B0000
-#error "Halide requires PyBind 2.11+"
-#endif
-
 #ifndef HALIDE_PYBIND_MODULE_NAME
 #define HALIDE_PYBIND_MODULE_NAME halide_
 #endif
 
-PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
+NB_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     using namespace Halide::PythonBindings;
 
-#if PY_VERSION_HEX >= 0x030E0000
     // CPython 3.14 caches C stack limits in the thread state, which does not
     // interact well with Halide's user-space compiler stack when warnings call
     // back into Python. Stay on Python's stack by default, but preserve the
     // existing Halide behavior when the user explicitly opts in.
-    if (Halide::Internal::get_env_variable("HL_COMPILER_STACK_SIZE").empty()) {
+    if (Py_Version >= 0x030E0000 && Halide::Internal::get_env_variable("HL_COMPILER_STACK_SIZE").empty()) {
         Halide::set_compiler_stack_size(0);
     }
-#endif
 
     // Order of definitions matters somewhat:
     // things used for default arguments must be registered
@@ -76,6 +71,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_type(m);
     define_derivative(m);
     define_generator(m);
+    define_pystub(m);
     define_serialization(m);
 
     // There is no PyUtil yet, so just put this here
@@ -100,13 +96,13 @@ Expr double_to_expr_check(double v) {
             " will be interpreted as a float32 by Halide and lose precision;"
             " add an explicit `f32()` or `f64()` cast to avoid this warning.";
         if (PyErr_WarnEx(PyExc_RuntimeWarning, warning.c_str(), 0) < 0) {
-            throw py::error_already_set();
+            throw py::python_error();
         }
     }
     return Expr(f);
 }
 
-std::vector<Expr> collect_print_args(const py::args &args) {
+std::vector<Expr> collect_print_args(const py::tuple &args) {
     std::vector<Expr> v;
     v.reserve(args.size());
     for (const auto &arg : args) {
@@ -114,9 +110,9 @@ std::vector<Expr> collect_print_args(const py::args &args) {
         // and fail. Normally we don't want string to be convertible
         // to Expr, but in this unusual case we do.
         try {
-            v.emplace_back(arg.cast<std::string>());
+            v.emplace_back(py::cast<std::string>(arg));
         } catch (const py::cast_error &) {
-            v.push_back(arg.cast<Expr>());
+            v.push_back(py::cast<Expr>(arg));
         }
     }
     return v;

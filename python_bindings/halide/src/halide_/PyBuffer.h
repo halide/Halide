@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_buffer(py::module &m);
+void define_buffer(py::module_ &m);
 
 Type format_descriptor_to_type(const std::string &fd);
 
@@ -15,7 +15,7 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos);
 template<typename T = void,
          int Dims = AnyDims,
          int InClassDimStorage = (Dims == AnyDims ? 4 : std::max(Dims, 1))>
-Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer(const py::buffer_info &info, bool reverse_axes) {
+Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer(const PythonBufferInfo &info, bool reverse_axes) {
     const Type t = format_descriptor_to_type(info.format);
     halide_dimension_t *dims = (halide_dimension_t *)alloca(info.ndim * sizeof(halide_dimension_t));
     _halide_user_assert(dims);

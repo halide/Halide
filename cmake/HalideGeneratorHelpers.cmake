@@ -222,7 +222,21 @@ function(add_halide_generator TARGET)
         )
         file(CONFIGURE OUTPUT "${stub_file}" CONTENT "${stub_text}" @ONLY)
 
-        Python_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
+        find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+        if (
+            NOT Python_INTERPRETER_ID STREQUAL "Python"
+            OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t"
+        )
+            message(
+                FATAL_ERROR "Halide Python stubs require regular (GIL-enabled) CPython 3.12 or newer."
+            )
+        endif ()
+        Python_add_library(
+            ${TARGET}_pystub
+            MODULE
+            USE_SABI 3.12
+            WITH_SOABI "${stub_file}" ${ARG_SOURCES}
+        )
         set_target_properties(${TARGET}_pystub
             PROPERTIES
             CXX_VISIBILITY_PRESET hidden
@@ -1115,7 +1129,18 @@ function(add_halide_python_extension_library TARGET)
         VERBATIM
     )
 
-    Python_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+    if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
+        message(
+            FATAL_ERROR "Halide Python extensions require regular (GIL-enabled) CPython 3.12 or newer."
+        )
+    endif ()
+    Python_add_library(
+        ${TARGET}
+        MODULE
+        USE_SABI 3.12
+        WITH_SOABI ${pycpps} ${pyext_module_definition_src}
+    )
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
     # Generated modules expose halide.runtime.Kernel objects. Keep an in-tree
     # runtime module available for tests; installed consumers satisfy this as a

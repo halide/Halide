@@ -118,8 +118,8 @@ building the core pieces of Halide.
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                                                           |
 | [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | In-process Wasm JIT only, never AOT (see below). Unstable API; exact version required.    |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | In-process Wasm JIT only, never AOT (see below). Difficult to build. See [WebAssembly.md] |
-| [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                                                           |
-| [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                                                           |
+| [Python]      | `>=3.12`           | `WITH_PYTHON_BINDINGS=ON`  | Regular, GIL-enabled CPython.                                                             |
+| [nanobind]    | `>=2.11,<2.12`     | `WITH_PYTHON_BINDINGS=ON`  | Required to build Halide's bindings, not downstream generator stubs.                      |
 
 Halide maintains the following compatibility policy with LLVM: Halide version
 `N` supports LLVM versions `N`, `N-1`, and `N-2`. Our binary distributions
@@ -158,7 +158,7 @@ for these packages is linked in the table above.
 Halide has first-class support for using [vcpkg] to manage dependencies. The
 list of dependencies and features is contained inside `vcpkg.json` at the root
 of the repository. LLVM and Python must be provided by the system; vcpkg handles
-the remaining dependencies (flatbuffers, wabt, pybind11, libjpeg, libpng, etc.).
+the remaining dependencies (flatbuffers, wabt, nanobind, libjpeg, libpng, etc.).
 
 Halide includes a `vcpkg-configuration.json` file that automatically configures
 [overlay ports][vcpkg-overlay] and overlay triplets. The overlay ports redirect
@@ -184,13 +184,14 @@ either from the [Doxygen website][doxygen-download] or through [winget]:
 $ winget install DimitriVanHeesch.Doxygen
 ```
 
-To build the Python bindings, you will need to install Python 3. This should be
-done by running the official installer from the [Python website][python]. Be
-sure to download the debugging symbols through the installer. This will require
-using the "Advanced Installation" workflow. Although it is not strictly
-necessary, it is convenient to install Python system-wide on Windows (i.e.
-`C:\Program Files`) because CMake looks at standard paths and registry keys.
-This removes the need to manually set the `PATH`.
+To build the Python bindings, you will need to install CPython 3.12 or newer
+(not a free-threaded build). This should be done by running the official
+installer from the [Python website][python]. Be sure to download the debugging
+symbols through the installer. This will require using the "Advanced
+Installation" workflow. Although it is not strictly necessary, it is convenient
+to install Python system-wide on Windows (i.e. `C:\Program Files`) because CMake
+looks at standard paths and registry keys. This removes the need to manually set
+the `PATH`.
 
 Once Python is installed, you can install the Python module dependencies in a
 [virtual environment][venv] by running
@@ -206,7 +207,8 @@ from the root of the repository.
 On macOS, it is possible to install all dependencies via [Homebrew]:
 
 ```shell
-$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg-turbo openblas
+$ brew install llvm flatbuffers wabt python doxygen eigen libpng libjpeg-turbo openblas
+$ uv sync --frozen --no-install-workspace
 ```
 
 The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
@@ -220,14 +222,14 @@ Or use the `macOS` CMake preset, which does this for you.
 
 #### Ubuntu / Debian
 
-On Ubuntu you should install the following packages (this includes the Python
-module dependencies):
+On Ubuntu 26.04 or newer, install the following packages (including nanobind):
 
 ```
 $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
     libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy \
-    python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \
+    python3-imageio nanobind-dev libopenblas-dev libeigen3-dev \
     libatlas-base-dev doxygen
+$ uv sync --frozen --no-install-workspace
 ```
 
 #### Python
@@ -619,12 +621,12 @@ On this test system (an M3 MacBook Pro), the build is three times faster, with a
 [lld]: https://lld.llvm.org/
 [llvm]: https://github.com/llvm/llvm-project
 [msvc-cmd]: https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line
+[nanobind]: https://github.com/wjakob/nanobind
 [ninja]: https://ninja-build.org/
 [ninja-download]: https://github.com/ninja-build/ninja/releases
 [openblas]: https://www.openblas.net/
 [pipx]: https://pipx.pypa.io/stable/
 [precompiled headers]: https://ccache.dev/manual/4.11.3.html#_precompiled_headers
-[pybind11]: https://github.com/pybind/pybind11
 [pypi-cmake]: https://pypi.org/project/cmake/
 [python]: https://www.python.org/downloads/
 [snap store]: https://snapcraft.io/cmake

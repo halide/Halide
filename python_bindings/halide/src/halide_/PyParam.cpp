@@ -8,36 +8,46 @@ namespace PythonBindings {
 
 namespace {
 
+template<typename T>
+void set_param_value(Param<> &param, T value, bool estimate = false) {
+    if constexpr (std::is_same_v<T, double>) {
+        // nanobind only considers float32 a non-converting match when exact.
+        // Round Python floats for float32 Params, as the former binding did.
+        if (param.type() == Float(32)) {
+            set_param_value(param, static_cast<float>(value), estimate);
+            return;
+        }
+    }
+    if (estimate) {
+        param.set_estimate<T>(value);
+    } else {
+        param.set<T>(value);
+    }
+}
+
 template<typename TYPE>
 void add_param_methods(py::class_<Param<>> &param_class) {
     param_class
-        .def(py::init([](const Type &type, TYPE value) {
+        .def("__init__", [](Param<> *self, const Type &type, TYPE value) {
                  Param<> param(type);
-                 param.set<TYPE>(value);
-                 return param;
-             }),
-             py::arg("type"), py::arg("value"))
-        .def(py::init([](const Type &type, const std::string &name, TYPE value) {
+                 set_param_value(param, value);
+                 new (self) Param<>(param); }, py::arg("type"), py::arg("value"))
+        .def("__init__", [](Param<> *self, const Type &type, const std::string &name, TYPE value) {
                  Param<> param(type, name);
-                 param.set<TYPE>(value);
-                 return param;
-             }),
-             py::arg("type"), py::arg("name"), py::arg("value"))
-        .def(
-            "set", [](Param<> &param, TYPE value) -> void {
-                param.set<TYPE>(value);
-            },
-            py::arg("value"))
+                 set_param_value(param, value);
+                 new (self) Param<>(param); }, py::arg("type"), py::arg("name"), py::arg("value"))
+        .def("set", [](Param<> &param, TYPE value) -> void { set_param_value(param, value); },
+             py::arg("value"))
         .def("set_estimate",  //
              [](Param<> &param, TYPE value) -> void {
-                 param.set_estimate<TYPE>(value);  //
+                 set_param_value(param, value, true);  //
              },
              py::arg("value"));
 }
 
 }  // namespace
 
-void define_param(py::module &m) {
+void define_param(py::module_ &m) {
     auto param_class =
         py::class_<Param<>>(m, "Param")
             .def(py::init<Type>(), py::arg("type"))
@@ -72,7 +82,6 @@ void define_param(py::module &m) {
     add_param_methods<int16_t>(param_class);
     add_param_methods<int32_t>(param_class);
     add_param_methods<int64_t>(param_class);
-    add_param_methods<float>(param_class);
     add_param_methods<double>(param_class);
 
     add_binary_operators(param_class);

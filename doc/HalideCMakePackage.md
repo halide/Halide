@@ -395,11 +395,13 @@ The `LINK_LIBRARIES` argument lists libraries that should be linked to
 `<target>` when it is being built in the present build system.
 
 If `PYSTUB` is specified, then a Python Extension will be built that wraps the
-Generator with CPython glue to allow use of the Generator Python 3. The result
-will be a shared library of the form `<target>_pystub.<soabi>.so`, where
-`<soabi>` describes the specific Python version and platform (e.g.,
-`cpython-310-darwin` for Python 3.10 on macOS). See [Python.md](Python.md) for
-examples of use.
+Generator with CPython glue. This requires regular CPython 3.12 or newer and its
+stable-ABI development headers, but does not require nanobind. Argument
+conversion and dispatch are handled by the installed Halide compiler bindings.
+The result is `<target>_pystub.abi3.so` on Linux/macOS or `<target>_pystub.pyd`
+on Windows, usable unchanged on newer regular CPython versions. Previously built
+pybind11 stubs must be rebuilt; Python ABI compatibility does not imply Halide
+C++ ABI compatibility. See [Python.md](Python.md) for examples of use.
 
 #### `add_halide_library`
 
@@ -566,9 +568,10 @@ Every library specified must be built with the `PYTHON_EXTENSION` keyword, and
 all libraries must use the same Halide runtime. Importing the resulting module
 requires the matching `halide-runtime` Python package.
 
-The result will be a shared library of the form `<target>.<soabi>.so`, where
-`<soabi>` describes the specific Python version and platform (e.g.,
-`cpython-310-darwin` for Python 3.10 on macOS.)
+The result uses the CPython 3.12 stable ABI: `<target>.abi3.so` on Linux/macOS
+or `<target>.pyd` on Windows. Building requires the Python 3.12+ interpreter and
+`Development.SABIModule` CMake component. The binary can be imported unchanged
+on newer regular CPython versions; free-threaded Python is not supported.
 
 #### `add_halide_runtime`
 

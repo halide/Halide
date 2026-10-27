@@ -9,7 +9,7 @@ namespace PythonBindings {
 // Methods that are defined on both Func and Stage.
 template<typename PythonClass>
 HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
-    using T = typename PythonClass::type;
+    using T = typename PythonClass::Type;
 
     class_instance
 

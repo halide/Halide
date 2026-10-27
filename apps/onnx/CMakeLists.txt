@@ -102,10 +102,13 @@ set_tests_properties(
 )
 
 # Python bindings to convert onnx models to Halide model
-find_package(Python 3 COMPONENTS Interpreter Development.Module)
+find_package(Python 3.12 COMPONENTS Interpreter Development.Module Development.SABIModule)
 if (NOT Python_FOUND)
     message(WARNING "Could NOT find Python")
     return()
+endif ()
+if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
+    message(FATAL_ERROR "ONNX bindings require regular (GIL-enabled) CPython 3.12 or newer.")
 endif ()
 
 # Normalize to forward slashes before passing to find_package. vcpkg overrides
@@ -115,13 +118,20 @@ endif ()
 # converts native separators to forward slashes, sidestepping the issue on all
 # CMake versions.
 file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
-find_package(pybind11 HINTS "${Python_SITEARCH}")
-if (NOT pybind11_FOUND)
-    message(WARNING "Could NOT find pybind11")
+find_package(nanobind 2.11...<2.12 CONFIG HINTS "${Python_SITEARCH}/nanobind/cmake")
+if (NOT nanobind_FOUND)
+    message(WARNING "Could NOT find nanobind")
     return()
 endif ()
 
-pybind11_add_module(model_cpp model.cpp benchmarking_utils.h common_types.h denormal_disabler.h)
+nanobind_add_module(
+    model_cpp
+    STABLE_ABI model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
+)
+target_include_directories(
+    model_cpp
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../python_bindings/common"
+)
 target_link_libraries(model_cpp PRIVATE Halide::Halide onnx_app::oclib)
 add_dependencies(onnx model_cpp)
 

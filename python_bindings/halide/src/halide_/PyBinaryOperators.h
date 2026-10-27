@@ -122,7 +122,7 @@ struct Int64ToExprCheck {
 
 template<typename other_t, typename PythonClass>
 void add_binary_operators_with(PythonClass &class_instance) {
-    using self_t = typename PythonClass::type;
+    using self_t = typename PythonClass::Type;
     // If 'other_t' is double or int64_t, we want to wrap it as an Expr()
     // prior to calling the binary op (so that double literals that lose
     // precision when converted to float issue warnings, and so that
@@ -225,10 +225,10 @@ void add_binary_operators_with(PythonClass &class_instance) {
 
 template<typename PythonClass>
 void add_binary_operators(PythonClass &class_instance) {
-    using self_t = typename PythonClass::type;
+    using self_t = typename PythonClass::Type;
 
-    // The order of definitions matters: pybind11 tries overloads in
-    // registration order, and (as of pybind11 3.1) a Python int is an
+    // The order of definitions matters: bindings try overloads in
+    // registration order, and a Python int can be an
     // acceptable non-converting match for a C++ double parameter (per PEP
     // 484 numeric tower rules), not just for int/int64_t. So int and
     // int64_t must both be registered before double, or a plain Python int
@@ -245,9 +245,9 @@ void add_binary_operators(PythonClass &class_instance) {
 
     // Halide::pow() has only an Expr, Expr variant
     class_instance
-        .def("__pow__", Halide::pow, py::is_operator())
-        .def("__rpow__", [](const Expr &self, const Expr &other) {
-            return Halide::pow(other, self);  //
+        .def("__pow__", [](const self_t &self, const Expr &other) { return Halide::pow(Expr(self), other); }, py::is_operator())
+        .def("__rpow__", [](const self_t &self, const Expr &other) {
+            return Halide::pow(other, Expr(self));  //
         },
              py::is_operator());
 

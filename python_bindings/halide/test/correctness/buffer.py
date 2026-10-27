@@ -623,6 +623,7 @@ def test_runtime_buffer_is_distinct():
     assert hl.BufferDimension is hlr.BufferDimension
 
     runtime_type = hlr.Type(0, 32)
+    assert runtime_type.__eq__(None) is False
 
     runtime_buffer = hlr.Buffer(runtime_type, [4, 3], "runtime_buffer")
     assert runtime_buffer.type() == runtime_type
@@ -673,6 +674,41 @@ def test_runtime_buffer_is_distinct():
     assert runtime_view[0] == 23
 
 
+def test_buffer_export_lifetime():
+    class Exporter:
+        def __init__(self):
+            self.data = bytearray(range(8))
+            self.exports = 0
+
+        def __buffer__(self, flags):
+            self.exports += 1
+            return memoryview(self.data)
+
+        def __release_buffer__(self, view):
+            self.exports -= 1
+
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        source = Exporter()
+        buffer = buffer_type(source)
+        view = buffer.numpy_view()
+        del buffer
+        gc.collect()
+        assert source.exports > 0
+        view[3] = 42
+        assert source.data[3] == 42
+        del view
+        gc.collect()
+        assert source.exports == 0
+        source.data.extend(b"more")
+
+        try:
+            buffer_type(memoryview(b"readonly"))
+        except BufferError:
+            pass
+        else:
+            assert False, "read-only storage must not become a writable Halide Buffer"
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -684,6 +720,7 @@ if __name__ == "__main__":
     test_buffer_copy_no_reverse()
     test_ndarray_negative_strides()
     test_runtime_buffer_is_distinct()
+    test_buffer_export_lifetime()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()

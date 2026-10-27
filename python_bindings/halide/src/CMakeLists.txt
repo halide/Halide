@@ -1,4 +1,5 @@
-pybind11_add_module(Halide_Python)
+nanobind_add_module(Halide_Python STABLE_ABI)
+target_include_directories(Halide_Python PRIVATE "${Halide_Python_SOURCE_DIR}/common")
 add_library(Halide::Python ALIAS Halide_Python)
 
 set_target_properties(Halide_Python PROPERTIES OUTPUT_NAME halide_ EXPORT_NAME Python)
@@ -32,6 +33,7 @@ target_sources(
     halide_/PyRDom.cpp
     halide_/PySerialization.cpp
     halide_/PyStage.cpp
+    halide_/PyStub.cpp
     halide_/PyTarget.cpp
     halide_/PyTuple.cpp
     halide_/PyType.cpp

@@ -313,7 +313,7 @@ Halide includes a `vcpkg-configuration.json` that automatically configures
 [overlay ports](https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports)
 and overlay triplets. These overlays redirect LLVM and Python to system
 installations, so vcpkg only builds the smaller dependencies (flatbuffers, wabt,
-pybind11, etc.). You must have LLVM and Python installed separately (see
+nanobind, etc.). You must have LLVM and Python installed separately (see
 [Acquiring LLVM](#acquiring-llvm) above).
 
 If CMake does not find your LLVM installation automatically, pass its absolute

@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_loop_level(py::module &m);
+void define_loop_level(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

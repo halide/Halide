@@ -40,10 +40,10 @@ jobs:
         include:
           - bits: 32
             arch: i686
-            python: cpython-3.11.5-linux-x86-gnu  # latest available on uv
+            python: cpython-3.12-linux-x86_64-gnu
           # - bits: 64  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
           #   arch: x86_64
-          #   python: cpython-3.10-linux-x86_64-gnu
+          #   python: cpython-3.12-linux-x86_64-gnu
 
     steps:
       - uses: actions/checkout@v7
@@ -80,12 +80,15 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          setarch ${{ matrix.arch }} bash -ec "
-            CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' \
-            uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
-            echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
-            echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
-          "
+          # Tooling runs on supported 64-bit Python; LLVM and C++ remain 32-bit.
+          LLVM_VER=$(uv export --group '${{ matrix.uv_group }}' --no-emit-project \
+            | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
+          uv sync --frozen --python '${{ matrix.python }}' --group ci-base --no-install-workspace
+          uv pip install --python-platform i686-unknown-linux-gnu --only-binary :all: \
+            --extra-index-url https://pypi.halide-lang.org/simple/ \
+            "halide-llvm==${LLVM_VER}"
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
       - name: Configure LLVM
         run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
