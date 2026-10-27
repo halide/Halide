@@ -8,6 +8,7 @@
 #include "schemes/tags.h"
 
 #include <functional>
+#include <map>
 #include <set>
 
 namespace ggml {
@@ -1796,6 +1797,17 @@ inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) 
     return count;
 }
 
+// A codebook's lut: a constant (codebook_lut()) of (port, index).
+inline bool is_lut(const Func &f) {
+    return constant(f) && f.dimensions() == 2;
+}
+
+// Metal: lut f per threadgroup, at out's loop `at`, in threadgroup memory.
+inline void metal_lut(Func f, Func out, const Var &at) {
+    Var p = f.args()[0], i = f.args()[1];
+    f.compute_at(out, at).store_in(MemoryType::GPUShared).reorder(i, p).gpu_threads(i);
+}
+
 // Metal: the codebooks' luts (codebook_lut()), each computed per
 // threadgroup (at out's innermost gpu_blocks loop) into threadgroup memory,
 // an entry per thread, as GGML's kernel_mul_mv_iq4_nl_f32 copies
@@ -1807,10 +1819,40 @@ inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) 
 // table's device buffer, about even: 0.97-1.03x.)
 inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
     for (Func f : decoders(rs)) {
-        if (!constant(f) || f.dimensions() != 2) continue;
-        Var p = f.args()[0], i = f.args()[1];
-        f.compute_at(out, Var("no")).store_in(MemoryType::GPUShared).reorder(i, p).gpu_threads(i);
+        if (is_lut(f)) metal_lut(f, out, Var("no"));
     }
+}
+
+// g's private copies (clone_in) of the Funcs on its calls' paths to those
+// `pick` selects, so they can be scheduled for g alone (as a specialization's
+// own luts); returns the copies of the picked.
+inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func &)> &pick) {
+    using namespace Internal;
+    std::map<std::string, bool> memo;
+    std::function<bool(const Function &)> reaches = [&](const Function &f) {
+        auto it = memo.find(f.name());
+        if (it != memo.end()) return it->second;
+        memo[f.name()] = false;
+        bool r = pick(Func(f));
+        for (const auto &c : find_direct_calls(f)) {
+            r = reaches(c.second) || r;
+        }
+        return memo[f.name()] = r;
+    };
+    std::vector<Func> picked;
+    std::function<void(Func)> walk = [&](Func f) {
+        for (const auto &c : find_direct_calls(f.function())) {
+            if (!reaches(c.second)) continue;
+            Func copy = Func(c.second).clone_in(f);
+            if (pick(Func(c.second))) {
+                picked.push_back(copy);
+            } else {
+                walk(copy);
+            }
+        }
+    };
+    walk(g);
+    return picked;
 }
 
 // Metal (Apple GPUs), as GGML's kernel_mul_mv_*_f32 (q4_0's, q4_K's, ...):
@@ -2117,6 +2159,13 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     // their fragments (wf, xf)
     inline_until(dot, {wh, xh});
     Func ws = wh.in(dot), xs = xh.in(dot), wf = ws.in(dot), xf = xs.in(dot);
+    // the weights' luts (metal_luts) the gemm's own, per threadgroup (M3 Max,
+    // iq4_nl and mxfp4 on f32 acts, vs packed_muxes's select tree on packed
+    // words: M = 16 1.03-1.06x, M = 64..128 0.94-0.98x, M = 512 even; inlined
+    // as a select tree, 0.82-0.92x)
+    for (Func f : clone_paths(ws, is_lut)) {
+        metal_lut(f, out, n);
+    }
     Stage sd = Stage(dot), su = dot.update();
     for (const Shape &sh : shapes) {
         const int bn = t * sh.tn * sh.wn, bm = t * sh.tm;
@@ -2391,17 +2440,19 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             metal_flat(out, dots[0], r, staged);
             return;
         }
-        metal_luts(out, rs);
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
             metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 8);
+            metal_luts(out, rs);
             return;
         }
         if (f32_operands(dots[0], rs, staged, fmt, wh, xh)) {
             metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 16);
+            metal_luts(out, rs);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
+        metal_luts(out, rs);
         metal_rows(out, dots[0], r, rs, fmt.sub);
         return;
     }
