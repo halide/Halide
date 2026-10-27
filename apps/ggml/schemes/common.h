@@ -644,14 +644,18 @@ struct TritPack {
 // per value; GGML's table_b2b_*), built by running inner's decode. A
 // schedule computing a row at a time reads it with one load: the decode
 // moves off the SIMD units. Or onto `entries` indices of type `index` (e.g.
-// a Lattice's: GGML's grids, rows of a table of 2048).
+// a Lattice's: GGML's grids, rows of a table of 2048). `staged`: the decode
+// reads the table through a Func of its own ("lut", a copy of it), which a
+// schedule can place (e.g. in a GPU's threadgroup memory, as GGML's Metal
+// kernels copy kvalues_iq4nl); else it reads the Buffer itself.
 struct Tabulate {
     Approximation inner;
     int per, entries;
     Buffer<> table;
+    bool staged = false;
 
-    Tabulate(Approximation a, int per, int entries = 256, Type index = UInt(8))
-        : inner(std::move(a)), per(per), entries(entries) {
+    Tabulate(Approximation a, int per, int entries = 256, Type index = UInt(8), bool staged = false)
+        : inner(std::move(a)), per(per), entries(entries), staged(staged) {
         Func bytes("bytes"), random("random");
         Var p, v;
         bytes(p, v) = cast(index, v);
@@ -689,14 +693,28 @@ struct Tabulate {
 
 private:
     std::vector<Func> tabulated(const std::vector<Func> &e) const {
-        Func f("tabulated");
-        Var j, b;
+        Func f("tabulated"), lut("lut");
+        Var j, b, p, v;
         Expr i = cast<int>(e[0](j / per, b, _));
         if (!(entries == 256 && e[0].type() == UInt(8))) i = clamp(i, 0, entries - 1);  // indices past the table: undefined
-        f(j, b, _) = table(j % per, i);
+        if (staged) {
+            lut(p, v) = table(p, v);
+            f(j, b, _) = lut(j % per, i);
+        } else {
+            f(j, b, _) = table(j % per, i);
+        }
         return {f};
     }
 };
+
+// A codebook (see codebook()), decoded, with `lut`, through a staged table of
+// its values (Tabulate's, read through a Func a schedule places: GPUs, with
+// no register table lookup, as GGML's Metal kernels' threadgroup copy of
+// kvalues_iq4nl); else as codebook()'s mux.
+inline Approximation codebook(const std::string &name, const std::vector<int> &values, bool lut) {
+    Approximation c = codebook(name, values);
+    return lut ? Approximation(Tabulate{c, 1, (int)values.size(), UInt(8), true}) : c;
+}
 
 // ---------------------------------------------------------------------------
 // Units of GGML's grid formats (grid.h), each domain-free.

@@ -125,15 +125,15 @@ struct IQ4Quant {
 };
 
 // The codes <-> their indices in kvalues_iq4nl (decoded by a table lookup,
-// as GGML's NEON vqtbl1q_s8).
-inline Approximation iq4nl_codes() {
-    return codebook("iq4nl", kvalues_iq4nl());
+// as GGML's NEON vqtbl1q_s8; `lut`: a staged table, see codebook()).
+inline Approximation iq4nl_codes(bool lut = false) {
+    return codebook("iq4nl", kvalues_iq4nl(), lut);
 }
 
 // block_iq4_nl {f16 d; u8 qs[16]}: the codes' indices packed as q4_0's
 // (code j in the low nibble of byte j, code j + 16 in its high nibble).
-inline Approximation iq4_nl(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, IQ4Quant{QK}, Parallel{{"codes", iq4nl_codes()}, {"scale", fp16()}},
+inline Approximation iq4_nl(const std::string &lay, bool indexed = false, bool lut = false) {
+    return Compose{BlockReshape{QK, indexed}, IQ4Quant{QK}, Parallel{{"codes", iq4nl_codes(lut)}, {"scale", fp16()}},
                    Parallel{{"codes", PlanarFieldPack{4, QK / 2}}},
                    layout(lay, {{"d", Float(16)}, {"qs", UInt(8), QK / 2}}, {"qs", "d"})};
 }
@@ -142,8 +142,8 @@ inline Approximation iq4_nl(const std::string &lay, bool indexed = false) {
 // codes, 16 bytes of their indices packed as iq4_nl's; the scales + 32, their
 // low nibbles in scales_l (scale i in nibble i % 2 of byte i / 2), their top
 // two bits in scales_h (bits 2i).
-inline Approximation iq4_xs(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK_K, indexed}, IQ4Quant{QK_K}, Parallel{{"codes", iq4nl_codes()}},
+inline Approximation iq4_xs(const std::string &lay, bool indexed = false, bool lut = false) {
+    return Compose{BlockReshape{QK_K, indexed}, IQ4Quant{QK_K}, Parallel{{"codes", iq4nl_codes(lut)}},
                    Parallel{{"codes", Compose{BlockReshape{QK}, PlanarFieldPack{4, QK / 2}, Unblock{QK / 2}}},
                             {"scales", Compose{SumSplit{4}, Parallel{{"low", BitPack{4}}, {"high", Compose{multiples(4, -32, 4), BitPack{2}}}}}},
                             {"scale", fp16()}},

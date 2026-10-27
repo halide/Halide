@@ -75,9 +75,10 @@ struct MXFP4Quant {
 };
 
 // The codes <-> their e2m1 fields, through kvalues_mxfp4 as a codebook (its
-// decode a table lookup, as GGML's NEON vqtbl1q_s8).
-inline Approximation e2m1_codes() {
-    return codebook(e2m1().name() + "_codes", MXFP4Quant::kvalues());
+// decode a table lookup, as GGML's NEON vqtbl1q_s8; `lut`: a staged table,
+// see codebook()).
+inline Approximation e2m1_codes(bool lut = false) {
+    return codebook(e2m1().name() + "_codes", MXFP4Quant::kvalues(), lut);
 }
 
 // GGML's e8m0 scales: d = 2^(e - 128), half of e8m0's value (as
@@ -106,8 +107,8 @@ inline Approximation e8m0_half(bool narrow = false) {
 
 // block_mxfp4: the codes' fields packed as q4_0's (code j in the low nibble
 // of byte j, code j + 16 in its high nibble), the scale's byte e before them.
-inline Approximation mxfp4(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, MXFP4Quant{}, Parallel{{"codes", e2m1_codes()}, {"scale", e8m0_half(isdigit(lay[0]))}},
+inline Approximation mxfp4(const std::string &lay, bool indexed = false, bool lut = false) {
+    return Compose{BlockReshape{QK, indexed}, MXFP4Quant{}, Parallel{{"codes", e2m1_codes(lut)}, {"scale", e8m0_half(isdigit(lay[0]))}},
                    Parallel{{"codes", PlanarFieldPack{4, QK / 2}}},
                    layout(lay, {{"e", UInt(8)}, {"qs", UInt(8), QK / 2}}, {"qs", "e"})};
 }
