@@ -13,7 +13,7 @@ void define_extern_func_argument(py::module_ &m) {
             .def(py::init<float>())
             // for implicitly_convertible
             .def("__init__", [](ExternFuncArgument *self, const Func &f) { new (self) ExternFuncArgument(f); })
-            .def("__init__", [](ExternFuncArgument *self, const Param<> &p) { new (self) ExternFuncArgument(p); })
+            .def("__init__", [](ExternFuncArgument *self, const Param<> &p) { new (self) ExternFuncArgument(Expr(p)); })
             .def("__init__", [](ExternFuncArgument *self, const ImageParam &im) { new (self) ExternFuncArgument(im); })
             .def("__init__", [](ExternFuncArgument *self, const OutputImageParam &im) { new (self) ExternFuncArgument(im); })
 

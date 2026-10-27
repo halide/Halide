@@ -48,6 +48,18 @@ def test_float32_param_rounding():
     assert hl.evaluate(param.parameter().estimate()) == f32(0.3)
 
 
+def test_extern_scalar_param():
+    for type in (hl.Int(32), hl.Float(32)):
+        param = hl.Param(type, "extern_scalar")
+        for arg in (param, hl.ExternFuncArgument(param)):
+            f = hl.Func()
+            f.define_extern("extern_scalar_identity", [arg], type, 0)
+            inferred = f.infer_arguments()
+            assert len(inferred) == 1
+            assert inferred[0].name == param.name()
+            assert inferred[0].type == type
+
+
 def test_runtime_error():
     x = hl.Var("x")
     f = hl.Func("f")
@@ -672,6 +684,7 @@ def test_split_storage():
 
 if __name__ == "__main__":
     test_float32_param_rounding()
+    test_extern_scalar_param()
     test_compiletime_error()
     test_runtime_error()
     test_misused_and()
