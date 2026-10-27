@@ -37,6 +37,7 @@ function(_add_python_aot_and_stub_extension)
         add_halide_generator(${GEN_TARGET} SOURCES ${ARG_SOURCES})
     else ()
         add_halide_generator(${GEN_TARGET} PYSTUB ${GEN_NAME} SOURCES ${ARG_SOURCES})
+        add_dependencies(PythonCorrectnessGenerators ${GEN_TARGET}_pystub)
     endif ()
 
     foreach (G IN LISTS ARG_GENERATORS)

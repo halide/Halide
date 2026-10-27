@@ -20,7 +20,7 @@ void add_scalar_methods(py::class_<Parameter> &parameter_class) {
 
 }  // namespace
 
-void define_parameter(py::module &m) {
+void define_parameter(py::module_ &m) {
     // Disambiguate some ambiguous methods
     void (Parameter::*set_scalar_method)(const Type &t, halide_scalar_value_t val) = &Parameter::set_scalar;
 

@@ -1,7 +1,7 @@
 [project]
 name = "halide-workspace"
 version = "0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [tool.uv.workspace]
 members = [
@@ -11,17 +11,21 @@ members = [
 ]
 
 [dependency-groups]
-dev = ["pybind11>=2.11.1", "scikit-build-core>=1.0.3", "setuptools-scm>=8.3.1"]
+dev = [
+  "nanobind>=2.11,<2.12",
+  "scikit-build-core>=1.0.3",
+  "setuptools-scm>=8.3.1",
+]
 apps = [
   "imageio>=2",
-  "numpy>=1.26; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
-  "numpy>=1.26; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
+  "numpy>=1.26",
   "onnx==1.19.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
-  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l')",
   "protobuf>=7; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
   "pytest; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
 ]
 tools = [
+  "abi3audit",
   "cmake>=3.28",
   "ninja>=1.11,!=1.13.0",
   "pre-commit>=4",
@@ -51,9 +55,23 @@ halide-flatbuffers = { index = "halide" }
 halide-wabt = { index = "halide" }
 halide-runtime = { workspace = true }
 halide-llvm = { index = "halide" }
-imageio = { index = "piwheels", marker = "(platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'" }
-numpy = { index = "piwheels", marker = "(platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'" }
-pillow = { index = "piwheels", marker = "(platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'" }
+imageio = [
+  { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" },
+  { index = "pypi", marker = "platform_machine != 'armv8l' and platform_machine != 'armv7l'" },
+]
+numpy = [
+  { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" },
+  { index = "pypi", marker = "platform_machine != 'armv8l' and platform_machine != 'armv7l'" },
+]
+pillow = [
+  { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" },
+  { index = "pypi", marker = "platform_machine != 'armv8l' and platform_machine != 'armv7l'" },
+]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
 
 [[tool.uv.index]]
 name = "halide"
@@ -91,27 +109,24 @@ build-constraint-dependencies = ["numpy!=2.4.6,!=2.5.2"]
 [[tool.uv.dependency-metadata]]
 name = "halide"
 version = "22.0.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 requires-dist = [
   "halide-bin",
   "halide-runtime",
   "imageio>=2",
-  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l')",
 ]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-runtime"
 version = "22.0.0"
-requires-python = ">=3.10"
-requires-dist = [
-  "numpy>=1.26; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
-  "numpy>=1.26; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
-]
+requires-python = ">=3.12"
+requires-dist = ["numpy>=1.26"]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-bin"
 version = "22.0.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"

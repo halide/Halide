@@ -40,10 +40,10 @@ jobs:
         include:
           - bits: 32
             arch: i686
-            python: cpython-3.11.5-linux-x86-gnu  # latest available on uv
+            python: cpython-3.12-linux-x86-gnu
           # - bits: 64  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
           #   arch: x86_64
-          #   python: cpython-3.10-linux-x86_64-gnu
+          #   python: cpython-3.12-linux-x86_64-gnu
 
     steps:
       - uses: actions/checkout@v7
@@ -70,8 +70,15 @@ jobs:
             sudo apt-get install -y \
               gcc-multilib \
               g++-multilib \
+              libpython3.12-stdlib:i386 \
+              libpython3.12-dev:i386 \
               libpng-dev:i386 \
               libjpeg-dev:i386
+            # Unpack the interpreter privately rather than replacing system Python.
+            cd "$RUNNER_TEMP"
+            apt-get download python3.12-minimal:i386
+            dpkg-deb --extract python3.12-minimal_*_i386.deb python32
+            echo "${RUNNER_TEMP}/python32/usr/bin" >> "$GITHUB_PATH"
           else
             sudo apt-get install -y \
               libpng-dev \
@@ -81,7 +88,7 @@ jobs:
       - name: Sync CI environment
         run: |
           setarch ${{ matrix.arch }} bash -ec "
-            CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' \
+            CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' AR=gcc-ar RANLIB=gcc-ranlib \
             uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
             echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
             echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'

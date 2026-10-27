@@ -179,8 +179,8 @@ jobs:
         with:
           package-dir: python_bindings/halide
         env:
-          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
+          CIBW_BUILD: "cp312-${{ matrix.platform_tag }}"
+          CIBW_SKIP: "cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
             PIP_FIND_LINKS=/project/dist-bin
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
@@ -289,8 +289,8 @@ jobs:
         with:
           package-dir: python_bindings/halide-runtime
         env:
-          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
+          CIBW_BUILD: "cp312-${{ matrix.platform_tag }}"
+          CIBW_SKIP: "cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
             PIP_FIND_LINKS=/project/dist-bin
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'
@@ -318,10 +318,130 @@ jobs:
           name: wheels-runtime-${{ matrix.platform_tag }}
           path: ./wheelhouse/*.whl
 
+  build-abi3-consumers:
+    name: Build abi3 consumers on 3.12 (${{ matrix.platform_tag }})
+    needs: [build-wheels, build-runtime-wheels]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+          - os: windows-latest
+            platform_tag: win_amd64
+          - os: macos-15-intel
+            platform_tag: macosx_x86_64
+          - os: macos-15
+            platform_tag: macosx_arm64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-bin-${{ matrix.platform_tag }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-runtime-${{ matrix.platform_tag }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-${{ matrix.platform_tag }}
+          path: dist
+      - name: Build AOT and generator stub once
+        run: |
+          uv venv --python 3.12
+          uv pip install dist/*.whl "cmake>=3.28" "ninja!=1.13.0" abi3audit
+          uv run --no-sync abi3audit --strict dist/halide-*.whl dist/halide_runtime-*.whl
+          uv run --no-sync cmake -G Ninja -S test/integration/python_abi3 -B abi3-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(uv run --no-sync python -c "import sysconfig; print(sysconfig.get_path('purelib') + '/halide')")" \
+            -DPython_EXECUTABLE="$(uv run --no-sync python -c "import sys; print(sys.executable)")"
+          uv run --no-sync cmake --build abi3-build --parallel 2
+          PYTHONPATH="$PWD/abi3-build" uv run --no-sync python \
+            test/integration/python_abi3/check.py --stub-first
+          uv run --no-sync cmake --install abi3-build --prefix "$PWD/abi3-modules"
+          uv run --no-sync abi3audit --strict --assume-minimum-abi3 3.12 \
+            abi3-modules/abi3_pipeline.* abi3-modules/simplecpp_pystub.*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: abi3-consumers-${{ matrix.platform_tag }}
+          path: abi3-modules/
+
+  test-abi3:
+    name: Test unchanged abi3 artifacts on ${{ matrix.python }} (${{ matrix.platform_tag }})
+    needs: build-abi3-consumers
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14", "3.15"]
+        platform: [linux, windows, macos-intel, macos-arm]
+        include:
+          - platform: linux
+            os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+            runtime_suffix: .so
+          - platform: windows
+            os: windows-latest
+            platform_tag: win_amd64
+            runtime_suffix: .dll
+          - platform: macos-intel
+            os: macos-15-intel
+            platform_tag: macosx_x86_64
+            runtime_suffix: .so
+          - platform: macos-arm
+            os: macos-15
+            platform_tag: macosx_arm64
+            runtime_suffix: .so
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONPATH: ${{ github.workspace }}/abi3-modules
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-bin-${{ matrix.platform_tag }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-runtime-${{ matrix.platform_tag }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-${{ matrix.platform_tag }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: abi3-consumers-${{ matrix.platform_tag }}
+          path: abi3-modules
+      - name: Runtime without compiler packages
+        run: |
+          uv venv --python '${{ matrix.python }}'
+          uv pip install dist/halide_runtime-*.whl
+          uv run --no-sync python python_bindings/halide-runtime/test/load_aot.py \
+            'abi3-modules/runtimeadd${{ matrix.runtime_suffix }}'
+      - name: Compiler, AOT, and stub interoperability
+        run: |
+          uv pip install dist/halide_bin-*.whl dist/halide-*.whl abi3audit
+          uv run --no-sync python test/integration/python_abi3/check.py --wheels dist
+          uv run --no-sync python test/integration/python_abi3/check.py --runtime-first
+          uv run --no-sync python python_bindings/halide/test/correctness/basics.py
+          uv run --no-sync python python_bindings/halide/test/correctness/buffer.py
+          uv run --no-sync python python_bindings/halide/test/correctness/realize_warnings.py
+
   publish:
     name: Publish on PyPI
     if: github.event_name != 'workflow_dispatch'
-    needs: [build-halide-bin, build-wheels, build-runtime-wheels]
+    needs: test-abi3
     runs-on: ubuntu-latest
     permissions:
       id-token: write

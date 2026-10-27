@@ -1,7 +1,7 @@
 #ifndef HALIDE_PYTHON_RUNTIME_BUFFER_H
 #define HALIDE_PYTHON_RUNTIME_BUFFER_H
 
-#include <pybind11/pybind11.h>
+#include <nanobind/nanobind.h>
 
 #include "HalideRuntime.h"
 
@@ -16,7 +16,7 @@ inline constexpr char runtime_buffer_capsule_name[] =
 #undef HALIDE_PYTHON_STRINGIFY
 #undef HALIDE_PYTHON_STRINGIFY_IMPL
 
-void define_buffer(pybind11::module_ &m);
+void define_buffer(nanobind::module_ &m);
 
 }  // namespace Halide::PythonRuntimeBindings
 

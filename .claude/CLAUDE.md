@@ -223,7 +223,7 @@ shared library that can be loaded at schedule time
 
 ### Python bindings
 
-`python_bindings/` mirrors the C++ API via pybind11 (`src/`), with its own
+`python_bindings/` mirrors the C++ API via nanobind (`src/`), with its own
 `test/`, `tutorial/`, and `apps/` mirroring the top-level layout. Public API
 changes in `Halide::` should come with a matching binding update here.
 

@@ -71,11 +71,11 @@ jobs:
         include:
           - runner: macos-26
             arch: arm-64
-            python: cpython-3.10.20-macos-aarch64-none
+            python: cpython-3.12-macos-aarch64-none
           - runner: macos-26-intel
             arch: x86-64
             # uv doesn't provide macos-x86_64 builds; use a preinstalled one.
-            python: "3.10"
+            python: "3.12"
 
     steps:
       - uses: actions/checkout@v7
