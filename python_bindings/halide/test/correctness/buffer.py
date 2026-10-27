@@ -709,6 +709,53 @@ def test_buffer_export_lifetime():
             assert False, "read-only storage must not become a writable Halide Buffer"
 
 
+def test_buffer_ndarray_dtypes():
+    for dtype in (
+        np.bool_,
+        np.int8,
+        np.uint8,
+        np.int16,
+        np.uint16,
+        np.int32,
+        np.uint32,
+        np.int64,
+        np.uint64,
+        np.float16,
+        np.float32,
+        np.float64,
+    ):
+        for buffer_type in (hl.Buffer, hlr.Buffer):
+            source = np.array([[0, 1, 0], [1, 0, 1]], dtype=dtype)[:, ::-1]
+            buffer = buffer_type(source)
+            view = memoryview(buffer)
+            assert view.shape == source.shape
+            assert view.strides == source.strides
+            assert view.itemsize == source.itemsize
+            exported = buffer.numpy_view()
+            assert exported.dtype == source.dtype
+            assert np.shares_memory(exported, source)
+            assert np.array_equal(exported, source)
+            del buffer, source
+            gc.collect()
+            exported[0, 0] = 1
+            assert np.asarray(view)[0, 0] == 1
+
+
+def test_buffer_contiguous_requests():
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        source = np.arange(12, dtype=np.int32).reshape(3, 4)
+        contiguous = buffer_type(source)
+        assert np.shares_memory(np.frombuffer(contiguous, dtype=np.int32), source)
+        strided = buffer_type(source[:, ::2])
+        assert np.array_equal(np.asarray(strided), source[:, ::2])
+        try:
+            np.frombuffer(strided, dtype=np.int32)
+        except BufferError:
+            pass
+        else:
+            assert False, "a non-contiguous buffer satisfied a contiguous request"
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -721,6 +768,8 @@ if __name__ == "__main__":
     test_ndarray_negative_strides()
     test_runtime_buffer_is_distinct()
     test_buffer_export_lifetime()
+    test_buffer_ndarray_dtypes()
+    test_buffer_contiguous_requests()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()

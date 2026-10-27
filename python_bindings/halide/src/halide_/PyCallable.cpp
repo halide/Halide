@@ -83,7 +83,7 @@ public:
         argv[0] = &scalar_storage[0];
         cci[0] = Callable::make_ucon_qcci();
 
-        std::vector<PythonBufferInfo> buffer_exports;
+        std::vector<PythonArray> buffer_exports;
         const auto define_one_arg = [&argv, &scalar_storage, &buffers, &cci, &buffer_exports](const Argument &c_arg, py::handle value, size_t slot) {
             if (c_arg.is_buffer()) {
                 halide_buffer_t *raw_buffer;
@@ -104,11 +104,11 @@ public:
                     const bool writable = c_arg.is_output();
 
                     buffer_exports.push_back(py_buffer_value.request(writable));
-                    const PythonBufferInfo &value_buffer_info = buffer_exports.back();
+                    const PythonArray &array = buffer_exports.back();
 
                     buffers.buffers[slot] =
-                        pybufferinfo_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
-                            value_buffer_info, reverse_axes);
+                        pyarray_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
+                            array, reverse_axes);
                     raw_buffer = buffers.buffers[slot].raw_buffer();
                 }
                 // Mark all input buffers as having a dirty host, so that the Halide call will

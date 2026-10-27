@@ -7,7 +7,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -28,83 +27,6 @@ using BufferDimension = RuntimeBuffer::Dimension;
 std::string unique_name() {
     static std::atomic<uint64_t> next{0};
     return "b" + std::to_string(next++);
-}
-
-template<typename T>
-std::string format_descriptor() {
-    return python_format<T>();
-}
-
-template<>
-std::string format_descriptor<float16_t>() {
-    return "e";
-}
-
-halide_type_t format_descriptor_to_type(std::string format, Py_ssize_t itemsize) {
-    char byte_order = '@';
-    if (!format.empty() && std::strchr("@<>!=", format.front())) {
-        byte_order = format.front();
-        format.erase(format.begin());
-    }
-    const uint16_t endian_test = 1;
-    const bool native_is_little_endian = *reinterpret_cast<const uint8_t *>(&endian_test) == 1;
-    const bool non_native_byte_order =
-        (native_is_little_endian && (byte_order == '>' || byte_order == '!')) ||
-        (!native_is_little_endian && byte_order == '<');
-    if (non_native_byte_order && itemsize > 1) {
-        throw py::value_error("Non-native byte order is not supported.");
-    }
-
-#define HANDLE_TYPE(TYPE)                                                               \
-    if (format == format_descriptor<TYPE>()) {                                          \
-        const halide_type_t type = Halide::Runtime::Buffer<TYPE>::static_halide_type(); \
-        if (type.bytes() != itemsize) {                                                 \
-            throw py::value_error("Buffer item size does not match its format.");       \
-        }                                                                               \
-        return type;                                                                    \
-    }
-    HANDLE_TYPE(bool)
-    HANDLE_TYPE(uint8_t)
-    HANDLE_TYPE(uint16_t)
-    HANDLE_TYPE(uint32_t)
-    HANDLE_TYPE(uint64_t)
-    HANDLE_TYPE(int8_t)
-    HANDLE_TYPE(int16_t)
-    HANDLE_TYPE(int32_t)
-    HANDLE_TYPE(int64_t)
-    HANDLE_TYPE(float16_t)
-    HANDLE_TYPE(float)
-    HANDLE_TYPE(double)
-#undef HANDLE_TYPE
-    if (format == "l") {
-        const halide_type_t type = itemsize == 8 ? Runtime::Buffer<int64_t>::static_halide_type() : Runtime::Buffer<int32_t>::static_halide_type();
-        if (type.bytes() != itemsize) {
-            throw py::value_error("Buffer item size does not match its format.");
-        }
-        return type;
-    }
-    throw py::value_error("Unsupported Buffer<> type.");
-}
-
-std::string type_to_format_descriptor(halide_type_t type) {
-#define HANDLE_TYPE(TYPE)                                      \
-    if (type == Runtime::Buffer<TYPE>::static_halide_type()) { \
-        return format_descriptor<TYPE>();                      \
-    }
-    HANDLE_TYPE(bool)
-    HANDLE_TYPE(uint8_t)
-    HANDLE_TYPE(uint16_t)
-    HANDLE_TYPE(uint32_t)
-    HANDLE_TYPE(uint64_t)
-    HANDLE_TYPE(int8_t)
-    HANDLE_TYPE(int16_t)
-    HANDLE_TYPE(int32_t)
-    HANDLE_TYPE(int64_t)
-    HANDLE_TYPE(float16_t)
-    HANDLE_TYPE(float)
-    HANDLE_TYPE(double)
-#undef HANDLE_TYPE
-    throw py::value_error("Unsupported Buffer<> type.");
 }
 
 std::string type_string(const halide_type_t &type) {
@@ -163,28 +85,16 @@ public:
     }
 
     Buffer(PythonBuffer source, std::string name, bool reverse_axes)
-        : owner_(py::steal(PyMemoryView_FromObject(source.ptr()))), identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
-        if (!owner_) {
-            throw py::python_error();
-        }
-        PythonBufferInfo info = py::borrow<PythonBuffer>(owner_).request(true);
-        if (info.ndim < 0 || info.ndim > INT32_MAX) {
+        : identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
+        PythonArray array = source.request(true);
+        owner_ = py::cast(array, py::rv_policy::reference);
+        if (array.ndim() > INT32_MAX) {
             throw py::value_error("Out of range dimensionality in buffer conversion.");
         }
-        const halide_type_t type = format_descriptor_to_type(info.format, info.itemsize);
-        std::vector<halide_dimension_t> dims(info.ndim);
-        for (int i = 0; i < info.ndim; ++i) {
-            if (info.strides[i] % type.bytes() != 0) {
-                throw py::value_error("Buffer byte stride is not a multiple of its item size.");
-            }
-            const auto stride = info.strides[i] / type.bytes();
-            if (info.shape[i] < 0 || info.shape[i] > INT32_MAX || stride < INT32_MIN || stride > INT32_MAX) {
-                throw py::value_error("Out of range dimensions in buffer conversion.");
-            }
-            const int dst = reverse_axes ? info.ndim - i - 1 : i;
-            dims[dst] = {0, static_cast<int32_t>(info.shape[i]), static_cast<int32_t>(stride)};
-        }
-        buffer_ = RuntimeBuffer(type, info.ptr, info.ndim, dims.data());
+        const halide_type_t type = python_dtype_to_halide_type(array.dtype());
+        std::vector<halide_dimension_t> dims(array.ndim());
+        python_array_dimensions(array, dims.data(), reverse_axes);
+        buffer_ = RuntimeBuffer(type, const_cast<void *>(array.data()), array.ndim(), dims.data());
         runtime_buffer().set_host_dirty();
     }
 
@@ -278,25 +188,13 @@ public:
         name_ = name;
     }
 
-    PythonBufferInfo buffer_info(bool reverse_axes) {
+    PythonMutableArray buffer_array(py::handle owner, bool reverse_axes) {
         require_defined();
-        RuntimeBuffer &buffer = runtime_buffer();
-        if (buffer.data() == nullptr) {
-            throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
-        }
-        const int d = buffer.dimensions();
-        const int bytes = buffer.type().bytes();
-        std::vector<Py_ssize_t> shape(d), strides(d);
-        for (int i = 0; i < d; ++i) {
-            const int dst = reverse_axes ? d - i - 1 : i;
-            shape[dst] = buffer.dim(i).extent();
-            strides[dst] = static_cast<Py_ssize_t>(buffer.dim(i).stride()) * bytes;
-        }
-        return PythonBufferInfo(buffer.data(), bytes, type_to_format_descriptor(buffer.type()), d, shape, strides);
+        return python_buffer_array(*runtime_buffer().raw_buffer(), owner, reverse_axes);
     }
 
     py::object numpy_view(bool reverse_axes) {
-        return python_numpy_view(py::cast(this, py::rv_policy::reference), reverse_axes);
+        return python_numpy_view(buffer_array(py::cast(this, py::rv_policy::reference), reverse_axes));
     }
 
     py::object getitem(const std::vector<int> &pos) {
@@ -427,8 +325,8 @@ private:
     bool defined_ = false;
 };
 
-PythonBufferInfo buffer_info(Buffer &b) {
-    return b.buffer_info(true);
+PythonMutableArray buffer_array(Buffer &b, py::handle owner, bool reverse_axes) {
+    return b.buffer_array(owner, reverse_axes);
 }
 
 }  // namespace
@@ -448,7 +346,7 @@ void define_buffer(py::module_ &m) {
         .def("extent", &BufferDimension::extent)
         .def("max", &BufferDimension::max);
 
-    py::class_<Buffer>(m, "Buffer", py::type_slots(python_buffer_slots<Buffer, buffer_info>))
+    py::class_<Buffer>(m, "Buffer", py::type_slots(python_buffer_slots<Buffer, buffer_array>))
         .def(py::init<>())
         .def(py::init<const Buffer &>(), py::keep_alive<1, 2>())
         .def(py::init<PythonBuffer, std::string, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)

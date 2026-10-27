@@ -1,6 +1,7 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYBUFFER_H
 #define HALIDE_PYTHON_BINDINGS_PYBUFFER_H
 
+#include "PyBufferProtocol.h"
 #include "PyHalide.h"
 
 namespace Halide {
@@ -8,31 +9,17 @@ namespace PythonBindings {
 
 void define_buffer(py::module_ &m);
 
-Type format_descriptor_to_type(const std::string &fd);
-
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos);
 
 template<typename T = void,
          int Dims = AnyDims,
          int InClassDimStorage = (Dims == AnyDims ? 4 : std::max(Dims, 1))>
-Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer(const PythonBufferInfo &info, bool reverse_axes) {
-    const Type t = format_descriptor_to_type(info.format);
-    halide_dimension_t *dims = (halide_dimension_t *)alloca(info.ndim * sizeof(halide_dimension_t));
+Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pyarray_to_halidebuffer(const PythonArray &array, bool reverse_axes) {
+    const Type t = python_dtype_to_halide_type(array.dtype());
+    halide_dimension_t *dims = (halide_dimension_t *)alloca(array.ndim() * sizeof(halide_dimension_t));
     _halide_user_assert(dims);
-    for (int i = 0; i < info.ndim; i++) {
-        // Strides may be negative in both numpy and Halide. So check against both INT_MIN and
-        // INT_MAX.
-        const auto elem_stride = info.strides[i] / t.bytes();
-        if (info.shape[i] > INT_MAX || elem_stride < INT_MIN || elem_stride > INT_MAX) {
-            throw py::value_error("Out of range dimensions in buffer conversion.");
-        }
-        // Reverse axes if requested.
-        // Numpy's default is row-major (most rapidly varying comes last).
-
-        const int dst_axis = reverse_axes ? (info.ndim - i - 1) : i;
-        dims[dst_axis] = {0, (int32_t)info.shape[i], (int32_t)elem_stride};
-    }
-    return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t.to_abi(), info.ptr, (int)info.ndim, dims);
+    python_array_dimensions(array, dims, reverse_axes);
+    return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t.to_abi(), const_cast<void *>(array.data()), (int)array.ndim(), dims);
 }
 
 }  // namespace PythonBindings
