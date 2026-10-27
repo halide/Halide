@@ -36,9 +36,11 @@ T cast_arg(const py::handle &arg) {
     try {
         return py::cast<T>(arg);
     } catch (const py::cast_error &) {
+        const py::str expected_name = py::type<T>().attr("__name__");
+        const py::str actual_name = arg.type().attr("__name__");
         _halide_user_error
-            << "select(): Expected " << py::str(py::type<T>().attr("__name__")).c_str()
-            << " but got " << py::str(arg.type().attr("__name__")).c_str() << ": "
+            << "select(): Expected " << expected_name.c_str()
+            << " but got " << actual_name.c_str() << ": "
             << py::str(arg).c_str();
     }
 }

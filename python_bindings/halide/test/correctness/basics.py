@@ -60,6 +60,20 @@ def test_extern_scalar_param():
             assert inferred[0].type == type
 
 
+def test_gpu_tile_overloads():
+    for dimensions in (1, 2, 3):
+        variables = hl.vars("x y z")[:dimensions]
+        threads = hl.vars("tx ty tz")[:dimensions]
+        for explicit_blocks in (False, True):
+            blocks = hl.vars("bx by bz")[:dimensions] if explicit_blocks else []
+            f = hl.Func()
+            f[variables] = sum(variables)
+            f[variables] += 1
+            args = [*variables, *blocks, *threads, *([2] * dimensions)]
+            f.gpu_tile(*args)
+            f.update().gpu_tile(*args)
+
+
 def test_runtime_error():
     x = hl.Var("x")
     f = hl.Func("f")
@@ -685,6 +699,7 @@ def test_split_storage():
 if __name__ == "__main__":
     test_float32_param_rounding()
     test_extern_scalar_param()
+    test_gpu_tile_overloads()
     test_compiletime_error()
     test_runtime_error()
     test_misused_and()
