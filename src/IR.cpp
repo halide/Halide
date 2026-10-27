@@ -1383,9 +1383,9 @@ bool Shuffle::is_extract_element() const {
 template<>
 void destroy<IRNode>(const IRNode *t) {
     switch (t->node_type) {
-#define HALIDE_DELETE_NODE(T)  \
-    case IRNodeType::T:        \
-        delete (const T *)t;   \
+#define HALIDE_DELETE_NODE(T) \
+    case IRNodeType::T:       \
+        delete (const T *)t;  \
         break;
         HALIDE_FOR_EACH_IR_NODE(HALIDE_DELETE_NODE)
 #undef HALIDE_DELETE_NODE
