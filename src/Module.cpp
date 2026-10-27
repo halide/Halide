@@ -708,7 +708,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             auto out = make_raw_fd_ostream(html_assembly_path);
             compile_llvm_module_to_assembly(*llvm_module, *out);
         }
-        if (!debug_symbols) {
+        if (html && !debug_symbols) {
             llvm::StripDebugInfo(*llvm_module);
         }
 
