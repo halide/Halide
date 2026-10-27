@@ -449,6 +449,7 @@ tests(
     reduction_type_mismatch.cpp
     register_shuffle.cpp
     reorder_storage.cpp
+    repeat_each_element.cpp
     require.cpp
     require_fail.cpp
     reschedule.cpp
