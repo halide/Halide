@@ -644,22 +644,46 @@ struct TritPack {
 // per value; GGML's table_b2b_*), built by running inner's decode. A
 // schedule computing a row at a time reads it with one load: the decode
 // moves off the SIMD units. Or onto `entries` indices of type `index` (e.g.
-// a Lattice's: GGML's grids, rows of a table of 2048). `staged`: the decode
-// reads the table through a Func of its own ("lut", a copy of it), which a
-// schedule can place (e.g. in a GPU's threadgroup memory, as GGML's Metal
-// kernels copy kvalues_iq4nl); else it reads the Buffer itself.
+// a Lattice's: GGML's grids, rows of a table of 2048). `lut` (per = 1, an
+// elementwise inner): the decode reads the table through a Func of its own
+// ("lut"), defined as inner's decode of its index (the table's values
+// computed, not read: no Buffer), so a schedule picks how the decode looks a
+// value up: inlined, inner's decode itself (a codebook's mux: a register
+// table lookup, e.g. NEON's tbl), or computed into memory and read from there
+// (e.g. a GPU's threadgroup memory, as GGML's Metal kernels copy
+// kvalues_iq4nl); else it reads the Buffer.
 struct Tabulate {
     Approximation inner;
     int per, entries;
+    Type index;
     Buffer<> table;
-    bool staged = false;
+    bool lut = false;
 
-    Tabulate(Approximation a, int per, int entries = 256, Type index = UInt(8), bool staged = false)
-        : inner(std::move(a)), per(per), entries(entries), staged(staged) {
-        Func bytes("bytes"), random("random");
+    Tabulate(Approximation a, int per, int entries = 256, Type index = UInt(8), bool lut = false)
+        : inner(std::move(a)), per(per), entries(entries), index(index), lut(lut) {
+        if (lut) {
+            // inner reads as tabulated: its decode of element j reads only
+            // the index j (checked on its definition: a lut's table is never
+            // built, and the check runs no pipeline, so a kernel's code is
+            // as with inner's own decode)
+            Func e("index");
+            Var j, b;
+            e(j, b) = cast(index, j);
+            Expr x = inlined(inner.decode({e}).decoded[0](j, b), e), i = Internal::Variable::make(index, "i");
+            bool other = false;
+            x = Internal::mutate_with(x, [&](auto *self, const Internal::Call *c) -> Expr {
+                if (c->name != e.name()) return self->visit_base(c);
+                other |= !(Internal::equal(c->args[0], Expr(j)) && Internal::equal(c->args[1], Expr(b)));
+                return i;
+            });
+            if (per != 1 || other || Internal::expr_uses_var(x, j.name()) || Internal::expr_uses_var(x, b.name())) {
+                throw std::invalid_argument("Tabulate: a decoded element reads more than its index");
+            }
+            return;
+        }
+        Func random("random");
         Var p, v;
-        bytes(p, v) = cast(index, v);
-        Buffer<> t = inner.decode({bytes}).decoded[0].realize({per, entries});
+        Buffer<> t = values().realize({per, entries});
         // one Buffer per table: a pipeline tells its Buffers apart by name
         static std::map<std::vector<uint8_t>, Buffer<>> tables;
         std::vector<uint8_t> key((const uint8_t *)t.data(), (const uint8_t *)t.data() + t.size_in_bytes());
@@ -692,14 +716,36 @@ struct Tabulate {
     }
 
 private:
+    // x with the Funcs it calls substituted in, but `keep`.
+    static Expr inlined(Expr x, const Func &keep = Func()) {
+        for (;;) {
+            Internal::FunctionPtr g;
+            Internal::visit_with(x, [&](auto *self, const Internal::Call *c) {
+                if (c->call_type == Internal::Call::Halide && !(keep.defined() && c->name == keep.name())) g = c->func;
+                self->visit_base(c);
+            });
+            if (!g.defined()) return x;
+            x = Internal::inline_function(x, Internal::Function(g));
+        }
+    }
+    // The table: (p, v) inner's decode of element p of a record of index v.
+    Func values() const {
+        Func bytes("bytes");
+        Var p, v;
+        bytes(p, v) = cast(index, v);
+        return inner.decode({bytes}).decoded[0];
+    }
     std::vector<Func> tabulated(const std::vector<Func> &e) const {
-        Func f("tabulated"), lut("lut");
+        Func f("tabulated");
         Var j, b, p, v;
         Expr i = cast<int>(e[0](j / per, b, _));
         if (!(entries == 256 && e[0].type() == UInt(8))) i = clamp(i, 0, entries - 1);  // indices past the table: undefined
-        if (staged) {
-            lut(p, v) = table(p, v);
-            f(j, b, _) = lut(j % per, i);
+        if (lut) {
+            // (inner's decode substituted in: a Func of no Funcs, whose
+            // region a schedule bounds by the indices read)
+            Func l("lut");
+            l(p, v) = inlined(values()(p, v));
+            f(j, b, _) = l(j % per, i);
         } else {
             f(j, b, _) = table(j % per, i);
         }
@@ -707,13 +753,12 @@ private:
     }
 };
 
-// A codebook (see codebook()), decoded, with `lut`, through a staged table of
-// its values (Tabulate's, read through a Func a schedule places: GPUs, with
-// no register table lookup, as GGML's Metal kernels' threadgroup copy of
-// kvalues_iq4nl); else as codebook()'s mux.
-inline Approximation codebook(const std::string &name, const std::vector<int> &values, bool lut) {
-    Approximation c = codebook(name, values);
-    return lut ? Approximation(Tabulate{c, 1, (int)values.size(), UInt(8), true}) : c;
+// A codebook (see codebook()) decoded through a lut (Tabulate's): its mux,
+// in a Func of its own, which a schedule inlines (CPUs: a register table
+// lookup) or computes into memory (GPUs, with no register table lookup: as
+// GGML's Metal kernels' threadgroup copy of kvalues_iq4nl).
+inline Approximation codebook_lut(const std::string &name, const std::vector<int> &values) {
+    return Tabulate{codebook(name, values), 1, (int)values.size(), UInt(8), true};
 }
 
 // ---------------------------------------------------------------------------

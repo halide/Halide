@@ -26,6 +26,21 @@ inline Buffer<> table_of(Func f) {
     return b;
 }
 
+// Whether f is a constant: a definition of its arguments alone, reading no
+// Funcs, Buffers or Params (a Tabulate's lut).
+inline bool constant(Func f) {
+    if (f.function().has_update_definition()) return false;
+    bool reads = false;
+    for (const Expr &v : f.function().definition().values()) {
+        Internal::visit_with(
+            v, [&](auto *self, const Internal::Call *c) {
+                reads |= c->call_type == Internal::Call::Halide || c->call_type == Internal::Call::Image || c->param.defined();
+                self->visit_base(c); },
+            [&](auto *, const Internal::Variable *x) { reads |= x->param.defined() || x->image.defined() || x->reduction_domain.defined(); });
+    }
+    return !reads;
+}
+
 // Which components' decode to pick, by their port tags (schemes/tags.h):
 // only(t) those tagged any of t, all_but(t) the rest (including the Funcs
 // of several components, or of none: the values decoded from them).
@@ -318,13 +333,6 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 // M = 32 from 2.2x to 2.7x).
 inline bool use_tables(const Target &t) {
     return !t.has_gpu_feature();
-}
-
-// Whether a kernel decodes codebooks (iq4_nl's, iq4_xs's, mxfp4's kvalues)
-// through staged tables (codebook(); see metal_luts): on Metal, which has no
-// register table lookup (NEON's tbl) for their mux.
-inline bool use_luts(const Target &t) {
-    return t.has_feature(Target::Metal);
 }
 
 // The table decoders that tables() stages: all but tables of one value per
@@ -1788,16 +1796,18 @@ inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) 
     return count;
 }
 
-// Metal: the codebooks' staged tables (use_luts), each copied per
+// Metal: the codebooks' luts (codebook_lut()), each computed per
 // threadgroup (at out's innermost gpu_blocks loop) into threadgroup memory,
 // an entry per thread, as GGML's kernel_mul_mv_iq4_nl_f32 copies
 // kvalues_iq4nl. (M3 Max, iq4_nl, iq4_xs and mxfp4 on f32 and q8 acts: gemv
 // 1.45-1.75x the speed of their mux as a select tree on words of the
 // constants packed, M = 4 1.12-1.18x; read in place from the table's device
 // buffer, or in the constant address space, gemv on N or K of 14336
-// 0.73-1.0x of staged.)
+// 0.73-1.0x of staged; computed per threadgroup, as here, or copied from a
+// table's device buffer, about even: 0.97-1.03x.)
 inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
-    for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
+    for (Func f : decoders(rs)) {
+        if (!constant(f) || f.dimensions() != 2) continue;
         Var p = f.args()[0], i = f.args()[1];
         f.compute_at(out, Var("no")).store_in(MemoryType::GPUShared).reorder(i, p).gpu_threads(i);
     }
@@ -2509,6 +2519,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // 32 KB: 1.2x on one thread, 1.04x on four; even on six; on ten, two
         // records 1.1-1.4x).
         std::vector<Func> cd = decoders(rs, only({tag::codes}), 0, 1);
+        cd.erase(std::remove_if(cd.begin(), cd.end(), constant), cd.end());  // (not a codebook's lut)
         if (!cd.empty() && cd.front().type() != cd.back().type()) {
             Tiles r2 = rt;
             r2.nt = 2 * fmt.rows;

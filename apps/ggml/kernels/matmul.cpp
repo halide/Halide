@@ -50,13 +50,13 @@ public:
         // mul_mat on weight records of several rows takes their codes at 2^k
         // (an exact alternative, see Type0Quant): it shortens the gemv's decode
         bool scaled = op == "mul_mat" && ggml::format(wn).rows > 1;
-        bool tables = ggml::use_tables(get_target()), luts = ggml::use_luts(get_target());
-        ggml::Format fw = ggml::format(wn, false, scaled, true, Expr(), tables, luts), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
+        bool tables = ggml::use_tables(get_target());
+        ggml::Format fw = ggml::format(wn, false, scaled, true, Expr(), tables), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
         std::vector<ImageParam> w = inputs(fw, "w"), a = inputs(fa, "a");
         if (fw.rowwise || fa.rowwise || fc.rowwise) {
             // Rowwise formats reduce over a row's blocks: the weight's records
             Expr nb = record(w[0]).extent();
-            fw = ggml::format(wn, false, scaled, true, nb, tables, luts), fa = ggml::format(an, false, false, true, nb), fc = ggml::format(cn, false, false, false, nb);
+            fw = ggml::format(wn, false, scaled, true, nb, tables), fa = ggml::format(an, false, false, true, nb), fc = ggml::format(cn, false, false, false, nb);
             if (!fw.rowwise || !(fa.rowwise || fc.rowwise)) throw std::invalid_argument("rowwise formats: both operands'");
         }
         Var k("k"), n("n"), m("m");
