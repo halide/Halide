@@ -129,7 +129,9 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # does, not subtracted per value; tq2_0's and tq1_0's gemm 1.2-1.5x, gemv
 # 1.1-1.3x): =gemv on vec_dot and the gemv tiles only (q6_K: its gemm tiles
 # 10-20% slower, its sub-block scales times the sums), =none where GGML too
-# subtracts per value (q3_K: the fold doubles its loops' instructions).
+# subtracts per value (q3_K: the fold doubles its loops' instructions), or
+# where hoist_invariants() can't prove the split exact (iq1_s's and iq1_m's
+# delta, +-1 added to 8 times a grid value, a table's, of unknown bounds).
 # row_pairs=false (mul_mat's gemv on single rows, not row pairs): q6_K's
 # gemv 1.05-1.1x on one thread (row pairs spill), 0.85-0.95x on ten; q3_K's
 # gemv, with interleave=1 (as GGML's vec_dot, a row at a time: a row's block
@@ -144,6 +146,10 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 set(GGML_SCHEDULE_PARAMS
     "q3_K vec_dot * fold_offsets=none"
     "q3_K mul_mat * fold_offsets=none"
+    "iq1_s vec_dot * fold_offsets=none"
+    "iq1_s mul_mat * fold_offsets=none"
+    "iq1_m vec_dot * fold_offsets=none"
+    "iq1_m mul_mat * fold_offsets=none"
     "q6_K mul_mat * fold_offsets=gemv"
     "q6_K mul_mat q8_K row_pairs=false"
     "q6_K mul_mat f32:q8_K row_pairs=false"
