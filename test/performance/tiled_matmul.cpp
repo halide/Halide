@@ -74,7 +74,7 @@ bool matmul(Halide::Target target) {
     Var xi("xi"), yi("yi");
     RVar ri("ri"), ro("ro");
     mm.compute_at(mm.in(), y)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .update()
         // Split into (x,y) tile
         .tile(x, y, xi, yi, tile_x, tile_y, TailStrategy::GuardWithIf)
@@ -184,7 +184,7 @@ bool matmul_bf16(Halide::Target target) {
     Var xi("xi"), yi("yi");
     RVar ri("ri"), ro("ro");
     mm.compute_at(mm.in(), y)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .update()
         // Split into (x,y) tile
         .tile(x, y, xi, yi, tile_x, tile_y, TailStrategy::GuardWithIf)

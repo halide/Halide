@@ -188,8 +188,8 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::LockedCache;
     case Serialize::MemoryType::VTCM:
         return MemoryType::VTCM;
-    case Serialize::MemoryType::AMXTile:
-        return MemoryType::AMXTile;
+    case Serialize::MemoryType::Tile:
+        return MemoryType::Tile;
     case Serialize::MemoryType::GPR:
         return MemoryType::GPR;
     default:

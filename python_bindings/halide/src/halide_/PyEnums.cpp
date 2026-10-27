@@ -60,9 +60,11 @@ void define_enums(py::module &m) {
         .value("GPUTexture", MemoryType::GPUTexture)
         .value("LockedCache", MemoryType::LockedCache)
         .value("VTCM", MemoryType::VTCM)
-        .value("AMXTile", MemoryType::AMXTile)
+        .value("Tile", MemoryType::Tile)
         .value("GPUSharedAsync", MemoryType::GPUSharedAsync)
-        .value("GPR", MemoryType::GPR);
+        .value("GPR", MemoryType::GPR)
+        // Deprecated alias for Tile.
+        .value("AMXTile", MemoryType::Tile);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
