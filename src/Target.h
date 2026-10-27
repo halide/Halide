@@ -208,6 +208,7 @@ struct Target {
         HLSL_SM68 = halide_target_feature_hlsl_sm68,
         HLSL_SM69 = halide_target_feature_hlsl_sm69,
         NoMetadata = halide_target_feature_no_metadata,
+        ARMI8MM = halide_target_feature_arm_i8mm,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
