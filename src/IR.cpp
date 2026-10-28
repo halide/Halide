@@ -1389,6 +1389,8 @@ void destroy<IRNode>(const IRNode *t) {
         break;
         HALIDE_FOR_EACH_IR_NODE(HALIDE_DELETE_NODE)
 #undef HALIDE_DELETE_NODE
+    default:
+        unknown_node_type_error(t->node_type);
     }
 }
 

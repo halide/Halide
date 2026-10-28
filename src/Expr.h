@@ -95,7 +95,7 @@ const char *IRNodeType_string(IRNodeType type);
 
 /** Report an internal error for an out-of-range IRNodeType. Kept out of line
  * so that switch-based dispatch on IRNodeType needs no stack frame. */
-[[noreturn]] void unknown_node_type_error(IRNodeType type);
+[[noreturn]] HALIDE_NEVER_INLINE void unknown_node_type_error(IRNodeType type);
 
 constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
 
