@@ -300,10 +300,6 @@ string slide_level_name(const Function &f, const string &name) {
     return l ? l->to_string() : name;
 }
 
-// Compared against by pointer, to report naming two dimensions that move the
-// same dimension of a Func's storage.
-constexpr const char *already_slid = "this dimension has already been slid over";
-
 // What sliding window decided to do with one Func over one loop or let. The
 // rewrite makes no decisions of its own.
 struct SlideDecision {
@@ -373,13 +369,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // The value of loop_var at the first iteration anything consumes this
     // func, which is earlier than the loop min if a consumer is warming up.
     Expr loop_min;
-    set<int> &slid_dimensions;
+    // For each dimension of func's storage already slid, what it slid over.
+    map<int, string> &slid_dimensions;
     Scope<Expr> scope;
     Scope<Interval> &bounds_scope;
-
-    // Whether the warm-up can prepend iterations to the loop. Otherwise it
-    // warms up with a select.
-    bool can_rewind;
 
     // Whether loop_var is the variable of the loop whose body we're
     // mutating, rather than a let inside it.
@@ -495,9 +488,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
 
         if (!dim.empty() && slid_dimensions.count(dim_idx)) {
-            result.dim = dim;
-            result.dim_idx = dim_idx;
-            return result.reject(already_slid);
+            // The window can only advance along a dimension once, so one of
+            // the two would be silently dropped.
+            user_assert(func.schedule().slide_levels().empty())
+                << "Func " << func.name() << " was told to slide over both "
+                << slide_level_name(func, slid_dimensions[dim_idx]) << " and "
+                << slide_level_name(func, loop_var) << ", but both of those move "
+                << "the same dimension (" << dim << ") of " << func.name()
+                << ", so the window would have to advance along it twice. Slide "
+                << "over dimensions that move different dimensions of "
+                << func.name() << ".\n";
+            return result.reject("this dimension has already been slid over");
         }
         if (func.schedule().memory_type() == MemoryType::Register &&
             enclosing_real_loops > 0) {
@@ -596,8 +597,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
         // The solver returns something even when the constraints can't all be
         // met, so check its answer.
-        bool solved = (can_rewind &&
-                       solve_result.has_upper_bound() &&
+        bool solved = (solve_result.has_upper_bound() &&
                        can_prove(substitute(new_loop_min_name, solve_result.max,
                                             new_loop_min_eq)));
         if (solved &&
@@ -622,7 +622,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // every iteration has a previous iteration. The first iteration
             // will warm up the loop instead.
             Expr need_explicit_warmup = loop_var_expr <= loop_min;
-            // A let slid over varies with loops outside the innermost one.
+            // The loop a let is slid at contains the producer's loop, which
+            // only collapses once the warm-up is peeled off, so
+            // likely_if_innermost would never fire.
             auto mark = [&](const Expr &e) {
                 return over_loop ? likely_if_innermost(e) : likely(e);
             };
@@ -700,7 +702,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (!decision.slid()) {
             return op;
         }
-        slid_dimensions.insert(decision.dim_idx);
+        slid_dimensions[decision.dim_idx] = loop_var;
 
         if (func.schedule().memory_type() == MemoryType::Register) {
             // Sliding in registers leaves the region written alone, and
@@ -844,12 +846,12 @@ public:
     // Slide over v, which starts at v_min. It is either the variable of the
     // loop whose body we mutate, or a let inside it, in which case outer_loop
     // names that loop.
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
-                                   Scope<Interval> &bounds_scope, bool can_rewind,
-                                   const string &outer_loop)
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min,
+                                   map<int, string> &slid_dimensions,
+                                   Scope<Interval> &bounds_scope, const string &outer_loop)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
           slid_dimensions(slid_dimensions), bounds_scope(bounds_scope),
-          can_rewind(can_rewind), over_loop(outer_loop.empty()),
+          over_loop(outer_loop.empty()),
           var_in_scope(outer_loop.empty()) {
         if (!over_loop) {
             loops_building_var.push(outer_loop);
@@ -912,8 +914,10 @@ class InjectWarmupGuards : public IRMutator {
     // The loop min before anything rewound it.
     const Expr &orig_loop_min;
     FuncDependencies &deps;
-    // Whether the loop guarded is the innermost one anything slid over, which
-    // it isn't if a Func slid over a let inside it.
+    // Whether to use likely_if_innermost rather than likely. If a Func slid
+    // over a let inside the loop, the loop contains producer loops that only
+    // collapse once the warm-up is peeled off, so the loop never looks
+    // innermost.
     bool innermost;
 
     // Memoized, because answering the question requires a traversal. An
@@ -1153,19 +1157,13 @@ class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
     FuncDependencies deps;
 
-    // A map of which dimensions we've already slid over, by Func name.
-    map<string, set<int>> slid_dimensions;
-    // For funcs told which dimensions to slide over, which of those claimed
-    // each dimension of the func's storage. Only used to explain errors.
-    map<string, map<int, string>> slid_over_by;
+    // A map of which dimensions we've already slid over, and what over, by
+    // Func name.
+    map<string, map<int, string>> slid_dimensions;
 
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
-    // For each of those, how many loops we were already inside when we
-    // reached its Realize. Loops outside that point don't have its storage
-    // live across them.
-    list<size_t> sliding_loop_depth;
     // The loops we're inside of, outermost first.
     vector<string> loop_stack;
     // For each let in scope, the loops its value depends on, directly or
@@ -1194,35 +1192,6 @@ class SlidingWindow : public IRMutator {
         return result;
     }
 
-    size_t storage_depth(const Function &f) {
-        auto d = sliding_loop_depth.begin();
-        for (auto it = sliding.begin(); it != sliding.end(); it++, d++) {
-            if (it->name() == f.name()) {
-                return *d;
-            }
-        }
-        internal_error << "Not sliding " << f.name() << "\n";
-        return 0;
-    }
-
-    // Two dimensions a func was told to slide over move the same dimension of
-    // its storage. The window can only advance along that dimension once, so
-    // one of the two requests would be silently dropped.
-    void check_not_entangled(const Function &f, const string &dim,
-                             const SlideDecision &decision) {
-        if (decision.rejected != already_slid) {
-            return;
-        }
-        const string &other = slid_over_by[f.name()][decision.dim_idx];
-        user_error
-            << "Func " << f.name() << " was told to slide over both "
-            << slide_level_name(f, other) << " and " << slide_level_name(f, dim)
-            << ", but both of those move the same dimension ("
-            << decision.dim << ") of " << f.name() << ", so the window would "
-            << "have to advance along it twice. Slide over dimensions that "
-            << "move different dimensions of " << f.name() << ".\n";
-    }
-
     // The things func can slide over at the serial loop op, currently called
     // name and with the given body. A func not told what to slide over slides
     // over every loop. A func told what to slide over slides over each loop
@@ -1240,26 +1209,11 @@ class SlidingWindow : public IRMutator {
 
         FindSlideLets finder(func);
         body.accept(&finder);
-        const size_t depth = storage_depth(func);
         for (const SlideLet &l : finder.result) {
             set<string> used = loops_used(l.value);
             size_t outer = 0;
             while (outer < loop_stack.size() && !used.count(loop_stack[outer])) {
                 outer++;
-            }
-            if (outer < depth) {
-                // Sliding assumes the previous iteration's values are still
-                // there, and an allocation inside one of the loops the
-                // dimension varies over is thrown away and remade as they run.
-                user_error
-                    << "Func " << func.name() << " was told to slide over "
-                    << slide_level_name(func, l.name) << ", but that "
-                    << "dimension varies over the loop " << loop_stack[outer]
-                    << ", which is outside " << func.name() << "'s storage. Sliding "
-                    << "would read values from a previous iteration of that "
-                    << "loop, which have been thrown away by then. Store "
-                    << func.name() << " at a coarser level, or slide over a "
-                    << "dimension that doesn't span that loop.\n";
             }
             if (outer < loop_stack.size() || !expr_uses_var(l.value, name)) {
                 // It slides at an outer or inner loop instead.
@@ -1302,10 +1256,8 @@ class SlidingWindow : public IRMutator {
         // We want to slide innermost first, so put it on the front of
         // the list.
         sliding.push_front(iter->second);
-        sliding_loop_depth.push_front(loop_stack.size());
         Stmt new_body = mutate(op->body);
         sliding.pop_front();
-        sliding_loop_depth.pop_front();
         // Remove tracking of slid dimensions when we're done realizing
         // it in case a realization appears elsewhere.
         auto slid_it = slid_dimensions.find(iter->second.name());
@@ -1394,7 +1346,7 @@ class SlidingWindow : public IRMutator {
                     }
                 }
 
-                set<int> &slid_dims = slid_dimensions[func.name()];
+                map<int, string> &slid_dims = slid_dimensions[func.name()];
                 size_t old_slid_dims_size = slid_dims.size();
 
                 Interval min_bounds = bounds_of_expr_in_scope(loop_min, bounds_scope);
@@ -1405,17 +1357,10 @@ class SlidingWindow : public IRMutator {
                 SlidingWindowOnFunctionAndLoop slider(func, target.var,
                                                       target.at_iteration(name, consumed_from),
                                                       slid_dims, bounds_scope,
-                                                      is_positive_const(target.stride),
                                                       target.is_loop() ? "" : name);
 
                 body = slider(body);
                 const SlideDecision &decision = slider.decision;
-                if (!func.schedule().slide_levels().empty()) {
-                    check_not_entangled(func, target.var, decision);
-                    if (decision.slid()) {
-                        slid_over_by[func.name()][decision.dim_idx] = target.var;
-                    }
-                }
                 if (func.schedule().memory_type() == MemoryType::Register &&
                     decision.slid() && decision.old_bounds.has_lower_bound()) {
                     body = slider.translate_loop(body);
@@ -1502,7 +1447,7 @@ class SlidingWindow : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         // Don't let specializations corrupt the tracking of which
         // dimensions have been slid.
-        map<string, set<int>> old_slid_dimensions = slid_dimensions;
+        map<string, map<int, string>> old_slid_dimensions = slid_dimensions;
         Stmt then_case = mutate(op->then_case);
         slid_dimensions = old_slid_dimensions;
         Stmt else_case = mutate(op->else_case);

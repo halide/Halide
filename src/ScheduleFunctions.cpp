@@ -2237,10 +2237,12 @@ public:
 
 // A window slides forwards one value at a time, so the loops a dimension of a
 // consumer is split into must count through its values in order: serial,
-// adjacent, outer outside inner, and with no tail that skips or repeats values
-// anywhere but the outermost of them.
-void validate_slide_level(const Function &f, const LoopLevel &l, const Function &g,
-                          const StageSchedule &s) {
+// adjacent, outer outside inner, with constant split factors, and with no tail
+// that skips or repeats values anywhere but the outermost of them. Returns the
+// outermost of those loops, or an empty string if the stage doesn't have the
+// dimension.
+string validate_slide_level(const Function &f, const LoopLevel &l, const Function &g,
+                            const StageSchedule &s) {
     const string &v = l.var_name();
     auto matches = [&](const string &n) {
         return n == v || ends_with(n, "." + v);
@@ -2260,6 +2262,11 @@ void validate_slide_level(const Function &f, const LoopLevel &l, const Function 
         switch (split.split_type) {
         case Split::SplitVar:
             if (k != digits.end()) {
+                user_assert(is_const(split.factor))
+                    << error_prefix << split.old_var << " is split by "
+                    << split.factor << ", which is not a constant. The window "
+                    << "must advance by a constant amount per iteration of the "
+                    << "loop it slides along.\n";
                 bool exact = is_const_one(split.factor) || alignment.count(split.outer);
                 user_assert(exact ||
                             (k == digits.begin() &&
@@ -2299,7 +2306,7 @@ void validate_slide_level(const Function &f, const LoopLevel &l, const Function 
             }
         }
         if (digits.empty()) {
-            return;
+            return "";
         }
     }
     size_t pos = 0;
@@ -2316,9 +2323,14 @@ void validate_slide_level(const Function &f, const LoopLevel &l, const Function 
             << "dimension is split into must be serial and adjacent, outer "
             << "outside inner.\n";
     }
+    return digits[0];
 }
 
-void validate_slide_levels(const Function &f, const map<string, Function> &env) {
+// Returns each slide level paired with the outermost loop it slides along, for
+// every stage of the consumer that has the dimension.
+vector<pair<LoopLevel, LoopLevel>> validate_slide_levels(const Function &f,
+                                                         const map<string, Function> &env) {
+    vector<pair<LoopLevel, LoopLevel>> result;
     for (const LoopLevel &l : f.schedule().slide_levels()) {
         auto it = env.find(l.func());
         if (it == env.end()) {
@@ -2333,9 +2345,15 @@ void validate_slide_levels(const Function &f, const map<string, Function> &env) 
             for (const Specialization &spec : defs[i].specializations()) {
                 defs.push_back(spec.definition);
             }
-            validate_slide_level(f, l, g, defs[i].schedule());
+            string outermost = validate_slide_level(f, l, g, defs[i].schedule());
+            if (!outermost.empty()) {
+                LoopLevel loop(g, Var(outermost));
+                loop.lock();
+                result.emplace_back(l, loop);
+            }
         }
     }
+    return result;
 }
 
 // Check a schedule is legal, throwing an error if it is not. Returns whether or
@@ -2516,7 +2534,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
-    validate_slide_levels(f, env);
+    vector<pair<LoopLevel, LoopLevel>> slide_loops = validate_slide_levels(f, env);
 
     if (is_output) {
         // None of the checks below apply to outputs
@@ -2644,6 +2662,29 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         s.accept(&printer);
 
         user_error << err.str();
+    }
+
+    // The window lives in f's storage and moves as f is computed, so a loop it
+    // slides along must be between the two.
+    for (const auto &[l, loop] : slide_loops) {
+        for (size_t i = 0; i < sites.size(); i++) {
+            if (!sites[i].loop_level.match(loop)) {
+                continue;
+            }
+            user_assert((int)i > store_idx)
+                << "Func " << f.name() << " was told to slide over " << l.to_string()
+                << ", but that dimension varies over the loop " << loop.to_string()
+                << ", which is outside " << f.name() << "'s storage. Sliding "
+                << "would read values from a previous iteration of that loop, "
+                << "which have been thrown away by then. Store " << f.name()
+                << " at a coarser level, or slide over a dimension that doesn't "
+                << "span that loop.\n";
+            user_assert((int)i <= compute_idx)
+                << "Func " << f.name() << " was told to slide over " << l.to_string()
+                << ", but it is computed outside the loop " << loop.to_string()
+                << ", so the window would never move. Compute " << f.name()
+                << " at or inside that loop.\n";
+        }
     }
 
     return true;

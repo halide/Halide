@@ -556,6 +556,32 @@ int main(int argc, char **argv) {
         });
 
     failures += !expect_user_error(
+        "computed_outside", "would never move", [] {
+            Func f("f"), g("g");
+            Var x("x"), y("y");
+            f(x, y) = x + y;
+            g(x, y) = f(x, y) + f(x - 1, y);
+            // f is computed once per row, so there's nothing left to slide
+            // over the columns.
+            f.store_root().compute_at(g, y).slide(g, x);
+            g.realize({8, 8});
+        });
+
+    failures += !expect_user_error(
+        "non_constant_factor", "not a constant", [] {
+            Param<int> n;
+            n.set(4);
+            Func f("f"), g("g");
+            Var x("x"), xo("xo"), xi("xi");
+            f(x) = x;
+            g(x) = f(x) + f(x - 1);
+            // Each iteration of xo moves the window along by n.
+            g.split(x, xo, xi, n, TailStrategy::RoundUp);
+            f.store_root().compute_at(g, xi).slide(g, x);
+            g.realize({16});
+        });
+
+    failures += !expect_user_error(
         "non_monotonic_dimension", "xi breaks the sequence", [] {
             Func f("f"), g("g");
             Var x("x"), xo("xo"), xi("xi");
