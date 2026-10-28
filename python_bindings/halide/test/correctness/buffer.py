@@ -623,6 +623,7 @@ def test_runtime_buffer_is_distinct():
     assert hl.BufferDimension is hlr.BufferDimension
 
     runtime_type = hlr.Type(0, 32)
+    assert runtime_type.__eq__(None) is False
 
     runtime_buffer = hlr.Buffer(runtime_type, [4, 3], "runtime_buffer")
     assert runtime_buffer.type() == runtime_type
@@ -673,6 +674,88 @@ def test_runtime_buffer_is_distinct():
     assert runtime_view[0] == 23
 
 
+def test_buffer_export_lifetime():
+    class Exporter:
+        def __init__(self):
+            self.data = bytearray(range(8))
+            self.exports = 0
+
+        def __buffer__(self, flags):
+            self.exports += 1
+            return memoryview(self.data)
+
+        def __release_buffer__(self, view):
+            self.exports -= 1
+
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        source = Exporter()
+        buffer = buffer_type(source)
+        view = buffer.numpy_view()
+        del buffer
+        gc.collect()
+        assert source.exports > 0
+        view[3] = 42
+        assert source.data[3] == 42
+        del view
+        gc.collect()
+        assert source.exports == 0
+        source.data.extend(b"more")
+
+        try:
+            buffer_type(memoryview(b"readonly"))
+        except BufferError:
+            pass
+        else:
+            assert False, "read-only storage must not become a writable Halide Buffer"
+
+
+def test_buffer_ndarray_dtypes():
+    for dtype in (
+        np.bool_,
+        np.int8,
+        np.uint8,
+        np.int16,
+        np.uint16,
+        np.int32,
+        np.uint32,
+        np.int64,
+        np.uint64,
+        np.float16,
+        np.float32,
+        np.float64,
+    ):
+        for buffer_type in (hl.Buffer, hlr.Buffer):
+            source = np.array([[0, 1, 0], [1, 0, 1]], dtype=dtype)[:, ::-1]
+            buffer = buffer_type(source)
+            view = memoryview(buffer)
+            assert view.shape == source.shape
+            assert view.strides == source.strides
+            assert view.itemsize == source.itemsize
+            exported = buffer.numpy_view()
+            assert exported.dtype == source.dtype
+            assert np.shares_memory(exported, source)
+            assert np.array_equal(exported, source)
+            del buffer, source
+            gc.collect()
+            exported[0, 0] = 1
+            assert np.asarray(view)[0, 0] == 1
+
+
+def test_buffer_contiguous_requests():
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        source = np.arange(12, dtype=np.int32).reshape(3, 4)
+        contiguous = buffer_type(source)
+        assert np.shares_memory(np.frombuffer(contiguous, dtype=np.int32), source)
+        strided = buffer_type(source[:, ::2])
+        assert np.array_equal(np.asarray(strided), source[:, ::2])
+        try:
+            np.frombuffer(strided, dtype=np.int32)
+        except BufferError:
+            pass
+        else:
+            assert False, "a non-contiguous buffer satisfied a contiguous request"
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -684,6 +767,9 @@ if __name__ == "__main__":
     test_buffer_copy_no_reverse()
     test_ndarray_negative_strides()
     test_runtime_buffer_is_distinct()
+    test_buffer_export_lifetime()
+    test_buffer_ndarray_dtypes()
+    test_buffer_contiguous_requests()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()

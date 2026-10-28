@@ -66,7 +66,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
                      std::string msg = os.str();
                      if (PyErr_WarnEx(PyExc_RuntimeWarning, msg.c_str(), 1) < 0) {
-                         throw py::error_already_set();
+                         throw py::python_error();
                      }
                  }
                  func(lhs) = Expr(f);
@@ -101,17 +101,17 @@ py::object evaluate_impl(const py::object &expr, bool may_gpu) {
     if (r->size() == 1) {
         return buffer_getitem_operator((*r)[0], {});
     } else {
-        py::tuple result(r->size());
+        py::list result;
         for (size_t i = 0; i < r->size(); i++) {
-            result[i] = buffer_getitem_operator((*r)[i], {});
+            result.append(buffer_getitem_operator((*r)[i], {}));
         }
-        return result;
+        return py::tuple(result);
     }
 }
 
 }  // namespace
 
-void define_func(py::module &m) {
+void define_func(py::module_ &m) {
     define_func_ref(m);
     define_var_or_rvar(m);
     define_loop_level(m);
@@ -139,10 +139,10 @@ void define_func(py::module &m) {
             .def(py::init<Type, int, std::string>(), py::arg("required_type"), py::arg("required_dimensions"), py::arg("name"))
             .def(py::init<std::vector<Type>, int, std::string>(), py::arg("required_types"), py::arg("required_dimensions"), py::arg("name"))
             .def(py::init<Expr>())
-            .def(py::init([](Buffer<> &b) -> Func { return Func(b); }))
+            .def("__init__", [](Func *self, Buffer<> &b) { new (self) Func(Func(b)); })
 
             // for implicitly_convertible
-            .def(py::init([](const ImageParam &im) -> Func { return im; }))
+            .def("__init__", [](Func *self, const ImageParam &im) { new (self) Func(im); })
 
             .def(
                 "realize",
@@ -356,6 +356,7 @@ void define_func(py::module &m) {
             .def("trace_loads", &Func::trace_loads)
             .def("trace_stores", &Func::trace_stores)
             .def("trace_realizations", &Func::trace_realizations)
+            .def("trace_bounds_required", &Func::trace_bounds_required)
             .def("print_loop_nest", &Func::print_loop_nest)
             .def("add_trace_tag", &Func::add_trace_tag, py::arg("trace_tag"))
 
@@ -391,7 +392,7 @@ void define_func(py::module &m) {
 
                      // dst could be Buffer<>, vector<Buffer>, or vector<int>
                      try {
-                         Buffer<> b = dst.cast<Buffer<>>();
+                         Buffer<> b = py::cast<Buffer<>>(dst);
                          f.infer_input_bounds(&juc, b, t);
                          return;
                      } catch (const py::cast_error &) {
@@ -399,7 +400,7 @@ void define_func(py::module &m) {
                      }
 
                      try {
-                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                         std::vector<Buffer<>> v = py::cast<std::vector<Buffer<>>>(dst);
                          f.infer_input_bounds(&juc, Realization(std::move(v)), t);
                          return;
                      } catch (const py::cast_error &) {
@@ -407,7 +408,7 @@ void define_func(py::module &m) {
                      }
 
                      try {
-                         std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                         std::vector<int32_t> v = py::cast<std::vector<int32_t>>(dst);
                          f.infer_input_bounds(&juc, v, t);
                          return;
                      } catch (const py::cast_error &) {
@@ -436,6 +437,8 @@ void define_func(py::module &m) {
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
 
+            .def("split_storage", &Func::split_storage, py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"))
+
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 
             .def("fold_storage", &Func::fold_storage, py::arg("dim"), py::arg("extent"), py::arg("fold_forward") = true)
@@ -451,7 +454,7 @@ void define_func(py::module &m) {
     py::implicitly_convertible<ImageParam, Func>();
 
     // Note that overloads of FuncRef must come *before* Expr;
-    // otherwise PyBind's automatic STL conversion machinery
+    // otherwise automatic STL conversion machinery
     // can attempt to convert a FuncRef into a vector-of-size-1 Expr,
     // which will fail. TODO: can we avoid this?
 
@@ -464,12 +467,12 @@ void define_func(py::module &m) {
 
     // Special cases of f[g[...]] = ...
     // We need to capture this case here since otherwise
-    // pybind11 would try to convert g[...], which is a FuncRef
+    // the binding would try to convert g[...], which is a FuncRef
     // to a list of Var.
     // However, to do this it has to check g[...][0] is a Var or not.
     // If g is not defined as a Tuple this results in a runtime error
     // inside Halide.
-    // We also can't rely on implicit conversion in pybind11 since it
+    // We also can't rely on implicit conversion since it
     // happens after all function overloads have been visited.
     define_set_func_ref<FuncRef>(func_class);
     define_set_func_ref<Expr>(func_class);

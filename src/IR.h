@@ -767,11 +767,30 @@ struct Call : public ExprNode<Call> {
         extract_bits,
         // Extracts a single element from a mask vector
         extract_mask_element,
+        // fixed_to_float(x, k) reads the integer x as a fixed-point number with
+        // k fractional bits: float(x) * 2^-k, where k is a positive constant
+        // (broadcast to x's lanes).
+        fixed_to_float,
         // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
         get_runtime_streaming_vscale,
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
         get_user_context,
+        // Read a value held by another lane of the same group of gpu lanes.
+        // Args are (value, x, width). The lanes are partitioned into groups
+        // of width lanes, which must be a power of two no greater than 32
+        // and correspond to aligned groups of hardware SIMD lanes. x is
+        // the source lane relative to the current one (gpu_shuffle_down
+        // reads lane + x, gpu_shuffle_up reads lane - x, and
+        // gpu_shuffle_xor reads lane ^ x), or, for gpu_shuffle_idx, the
+        // index of the source lane within the group. For all but
+        // gpu_shuffle_idx, x must be the same in every lane. The result is
+        // undefined if the source lane is outside the group or is
+        // inactive. value must be a 32-bit scalar.
+        gpu_shuffle_down,
+        gpu_shuffle_idx,
+        gpu_shuffle_up,
+        gpu_shuffle_xor,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
@@ -833,6 +852,9 @@ struct Call : public ExprNode<Call> {
         return_second,
         // Round a floating point value to nearest integer, with ties going to even
         round,
+        // Round a floating point value to nearest integer, with ties going away
+        // from zero (C's round)
+        round_half_away,
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
@@ -890,12 +912,25 @@ struct Call : public ExprNode<Call> {
         strict_sub,
         // Convert a list of Exprs to a string
         stringify,
+        // Read one element of one field out of a struct-typed value.
+        // args = {struct value, field index as an IntImm, element index}.
+        // The field's name is resolved to its index eagerly; the element index
+        // is 0 for a scalar field.
+        struct_field_read,
+        // Construct a value of a struct type from its field elements, in
+        // declaration order, flattened element-by-element (an array field
+        // contributes array_extent args).
+        struct_pack,
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
         target_has_feature,
         target_natural_vector_size,
         target_os_is,
+        // Takes the trace id of the pipeline. Marks where bounds inference
+        // should emit the halide_trace_bounds_required events for the
+        // pipeline's outermost loop level.
+        trace_bounds_required_marker,
         // An undef is a magic value where storing it has no observable effect.
         undef,
         // Mark a code path as unreachable so that it can be dead-code eliminated.

@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_serialization(py::module &m);
+void define_serialization(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

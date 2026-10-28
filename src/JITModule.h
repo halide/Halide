@@ -196,6 +196,24 @@ struct JITUserContext {
     JITHandlers handlers;
 };
 
+/** Hold a reference on the JIT thread pool's keep-awake count for the lifetime
+ * of this object, so that back-to-back small parallel loops don't pay to wake
+ * up the pool's threads. Instances may be nested, and may live on different
+ * threads. Idle threads keep their cores busy while any instance is alive, so
+ * hold one only around phases that run many short parallel loops. See
+ * halide_thread_pool_keep_awake in HalideRuntime.h for details. This is the
+ * JIT equivalent of Halide::Runtime::ThreadPoolKeepAwake, which is for AOT
+ * code. See also Internal::JITSharedRuntime::thread_pool_keep_awake. */
+class ThreadPoolKeepAwake {
+public:
+    ThreadPoolKeepAwake();
+    ~ThreadPoolKeepAwake();
+    ThreadPoolKeepAwake(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake &operator=(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake(ThreadPoolKeepAwake &&) = delete;
+    ThreadPoolKeepAwake &operator=(ThreadPoolKeepAwake &&) = delete;
+};
+
 namespace Internal {
 
 class JITModuleContents;
@@ -305,11 +323,19 @@ struct JITModule {
     /** See JITSharedRuntime::reuse_device_allocations */
     void reuse_device_allocations(bool) const;
 
+    /** See JITSharedRuntime::set_trace_file */
+    void set_trace_file(int fd) const;
+
     /** See JITSharedRuntime::get_num_threads */
     int get_num_threads() const;
 
     /** See JITSharedRuntime::set_num_threads */
     int set_num_threads(int) const;
+
+    /** Call this module's halide_thread_pool_keep_awake, if it has one, and
+     * return its result. Returns 0 otherwise. Prefer
+     * JITSharedRuntime::thread_pool_keep_awake. */
+    int thread_pool_keep_awake(bool) const;
 
     /** Return true if compile_module has been called on this module. */
     bool compiled() const;
@@ -342,6 +368,12 @@ public:
      * instead. */
     static void reuse_device_allocations(bool);
 
+    /** Set the file descriptor that JIT-compiled pipelines write binary
+     * trace events to. Applies to the shared runtime now if it exists,
+     * and whenever it is created later. Pass -1 to restore the default
+     * behavior. See halide_set_trace_file in HalideRuntime.h. */
+    static void set_trace_file(int fd);
+
     static void release_all();
 
     /** Get the number of threads in the Halide thread pool. Includes the
@@ -355,6 +387,16 @@ public:
      * avoid deadlock when using the async scheduling directive. Returns the old
      * number. */
     static int set_num_threads(int);
+
+    /** Acquire (true) or release (false) a reference on the keep-awake count of
+     * the shared JIT runtime's thread pool, and return the new number of
+     * references held through this function. See halide_thread_pool_keep_awake
+     * in HalideRuntime.h. The references are tracked here, so they may be
+     * acquired before any JIT code has run: they are applied when the shared
+     * runtime is created, and carried over to a new shared runtime after
+     * release_all. Releasing a reference that isn't held is a user error. Most
+     * code should use Halide::ThreadPoolKeepAwake instead. */
+    static int thread_pool_keep_awake(bool);
 
     /** Search the shared JIT runtime for `target` for a symbol with the
      * given name. Returns the first match's address, or nullptr if no

@@ -41,7 +41,9 @@ T cast_to(const py::handle &h) {
     // We want to ensure that the error thrown is one that will be translated
     // to `hl.HalideError` in Python.
     try {
-        return h.cast<T>();
+        return py::cast<T>(h);
+    } catch (const py::cast_error &) {
+        throw Halide::Error(py::cast<std::string>(py::str(h.type())) + " is not an instance of the expected argument type.");
     } catch (const std::exception &e) {
         throw Halide::Error(e.what());
     }
@@ -81,7 +83,8 @@ public:
         argv[0] = &scalar_storage[0];
         cci[0] = Callable::make_ucon_qcci();
 
-        const auto define_one_arg = [&argv, &scalar_storage, &buffers, &cci](const Argument &c_arg, py::handle value, size_t slot) {
+        std::vector<PythonArray> buffer_exports;
+        const auto define_one_arg = [&argv, &scalar_storage, &buffers, &cci, &buffer_exports](const Argument &c_arg, py::handle value, size_t slot) {
             if (c_arg.is_buffer()) {
                 halide_buffer_t *raw_buffer;
                 if (py::isinstance<Halide::Buffer<>>(value)) {
@@ -97,14 +100,15 @@ public:
                     // If it's a buffer-protocol object (e.g. a NumPy array), the convention
                     // is to always reverse axes.
                     constexpr bool reverse_axes = true;
-                    py::buffer py_buffer_value = cast_to<py::buffer>(value);
+                    PythonBuffer py_buffer_value = cast_to<PythonBuffer>(value);
                     const bool writable = c_arg.is_output();
 
-                    const py::buffer_info value_buffer_info = py_buffer_value.request(writable);
+                    buffer_exports.push_back(py_buffer_value.request(writable));
+                    const PythonArray &array = buffer_exports.back();
 
                     buffers.buffers[slot] =
-                        pybufferinfo_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
-                            value_buffer_info, reverse_axes);
+                        pyarray_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
+                            array, reverse_axes);
                     raw_buffer = buffers.buffers[slot].raw_buffer();
                 }
                 // Mark all input buffers as having a dirty host, so that the Halide call will
@@ -219,7 +223,7 @@ public:
 #undef TYPED_ALLOCA
 };
 
-void define_callable(py::module &m) {
+void define_callable(py::module_ &m) {
     // Not supported yet, because we want to think about how to expose runtime
     // overrides in Python (https://github.com/halide/Halide/issues/2790):
     // - JITUserContext

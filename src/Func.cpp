@@ -705,7 +705,12 @@ struct RFactorProjection {
     }
 };
 
-pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
+// If include_split_predicates is false, the predicates that splits of RVars
+// place on the projected RDom (e.g. to guard the tail of a GuardWithIf split)
+// are left out, so the projected RDom may cover points that are outside the
+// original RDom.
+pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits,
+                                                    bool include_split_predicates = true) {
     // The bounds projections maps expressions that reference the old RDom
     // bounds to expressions that reference the new RDom bounds (from dims).
     // We call this a projection because we are computing the symbolic image
@@ -752,7 +757,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             case ApplySplitResult::PredicateCalls:
             case ApplySplitResult::PredicateProvides:
             case ApplySplitResult::Predicate:
-                new_rdom.where(substitute(bounds_projection, result.value));
+                if (include_split_predicates) {
+                    new_rdom.where(substitute(bounds_projection, result.value));
+                }
                 break;
             case ApplySplitResult::Substitution:
             case ApplySplitResult::SubstitutionInCalls:
@@ -767,6 +774,33 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(dim_projection, dims[i].var, RVar(new_rdom, i));
     }
     return {new_rdom, dim_projection};
+}
+
+// Is the identity of the associative op also a right identity of the op as
+// written, i.e. does op(x, identity) simplify to x for every element of the
+// Tuple? If so, combining an element of an rfactor intermediate that was never
+// updated (and so still holds the identity) into the result is a no-op. This
+// is not the case for e.g. the unary op f() = g(r), or an argmax that keeps
+// the index from y on ties.
+bool identity_is_right_identity(const AssociativeOp &prover_result) {
+    std::map<string, Expr> y_to_identity;
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        if (!prover_result.ys[i].var.empty()) {
+            y_to_identity.emplace(prover_result.ys[i].var, prover_result.pattern.identities[i]);
+        }
+    }
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        const string &x = prover_result.xs[i].var;
+        if (x.empty()) {
+            return false;
+        }
+        Expr combined = simplify(substitute(y_to_identity, prover_result.pattern.ops[i]));
+        const Variable *v = combined.as<Variable>();
+        if (!v || v->name != x) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // A semiring distributive law used by hoist_invariants(): `inner` distributes
@@ -1129,8 +1163,25 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             intermediate_rdom.set_predicate(simplify(pred));
         }
 
-        // Preserved
-        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits);
+        // Preserved. Each point of the preserved RDom combines one element of
+        // the intermediate into the result. For example, consider summing over
+        // r in [0, N), splitting r into ro * 4 + ri with GuardWithIf, and
+        // preserving ri. The intermediate has four partial sums, one per ri,
+        // each initialized to zero and updated only where ro * 4 + ri < N.
+        // If N is 3, the partial sum for ri = 3 is never updated and stays zero.
+        // The final merge can still add all four partial sums: adding that
+        // zero is a no-op. Omitting the split's guard from the merge lets its
+        // RDom be [0, 4), independent of N.
+        //
+        // More generally, we can omit split predicates when the intermediate's
+        // initial value is a right identity: merging an element that was never
+        // updated does not change the result. The intermediate still needs the
+        // predicates to avoid evaluating the original update outside its RDom.
+        // The extra merge work is limited to the split tail (fewer than the
+        // split factor in each dimension). We keep user predicates, which
+        // might exclude much more.
+        const bool include_split_predicates = !identity_is_right_identity(prover_result);
+        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits, include_split_predicates);
         Scope<Interval> intm_rdom;
         for (size_t i = 0; i < intermediate_rdom.domain().size(); i++) {
             const auto &var = intermediate_rdims[i].var;
@@ -1380,9 +1431,9 @@ FuncVec Stage::hoist_invariants() {
     return intms;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, const Expr &align_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor_arg << "\n";
+             << outer << " and " << inner << " with factor of " << factor_arg << " and align " << align_arg << "\n";
 
     user_assert(factor_arg.defined())
         << "In schedule for " << name() << ", split factor for splitting "
@@ -1392,6 +1443,14 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         << old << " has type " << factor_arg.type()
         << ", which is not representable as int32.\n";
     Expr factor = cast<int32_t>(factor_arg);
+    Expr align;
+    if (align_arg.defined()) {
+        user_assert(Int(32).can_represent(align_arg.type()))
+            << "In schedule for " << name() << ", split align for splitting "
+            << old << " has type " << align_arg.type()
+            << ", which is not representable as int32.\n";
+        align = cast<int32_t>(align_arg);
+    }
 
     vector<Dim> &dims = definition.schedule().dims();
 
@@ -1595,11 +1654,11 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     }
 
     // Add the split to the splits list
-    Split split = {old_name, outer_name, inner_name, factor, exact, tail, Split::SplitVar};
+    Split split = {old_name, outer_name, inner_name, factor, align, exact, tail, Split::SplitVar};
     definition.schedule().splits().push_back(split);
 }
 
-Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+Stage &Stage::aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
     definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
@@ -1608,7 +1667,13 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
         user_assert(!outer.is_rvar) << "Can't split Var " << old.name() << " into RVar " << outer.name() << "\n";
         user_assert(!inner.is_rvar) << "Can't split Var " << old.name() << " into RVar " << inner.name() << "\n";
     }
-    split(old.name(), outer.name(), inner.name(), factor, old.is_rvar, tail);
+    split(old.name(), outer.name(), inner.name(), factor, align, old.is_rvar, tail);
+    return *this;
+}
+
+Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+    definition.schedule().touched() = true;
+    split(old.name(), outer.name(), inner.name(), factor, Expr(), old.is_rvar, tail);
     return *this;
 }
 
@@ -1690,7 +1755,7 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     set_dim_type(fused, dims[inner_pos].for_type);
 
     // Add the fuse to the splits list
-    Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
+    Split split = {fused_name, outer_name, inner_name, Expr(), Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
     definition.schedule().splits().push_back(split);
     return *this;
 }
@@ -1941,7 +2006,7 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
     }
 
     if (!found) {
-        Split split = {old_name, new_name, "", 1, old_var.is_rvar, TailStrategy::RoundUp, Split::RenameVar};
+        Split split = {old_name, new_name, "", 1, Expr(), old_var.is_rvar, TailStrategy::RoundUp, Split::RenameVar};
         definition.schedule().splits().push_back(split);
     }
 
@@ -2822,6 +2887,12 @@ Func &Func::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar 
     return *this;
 }
 
+Func &Func::aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).aligned_split(old, outer, inner, factor, align, tail);
+    return *this;
+}
+
 Func &Func::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
     invalidate_cache();
     Stage(func, func.definition(), 0).fuse(inner, outer, fused);
@@ -3364,6 +3435,69 @@ Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVa
     return *this;
 }
 
+Func &Func::split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor) {
+    invalidate_cache();
+
+    user_assert(!func.has_extern_definition())
+        << "In schedule for " << name()
+        << ", split_storage is not supported because " << name()
+        << " has an extern definition.\n";
+
+    user_assert(factor.defined())
+        << "In schedule for " << name()
+        << ", split_storage of " << old.name() << " has an undefined factor.\n";
+    user_assert(Int(32).can_represent(factor.type()))
+        << "In schedule for " << name()
+        << ", split_storage factor for splitting " << old.name()
+        << " has type " << factor.type()
+        << ", which is not representable as int32.\n";
+    user_assert(outer.name() != inner.name())
+        << "In schedule for " << name()
+        << ", split_storage of " << old.name()
+        << " uses the same name for the inner and outer axis.\n";
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (const StorageDim &dim : dims) {
+        for (const Var *new_var : {&outer, &inner}) {
+            if (var_name_match(dim.var, new_var->name()) &&
+                !var_name_match(dim.var, old.name())) {
+                user_error << "In schedule for " << name()
+                           << ", can't create storage axis " << new_var->name()
+                           << " using split_storage, because it is already used "
+                              "in this Func's storage schedule.\n"
+                           << dump_dim_list(dims);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, old.name())) {
+            user_assert(!dims[i].bound.defined() &&
+                        !dims[i].alignment.defined() &&
+                        !dims[i].fold_factor.defined())
+                << "In schedule for " << name()
+                << ", can't split_storage " << old.name()
+                << " because it already has a bound_storage, align_storage, or "
+                   "fold_storage setting. Apply these to the split axes instead.\n";
+            // Record the split so storage flattening can reconstruct
+            // the storage layout, then replace the old axis with the
+            // inner (innermost) and outer axes.
+            func.schedule().storage_splits().push_back(
+                {dims[i].var, outer.name(), inner.name(), cast<int32_t>(factor)});
+            StorageDim inner_dim = {inner.name()};
+            StorageDim outer_dim = {outer.name()};
+            dims[i] = inner_dim;
+            dims.insert(dims.begin() + i + 1, outer_dim);
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << old.name()
+               << " to split the storage of.\n"
+               << dump_dim_list(dims);
+    return *this;
+}
+
 Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
 
@@ -3447,6 +3581,14 @@ Func &Func::bound_storage(const Var &dim, const Expr &bound) {
 
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
+
+    for (const StorageSplit &split : func.schedule().storage_splits()) {
+        user_assert(!var_name_match(split.outer, dim.name()) &&
+                    !var_name_match(split.inner, dim.name()))
+            << "In schedule for " << name()
+            << ", can't fold_storage " << dim.name()
+            << " because it is a split_storage axis.\n";
+    }
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
     for (auto &d : dims) {
@@ -3705,7 +3847,7 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
 //
 // This constraint keeps the recurrence visible to the overflow proof.
 Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
-                  const FuncValueBounds &fvb) {
+                  const FuncValueBounds &fvb, bool unsafe) {
     auto retype_self_reference = [&](const Expr &expr) {
         if (const Call *c = expr.as<Call>(); c && c->call_type == Call::Halide && c->name == fname) {
             return Call::make(dst, c->args, c->value_index, /*follow_global_wrappers=*/false);
@@ -3732,6 +3874,21 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
         user_assert(e.node_type() != IRNodeType::Sub || a_is_self)
             << "change_type() only supports difference reductions of the form "
             << fname << "(...) - term.\n";
+        // Accumulating a product at a float type t (unsafe: rounding each
+        // step): when both factors are exactly representable in t, prefer
+        // fma(a, b, acc), rounding the step once rather than the product and
+        // then the sum (cf. the widening_mul preference in retype_leaf()).
+        // A safe retype's steps are exact, so there it would change nothing.
+        const Expr &term = a_is_self ? operands->second : operands->first;
+        if (const Mul *mul = term.as<Mul>();
+            unsafe && mul && e.node_type() == IRNodeType::Add && t.is_float() && !t.is_bfloat()) {
+            std::map<Expr, ConstantInterval, ExprCompare> cache;
+            Expr x = lossless_cast(t, mul->a, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+            Expr y = lossless_cast(t, mul->b, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+            if (x.defined() && y.defined()) {
+                return fma(x, y, retype_self_reference(a_is_self ? operands->first : operands->second));
+            }
+        }
         Expr a = a_is_self ? retype_self_reference(operands->first) : retype_leaf(operands->first, t, fvb);
         Expr b = b_is_self ? retype_self_reference(operands->second) : retype_leaf(operands->second, t, fvb);
         return make_binary_op(e.node_type(), a, b);
@@ -4117,7 +4274,7 @@ Func Func::change_type(Type t, bool unsafe) {
         vector<Expr> vals;
         vals.reserve(def.values().size());
         for (const Expr &v : def.values()) {
-            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds, unsafe));
         }
         typed.function().define_update(def.args(), vals);
         typed.function().update(u).schedule() = def.schedule().get_copy();
@@ -4181,6 +4338,12 @@ Func &Func::trace_stores() {
 Func &Func::trace_realizations() {
     invalidate_cache();
     func.trace_realizations();
+    return *this;
+}
+
+Func &Func::trace_bounds_required() {
+    invalidate_cache();
+    func.trace_bounds_required();
     return *this;
 }
 

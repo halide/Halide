@@ -146,6 +146,7 @@ struct Target {
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
         TracePipeline = halide_target_feature_trace_pipeline,
+        TraceBoundsRequired = halide_target_feature_trace_bounds_required,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
         TSAN = halide_target_feature_tsan,
@@ -206,6 +207,7 @@ struct Target {
         HLSL_SM67 = halide_target_feature_hlsl_sm67,
         HLSL_SM68 = halide_target_feature_hlsl_sm68,
         HLSL_SM69 = halide_target_feature_hlsl_sm69,
+        NoMetadata = halide_target_feature_no_metadata,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

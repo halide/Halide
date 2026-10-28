@@ -20,17 +20,22 @@ set(Halide_CACHE_DIR "$ENV{HL_CACHE_DIR}"
 )
 
 # Produce the command prefix used to invoke a generator executable target. When
-# a cache directory is configured, the invocation is wrapped in
-# `cmake -E env HL_CACHE_DIR=... --` so the value reaches the generator process,
+# a cache directory or environment is configured, the invocation is wrapped in
+# `cmake -E env ... --` so the values reach the generator process,
 # and the executable is referenced by file (a bare target name only
-# auto-resolves as the first token of a COMMAND). When no cache is configured
+# auto-resolves as the first token of a COMMAND). When neither is configured
 # the bare target is returned, so the emitted command is identical to before.
 # In both cases the caller is responsible for listing the target in DEPENDS.
 function(_Halide_generator_invocation OUT_VAR GEN_TARGET)
+    cmake_parse_arguments(PARSE_ARGV 2 ARG "" "" "ENVIRONMENT")
+    set(env_assignments ${ARG_ENVIRONMENT})
     if (Halide_CACHE_DIR)
+        list(PREPEND env_assignments "HL_CACHE_DIR=${Halide_CACHE_DIR}")
+    endif ()
+    if (env_assignments)
         set(${OUT_VAR}
-            ${CMAKE_COMMAND} -E env "HL_CACHE_DIR=${Halide_CACHE_DIR}" --
-            "$<TARGET_FILE:${GEN_TARGET}>" PARENT_SCOPE
+            ${CMAKE_COMMAND} -E env ${env_assignments} -- "$<TARGET_FILE:${GEN_TARGET}>"
+            PARENT_SCOPE
         )
     else ()
         set(${OUT_VAR} "${GEN_TARGET}" PARENT_SCOPE)
@@ -147,6 +152,14 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             add_executable(${gen} ALIAS ${TARGET})
+            list(LENGTH Halide_CMAKE_TARGET num_platforms)
+            if (
+                APPLE
+                AND num_platforms GREATER 1
+                AND Halide_HOST_TARGET MATCHES "^(arm|x86)-64-macos$"
+            )
+                _Halide_set_osx_arch("${TARGET}" "${Halide_HOST_TARGET}")
+            endif ()
 
             if (NOT TARGET Halide::Generator)
                 find_package(HalideCompiler REQUIRED)
@@ -209,7 +222,21 @@ function(add_halide_generator TARGET)
         )
         file(CONFIGURE OUTPUT "${stub_file}" CONTENT "${stub_text}" @ONLY)
 
-        Python_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
+        find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+        if (
+            NOT Python_INTERPRETER_ID STREQUAL "Python"
+            OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t"
+        )
+            message(
+                FATAL_ERROR "Halide Python stubs require regular (GIL-enabled) CPython 3.12 or newer."
+            )
+        endif ()
+        Python_add_library(
+            ${TARGET}_pystub
+            MODULE
+            USE_SABI 3.12
+            WITH_SOABI "${stub_file}" ${ARG_SOURCES}
+        )
         set_target_properties(${TARGET}_pystub
             PROPERTIES
             CXX_VISIBILITY_PRESET hidden
@@ -260,7 +287,7 @@ endfunction()
 
 function(_Halide_library_from_generator TARGET)
     cmake_parse_arguments(
-        PARSE_ARGV 1 ARG ""
+        PARSE_ARGV 1 ARG "INTERNAL"
         "FILE_BASE_NAME;FUNCTION_NAME;GENERATOR;GRADIENT_DESCENT;OUTPUT_DIR;TYPE;USE_RUNTIME"
         "COMMAND;DEPENDS;EXTRA_OUTPUTS;PARAMS;PLUGINS;TARGETS"
     )
@@ -393,12 +420,16 @@ function(_Halide_library_from_generator TARGET)
 
     foreach (out file IN ZIP_LISTS outputs output_files)
         list(APPEND "local_out_${out}" "${file}")
-        list(APPEND "OUT_${out}" "${file}")
+        if (NOT ARG_INTERNAL)
+            list(APPEND "OUT_${out}" "${file}")
+        endif ()
     endforeach ()
 
-    foreach (out IN LISTS outputs)
-        set("OUT_${out}" "${OUT_${out}}" PARENT_SCOPE)
-    endforeach ()
+    if (NOT ARG_INTERNAL)
+        foreach (out IN LISTS outputs)
+            set("OUT_${out}" "${OUT_${out}}" PARENT_SCOPE)
+        endforeach ()
+    endif ()
 
     # Create the filter's library target
     if (ARG_TYPE STREQUAL "static_library")
@@ -433,11 +464,13 @@ function(_Halide_library_from_generator TARGET)
         _Halide_add_targets_to_runtime("${ARG_USE_RUNTIME}" TARGETS ${ARG_TARGETS})
     endif ()
 
-    target_sources(
-        "${TARGET}"
-        INTERFACE
-        FILE_SET HEADERS BASE_DIRS "${ARG_OUTPUT_DIR}" FILES "${local_out_c_header}"
-    )
+    if (NOT ARG_INTERNAL)
+        target_sources(
+            "${TARGET}"
+            INTERFACE
+            FILE_SET HEADERS BASE_DIRS "${ARG_OUTPUT_DIR}" FILES "${local_out_c_header}"
+        )
+    endif ()
 endfunction()
 
 function(_Halide_lipo)
@@ -506,7 +539,7 @@ function(_Halide_lipo)
 endfunction()
 
 function(_Halide_compute_generator_cmd)
-    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "FROM;OUT_COMMAND;OUT_DEPENDS" "")
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "FROM;OUT_COMMAND;OUT_DEPENDS" "ENVIRONMENT")
 
     if (NOT ARG_FROM)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
@@ -525,7 +558,7 @@ function(_Halide_compute_generator_cmd)
 
     get_property(py_src TARGET "${ARG_FROM}" PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (NOT py_src)
-        _Halide_generator_invocation(gen_cmd "${ARG_FROM}")
+        _Halide_generator_invocation(gen_cmd "${ARG_FROM}" ENVIRONMENT ${ARG_ENVIRONMENT})
         set("${ARG_OUT_COMMAND}" ${gen_cmd} PARENT_SCOPE)
         set("${ARG_OUT_DEPENDS}" "${ARG_FROM}" PARENT_SCOPE)
         return()
@@ -550,9 +583,9 @@ function(_Halide_compute_generator_cmd)
 
     set("${ARG_OUT_COMMAND}"
         ${CMAKE_COMMAND} -E env
-        "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" ${cache_env_assign} --
-        ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" $<SHELL_PATH:${py_src}>
-        PARENT_SCOPE
+        "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" ${cache_env_assign}
+        ${ARG_ENVIRONMENT} -- ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>"
+        $<SHELL_PATH:${py_src}> PARENT_SCOPE
     )
     set("${ARG_OUT_DEPENDS}" ${ARG_FROM} Halide::Python ${py_src} PARENT_SCOPE)
 endfunction()
@@ -705,7 +738,7 @@ function(add_halide_library TARGET)
         FILE_BASE_NAME FROM GENERATOR FUNCTION_NAME NAMESPACE OUTPUT_DIR USE_RUNTIME AUTOSCHEDULER
         HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS
     )
-    set(multiValueArgs DEPENDS TARGETS PARAMS PLUGINS ${features_args})
+    set(multiValueArgs DEPENDS ENVIRONMENT TARGETS PARAMS PLUGINS ${features_args})
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT "${ARG_UNPARSED_ARGUMENTS}" STREQUAL "")
@@ -862,8 +895,16 @@ function(add_halide_library TARGET)
     # Main library target for filter.
     ##
 
+    foreach (assignment IN LISTS ARG_ENVIRONMENT)
+        if (NOT assignment MATCHES "^[A-Za-z_][A-Za-z0-9_]*=")
+            message(
+                FATAL_ERROR "ENVIRONMENT entries must have the form VAR=value, got: ${assignment}"
+            )
+        endif ()
+    endforeach ()
     _Halide_compute_generator_cmd(
         FROM "${ARG_FROM}"
+        ENVIRONMENT ${ARG_ENVIRONMENT}
         OUT_COMMAND generator_cmd
         OUT_DEPENDS generator_cmd_deps
     )
@@ -872,7 +913,6 @@ function(add_halide_library TARGET)
         COMMAND ${generator_cmd}  #
         DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS}  #
         EXTRA_OUTPUTS ${extra_outputs}  #
-        FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"  #
         FUNCTION_NAME "${ARG_FUNCTION_NAME}"  #
         GENERATOR "${ARG_GENERATOR}"  #
         GRADIENT_DESCENT "${ARG_GRADIENT_DESCENT}"  #
@@ -894,6 +934,7 @@ function(add_halide_library TARGET)
     if (common_triple STREQUAL "cmake" AND num_platforms GREATER 1)
         set(merged_base "")
         set(merged_libs "")
+        set(have_public_outputs FALSE)
 
         foreach (triple IN LISTS Halide_CMAKE_TARGET)
             set(features_arch "ARG_FEATURES[${triple}]")
@@ -907,6 +948,7 @@ function(add_halide_library TARGET)
             list(TRANSFORM targets_arch APPEND "-${ARG_FEATURES}")
             list(TRANSFORM targets_arch REPLACE "-$" "")
 
+            set(slice_args "")
             if (NOT merged_base AND NOT ARG_C_BACKEND)
                 set(this_lib "${TARGET}")
                 set(merged_base "${this_lib}")
@@ -915,8 +957,20 @@ function(add_halide_library TARGET)
                 list(APPEND merged_libs "${this_lib}")
             endif ()
 
+            if (NOT have_public_outputs)
+                set(file_base_name "${ARG_FILE_BASE_NAME}")
+                set(have_public_outputs TRUE)
+            else ()
+                set(file_base_name "${ARG_FILE_BASE_NAME}-${triple}")
+                list(APPEND slice_args INTERNAL)
+            endif ()
+
             # Appends to OUT_c_header, OUT_<extra-output>, etc.
-            _Halide_library_from_generator("${this_lib}" ${generator_args} TARGETS ${targets_arch})
+            _Halide_library_from_generator(
+                "${this_lib}" ${generator_args}
+                FILE_BASE_NAME "${file_base_name}"
+                TARGETS ${targets_arch} ${slice_args}
+            )
             _Halide_set_osx_arch("${this_lib}" "${triple}")
         endforeach ()
 
@@ -933,7 +987,11 @@ function(add_halide_library TARGET)
         endif ()
 
         # Appends to OUT_c_header, OUT_<extra-output>, etc.
-        _Halide_library_from_generator("${TARGET}" ${generator_args} TARGETS ${ARG_TARGETS})
+        _Halide_library_from_generator(
+            "${TARGET}" ${generator_args}
+            FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"
+            TARGETS ${ARG_TARGETS}
+        )
     endif ()
 
     # Save metadata on the library target for downstream helpers.
@@ -1071,7 +1129,18 @@ function(add_halide_python_extension_library TARGET)
         VERBATIM
     )
 
-    Python_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.SABIModule)
+    if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
+        message(
+            FATAL_ERROR "Halide Python extensions require regular (GIL-enabled) CPython 3.12 or newer."
+        )
+    endif ()
+    Python_add_library(
+        ${TARGET}
+        MODULE
+        USE_SABI 3.12
+        WITH_SOABI ${pycpps} ${pyext_module_definition_src}
+    )
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
     # Generated modules expose halide.runtime.Kernel objects. Keep an in-tree
     # runtime module available for tests; installed consumers satisfy this as a

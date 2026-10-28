@@ -1,24 +1,25 @@
 #include "PyTuple.h"
+#include <nanobind/make_iterator.h>
 
 namespace Halide {
 namespace PythonBindings {
 
 Tuple to_halide_tuple(const py::object &o) {
     try {
-        Expr e = o.cast<Expr>();
+        Expr e = py::cast<Expr>(o);
         return Tuple(e);
     } catch (const py::cast_error &) {
         // fall thru
     }
 
     try {
-        py::tuple t = o.cast<py::tuple>();
+        py::tuple t = py::cast<py::tuple>(o);
         if (t.empty()) {
             throw py::value_error("Cannot use a zero-length tuple-of-Expr");
         }
         std::vector<Expr> v(t.size());
         for (size_t i = 0; i < t.size(); i++) {
-            v[i] = t[i].cast<Expr>();
+            v[i] = py::cast<Expr>(t[i]);
         }
         return Tuple(v);
     } catch (const py::cast_error &) {
@@ -30,15 +31,15 @@ Tuple to_halide_tuple(const py::object &o) {
 
 namespace {
 
-py::iterator tuple_iterator(const Tuple &t) {
-    return py::make_iterator(t.begin(), t.end());
+auto tuple_iterator(const Tuple &t) {
+    return py::make_iterator(py::type<Tuple>(), "TupleIterator", t.begin(), t.end());
 }
 
 }  // namespace
 
-void define_tuple(py::module &m) {
+void define_tuple(py::module_ &m) {
     // Halide::Tuple isn't surfaced to the user in Python;
-    // we define it here to allow PyBind to do some automatic
+    // we define it here to allow nanobind to do some automatic
     // conversion from Python's built-in tuple type.
     //
     // TODO: AFAICT, there isn't a good way to auto-convert Halide::Tuple-as-return-type
@@ -47,15 +48,15 @@ void define_tuple(py::module &m) {
     auto tuple_class =
         py::class_<Tuple>(m, "Tuple")
             // for implicitly_convertible
-            .def(py::init([](const py::tuple &t) -> Tuple {
+            .def("__init__", [](Tuple *self, const py::tuple &t) {
                 std::vector<Expr> v;
                 v.reserve(t.size());
                 for (const auto o : t) {
-                    v.push_back(o.cast<Expr>());
+                    v.push_back(py::cast<Expr>(o));
                 }
-                return Tuple(v);
-            }))
-            .def(py::init([](const FuncRef &f) -> Tuple {
+                new (self) Tuple(Tuple(v));
+            })
+            .def("__init__", [](Tuple *self, const FuncRef &f) {
                 std::vector<Expr> v;
                 v.reserve(f.size());
                 if (f.size() == 1) {
@@ -65,11 +66,11 @@ void define_tuple(py::module &m) {
                         v.push_back(f[(int)i]);
                     }
                 }
-                return Tuple(v);
-            }))
-            .def(py::init([](const std::vector<Expr> &v) -> Tuple {
-                return Tuple(v);
-            }))
+                new (self) Tuple(Tuple(v));
+            })
+            .def("__init__", [](Tuple *self, const std::vector<Expr> &v) {
+                new (self) Tuple(Tuple(v));
+            })
             .def("__len__", &Tuple::size)
             .def("__getitem__", [](const Tuple &t, size_t i) -> Expr {
                 if (i >= t.size()) {

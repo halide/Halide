@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 project(onnx_app)
+add_custom_target(onnx)
 
 enable_testing()
 
@@ -89,6 +90,7 @@ add_halide_library(
 # Test the generated static library
 add_executable(onnx_converter_generator_test onnx_converter_generator_test.cc)
 target_link_libraries(onnx_converter_generator_test PRIVATE Halide::Runtime test_model)
+add_dependencies(onnx onnx_converter_test onnx_converter_generator_test)
 
 add_test(NAME onnx_converter_generator_test COMMAND onnx_converter_generator_test)
 set_tests_properties(
@@ -100,9 +102,13 @@ set_tests_properties(
 )
 
 # Python bindings to convert onnx models to Halide model
-find_package(Python 3 COMPONENTS Interpreter Development.Module)
+find_package(Python 3.12 COMPONENTS Interpreter Development.Module Development.SABIModule)
 if (NOT Python_FOUND)
     message(WARNING "Could NOT find Python")
+    return()
+endif ()
+if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
+    message(WARNING "ONNX bindings require regular (GIL-enabled) CPython 3.12 or newer.")
     return()
 endif ()
 
@@ -113,14 +119,19 @@ endif ()
 # converts native separators to forward slashes, sidestepping the issue on all
 # CMake versions.
 file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
-find_package(pybind11 HINTS "${Python_SITEARCH}")
-if (NOT pybind11_FOUND)
-    message(WARNING "Could NOT find pybind11")
+find_package(nanobind 2.11...<2.12 CONFIG HINTS "${Python_SITEARCH}/nanobind/cmake")
+if (NOT nanobind_FOUND)
+    message(WARNING "Could NOT find nanobind")
     return()
 endif ()
 
-pybind11_add_module(model_cpp model.cpp benchmarking_utils.h common_types.h denormal_disabler.h)
+nanobind_add_module(
+    model_cpp
+    STABLE_ABI
+    NB_SUPPRESS_WARNINGS model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
+)
 target_link_libraries(model_cpp PRIVATE Halide::Halide onnx_app::oclib)
+add_dependencies(onnx model_cpp)
 
 add_test(
     NAME model_test

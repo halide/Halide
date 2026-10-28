@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <set>
 #include <string>
@@ -447,6 +448,22 @@ void compile_module_impl(
     auto dtorRunner = std::make_unique<llvm::orc::CtorDtorRunner>(JIT->getMainJITDylib());
     dtorRunner->add(dtors);
 
+#ifdef _WIN32
+    // JIT code has no import table, so the process-wide search below can bind
+    // C runtime functions to any loaded CRT that exports them, e.g. the
+    // msvcrt.dll that advapi32.dll pulls in. Each CRT has its own state (the
+    // environment, FILE handles, the heap), so search the CRT that libHalide
+    // itself uses first.
+    const void *crt_function = (const void *)&::getenv;
+    HMODULE crt = nullptr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)crt_function, &crt)) {
+        JIT->getMainJITDylib().addGenerator(
+            std::make_unique<llvm::orc::DynamicLibrarySearchGenerator>(
+                llvm::sys::DynamicLibrary(crt), target_data_layout.getGlobalPrefix()));
+    }
+#endif
+
     // Resolve system symbols (like pthread, dl and others)
 #if defined(__GNUC__) && !defined(__clang__)
     // GCC's -Wuninitialized/-Wmaybe-uninitialized misfires on the move
@@ -677,6 +694,14 @@ void JITModule::reuse_device_allocations(bool b) const {
     }
 }
 
+void JITModule::set_trace_file(int fd) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_set_trace_file");
+    if (f != exports().end()) {
+        (reinterpret_bits<void (*)(void *, int)>(f->second.address))(nullptr, fd);
+    }
+}
+
 int JITModule::get_num_threads() const {
     std::map<std::string, Symbol>::const_iterator f =
         exports().find("halide_get_num_threads");
@@ -695,6 +720,15 @@ int JITModule::set_num_threads(int n) const {
     return 1;
 }
 
+int JITModule::thread_pool_keep_awake(bool keep_awake) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_thread_pool_keep_awake");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)(bool)>(f->second.address))(keep_awake);
+    }
+    return 0;
+}
+
 bool JITModule::compiled() const {
     return jit_module->JIT != nullptr;
 }
@@ -705,6 +739,13 @@ JITHandlers runtime_internal_handlers;
 JITHandlers default_handlers;
 JITHandlers active_handlers;
 int64_t default_cache_size;
+int default_trace_file = -1;
+
+// The number of references held through JITSharedRuntime::thread_pool_keep_awake,
+// and whether the MainShared runtime currently holds one reference on their
+// behalf. Guarded by shared_runtimes_mutex.
+int keep_awake_count = 0;
+bool keep_awake_applied = false;
 
 void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_print) {
@@ -1186,6 +1227,15 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 runtime.memoization_cache_set_size(default_cache_size);
             }
 
+            if (default_trace_file != -1) {
+                runtime.set_trace_file(default_trace_file);
+            }
+
+            if (keep_awake_count > 0) {
+                runtime.thread_pool_keep_awake(true);
+                keep_awake_applied = true;
+            }
+
             runtime.jit_module->name = "MainShared";
         } else {
             runtime.jit_module->name = "GPU";
@@ -1422,6 +1472,13 @@ void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, c
 void JITSharedRuntime::release_all() {
     std::scoped_lock lock(shared_runtimes_mutex);
 
+    // Compiled pipelines may keep the old runtime alive, so let its thread
+    // pool sleep. A new runtime picks up the reference when it's created.
+    if (keep_awake_applied) {
+        shared_runtimes(MainShared).thread_pool_keep_awake(false);
+        keep_awake_applied = false;
+    }
+
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
     }
@@ -1454,6 +1511,12 @@ void JITSharedRuntime::reuse_device_allocations(bool b) {
     shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
+void JITSharedRuntime::set_trace_file(int fd) {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    default_trace_file = fd;
+    shared_runtimes(MainShared).set_trace_file(fd);
+}
+
 int JITSharedRuntime::get_num_threads() {
     std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).get_num_threads();
@@ -1462,6 +1525,27 @@ int JITSharedRuntime::get_num_threads() {
 int JITSharedRuntime::set_num_threads(int n) {
     std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
+}
+
+int JITSharedRuntime::thread_pool_keep_awake(bool keep_awake) {
+    std::scoped_lock lock(shared_runtimes_mutex);
+    // The MainShared runtime holds a single reference while keep_awake_count
+    // is positive, so that references can be acquired before it exists.
+    if (keep_awake) {
+        if (keep_awake_count++ == 0 && shared_runtimes(MainShared).compiled()) {
+            shared_runtimes(MainShared).thread_pool_keep_awake(true);
+            keep_awake_applied = true;
+        }
+    } else {
+        user_assert(keep_awake_count > 0)
+            << "JITSharedRuntime::thread_pool_keep_awake(false) called without a "
+            << "matching JITSharedRuntime::thread_pool_keep_awake(true).\n";
+        if (--keep_awake_count == 0 && keep_awake_applied) {
+            shared_runtimes(MainShared).thread_pool_keep_awake(false);
+            keep_awake_applied = false;
+        }
+    }
+    return keep_awake_count;
 }
 
 void *JITSharedRuntime::find_symbol(const Target &target, const std::string &name) {
@@ -1610,4 +1694,13 @@ void JITFuncCallContext::finalize(int exit_status) {
 }
 
 }  // namespace Internal
+
+ThreadPoolKeepAwake::ThreadPoolKeepAwake() {
+    Internal::JITSharedRuntime::thread_pool_keep_awake(true);
+}
+
+ThreadPoolKeepAwake::~ThreadPoolKeepAwake() {
+    Internal::JITSharedRuntime::thread_pool_keep_awake(false);
+}
+
 }  // namespace Halide

@@ -91,9 +91,6 @@ jobs:
       - run: make test_generator
         if: ${{ !cancelled() && runner.os != 'macOS' }}
 
-      - run: make test_error
-        if: ${{ !cancelled() && runner.os != 'macOS' }}
-
       - run: make test_warning
         if: ${{ !cancelled() && runner.os != 'macOS' }}
 

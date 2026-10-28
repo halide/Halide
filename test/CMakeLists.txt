@@ -42,11 +42,6 @@ if (WITH_TEST_CORRECTNESS)
     add_subdirectory(correctness)
 endif ()
 
-Halide_feature(WITH_TEST_ERROR "Build error tests" ON)
-if (WITH_TEST_ERROR)
-    add_subdirectory(error)
-endif ()
-
 Halide_feature(WITH_TEST_WARNING "Build warning tests" ON)
 if (WITH_TEST_WARNING)
     add_subdirectory(warning)
@@ -89,3 +84,12 @@ Halide_feature(WITH_TEST_DEBUGGER "Build debugger-integration tests" ON)
 if (WITH_TEST_DEBUGGER)
     add_subdirectory(debugger)
 endif ()
+
+add_test(
+    NAME filter_dll_exports
+    COMMAND
+        "${CMAKE_COMMAND}" "-DSCRIPT=${Halide_SOURCE_DIR}/cmake/FilterDllExports.cmake"
+        "-DDIR=${CMAKE_CURRENT_SOURCE_DIR}/filter_dll_exports"
+        "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/filter_dll_exports.out.def" -P
+        "${CMAKE_CURRENT_SOURCE_DIR}/filter_dll_exports/run.cmake"
+)

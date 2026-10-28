@@ -9,7 +9,7 @@ namespace PythonBindings {
 // Methods that are defined on both Func and Stage.
 template<typename PythonClass>
 HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
-    using T = typename PythonClass::type;
+    using T = typename PythonClass::Type;
 
     class_instance
 
@@ -29,6 +29,8 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
 
         .def("split", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy)) & T::split,
              py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"), py::arg("tail") = TailStrategy::Auto)
+        .def("aligned_split", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, TailStrategy)) & T::aligned_split,
+             py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"), py::arg("align"), py::arg("tail") = TailStrategy::Auto)
 
         .def("fuse", &T::fuse,
              py::arg("inner"), py::arg("outer"), py::arg("fused"))
@@ -79,16 +81,17 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
 
         .def("gpu_lanes", (T & (T::*)(const VarOrRVar &, DeviceAPI)) & T::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
 
-        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
-
-        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
+        // Prefer higher-dimensional overloads before tile sizes can convert to optional enums.
+        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("y"), py::arg("z"), py::arg("bx"), py::arg("by"), py::arg("bz"), py::arg("tx"), py::arg("ty"), py::arg("tz"), py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
+        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("y"), py::arg("z"), py::arg("tx"), py::arg("ty"), py::arg("tz"), py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("y"), py::arg("bx"), py::arg("by"), py::arg("tx"), py::arg("ty"), py::arg("x_size"), py::arg("y_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("y"), py::arg("tx"), py::arg("ty"), py::arg("x_size"), py::arg("y_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
-        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("y"), py::arg("z"), py::arg("bx"), py::arg("by"), py::arg("bz"), py::arg("tx"), py::arg("ty"), py::arg("tz"), py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
-        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("y"), py::arg("z"), py::arg("tx"), py::arg("ty"), py::arg("tz"), py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
+        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
+
+        .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
         .def("rename", &T::rename, py::arg("old_name"), py::arg("new_name"))
 

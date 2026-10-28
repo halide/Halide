@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <random>
 #include <sstream>
 #include <string>
 
@@ -1095,6 +1096,55 @@ int change_type_float_target_precision_rejected_test() {
     return 0;
 }
 
+// An unsafe retype of a float dot product to a narrower float, both factors
+// exactly representable there, accumulates by fused multiply-add: each step
+// rounded once (as a hardware fma.f16 accumulator), not the product and then
+// the sum.
+int change_type_unsafe_float_fma_test() {
+    const int K = 64, N = 16;
+    ImageParam A{Float(16), 2, "A_fma"}, B{Float(16), 1, "B_fma"};
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc_fma"};
+    Acc(i) = 0.0f;
+    Acc(i) += cast<float>(A(r, i)) * cast<float>(B(r));
+    Func Acc_f16 = Acc.change_type(Float(16), /*unsafe*/ true);
+
+    bool fused = false;
+    Internal::visit_with(Acc_f16.update_value().get(), [&](auto *self, const Internal::Call *c) {
+        fused |= c->is_intrinsic(Internal::Call::strict_fma);
+        self->visit_base(c);
+    });
+    internal_assert(fused) << "expected the retyped update to be an fma: " << Acc_f16.update_value() << "\n";
+
+    // Values k/256 in [-2, 2): products and partial sums are exact in double,
+    // so rounding the double sum to float16 is the fma's single rounding.
+    Buffer<float16_t> a(K, N), b(K);
+    std::mt19937 rng(0);
+    a.for_each_value([&](float16_t &v) { v = float16_t((int(rng() % 1024) - 512) / 256.0); });
+    b.for_each_value([&](float16_t &v) { v = float16_t((int(rng() % 1024) - 512) / 256.0); });
+    A.set(a);
+    B.set(b);
+    Buffer<float16_t> out = Acc_f16.realize({N});
+
+    bool distinguishes = false;
+    for (int n = 0; n < N; n++) {
+        float16_t fma_acc(0.0), two_acc(0.0);
+        for (int k = 0; k < K; k++) {
+            double p = (double)a(k, n) * (double)b(k);
+            fma_acc = float16_t((double)fma_acc + p);
+            two_acc = float16_t((double)two_acc + (double)float16_t(p));
+        }
+        distinguishes |= fma_acc.to_bits() != two_acc.to_bits();
+        internal_assert(out(n).to_bits() == fma_acc.to_bits())
+            << "change_type fma accumulation mismatch at " << n << ": " << (double)out(n)
+            << " vs " << (double)fma_acc << "\n";
+    }
+    internal_assert(distinguishes) << "test data should tell one rounding per step from two\n";
+    return 0;
+}
+
 // A second update stage that clamps the accumulator with a big minimum does
 // not relax the safety check on the summation before it: the accumulator is
 // physically stored as `t` between stages, so a sum that can overflow `t` is
@@ -1367,6 +1417,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_float_target_precision_rejected_test\n");
     if (change_type_float_target_precision_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_unsafe_float_fma_test\n");
+    if (change_type_unsafe_float_fma_test()) {
         return 1;
     }
     printf("Running change_type_sum_then_clamp_test\n");

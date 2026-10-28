@@ -32,6 +32,9 @@ struct CallableContents {
     // Encoded values for complete runtime type checking, used
     // only for make_std_function. Lazily created.
     std::vector<Callable::FullCallCheckInfo> full_call_check_info;
+
+    // The number of live ProfilerScopes for this Callable.
+    int profiler_scopes = 0;
 };
 
 namespace Internal {
@@ -52,6 +55,22 @@ Callable::Callable()
 
 bool Callable::defined() const {
     return contents.defined();
+}
+
+int &Callable::profiler_scopes() const {
+    return contents->profiler_scopes;
+}
+
+JITCache &Callable::jit_cache() const {
+    return contents->jit_cache;
+}
+
+const JITHandlers &Callable::saved_jit_handlers() const {
+    return contents->saved_jit_handlers;
+}
+
+const std::string &Callable::name() const {
+    return contents->name;
 }
 
 Callable::Callable(const std::string &name,
@@ -195,7 +214,9 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
     int exit_status = contents->jit_cache.call_jit_code(argv);
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    if (contents->profiler_scopes == 0) {
+        contents->jit_cache.finish_profiling(context);
+    }
 
     jit_call_context.finalize(exit_status);
 

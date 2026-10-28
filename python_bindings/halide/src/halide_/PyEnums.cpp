@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_enums(py::module &m) {
+void define_enums(py::module_ &m) {
     py::enum_<Argument::Kind>(m, "ArgumentKind")
         .value("InputScalar", Argument::Kind::InputScalar)
         .value("InputBuffer", Argument::Kind::InputBuffer)
@@ -116,16 +116,7 @@ void define_enums(py::module &m) {
             .value("NoOS", Target::OS::NoOS)
             .value("wasmrt", Target::OS::WebAssemblyRuntime);
 
-    // OSX is deprecated in C++ (identical to MacOS), but the Python binding
-    // is kept for one release for backwards compatibility.
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-    target_os.value("OSX", Target::OS::OSX);
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
+    // The deprecated OSX alias is provided by the Python package initializer.
 
     py::enum_<Target::Arch>(m, "TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
@@ -217,6 +208,7 @@ void define_enums(py::module &m) {
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("TracePipeline", Target::Feature::TracePipeline)
+        .value("TraceBoundsRequired", Target::Feature::TraceBoundsRequired)
         .value("D3D12Compute", Target::Feature::D3D12Compute)
         .value("StrictFloat", Target::Feature::StrictFloat)
         .value("TSAN", Target::Feature::TSAN)
@@ -277,13 +269,15 @@ void define_enums(py::module &m) {
         .value("HLSL_SM67", Target::Feature::HLSL_SM67)
         .value("HLSL_SM68", Target::Feature::HLSL_SM68)
         .value("HLSL_SM69", Target::Feature::HLSL_SM69)
+        .value("NoMetadata", Target::Feature::NoMetadata)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
         .value("Int", Type::Int)
         .value("UInt", Type::UInt)
         .value("Float", Type::Float)
-        .value("Handle", Type::Handle);
+        .value("Handle", Type::Handle)
+        .value("Struct", Type::StructKind);
 
     py::enum_<OutputFileType>(m, "OutputFileType")
         .value("assembly", OutputFileType::assembly)

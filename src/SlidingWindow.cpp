@@ -995,13 +995,24 @@ class InjectWarmupGuards : public IRMutator {
         return has_common_start(op) ? wrap(op) : IRMutator::visit(op);
     }
 
+    Stmt visit(const LetStmt *op) override {
+        return has_common_start(op) ? wrap(op) : IRMutator::visit(op);
+    }
+
     Stmt visit(const Provide *op) override {
         return wrap(op);
     }
 
     Stmt visit(const Evaluate *op) override {
-        // Sliding window markers are notes to storage folding, not work.
-        if (Call::as_intrinsic(op->value, {Call::sliding_window_marker})) {
+        // Sliding window markers are notes to storage folding, not work. An
+        // end trace event runs whenever its begin event, which is in the
+        // value of an enclosing let, does.
+        bool is_trace = false;
+        visit_with(op->value, [&](auto *self, const Call *c) {
+            is_trace |= c->name == Call::trace;
+            self->visit_base(c);
+        });
+        if (is_trace || Call::as_intrinsic(op->value, {Call::sliding_window_marker})) {
             return op;
         }
         return wrap(op);

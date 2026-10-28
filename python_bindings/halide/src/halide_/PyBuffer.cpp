@@ -55,38 +55,22 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
     return s;
 }
 
-// PyBind11 doesn't have baked-in support for float16, so add just
-// enough special-case wrapping to support it.
+// Convert Halide's scalar float16_t through Python's float type.
 template<typename T>
 inline T value_cast(const py::object &value) {
-    return value.cast<T>();
+    return py::cast<T>(value);
 }
 
 template<>
 inline float16_t value_cast<float16_t>(const py::object &value) {
-    return float16_t(value.cast<double>());
+    return float16_t(py::cast<double>(value));
 }
 
 // TODO: https://github.com/halide/Halide/issues/6849
+// DLPack supports bfloat16, but PEP 3118 and nanobind's memoryview export do not.
 // template<>
 // inline bfloat16_t value_cast<bfloat16_t>(const py::object &value) {
-//     return bfloat16_t(value.cast<double>());
-// }
-
-template<typename T>
-inline std::string format_descriptor() {
-    return py::format_descriptor<T>::format();
-}
-
-template<>
-inline std::string format_descriptor<float16_t>() {
-    return "e";
-}
-
-// TODO: https://github.com/halide/Halide/issues/6849
-// template<>
-// inline std::string format_descriptor<bfloat16_t>() {
-//     return there-is-no-python-buffer-format-descriptor-for-bfloat16;
+//     return bfloat16_t(py::cast<double>(value));
 // }
 
 void call_fill(Buffer<> &b, const py::object &value) {
@@ -145,32 +129,6 @@ bool call_all_equal(Buffer<> &b, const py::object &value) {
     return false;
 }
 
-std::string type_to_format_descriptor(const Type &type) {
-
-#define HANDLE_BUFFER_TYPE(TYPE) \
-    if (type == type_of<TYPE>()) return format_descriptor<TYPE>();
-
-    HANDLE_BUFFER_TYPE(bool)
-    HANDLE_BUFFER_TYPE(uint8_t)
-    HANDLE_BUFFER_TYPE(uint16_t)
-    HANDLE_BUFFER_TYPE(uint32_t)
-    HANDLE_BUFFER_TYPE(uint64_t)
-    HANDLE_BUFFER_TYPE(int8_t)
-    HANDLE_BUFFER_TYPE(int16_t)
-    HANDLE_BUFFER_TYPE(int32_t)
-    HANDLE_BUFFER_TYPE(int64_t)
-    // TODO: https://github.com/halide/Halide/issues/6849
-    // HANDLE_BUFFER_TYPE(bfloat16_t)
-    HANDLE_BUFFER_TYPE(float16_t)
-    HANDLE_BUFFER_TYPE(float)
-    HANDLE_BUFFER_TYPE(double)
-
-#undef HANDLE_BUFFER_TYPE
-
-    throw py::value_error("Unsupported Buffer<> type.");
-    return std::string();
-}
-
 void check_out_of_bounds(Buffer<> &buf, const std::vector<int> &pos) {
     const int d = buf.dimensions();
     if ((size_t)pos.size() != (size_t)d) {
@@ -182,44 +140,12 @@ void check_out_of_bounds(Buffer<> &buf, const std::vector<int> &pos) {
             // Try to mimic the wording of similar errors in NumPy
             std::ostringstream o;
             o << "index " << pos[i] << " is out of bounds for axis " << i << " with min=" << dim.min() << ", extent=" << dim.extent();
-            throw py::index_error(o.str());
+            throw py::index_error(o.str().c_str());
         }
     }
 }
 
 }  // namespace
-
-Type format_descriptor_to_type(const std::string &fd) {
-
-#define HANDLE_BUFFER_TYPE(TYPE) \
-    if (fd == format_descriptor<TYPE>()) return type_of<TYPE>();
-
-    HANDLE_BUFFER_TYPE(bool)
-    HANDLE_BUFFER_TYPE(uint8_t)
-    HANDLE_BUFFER_TYPE(uint16_t)
-    HANDLE_BUFFER_TYPE(uint32_t)
-    HANDLE_BUFFER_TYPE(uint64_t)
-    HANDLE_BUFFER_TYPE(int8_t)
-    HANDLE_BUFFER_TYPE(int16_t)
-    HANDLE_BUFFER_TYPE(int32_t)
-    HANDLE_BUFFER_TYPE(int64_t)
-    // TODO: https://github.com/halide/Halide/issues/6849
-    // HANDLE_BUFFER_TYPE(bfloat16_t)
-    HANDLE_BUFFER_TYPE(float16_t)
-    HANDLE_BUFFER_TYPE(float)
-    HANDLE_BUFFER_TYPE(double)
-
-#undef HANDLE_BUFFER_TYPE
-
-    // The string 'l' corresponds to np.int_, which is essentially
-    // a C 'long'; return a 32 or 64 bit int as appropriate.
-    if (fd == "l") {
-        return sizeof(long) == 8 ? type_of<int64_t>() : type_of<int32_t>();
-    }
-
-    throw py::value_error("Unsupported Buffer<> type.");
-    return Type();
-}
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     check_out_of_bounds(buf, pos);
@@ -279,46 +205,44 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
     return py::object();
 }
 
-// Use an alias class so that if we are created via a py::buffer, we can
-// keep the py::buffer_info class alive for the life of the Buffer<>,
-// ensuring the data isn't collected out from under us.
+// Retain the imported ndarray and its buffer export for the life of the Buffer.
 class PyBuffer : public Buffer<> {
-    py::buffer_info info;
+    PythonArray array;
 
 public:
     PyBuffer()
-        : Buffer<>(), info() {
+        : Buffer<>() {
     }
 
     explicit PyBuffer(const Buffer<> &b)
-        : Buffer<>(b), info() {
+        : Buffer<>(b) {
     }
 
-    PyBuffer(const py::buffer &buffer, const std::string &name, bool reverse_axes)
-        : Buffer<>(), info() {
+    PyBuffer(const PythonBuffer &buffer, const std::string &name, bool reverse_axes)
+        : Buffer<>() {
         py::object get_runtime_buffer = py::getattr(buffer, "_get_halide_runtime_buffer_capsule", py::none());
         if (!get_runtime_buffer.is_none()) {
             py::object defined = py::getattr(buffer, "defined", py::none());
             if (defined.is_none()) {
                 throw py::type_error("Invalid halide.runtime.Buffer.");
             }
-            if (!defined().cast<bool>()) {
+            if (!py::cast<bool>(defined())) {
                 return;
             }
-            const py::capsule capsule = get_runtime_buffer().cast<py::capsule>();
+            const py::capsule capsule = py::cast<py::capsule>(get_runtime_buffer());
             const auto *runtime_buffer = static_cast<const Halide::Runtime::Buffer<> *>(
                 PyCapsule_GetPointer(capsule.ptr(), runtime_buffer_capsule_name));
             if (!runtime_buffer) {
-                throw py::error_already_set();
+                throw py::python_error();
             }
             Buffer<>::operator=(Buffer<>(Halide::Runtime::Buffer<>(*runtime_buffer), name));
             return;
         }
 
-        info = buffer.request(/*writable*/ true);
-        Buffer<>::operator=(Buffer<>(pybufferinfo_to_halidebuffer(info, reverse_axes), name));
+        array = buffer.request(/*writable*/ true);
+        Buffer<>::operator=(Buffer<>(pyarray_to_halidebuffer(array, reverse_axes), name));
 
-        // Default to setting host-dirty on any PyBuffer we create from an existing py::buffer;
+        // Default to setting host-dirty on any PyBuffer we create from an existing PythonBuffer;
         // this allows (e.g.) code like
         //
         //     input = hl.Buffer(imageio.imread(image_path))
@@ -337,63 +261,41 @@ public:
     ~PyBuffer() override = default;
 };
 
-py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes) {
-    if (b.data() == nullptr) {
-        throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
+PythonMutableArray buffer_array(Buffer<> &b, py::handle owner, bool reverse_axes) {
+    if (!b.defined()) {
+        throw py::value_error("Undefined buffer");
     }
-
-    const int d = b.dimensions();
-    const int bytes = b.type().bytes();
-    std::vector<Py_ssize_t> shape(d), strides(d);
-    for (int i = 0; i < d; i++) {
-        const int dst_axis = reverse_axes ? (d - i - 1) : i;
-        shape[dst_axis] = (Py_ssize_t)b.raw_buffer()->dim[i].extent;
-        strides[dst_axis] = (Py_ssize_t)b.raw_buffer()->dim[i].stride * (Py_ssize_t)bytes;
-    }
-
-    return py::buffer_info(
-        b.data(),                             // Pointer to buffer
-        bytes,                                // Size of one scalar
-        type_to_format_descriptor(b.type()),  // Python struct-style format descriptor
-        d,                                    // Number of dimensions
-        shape,                                // Buffer dimensions
-        strides                               // Strides (in bytes) for each index
-    );
+    return python_buffer_array(*b.raw_buffer(), owner, reverse_axes);
 }
 
 }  // namespace
 
-void define_buffer(py::module &m) {
+void define_buffer(py::module_ &m) {
     using BufferDimension = Halide::Runtime::Buffer<>::Dimension;
 
-    m.attr("BufferDimension") = py::module_::import("halide.runtime").attr("BufferDimension");
+    m.attr("BufferDimension") = py::module_::import_("halide.runtime").attr("BufferDimension");
 
     auto buffer_class =
-        py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::buffer_protocol())
+        py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::type_slots(python_buffer_slots<Buffer<>, buffer_array>))
 
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
             // most notably, we can convert to an ndarray by calling numpy.array(other_buffer). This
             // always reverses the axes.
-            .def_buffer([](Buffer<> &b) -> py::buffer_info {
-                return to_buffer_info(b, /*reverse_axes*/ true);
-            })
-
             // Returns a NumPy array that is a view of (shares storage with) this Buffer.
             .def(
-                "numpy_view", [](Buffer<> &self, bool reverse_axes) -> py::array {
-                    // base = py::cast(self) ensures that `self` outlives the returned view.
-                    return py::array(to_buffer_info(self, reverse_axes), /*base*/ py::cast(self));
+                "numpy_view", [](Buffer<> &self, bool reverse_axes) -> py::object {
+                    return python_numpy_view(buffer_array(self, py::cast(&self, py::rv_policy::reference), reverse_axes));
                 },
                 py::arg("reverse_axes") = true, "Returns a NumPy array that is a view of this Buffer. By default the axes are "
                                                 "reversed. Pass reverse_axes=False to preserve the original axis order.")
 
-            .def(py::init_alias<>())
+            .def(py::init<>())
             // keep_alive</*Nurse*/ 1, /*Patient*/ 2>: this copy shares the source's data pointer
             // without taking ownership (the source may itself wrap external memory, e.g. a numpy
             // array kept alive only by the source Buffer).
             //
             // In keep_alive<1, 2>, 1 refers to `this`, 2 refers to the argument `Buffer<> &` arg.
-            .def(py::init_alias<const Buffer<> &>(), py::keep_alive<1, 2>())
+            .def(py::init<const Buffer<> &>(), py::keep_alive<1, 2>())
 
             // This py::init_alias allows us to use any buffer-like Python entity to create a
             // Buffer<> (most notably, an ndarray). A halide.runtime.Buffer is copied
@@ -401,21 +303,15 @@ void define_buffer(py::module &m) {
             // axis order. reverse_axes = True by default for other buffer objects.
             //
             // ! Note that the copy/default constructors are registered *above, before* the
-            // py::buffer one before. This is because hl.Buffer also satisfies the buffer protocol,
+            // PythonBuffer one before. This is because hl.Buffer also satisfies the buffer protocol,
             // and we want hl.Buffer(other_buffer) to be a "direct" copy (no axis reversal) rather
             // than routing through the axis-reversing buffer-protocol path.
-            .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true, py::keep_alive<1, 2>())
+            .def(py::init<PythonBuffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true, py::keep_alive<1, 2>())
 
-            .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-                     return Buffer<>(type, sizes, name);
-                 }),
-                 py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+            .def("__init__", [](Buffer<> *self, Type type, const std::vector<int> &sizes, const std::string &name) { new (self) Buffer<>(Buffer<>(type, sizes, name)); }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
             // The default storage order is [0, 1, 2, ...], meaning store the first axis densest.
-            .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
-                     return Buffer<>(type, sizes, storage_order, name);
-                 }),
-                 py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
+            .def("__init__", [](Buffer<> *self, Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) { new (self) Buffer<>(Buffer<>(type, sizes, storage_order, name)); }, py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
 
             // Note that this exists solely to allow you to create a Buffer with a null host ptr;
             // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
@@ -601,7 +497,7 @@ void define_buffer(py::module &m) {
                  )
 
             .def("for_each_element",  //
-                 [](Buffer<> &b, py::function f) -> void {
+                 [](Buffer<> &b, py::callable f) -> void {
                      const int d = b.dimensions();
                      std::vector<int> pos_v(d, 0);
                      b.for_each_element([&f, &pos_v](const int *pos) -> void {
@@ -706,8 +602,8 @@ void define_buffer(py::module &m) {
             })
 
             .def("get", [](const py::object &self) -> py::object {
-                const auto &buffer = self.cast<const Buffer<> &>();
-                py::object runtime_buffer = py::module_::import("halide.runtime").attr("Buffer");
+                const auto &buffer = py::cast<const Buffer<> &>(self);
+                py::object runtime_buffer = py::module_::import_("halide.runtime").attr("Buffer");
                 if (!buffer.defined()) {
                     return runtime_buffer();
                 }

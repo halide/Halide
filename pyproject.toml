@@ -1,7 +1,7 @@
 [project]
 name = "halide-workspace"
 version = "0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [tool.uv.workspace]
 members = [
@@ -11,16 +11,21 @@ members = [
 ]
 
 [dependency-groups]
-dev = ["pybind11>=2.11.1", "scikit-build-core>=1.0.3", "setuptools-scm>=8.3.1"]
+dev = [
+  "nanobind>=2.11,<2.12",
+  "scikit-build-core>=1.0.3",
+  "setuptools-scm>=8.3.1",
+]
 apps = [
   "imageio>=2",
   "numpy>=1.26",
   "onnx==1.19.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
-  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l')",
   "protobuf>=7; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
   "pytest; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
 ]
 tools = [
+  "abi3audit",
   "cmake>=3.28",
   "ninja>=1.11,!=1.13.0",
   "pre-commit>=4",
@@ -40,9 +45,9 @@ ci-base = [
   { include-group = "apps" },
   { include-group = "tools" },
 ]
-ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
-ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm~=22.1.0"]
-ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm>=24.0.0.dev0,<25"]
+ci-llvm-23 = [{ include-group = "ci-base" }, "halide-llvm>=23.0.0.dev0,<24"]
+ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm>=22.0.0.dev0,<23"]
 
 [tool.uv.sources]
 halide-bin = { workspace = true }
@@ -53,6 +58,11 @@ halide-llvm = { index = "halide" }
 imageio = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
 numpy = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
 pillow = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
 
 [[tool.uv.index]]
 name = "halide"
@@ -66,11 +76,17 @@ explicit = true
 
 [tool.uv]
 package = false
+# piwheels only publishes ARM wheels for Raspberry Pi OS's Pythons (3.11 and
+# 3.13), so with requires-python >= 3.12, only lock ARM for 3.13+.
+environments = [
+  "platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+  "(platform_machine == 'armv7l' or platform_machine == 'armv8l') and python_full_version >= '3.13'",
+]
 conflicts = [
   [
     { package = "halide-workspace", group = "ci-llvm-main" },
+    { package = "halide-workspace", group = "ci-llvm-23" },
     { package = "halide-workspace", group = "ci-llvm-22" },
-    { package = "halide-workspace", group = "ci-llvm-21" },
   ],
 ]
 # numpy 2.4.6 and 2.5.2 only have piwheels ARM wheels locked; without this
@@ -89,31 +105,31 @@ build-constraint-dependencies = ["numpy!=2.4.6,!=2.5.2"]
 # base versions are kept in sync with the release version by tbump below.
 [[tool.uv.dependency-metadata]]
 name = "halide"
-version = "22.0.0"
-requires-python = ">=3.10"
+version = "23.0.0"
+requires-python = ">=3.12"
 requires-dist = [
   "halide-bin",
   "halide-runtime",
   "imageio>=2",
-  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l')",
 ]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-runtime"
-version = "22.0.0"
-requires-python = ">=3.10"
+version = "23.0.0"
+requires-python = ">=3.12"
 requires-dist = ["numpy>=1.26"]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-bin"
-version = "22.0.0"
-requires-python = ">=3.10"
+version = "23.0.0"
+requires-python = ">=3.12"
 
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"
 
 [tool.tbump.version]
-current = "22.0.0"
+current = "23.0.0"
 regex = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
 
 [tool.tbump.git]
@@ -137,6 +153,18 @@ src = "vcpkg.json"
 
 [[tool.tbump.file]]
 src = "apps/vcpkg.json"
+
+[[tool.tbump.file]]
+src = "tools/halidoscope/src-tauri/Cargo.toml"
+search = 'version = "{current_version}"'
+
+[[tool.tbump.file]]
+src = "tools/halidoscope/src-tauri/tauri.conf.json"
+search = '"version": "{current_version}"'
+
+[[tool.tbump.file]]
+src = "tools/halidoscope/package.json"
+search = '"version": "{current_version}"'
 
 [[tool.tbump.file]]
 src = "src/runtime/HalideRuntime.h"

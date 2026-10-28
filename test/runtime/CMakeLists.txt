@@ -47,15 +47,24 @@ if (NOT MSVC)
     # block_storage.cpp
     halide_define_runtime_internal_test(block_storage)
 
+    # device_buffer_utils.cpp
+    halide_define_runtime_internal_test(device_buffer_utils)
+
     # linked_list.cpp
     halide_define_runtime_internal_test(linked_list)
 
     # memory_arena.cpp
     halide_define_runtime_internal_test(memory_arena)
 
+    # pointer_table.cpp
+    halide_define_runtime_internal_test(pointer_table)
+
     # string_storage.cpp
     halide_define_runtime_internal_test(string_storage)
 
     # string_table.cpp
     halide_define_runtime_internal_test(string_table)
+
+    # to_string.cpp
+    halide_define_runtime_internal_test(to_string)
 endif ()

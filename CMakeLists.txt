@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(
     Halide
-    VERSION 22.0.0
+    VERSION 23.0.0
     DESCRIPTION "Halide compiler and libraries"
     HOMEPAGE_URL "https://halide-lang.org"
 )
@@ -95,7 +95,8 @@ if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     endif ()
 endif ()
 
-# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
+# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS.
+# (With MSVC, src/CMakeLists.txt filters Halide.dll's list to stay under the linker's limit.)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++17
@@ -192,7 +193,7 @@ find_package(Threads REQUIRED)
 
 ## LLVM
 find_package(
-    Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
+    Halide_LLVM 22...99 REQUIRED  # Use 99 to fake a minimum-only constraint
     COMPONENTS WebAssembly X86
     OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV
 )

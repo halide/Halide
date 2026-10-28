@@ -1,9 +1,15 @@
 {
   "name": "halide-apps",
-  "version": "22.0.0",
+  "version": "23.0.0",
   "license": "MIT",
   "supports": "!uwp",
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+  "overrides": [
+    {
+      "name": "nanobind",
+      "version": "2.11.0"
+    }
+  ],
   "dependencies": [
     {
       "name": "cuda",
@@ -22,7 +28,7 @@
       "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
     },
     "protobuf",
-    "pybind11",
+    "nanobind",
     "tensorflow-lite"
   ]
 }

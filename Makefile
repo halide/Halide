@@ -519,6 +519,7 @@ SOURCE_FILES = \
   FuzzFloatStores.cpp \
   Generator.cpp \
   GeneratorCache.cpp \
+  Halidoscope.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -545,6 +546,7 @@ SOURCE_FILES = \
   Lower.cpp \
   LowerParallelTasks.cpp \
   LowerSMEStreamingTasks.cpp \
+  LowerStructTypes.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -725,6 +727,7 @@ HEADER_FILES = \
   FuzzFloatStores.h \
   Generator.h \
   GeneratorCache.h \
+  Halidoscope.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -753,6 +756,7 @@ HEADER_FILES = \
   Lower.h \
   LowerParallelTasks.h \
   LowerSMEStreamingTasks.h \
+  LowerStructTypes.h \
   LowerWarpShuffles.h \
   Memoization.h \
   Module.h \
@@ -1268,6 +1272,9 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+$(BUILD_DIR)/Halidoscope.o: CXX_FLAGS += -I$(SRC_DIR)/runtime
+
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -1294,7 +1301,6 @@ clean:
 
 CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(ROOT_DIR)/test/correctness/*.c)
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
-ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
 FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp %IRGraphCXXPrinter.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
@@ -1311,7 +1317,6 @@ COMMON_AUTOSCHEDULER_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/common/*
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
-test_error: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_runtime: $(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=runtime_%)
 test_fuzz: $(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=fuzz_%)
@@ -1397,7 +1402,7 @@ test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT
 	$(FILTERS_DIR)/rungen_test
 	$(FILTERS_DIR)/registration_test
 
-ALL_TESTS = test_correctness test_error test_tutorial test_warning test_runtime test_generator
+ALL_TESTS = test_correctness test_tutorial test_warning test_runtime test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
@@ -1416,7 +1421,6 @@ run_tests: $(ALL_TESTS)
 .PHONY: build_tests
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
-	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
 	$(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=$(BIN_DIR)/fuzz_%) \
@@ -1492,6 +1496,10 @@ $(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TES
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
 
+$(BIN_DIR)/correctness_vulkan_bool_minmax: $(ROOT_DIR)/test/correctness/vulkan_bool_minmax.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
 # OpenCL runtime correctness test requires runtime.a to be linked.
 $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
@@ -1502,10 +1510,6 @@ $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 
 $(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.cpp $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.h $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
-
-# Error tests that link against libHalide
-$(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(TEST_DEPS)
-	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -1778,6 +1782,10 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI201
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
 
+$(FILTERS_DIR)/sever_dequantize.a: $(BIN_DIR)/sever.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g sever $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f sever_dequantize target=$(TARGET)-no_runtime direction=dequantize
+
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
 # nested_externs_generators.cpp is a counterexample, and thus requires
@@ -1844,6 +1852,15 @@ $(BIN_DIR)/$(TARGET)/generator_aot_autograd: $(ROOT_DIR)/test/generator/autograd
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_autograd: $(ROOT_DIR)/test/generator/autograd_aottest.cpp $(FILTERS_DIR)/autograd.halide_generated.cpp $(FILTERS_DIR)/autograd_grad.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# sever has additional deps to link in
+$(BIN_DIR)/$(TARGET)/generator_aot_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.a $(FILTERS_DIR)/sever_dequantize.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.halide_generated.cpp $(FILTERS_DIR)/sever_dequantize.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -2084,7 +2101,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(TEST_DEPS)
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
-		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@;\
@@ -2155,9 +2172,21 @@ correctness_opencl_runtime: $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
+# auto_schedule_no_parallel/auto_schedule_no_reorder need to load the
+# Mullapudi2016 autoscheduler plugin to exercise their intended error, so
+# (unlike other correctness_% tests) they take the plugin path as argv[1].
+correctness_auto_schedule_no_parallel correctness_auto_schedule_no_reorder: correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016)
+	@-echo
+
 quiet_correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	@cd $(TMP_DIR) ; ( $(CURDIR)/$< 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
+
+quiet_correctness_auto_schedule_no_parallel quiet_correctness_auto_schedule_no_reorder: quiet_correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	@cd $(TMP_DIR) ; ( $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016) 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
 
 fuzz_%: $(BIN_DIR)/fuzz_%
 	@-mkdir -p $(TMP_DIR)
@@ -2185,11 +2214,6 @@ valgrind_tracing_stack: $(BIN_DIR)/correctness_tracing_stack
 performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
-	@-echo
-
-error_%: $(BIN_DIR)/error_%
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|terminating due to uncaught exception|^terminate called|^Error|Assertion.*failed"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%
@@ -2488,6 +2512,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
@@ -2570,7 +2595,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: format
 format:
@@ -2578,7 +2603,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: clang-tidy
 clang-tidy:

@@ -18,7 +18,13 @@ add_halide_generator(
 )
 
 # Filters
-add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)
+add_halide_library(
+    depthwise_separable_conv_pipeline
+    FROM depthwise_separable_conv.generator
+    GENERATOR depthwise_separable_conv
+    FUNCTION_NAME depthwise_separable_conv
+    FILE_BASE_NAME depthwise_separable_conv
+)
 add_halide_library(
     depthwise_separable_conv_auto_schedule
     FROM depthwise_separable_conv.generator
@@ -33,9 +39,10 @@ target_link_libraries(
     depthwise_separable_conv_process
     PRIVATE
     Halide::ImageIO
-    depthwise_separable_conv
+    depthwise_separable_conv_pipeline
     depthwise_separable_conv_auto_schedule
 )
+add_custom_target(depthwise_separable_conv DEPENDS depthwise_separable_conv_process)
 
 # Test that the app actually works!
 add_test(NAME depthwise_separable_conv_process COMMAND depthwise_separable_conv_process)

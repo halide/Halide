@@ -46,6 +46,7 @@
 #include "LoopCarry.h"
 #include "LowerParallelTasks.h"
 #include "LowerSMEStreamingTasks.h"
+#include "LowerStructTypes.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
@@ -322,6 +323,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
 
+    debug(1) << "Lowering struct type field access...\n";
+    s = lower_struct_types(s);
+    log("Lowering after lowering struct type field access:", s);
+
     debug(1) << "Adding atomic mutex allocation...\n";
     s = add_atomic_mutex(s, outputs);
     log("Lowering after adding atomic mutex allocation:", s);
@@ -435,7 +440,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::CUDA)) {
+    if (t.has_feature(Target::CUDA) || t.has_feature(Target::Metal)) {
         debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);

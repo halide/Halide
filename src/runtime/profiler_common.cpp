@@ -65,6 +65,7 @@ public:
 WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name,
                                                              int num_funcs,
                                                              const char *const *func_names,
+                                                             const char *const *func_ir_names,
                                                              const int *func_parents,
                                                              const int *func_canonical_ids,
                                                              const int *func_kinds,
@@ -100,6 +101,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     __builtin_memset(p->funcs, 0, func_stats_storage);
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].name = func_names[i];
+        p->funcs[i].ir_name = func_ir_names[i];
         p->funcs[i].parent = func_parents[i];
         p->funcs[i].canonical_id = func_canonical_ids[i];
         p->funcs[i].kind = (halide_profiler_func_kind)func_kinds[i];
@@ -204,6 +206,9 @@ WEAK void print_wrapped(void *user_context, int indent, int max_cols, const char
     }
 }
 
+// Set by halide_profiler_set_json_output. Guarded by the profiler lock.
+WEAK char *profiler_json_output = nullptr;
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
@@ -247,6 +252,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const char *const *func_names,
+                                        const char *const *func_ir_names,
                                         const int *func_parents,
                                         const int *func_canonical_ids,
                                         const int *func_kinds,
@@ -291,7 +297,7 @@ WEAK int halide_profiler_instance_start(void *user_context,
         // Find or create the pipeline statistics for this pipeline.
         halide_profiler_pipeline_stats *p =
             find_or_create_pipeline(pipeline_name, num_funcs,
-                                    func_names, func_parents, func_canonical_ids,
+                                    func_names, func_ir_names, func_parents, func_canonical_ids,
                                     func_kinds, func_buffer_func_ids,
                                     func_counters_approximated);
         if (!p) {
@@ -543,7 +549,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     // When JSON output is requested, we render each pipeline's warnings into
     // a "[...]" array string here (in pipeline-list order) as we print the
     // report below, and emit them in the JSON pass. Null means no warnings.
-    const char *json_path = getenv("HL_PROFILER_JSON_OUTPUT");
+    const char *json_path = profiler_json_output ? profiler_json_output : getenv("HL_PROFILER_JSON_OUTPUT");
     int num_pipelines = 0;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
@@ -1045,6 +1051,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             if (i == c) {
                 // Identity / non-summable fields come from the canonical entry.
                 dst.name = src.name;
+                dst.ir_name = src.ir_name;
                 dst.parent = src.parent;
                 dst.canonical_id = c;
                 dst.kind = src.kind;
@@ -1724,12 +1731,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         };
         const bool any_pipeline_warning =
             too_few_samples || too_many_anon_funcs || expensive_free;
+        // print_wrapped doesn't understand non-printing characters, and the
+        // JSON warnings below must not contain them either.
+        bool old_support_colors = support_colors;
+        support_colors = false;
         if (num_warnings || any_pipeline_warning) {
             halide_print(user_context, " Performance warnings:\n");
             int max_cols = (int)strlen(func_row);
-            // print_wrapped doesn't understand non-printing characters.
-            bool old = support_colors;
-            support_colors = false;
 
             for (int k = 0; k < 3; k++) {
                 if (!pipeline_warning_fired(k)) {
@@ -1749,7 +1757,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << "\n";
                 print_wrapped(user_context, 5, max_cols, sstr.str());
             }
-            support_colors = old;
         }
 
         // Render this pipeline's warnings as JSON array strings for the JSON
@@ -1814,6 +1821,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
             pipeline_func_warnings[pipeline_pos] = fw;
         }
+        support_colors = old_support_colors;
 
         sstr.clear();
         emit_dim(horiz_rule);
@@ -1910,6 +1918,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     const halide_profiler_func_stats *fs = &pp->funcs[i];
                     json << "        {\n";
                     field_str("          ", "name", fs->name);
+                    field_str("          ", "ir_name", fs->ir_name);
                     field_i("          ", "parent", fs->parent);
                     field_i("          ", "canonical_id", fs->canonical_id);
                     field_i("          ", "kind", fs->kind);
@@ -2064,6 +2073,19 @@ WEAK void halide_profiler_report(void *user_context) {
     halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
     halide_profiler_report_unlocked(user_context, s);
+}
+
+WEAK void halide_profiler_set_json_output(const char *path) {
+    halide_profiler_state *s = halide_profiler_get_state();
+    LockProfiler lock(s);
+    free(profiler_json_output);
+    profiler_json_output = nullptr;
+    if (path) {
+        size_t len = strlen(path) + 1;
+        profiler_json_output = (char *)malloc(len);
+        halide_abort_if_false(nullptr, profiler_json_output != nullptr);
+        memcpy(profiler_json_output, path, len);
+    }
 }
 
 WEAK void halide_profiler_reset_unlocked(halide_profiler_state *s) {

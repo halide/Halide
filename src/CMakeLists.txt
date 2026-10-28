@@ -131,6 +131,7 @@ target_sources(
     FuzzFloatStores.h
     Generator.h
     GeneratorCache.h
+    Halidoscope.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -159,6 +160,7 @@ target_sources(
     Lower.h
     LowerParallelTasks.h
     LowerSMEStreamingTasks.h
+    LowerStructTypes.h
     LowerWarpShuffles.h
     Memoization.h
     Module.h
@@ -314,6 +316,7 @@ target_sources(
     FuzzFloatStores.cpp
     Generator.cpp
     GeneratorCache.cpp
+    Halidoscope.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
@@ -340,6 +343,7 @@ target_sources(
     Lower.cpp
     LowerParallelTasks.cpp
     LowerSMEStreamingTasks.cpp
+    LowerStructTypes.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
     Module.cpp
@@ -510,6 +514,13 @@ target_sources(
     FILES "${Halide_BINARY_DIR}/include/Halide.h"
 )
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+set_source_files_properties(
+    Halidoscope.cpp
+    PROPERTIES
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
+)
+
 ##
 # CodeGen backends
 ##
@@ -627,6 +638,50 @@ target_export_script(
     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript"
 )
+
+##
+# Trim Halide.dll's export list on MSVC
+##
+
+# CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS exports every external symbol in our object
+# files, including COMDAT instantiations of std:: templates. That list is close
+# to link.exe's limit of 65535 exports (LNK1189), so instead we generate the
+# same list ourselves, drop symbols whose enclosing scope isn't ours (see
+# cmake/FilterDllExports.cmake), and hand the result to the linker.
+#
+# `cmake -E __create_def` is an internal CMake command, but it is exactly what
+# CMake itself runs for WINDOWS_EXPORT_ALL_SYMBOLS.
+if (WIN32 AND BUILD_SHARED_LIBS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(Halide_EXPORTS_DIR "${CMAKE_CURRENT_BINARY_DIR}/halide_exports/$<CONFIG>")
+
+    set_target_properties(Halide PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+
+    file(GENERATE
+        OUTPUT "${Halide_EXPORTS_DIR}/objects.txt"
+        CONTENT "$<JOIN:$<TARGET_OBJECTS:Halide>;$<TARGET_OBJECTS:Halide_initmod>,\n>\n"
+    )
+
+    # Export counts are reported at --log-level=VERBOSE; forward the setting.
+    set(Halide_EXPORTS_LOG_LEVEL "")
+    if (CMAKE_MESSAGE_LOG_LEVEL)
+        set(Halide_EXPORTS_LOG_LEVEL "--log-level=${CMAKE_MESSAGE_LOG_LEVEL}")
+    endif ()
+
+    add_custom_command(
+        TARGET Halide
+        PRE_LINK
+        COMMAND
+            "${CMAKE_COMMAND}" -E __create_def "${Halide_EXPORTS_DIR}/full.def"
+            "${Halide_EXPORTS_DIR}/objects.txt"
+        COMMAND
+            "${CMAKE_COMMAND}" ${Halide_EXPORTS_LOG_LEVEL} "-DIN=${Halide_EXPORTS_DIR}/full.def"
+            "-DOUT=${Halide_EXPORTS_DIR}/filtered.def" -P
+            "${Halide_SOURCE_DIR}/cmake/FilterDllExports.cmake"
+        COMMENT "Generating filtered export list for Halide.dll"
+        VERBATIM
+    )
+    target_link_options(Halide PRIVATE "/DEF:${Halide_EXPORTS_DIR}/filtered.def")
+endif ()
 
 ##
 # Set compiler options for libHalide

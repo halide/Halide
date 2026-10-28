@@ -520,6 +520,17 @@ class Interleaver : public IRMutator {
         return visit_let(op);
     }
 
+    // The largest stride we'll deinterleave a ramp by. This is what decides
+    // whether a vectorized loop over a repeating pattern -- a sensor's colour
+    // filter array, say -- gets split into one slice per phase, so that each
+    // slice has a phase known at compile time. Bayer needs two and X-Trans
+    // needs six.
+    //
+    // It stops below eight because a permute with a period of eight is often
+    // better done as a single shuffle than as eight slices: on Hexagon, for
+    // instance, deinterleaving (x/8)*9 + x%8 displaces a single vdelta.
+    static constexpr int max_deinterleave_stride = 7;
+
     Expr visit(const Ramp *op) override {
         if (op->stride.type().is_vector() &&
             is_const_one(op->stride) &&
@@ -534,9 +545,17 @@ class Interleaver : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    // A ramp with a vector base (e.g. ramp(x4(0), x4(1), 4), which repeats
+    // each element) does not become stride-one ramps when deinterleaved, so a
+    // div or mod of one is no reason to deinterleave.
+    static const Ramp *as_scalar_based_ramp(const Expr &e) {
+        const Ramp *r = e.as<Ramp>();
+        return r && r->base.type().is_scalar() ? r : nullptr;
+    }
+
     Expr visit(const Mod *op) override {
-        const Ramp *r = op->a.as<Ramp>();
-        for (int i = 2; i <= 4; ++i) {
+        const Ramp *r = as_scalar_based_ramp(op->a);
+        for (int i = 2; i <= max_deinterleave_stride; ++i) {
             if (r &&
                 is_const(op->b, i) &&
                 (r->type.lanes() % i) == 0) {
@@ -549,8 +568,8 @@ class Interleaver : public IRMutator {
     }
 
     Expr visit(const Div *op) override {
-        const Ramp *r = op->a.as<Ramp>();
-        for (int i = 2; i <= 4; ++i) {
+        const Ramp *r = as_scalar_based_ramp(op->a);
+        for (int i = 2; i <= max_deinterleave_stride; ++i) {
             if (r &&
                 is_const(op->b, i) &&
                 (r->type.lanes() % i) == 0 &&

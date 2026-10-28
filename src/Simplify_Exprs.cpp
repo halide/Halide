@@ -214,8 +214,19 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
                     x + max(y * (arg_lanes - 1), 0) <= z) ||
             rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
                     x < y + min(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+            rewrite(h_and(broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes), 1),
                     x <= y + min(z * (arg_lanes - 1), 0)) ||
+
+            // Same rules as above, but with a confounding w sub-Expr in the h_and.
+            // This lets us peel clauses one by one.
+            rewrite(h_and(w && (ramp(x, y, arg_lanes) < broadcast(z, arg_lanes)), 1),
+                    h_and(w, 1) && (x + max(y * (arg_lanes - 1), 0) < z)) ||
+            rewrite(h_and(w && (ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes)), 1),
+                    h_and(w, 1) && (x + max(y * (arg_lanes - 1), 0) <= z)) ||
+            rewrite(h_and(w && (broadcast(x, arg_lanes) < ramp(y, z, arg_lanes)), 1),
+                    h_and(w, 1) && (x < y + min(z * (arg_lanes - 1), 0))) ||
+            rewrite(h_and(w && (broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes)), 1),
+                    h_and(w, 1) && (x <= y + min(z * (arg_lanes - 1), 0))) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -237,7 +248,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
                     x + min(y * (arg_lanes - 1), 0) <= z) ||
             rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
                     x < y + max(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+            rewrite(h_or(broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes), 1),
                     x <= y + max(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, info);
@@ -255,8 +266,24 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     }
 }
 
+bool Simplify::known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi) {
+    if (e->node_type == IRNodeType::Broadcast) {
+        e = ((const Broadcast *)e)->value.get();
+    }
+    if (e->node_type == IRNodeType::IntImm) {
+        const int64_t v = ((const IntImm *)e)->value;
+        return lo <= v && v < hi;
+    } else if (e->node_type == IRNodeType::Variable) {
+        if (const ExprInfo *b = find_bounds_and_alignment_info(((const Variable *)e)->name)) {
+            return (b->bounds.min_defined && lo <= b->bounds.min &&
+                    b->bounds.max_defined && b->bounds.max < hi);
+        }
+    }
+    return false;
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *info) {
-    if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
+    if (const ExprInfo *b = find_bounds_and_alignment_info(op->name)) {
         if (info) {
             *info = *b;
         }
@@ -362,7 +389,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     // unreachable loads.
     if (is_const_one(op->predicate)) {
         string alloc_extent_name = op->name + ".total_extent_bytes";
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->type.bytes() > alloc_info->bounds) {
                 in_unreachable = true;
@@ -417,7 +444,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
                // It's a multi-dimensional multiramp.
-               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr, let_var_alignment()) &&
                mr.dimensions() > 1 &&
                // The innermost stride isn't already one.
                !is_const_one(mr.strides[0]) &&
@@ -439,6 +466,14 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             op->with(mr.to_expr(), permuted_predicate, align);
         int B = op->type.lanes() / A;
         return mutate(Shuffle::make_transpose(permuted_load, B), info);
+    } else if (mr.dimensions() >= 1 &&
+               is_const_one(mr.strides[0]) &&
+               !mr.matches_expr(index)) {
+        // The index is a multiramp that is already dense innermost, but it's
+        // spelled some other way (e.g. with vector div and mod). Write it as
+        // nested ramps, which later become a concat of dense loads (or as a
+        // single dense ramp, if it has one dim).
+        return op->with(mr.to_expr(), predicate, align);
     } else {
         return op->with(index, predicate, align);
     }
