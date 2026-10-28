@@ -78,7 +78,7 @@ endif ()
 
 if (WITH_TUTORIALS)
     install(
-        DIRECTORY ${Halide_Python_SOURCE_DIR}/tutorial/
+        DIRECTORY ${Halide_Python_SOURCE_DIR}/halide/tutorial/
         DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
         COMPONENT Halide_Documentation
         FILES_MATCHING
