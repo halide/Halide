@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Publish the built wheels to PyPI'
+        description: 'Publish the built wheels to PyPI (release branches only)'
         type: boolean
         default: false
   pull_request:
@@ -31,13 +31,15 @@ permissions:
 # them, and this workflow doesn't participate in pip.yml's publish job. Its
 # version is kept in sync with Halide's release version via tbump (see
 # tool.tbump.file entries for tools/halidoscope/src-tauri/Cargo.toml et al.
-# in the top-level pyproject.toml), not via a per-commit dynamic version.
+# in the top-level pyproject.toml). The exception is nightly builds from
+# main, which get a setuptools-scm dev version (e.g. 23.0.0.dev5) like the
+# other Halide wheels and are published to https://pypi.halide-lang.org.
 #
 # Wheels are published to PyPI when a GitHub release is published, or when
-# this workflow is run manually with `publish` checked (e.g. to publish from a
-# release branch). Since the version only changes with Halide's version, a
-# post-release of Halide reuses the existing Halidoscope version; such uploads
-# are skipped rather than failing.
+# this workflow is run manually from a release branch with `publish` checked.
+# Since the version only changes with Halide's version, a post-release of
+# Halide reuses the existing Halidoscope version; such uploads are skipped
+# rather than failing.
 jobs:
   build:
     name: Build wheel for ${{ matrix.platform_tag }}
@@ -58,6 +60,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Set nightly version
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        working-directory: tools/halidoscope
+        shell: bash
+        run: |
+          version=$(uvx --from setuptools-scm python -c \
+            "from setuptools_scm import get_version; print(get_version(root='../..', local_scheme='no-local-version'))")
+          echo "Nightly version: ${version}"
+          # A static project.version takes precedence over Cargo.toml's.
+          sed -i.bak "s/^dynamic = \[\"version\"\]$/version = \"${version}\"/" pyproject.toml
+          rm pyproject.toml.bak
+          grep -qx "version = \"${version}\"" pyproject.toml
 
       - name: Install Tauri's Linux system dependencies
         if: runner.os == 'Linux'
@@ -86,8 +105,6 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: tools/halidoscope/pnpm-lock.yaml
-
-      - uses: astral-sh/setup-uv@v7
 
       - name: Build frontend
         working-directory: tools/halidoscope
@@ -122,12 +139,18 @@ jobs:
           path: tools/halidoscope/wheelhouse/*.whl
 
   publish:
-    name: Publish on PyPI
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    name: Publish wheels
+    if: >-
+      (github.event_name == 'push' && github.ref_name == 'main')
+      || github.event_name == 'release'
+      || (github.event_name == 'workflow_dispatch' && inputs.publish
+          && startsWith(github.ref, 'refs/heads/release/'))
     needs: build
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    env:
+      GH_TOKEN: ${{ secrets.PYPI_RELEASES_TOKEN }}
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -135,6 +158,37 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - name: Publish nightly build to halide/pypi
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          files=(dist/halidoscope-*.whl)
+          shopt -u nullglob
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no Halidoscope wheels in dist/"
+            exit 1
+          fi
+
+          # Wheel filenames are "{name}-{version}-{tags}.whl".
+          version=$(basename "${files[0]}")
+          version="${version#halidoscope-}"
+          version="${version%%-*}"
+          tag="halidoscope@${version}"
+
+          if gh release view "$tag" --repo halide/pypi >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --repo halide/pypi --clobber
+          else
+            gh release create "$tag" "${files[@]}" \
+              --repo halide/pypi --title "$tag" --notes "Automated nightly build from Halide"
+          fi
+
+      - name: Trigger index rebuild
+        if: github.event_name == 'push'
+        run: gh workflow run rebuild-index.yml --repo halide/pypi
+
       - uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.event_name != 'push'
         with:
           skip-existing: true

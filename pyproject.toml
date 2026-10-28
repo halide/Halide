@@ -159,6 +159,10 @@ src = "tools/halidoscope/src-tauri/Cargo.toml"
 search = 'version = "{current_version}"'
 
 [[tool.tbump.file]]
+src = "tools/halidoscope/src-tauri/Cargo.lock"
+search = 'version = "{current_version}"'
+
+[[tool.tbump.file]]
 src = "tools/halidoscope/src-tauri/tauri.conf.json"
 search = '"version": "{current_version}"'
 
