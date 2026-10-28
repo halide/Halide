@@ -1165,6 +1165,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     std::vector<Offset<Serialize::WrapperRef>> wrappers_serialized = serialize_wrapper_refs(builder, func_schedule.wrappers());
     const Serialize::MemoryType memory_type = serialize_memory_type(func_schedule.memory_type());
     const auto memoized = func_schedule.memoized();
+    const auto precomputed = func_schedule.precomputed();
     const auto async = func_schedule.async();
     const auto ring_buffer = serialize_expr(builder, func_schedule.ring_buffer());
     const auto memoize_eviction_key_serialized = serialize_expr(builder, func_schedule.memoize_eviction_key());
@@ -1189,7 +1190,8 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second,
                                          builder.CreateVector(type_change_checks_serialized),
-                                         builder.CreateVector(storage_splits_serialized));
+                                         builder.CreateVector(storage_splits_serialized),
+                                         precomputed);
 }
 
 Offset<Serialize::Specialization> Serializer::serialize_specialization(FlatBufferBuilder &builder, const Specialization &specialization) {

@@ -554,6 +554,7 @@ table FuncSchedule {
     memoize_eviction_key: Expr;
     type_change_checks: [TypeChangeCheck];
     storage_splits: [StorageSplit];
+    precomputed: bool;
 }
 
 table Specialization {

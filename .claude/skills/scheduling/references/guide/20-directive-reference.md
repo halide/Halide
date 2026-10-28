@@ -16,6 +16,7 @@ story.
 | `f.hoist_storage(g, var)`       | Hoist just the *allocation* to `g`'s `var` loop; keep the compute schedule. Never hoist past a parallel loop. ([Ch. 15](15-storage-levels.md)) |
 | `f.fold_storage(var, K)`        | Circular buffer of `K` slots in `var`, for sliding windows. ([Ch. 15](15-storage-levels.md), [Ch. 10](10-recipes.md))                          |
 | `f.store_in(MemoryType::Stack)` | Allocate on the stack; small fixed sizes only. ([Ch. 15](15-storage-levels.md))                                                                |
+| `f.precompute()`                | Evaluate `f` once at compile time and embed it as a constant Buffer; implies `compute_root()`. For constant lookup tables.                     |
 
 ## Loop shape
 

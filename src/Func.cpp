@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -13,6 +14,7 @@
 #endif
 
 #include "ApplySplit.h"
+#include "Approximation.h"
 #include "Argument.h"
 #include "Associativity.h"
 #include "Bounds.h"
@@ -3536,6 +3538,110 @@ Func Func::clone_in(const vector<Func> &fs) {
     return get_wrapper(func, name() + "_clone", fs, true);
 }
 
+ApproximationResult Func::approximate_by(const Approximation &p, const vector<Func> &consumers) {
+    EncodeResult enc = p.encode({*this});
+    user_assert(!enc.encoded.empty())
+        << "approximate_by: Approximation::encode(" << name() << ") returned no Funcs\n";
+
+    DecodeResult dec = p.decode(enc.encoded);
+    user_assert(dec.decoded.size() == 1)
+        << "approximate_by: Approximation::decode() must return exactly one Func (the "
+        << "round-trip replacement), but returned " << dec.decoded.size() << "\n";
+
+    Func round_trip = dec.decoded[0];
+    user_assert(round_trip.dimensions() == dimensions())
+        << "approximate_by: decode(encode(" << name() << "))'s result (" << round_trip.name()
+        << ") has " << round_trip.dimensions() << " dimensions, but " << name() << " has "
+        << dimensions() << " -- Approximation implementations must reproduce the original "
+        << "Func's signature exactly\n";
+    user_assert(round_trip.types() == types())
+        << "approximate_by: decode(encode(" << name() << "))'s result (" << round_trip.name()
+        << ") has a different type than " << name() << " -- Approximation implementations "
+        << "must reproduce the original Func's signature exactly\n";
+
+    for (const Func &g : consumers) {
+        user_assert(g.name() != name())
+            << "approximate_by: " << name() << " cannot be its own consumer\n";
+        // Eager and destructive, like Func::rfactor() and the targeted
+        // form of Func::in().
+        g.function().substitute_calls(func, round_trip.function());
+    }
+
+    vector<Func> intermediates;
+    std::set<std::string> seen = {name(), round_trip.name()};
+    auto add = [&](const vector<Func> &fs) {
+        for (const Func &g : fs) {
+            if (seen.insert(g.name()).second) {
+                intermediates.push_back(g);
+            }
+        }
+    };
+    add(enc.encoded);
+    add(enc.intermediates);
+    add(dec.intermediates);
+    return {round_trip, enc.encoded, enc.encoded_ports, intermediates, enc.stage_outputs, dec.stage_outputs,
+            std::move(enc.trace), std::move(dec.trace)};
+}
+
+DerivedSubstitution Func::approximate_by(const DerivedPort &port, const vector<Func> &consumers) {
+    return approximate_by(port, consumers, DerivedPortCheck::Static);
+}
+
+DerivedSubstitution Func::approximate_by(const DerivedPort &port, const vector<Func> &consumers,
+                                         DerivedPortCheck check) {
+    user_assert(defined() && outputs() == 1 && !is_extern())
+        << "approximate_by: " << name() << " must be a defined, single-valued Func to be replaced "
+        << "by a derived port\n";
+    user_assert(port.stored.defined() && port.definition.defined())
+        << "approximate_by: the derived port '" << port.name << "' is undefined\n";
+    user_assert(port.bound_problem.empty())
+        << "approximate_by: derived port '" << port.name << "' of " << port.stage.label()
+        << " declares no bound on its stored value: " << port.bound_problem << "\n";
+    user_assert(port.exact || port.error_bound.defined())
+        << "approximate_by: derived port '" << port.name << "' of " << port.stage.label()
+        << " is lossy but declares no bound\n";
+
+    DerivedPortMatch match = match_derived_port(*this, port);
+    user_assert(match.matched)
+        << "approximate_by: " << name() << " does not equal derived port '" << port.name << "' of "
+        << port.stage.label() << ": " << match.reason << "\n"
+        << "  term:       " << match.term_form << "\n"
+        << "  definition: " << match.definition_form << "\n";
+
+    Type term_type = type(), stored_type = port.stored.type();
+    user_assert(stored_type == term_type ||
+                (stored_type.is_float() && term_type.is_float() && stored_type.bits() <= term_type.bits()))
+        << "approximate_by: derived port '" << port.name << "' has type " << stored_type
+        << ", which does not widen exactly to " << name() << "'s type " << term_type << "\n";
+
+    vector<Var> vars = args();
+    vector<Expr> var_exprs(vars.begin(), vars.end());
+    Expr value = cast(term_type, port.stored(match.port_args));
+    if (check == DerivedPortCheck::Runtime) {
+        Expr stored = cast<double>(port.stored(match.port_args));
+        Expr defined = cast<double>(port.definition(match.port_args));
+        Expr holds = port.exact ? (stored == defined) :
+                                  (abs(stored - defined) <= cast<double>(port.error_bound(match.port_args)));
+        value = require(holds, value, "derived port", port.name, "of", port.stage.label(),
+                        "does not hold its declared relation at", stored, defined);
+    }
+    Func replacement(unique_name(name() + "_from_" + port.name));
+    replacement(vars) = value;
+
+    for (const Func &g : consumers) {
+        user_assert(g.name() != name())
+            << "approximate_by: " << name() << " cannot be its own consumer\n";
+        g.function().substitute_calls(func, replacement.function());
+    }
+
+    Func bound;
+    if (!port.exact) {
+        bound = Func(unique_name(name() + "_" + port.name + "_bound"));
+        bound(vars) = port.error_bound(match.port_args);
+    }
+    return {replacement, port, match.port_args, bound, port.exact};
+}
+
 Func Func::copy_to_device(DeviceAPI d) {
     user_assert(defined())
         << "copy_to_device on Func " << name() << " with no definition\n";
@@ -3662,6 +3768,12 @@ Func &Func::memoize(const EvictionKey &eviction_key) {
         func.schedule().memoize_eviction_key() = eviction_key.key;  // not defined.
     }
     return *this;
+}
+
+Func &Func::precompute() {
+    invalidate_cache();
+    func.schedule().precomputed() = true;
+    return compute_root();
 }
 
 Func &Func::store_in(MemoryType t) {
@@ -4428,31 +4540,53 @@ const char *const eager_inline_schedule_hint =
     ", but only a Func with a schedule compatible with inlining (as for "
     "compute_inline()) can be inlined.\n";
 
-void check_eager_inline_level(const Function &f, const LoopLevel &level, const char *directives) {
+string eager_inline_level_obstacle(const LoopLevel &level, const char *directives) {
     if (currently_inlined(level)) {
-        return;
+        return {};
     }
     // An undefined LoopLevel is one the caller still intends to set().
     const bool undefined = level.var_name() == LoopLevel().var_name();
-    user_error << "eager_inline() cannot inline " << f.name()
-               << ": it is scheduled " << directives
-               << (undefined ? " at a LoopLevel that has not been set yet" : "")
-               << eager_inline_schedule_hint;
-}
-
-// Check eager-only placement constraints, then the shared inline schedule rules.
-// Directives that merely warn (split(), bound(), etc.) are allowed.
-void check_eager_inline_schedule(const Function &f) {
-    const FuncSchedule &func_s = f.schedule();
-    const StageSchedule &stage_s = f.definition().schedule();
-
-    check_eager_inline_level(f, func_s.compute_level(), "compute_root() or compute_at()");
-    check_eager_inline_level(f, func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()");
-    check_eager_inline_level(f, stage_s.fuse_level().level, "compute_with()");
-    validate_schedule_inlined_function(f, "inlined by eager_inline()");
+    return string(": it is scheduled ") + directives +
+           (undefined ? " at a LoopLevel that has not been set yet" : "") +
+           eager_inline_schedule_hint;
 }
 
 }  // namespace
+
+namespace Internal {
+
+// The schedule checks reject a Func whose schedule could not be used if it
+// were computed inline. These are the conditions that lowering treats as
+// errors for a Func that is compute_inline() (see
+// validate_schedule_inlined_function()). A schedule directive that lowering
+// merely warns about for an inlined Func (split(), bound(), etc.) is allowed.
+string eager_inline_obstacle(const Function &f) {
+    if (!f.can_be_inlined()) {
+        return ": it must be a pure Func with no update or extern definition and "
+               "no specializations.\n";
+    }
+    const FuncSchedule &func_s = f.schedule();
+    const StageSchedule &stage_s = f.definition().schedule();
+
+    const std::pair<LoopLevel, const char *> levels[] = {
+        {func_s.compute_level(), "compute_root() or compute_at()"},
+        {func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()"},
+        {stage_s.fuse_level().level, "compute_with()"},
+    };
+    for (const auto &[level, directives] : levels) {
+        string obstacle = eager_inline_level_obstacle(level, directives);
+        if (!obstacle.empty()) {
+            return obstacle;
+        }
+    }
+    const string error = inlined_function_schedule_error(f);
+    if (!error.empty()) {
+        return ": " + error;
+    }
+    return {};
+}
+
+}  // namespace Internal
 
 Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     vector<Function> funcs;
@@ -4460,11 +4594,10 @@ Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     for (const Func &f : fs) {
         user_assert(f.defined())
             << "eager_inline() was passed an undefined Func.\n";
-        user_assert(f.function().can_be_inlined())
-            << "eager_inline() cannot inline " << f.name()
-            << ": it must be a pure Func with no update or extern definition and "
-            << "no specializations.\n";
-        check_eager_inline_schedule(f.function());
+        const string obstacle = Internal::eager_inline_obstacle(f.function());
+        user_assert(obstacle.empty())
+            << "eager_inline() cannot inline " << f.name() << obstacle;
+        validate_schedule_inlined_function(f.function(), "inlined by eager_inline()");
         funcs.push_back(f.function());
         by_name.emplace(f.name(), f);
     }

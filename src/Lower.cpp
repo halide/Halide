@@ -52,6 +52,7 @@
 #include "OffloadGPULoops.h"
 #include "OptimizeShuffles.h"
 #include "PartitionLoops.h"
+#include "PrecomputeConstants.h"
 #include "Prefetch.h"
 #include "Profiling.h"
 #include "PromoteGPURegisters.h"
@@ -261,6 +262,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
     log("Lowering after allocation bounds inference:", s);
+
+    debug(1) << "Precomputing constant Funcs...\n";
+    s = precompute_constants(s, order, env, args, t, result_module);
+    log("Lowering after precomputing constant Funcs:", s);
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||

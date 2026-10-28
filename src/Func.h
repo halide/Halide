@@ -62,6 +62,11 @@ struct VarOrRVar {
 
 class ImageParam;
 class FuncVec;
+class Approximation;
+struct ApproximationResult;
+struct DerivedPort;
+struct DerivedSubstitution;
+enum class DerivedPortCheck;
 
 namespace Internal {
 struct AssociativeOp;
@@ -1669,6 +1674,34 @@ public:
     Func clone_in(const std::vector<Func> &fs);
     //@}
 
+    /** Eagerly and destructively replace every call to this Func inside
+     * each Func in 'consumers' with a call to the round trip
+     * p.decode(p.encode(*this)) instead. The substitution happens
+     * immediately, like Func::rfactor() and the targeted form of
+     * Func::in(), but substitutes a different computation rather than an
+     * identity wrapper -- see Approximation.h and
+     * doc/Approximation.md for the rationale. Because the
+     * substitution is eager, it can only rewrite Funcs that are already
+     * fully defined at the point of the call -- there is no counterpart to
+     * the global Func::in() that also covers Funcs written later. */
+    ApproximationResult approximate_by(const Approximation &p, const std::vector<Func> &consumers);
+
+    /** Eagerly and destructively replace every call to this Func (a term,
+     * e.g. a block sum outlined by a schedule) inside each Func in
+     * 'consumers' with a read of a derived port (see Derive and
+     * DerivedPort), provided that this Func equals the port's definition
+     * under real-valued semantics (see match_derived_port(); a mismatch is
+     * an error that prints both normal forms). The replacement is lossy,
+     * bounded by the port's declared bound (DerivedSubstitution::error_bound),
+     * and it is an error if the port declares none. With
+     * DerivedPortCheck::Runtime, the replacement also checks the declared
+     * relation where it reads the port. */
+    // @{
+    DerivedSubstitution approximate_by(const DerivedPort &port, const std::vector<Func> &consumers);
+    DerivedSubstitution approximate_by(const DerivedPort &port, const std::vector<Func> &consumers,
+                                       DerivedPortCheck check);
+    // @}
+
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
      * that the Func has a pure definition which is a simple call to a
@@ -2677,6 +2710,48 @@ public:
      */
     Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 
+    /** Evaluate this Func once, while the pipeline is compiled, and embed the
+     * result in the generated code as a constant Buffer. Every call to this
+     * Func reads that Buffer instead. Implies compute_root(). This is useful
+     * for small lookup tables that the algorithm defines by arithmetic: the
+     * schedule can choose to tabulate them on one target and leave them
+     * inlined on another.
+     *
+     * The Func must be constant: its definitions, and those of every Func it
+     * depends on, may not read a Param, an ImageParam, an input Buffer
+     * argument, or the result of an impure extern call. Embedded Buffers and
+     * RDoms with constant bounds are fine. Funcs with extern definitions
+     * can't be precomputed.
+     *
+     * The region evaluated is the region that bounds inference allocates for
+     * the Func, which must be a compile-time constant. Padding introduced by
+     * the schedule (the Func's own splits, align_bounds(), a consumer
+     * vectorized with TailStrategy::RoundUp, ...) is evaluated and embedded
+     * too. If the region depends on a Param or on the size of an output,
+     * compilation fails; use bound() to fix it. Reads outside the region
+     * fail the usual bounds check on the embedded Buffer.
+     *
+     * The Func is evaluated by JIT on the host, with a default schedule, so
+     * scheduling directives on it that don't change the region (vectorize,
+     * parallel, store_in, ...) are ignored. Target queries such as
+     * target_arch_is() are answered for the compilation target. Floating-point
+     * results are those of the host; compilation warns if the Func computes
+     * floating-point values for a target with a different architecture, bit
+     * width, or OS, unless strict_float is in use. The Func may not be an
+     * output of the pipeline, and may not be computed anywhere but at root.
+     * Wrappers created with in() or clone_in() read the embedded Buffer, so
+     * the table can still be staged, e.g. into GPU shared memory. Identical
+     * precomputed Buffers (same type, shape and contents) are embedded only
+     * once per Module.
+     *
+     * Unlike memoize(), which is a run-time cache keyed on the values of
+     * Params, and has to look up (and may evict and recompute) its entries on
+     * every call, precompute() does all of its work at compile time, takes no
+     * Params, and has no run-time cost beyond reading the constant Buffer. A
+     * Func can't be both memoized and precomputed.
+     */
+    Func &precompute();
+
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the
      * production is complete. If this Func's store level is different
@@ -3167,6 +3242,11 @@ Stage::eager_inline(const Func &first, Args &&...args) {
 }
 
 namespace Internal {
+
+/** Why eager_inline() would reject `f`, as the rest of the sentence
+ * "eager_inline() cannot inline <name>" (ending in a newline), or an empty
+ * string if it can be inlined. The schedule is checked as it stands now. */
+std::string eager_inline_obstacle(const Function &f);
 
 template<typename Last>
 inline void check_types(const Tuple &t, int idx) {
