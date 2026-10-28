@@ -2,13 +2,17 @@ version = 1
 revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
     "python_full_version < '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
+]
+supported-markers = [
+    "platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
 ]
 conflicts = [[
-    { package = "halide-workspace", group = "ci-llvm-21" },
     { package = "halide-workspace", group = "ci-llvm-22" },
+    { package = "halide-workspace", group = "ci-llvm-23" },
     { package = "halide-workspace", group = "ci-llvm-main" },
 ]]
 
@@ -20,24 +24,24 @@ members = [
     "halide-workspace",
 ]
 build-constraints = [
-    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "!=2.4.6,!=2.5.2", index = "https://pypi.org/simple" },
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "!=2.4.6,!=2.5.2" },
     { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = "!=2.4.6,!=2.5.2", index = "https://piwheels.org/simple" },
 ]
 
 [[manifest.dependency-metadata]]
 name = "halide"
-version = "22.0.0"
+version = "23.0.0"
 requires-dist = ["halide-bin", "halide-runtime", "imageio>=2", "pillow ; platform_machine == 'armv7l' or platform_machine == 'armv8l'"]
 requires-python = ">=3.12"
 
 [[manifest.dependency-metadata]]
 name = "halide-bin"
-version = "22.0.0"
+version = "23.0.0"
 requires-python = ">=3.12"
 
 [[manifest.dependency-metadata]]
 name = "halide-runtime"
-version = "22.0.0"
+version = "23.0.0"
 requires-dist = ["numpy>=1.26"]
 requires-python = ">=3.12"
 
@@ -379,7 +383,7 @@ wheels = [
 
 [[package]]
 name = "halide"
-version = "22.0.0"
+version = "23.0.0"
 source = { editable = "python_bindings/halide" }
 dependencies = [
     { name = "halide-bin" },
@@ -399,37 +403,17 @@ requires-dist = [
 
 [[package]]
 name = "halide-bin"
-version = "22.0.0"
+version = "23.0.0"
 source = { editable = "python_bindings/halide-bin" }
-
-[[package]]
-name = "halide-llvm"
-version = "21.1.8"
-source = { registry = "https://pypi.halide-lang.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
-    "python_full_version < '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
-]
-wheels = [
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-macosx_11_0_arm64.whl", hash = "sha256:3a5efde3893e1bd5da3729a4dc4697cc38d26d5accae3ff0869f4650a3d5d98b" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:9a5ade930a37fbb6bc449a32d83e7897e36dae3d6f074086df4e2b40f5b76f46" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:645c64a735f3294ed9983335273d51ad24d14de96d37fe4b8fc0eb13d5aec436" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f78909fd6d3acf71d8fe2ba8e61c9ed6d87b400240e95c764b56849e07e5d52f" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-manylinux_2_28_i686.whl", hash = "sha256:049b15a407ea249947fbf08e3d912ec352bbfad9f7afb1e1fa815e7dfc5a9db5" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:06fdbe2904735a1510d7959c60a9cd6034bed61bdf2e402a3b5eb289e8f769b6" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-win32.whl", hash = "sha256:b573660ce26091b9067dc3b63f2d8ee085719ee1f025296a3b52bcc9f105608c" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4021.1.8/halide_llvm-21.1.8-py3-none-win_amd64.whl", hash = "sha256:4c437b2831534b5d490276d8e5bdc112b0649f3d8fc40eee92aac37e7e425a8e" },
-]
 
 [[package]]
 name = "halide-llvm"
 version = "22.1.8"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
     "python_full_version < '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
 ]
 wheels = [
     { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-macosx_11_0_arm64.whl", hash = "sha256:136acbeb8f9522f9e82f7eaf867f0ede1df420172db5276748a90d4fccce1534" },
@@ -447,9 +431,9 @@ name = "halide-llvm"
 version = "23.1.4"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
     "python_full_version < '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
 ]
 wheels = [
     { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.4/halide_llvm-23.1.4-py3-none-macosx_11_0_arm64.whl", hash = "sha256:f7f9f8231ac0b529a4d33840a4593363a68fa7abb0e14eca23845421a36453d8" },
@@ -463,8 +447,28 @@ wheels = [
 ]
 
 [[package]]
+name = "halide-llvm"
+version = "24.0.0.dev117054+g7e2f1c59"
+source = { registry = "https://pypi.halide-lang.org/simple" }
+resolution-markers = [
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
+    "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "python_full_version < '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+]
+wheels = [
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-macosx_11_0_arm64.whl", hash = "sha256:1a7b8d556cb6a1c968a03f654279fa772beff6ef47e5586e4e1d56944314496e" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:c40b9e3beadda19e3db9cf309536cf0263513f559048bfeca4c703a998004e03" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9f652f7684db96a54611aa5d95efc9579e6f8baaa4a0ca482088259a7befed34" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:228b211fa5be423b2f471a1120802f6422e12a9689de7bb2f4fb54feeb50252b" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-manylinux_2_28_i686.whl", hash = "sha256:9e9ae338da164c917d55e7f6a3b2b2d3431525298574a23aa52a98e3e621813d" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:6f646fac7fa4c277f8c238d2a582972f4d4cb950db150b0edc887a9f448bf57d" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-win32.whl", hash = "sha256:293922e9a52905b96e8a52d5b0c7207df6a51c13bf6b0a49b2408a0da516548d" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4024.0.0.dev117054%2Bg7e2f1c59/halide_llvm-24.0.0.dev117054%2Bg7e2f1c59-py3-none-win_amd64.whl", hash = "sha256:9adb786f550a4c5d46525e845ca5dd3011243faf099dc9fc7435c52bdbc2f986" },
+]
+
+[[package]]
 name = "halide-runtime"
-version = "22.0.0"
+version = "23.0.0"
 source = { editable = "python_bindings/halide-runtime" }
 dependencies = [
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
@@ -509,16 +513,16 @@ ci-base = [
     { name = "setuptools-scm" },
     { name = "tbump" },
 ]
-ci-llvm-21 = [
+ci-llvm-22 = [
     { name = "abi3audit" },
     { name = "cmake" },
-    { name = "halide-llvm", version = "21.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
-    { name = "imageio", version = "2.37.4", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-21') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-21') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
-    { name = "imageio", version = "2.38.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-21') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "halide-llvm", version = "22.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "imageio", version = "2.37.4", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "imageio", version = "2.38.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
     { name = "nanobind" },
     { name = "ninja" },
-    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-21') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-21') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-21') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
     { name = "pillow", version = "12.3.0", source = { registry = "https://piwheels.org/simple" }, marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'" },
     { name = "pre-commit" },
@@ -529,16 +533,16 @@ ci-llvm-21 = [
     { name = "setuptools-scm" },
     { name = "tbump" },
 ]
-ci-llvm-22 = [
+ci-llvm-23 = [
     { name = "abi3audit" },
     { name = "cmake" },
-    { name = "halide-llvm", version = "22.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
-    { name = "imageio", version = "2.37.4", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
-    { name = "imageio", version = "2.38.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "halide-llvm", version = "23.1.4", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "imageio", version = "2.37.4", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-23') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "imageio", version = "2.38.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
     { name = "nanobind" },
     { name = "ninja" },
-    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-23') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
     { name = "pillow", version = "12.3.0", source = { registry = "https://piwheels.org/simple" }, marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'" },
     { name = "pre-commit" },
@@ -552,13 +556,13 @@ ci-llvm-22 = [
 ci-llvm-main = [
     { name = "abi3audit" },
     { name = "cmake" },
-    { name = "halide-llvm", version = "23.1.4", source = { registry = "https://pypi.halide-lang.org/simple" } },
-    { name = "imageio", version = "2.37.4", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
-    { name = "imageio", version = "2.38.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "halide-llvm", version = "24.0.0.dev117054+g7e2f1c59", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "imageio", version = "2.37.4", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "imageio", version = "2.38.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
     { name = "nanobind" },
     { name = "ninja" },
-    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-22') or (extra == 'group-16-halide-workspace-ci-llvm-21' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'armv7l' and platform_machine != 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" }, marker = "(platform_machine == 'armv7l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (platform_machine == 'armv8l' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-23') or (extra == 'group-16-halide-workspace-ci-llvm-22' and extra == 'group-16-halide-workspace-ci-llvm-main') or (extra == 'group-16-halide-workspace-ci-llvm-23' and extra == 'group-16-halide-workspace-ci-llvm-main')" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
     { name = "pillow", version = "12.3.0", source = { registry = "https://piwheels.org/simple" }, marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'" },
     { name = "pre-commit" },
@@ -595,9 +599,9 @@ tools = [
 
 [package.metadata.requires-dev]
 apps = [
-    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2", index = "https://pypi.org/simple" },
+    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2" },
     { name = "imageio", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=2", index = "https://piwheels.org/simple" },
-    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26", index = "https://pypi.org/simple" },
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26" },
     { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=1.26", index = "https://piwheels.org/simple" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
     { name = "pillow", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", index = "https://piwheels.org/simple" },
@@ -607,31 +611,11 @@ apps = [
 ci-base = [
     { name = "abi3audit" },
     { name = "cmake", specifier = ">=3.28" },
-    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2", index = "https://pypi.org/simple" },
+    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2" },
     { name = "imageio", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=2", index = "https://piwheels.org/simple" },
     { name = "nanobind", specifier = ">=2.11,<2.12" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26", index = "https://pypi.org/simple" },
-    { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=1.26", index = "https://piwheels.org/simple" },
-    { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
-    { name = "pillow", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", index = "https://piwheels.org/simple" },
-    { name = "pre-commit", specifier = ">=4" },
-    { name = "protobuf", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=7" },
-    { name = "pytest", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
-    { name = "ruff", specifier = ">=0.12" },
-    { name = "scikit-build-core", specifier = ">=1.0.3" },
-    { name = "setuptools-scm", specifier = ">=8.3.1" },
-    { name = "tbump", specifier = ">=6.11" },
-]
-ci-llvm-21 = [
-    { name = "abi3audit" },
-    { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = ">=21.0.0.dev0,<22", index = "https://pypi.halide-lang.org/simple" },
-    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2", index = "https://pypi.org/simple" },
-    { name = "imageio", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=2", index = "https://piwheels.org/simple" },
-    { name = "nanobind", specifier = ">=2.11,<2.12" },
-    { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26", index = "https://pypi.org/simple" },
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26" },
     { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=1.26", index = "https://piwheels.org/simple" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
     { name = "pillow", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", index = "https://piwheels.org/simple" },
@@ -647,11 +631,31 @@ ci-llvm-22 = [
     { name = "abi3audit" },
     { name = "cmake", specifier = ">=3.28" },
     { name = "halide-llvm", specifier = ">=22.0.0.dev0,<23", index = "https://pypi.halide-lang.org/simple" },
-    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2", index = "https://pypi.org/simple" },
+    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2" },
     { name = "imageio", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=2", index = "https://piwheels.org/simple" },
     { name = "nanobind", specifier = ">=2.11,<2.12" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26", index = "https://pypi.org/simple" },
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26" },
+    { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=1.26", index = "https://piwheels.org/simple" },
+    { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
+    { name = "pillow", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", index = "https://piwheels.org/simple" },
+    { name = "pre-commit", specifier = ">=4" },
+    { name = "protobuf", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=7" },
+    { name = "pytest", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
+    { name = "ruff", specifier = ">=0.12" },
+    { name = "scikit-build-core", specifier = ">=1.0.3" },
+    { name = "setuptools-scm", specifier = ">=8.3.1" },
+    { name = "tbump", specifier = ">=6.11" },
+]
+ci-llvm-23 = [
+    { name = "abi3audit" },
+    { name = "cmake", specifier = ">=3.28" },
+    { name = "halide-llvm", specifier = ">=23.0.0.dev0,<24", index = "https://pypi.halide-lang.org/simple" },
+    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2" },
+    { name = "imageio", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=2", index = "https://piwheels.org/simple" },
+    { name = "nanobind", specifier = ">=2.11,<2.12" },
+    { name = "ninja", specifier = ">=1.11,!=1.13.0" },
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26" },
     { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=1.26", index = "https://piwheels.org/simple" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
     { name = "pillow", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", index = "https://piwheels.org/simple" },
@@ -666,12 +670,12 @@ ci-llvm-22 = [
 ci-llvm-main = [
     { name = "abi3audit" },
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = ">=23.0.0.dev0,<24", index = "https://pypi.halide-lang.org/simple" },
-    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2", index = "https://pypi.org/simple" },
+    { name = "halide-llvm", specifier = ">=24.0.0.dev0,<25", index = "https://pypi.halide-lang.org/simple" },
+    { name = "imageio", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=2" },
     { name = "imageio", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=2", index = "https://piwheels.org/simple" },
     { name = "nanobind", specifier = ">=2.11,<2.12" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
-    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26", index = "https://pypi.org/simple" },
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = ">=1.26" },
     { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = ">=1.26", index = "https://piwheels.org/simple" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
     { name = "pillow", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", index = "https://piwheels.org/simple" },
@@ -728,7 +732,7 @@ name = "imageio"
 version = "2.37.4"
 source = { registry = "https://piwheels.org/simple" }
 resolution-markers = [
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
 ]
 dependencies = [
     { name = "numpy", version = "2.5.2", source = { registry = "https://piwheels.org/simple" } },
@@ -1055,7 +1059,7 @@ name = "numpy"
 version = "2.5.2"
 source = { registry = "https://piwheels.org/simple" }
 resolution-markers = [
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
 ]
 wheels = [
     { url = "https://piwheels.org/simple/numpy/numpy-2.5.2-cp313-cp313-linux_armv7l.whl", hash = "sha256:cea39dc91a59c3e2087e37107ee5e6fb8e37ab306d0f49d1e2fe0296508c57c5" },
@@ -1124,7 +1128,7 @@ name = "pillow"
 version = "12.3.0"
 source = { registry = "https://piwheels.org/simple" }
 resolution-markers = [
-    "platform_machine == 'armv7l' or platform_machine == 'armv8l'",
+    "(python_full_version >= '3.13' and platform_machine == 'armv7l') or (python_full_version >= '3.13' and platform_machine == 'armv8l')",
 ]
 wheels = [
     { url = "https://piwheels.org/simple/pillow/pillow-12.3.0-cp313-cp313-linux_armv7l.whl", hash = "sha256:d8b2b201942a627bca287184e7330d3ccbf4a6cce11ccc6ca8d2fb3bd1b08dff" },

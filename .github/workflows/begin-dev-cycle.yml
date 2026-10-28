@@ -1,0 +1,130 @@
+name: Begin development cycle
+
+# Two-step, release-manager-driven version bump for the start of a new
+# development cycle (e.g. 22.0.0 -> 23.0.0, tagged v23.0.0.dev0).
+#
+#   1. Run with action=open. The halide-ci app runs tbump on a branch and opens
+#      a PR. Push any extra changes the new cycle needs to that branch.
+#   2. Approve the PR, then run with action=land. The app fast-forwards main to
+#      the PR head and pushes the v<version>.dev0 tag in one atomic push, so no
+#      build of main ever sees the bump without its tag.
+#
+# Step 2 does not bypass branch protection: GitHub accepts the push only
+# because it is a fast-forward to the head of an approved PR. Do not use the
+# merge button on these PRs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "open: create the version-bump PR; land: push the approved PR and its tag"
+        required: true
+        type: choice
+        options: [ open, land ]
+      version:
+        description: "New version (default: next major after the current tbump version)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  begin-dev-cycle:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.LLVM_UPDATER_ID }}
+          private-key: ${{ secrets.LLVM_UPDATER_PRIVATE_KEY }}
+
+      - name: Get GitHub App user ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git and environment
+        run: |
+          echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+          echo "APP_SLUG=${{ steps.app-token.outputs.app-slug }}" >> "$GITHUB_ENV"
+          git config --global user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config --global user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Determine version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          CURRENT=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["tbump"]["version"]["current"])')
+          VERSION="${INPUT_VERSION:-$(( ${CURRENT%%.*} + 1 )).0.0}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Bad version '$VERSION'"; exit 1; }
+          MAJOR=${VERSION%%.*}
+          {
+            echo "CURRENT=$CURRENT"
+            echo "VERSION=$VERSION"
+            echo "TAG=v$VERSION.dev0"
+            echo "BRANCH=automated/begin-halide-$MAJOR"
+            echo "TITLE=Begin Halide $MAJOR development cycle"
+          } >> "$GITHUB_ENV"
+
+      - name: Open version-bump PR
+        if: inputs.action == 'open'
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists"; exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::Branch $BRANCH already exists; delete it or land the existing PR"; exit 1
+          fi
+
+          git checkout -b "$BRANCH"
+          uv run --frozen --only-group tools tbump --non-interactive --only-patch "$VERSION"
+          uv lock
+          git commit -am "$TITLE"
+          git push -u origin "$BRANCH"
+
+          gh pr create --head "$BRANCH" --title "$TITLE" --body-file - <<EOF
+          Bumps the Halide version from $CURRENT to $VERSION. Landing this PR creates the tag \`$TAG\`.
+
+          Push any other changes the new cycle needs to this branch, e.g. moving the \`ci-llvm-*\` dependency groups in \`pyproject.toml\` and changing the supported LLVM versions.
+
+          **Do not use the merge button.** Approve this PR and keep it rebased on \`main\` (fast-forwardable), then run the [Begin development cycle](https://github.com/${{ github.repository }}/actions/workflows/begin-dev-cycle.yml) workflow with \`action=land\` and \`version=$VERSION\`.
+          EOF
+
+      - name: Land approved PR and tag atomically
+        if: inputs.action == 'land'
+        run: |
+          read -r STATE DECISION AUTHOR HEAD < <(
+            gh pr view "$BRANCH" --json state,reviewDecision,author,headRefOid \
+              --jq '[.state, .reviewDecision, .author.login, .headRefOid] | @tsv')
+
+          [[ "$STATE" == OPEN ]] || { echo "::error::PR for $BRANCH is $STATE"; exit 1; }
+          [[ "$DECISION" == APPROVED ]] || { echo "::error::PR for $BRANCH is not approved ($DECISION)"; exit 1; }
+          [[ "$AUTHOR" == "app/$APP_SLUG" ]] || { echo "::error::PR was opened by $AUTHOR, not $APP_SLUG"; exit 1; }
+
+          git fetch origin "$BRANCH"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$HEAD" ]] || { echo "::error::Branch moved while landing; retry"; exit 1; }
+          git merge-base --is-ancestor origin/main "$HEAD" \
+            || { echo "::error::$BRANCH is not a fast-forward of main; rebase it and get it re-approved"; exit 1; }
+
+          RUNTIME_VERSION=$(git show "$HEAD:src/runtime/HalideRuntime.h" |
+            awk '$2 ~ /^HALIDE_VERSION_(MAJOR|MINOR|PATCH)$/ { v = v (v == "" ? "" : ".") $3 } END { print v }')
+          [[ "$RUNTIME_VERSION" == "$VERSION" ]] \
+            || { echo "::error::PR head is version $RUNTIME_VERSION, expected $VERSION"; exit 1; }
+
+          git tag -a "$TAG" -m "$TAG" "$HEAD"
+          git push --atomic origin "$HEAD:refs/heads/main" "refs/tags/$TAG"
+          git push origin --delete "$BRANCH"

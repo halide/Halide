@@ -45,9 +45,9 @@ ci-base = [
   { include-group = "apps" },
   { include-group = "tools" },
 ]
-ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm>=23.0.0.dev0,<24"]
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm>=24.0.0.dev0,<25"]
+ci-llvm-23 = [{ include-group = "ci-base" }, "halide-llvm>=23.0.0.dev0,<24"]
 ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm>=22.0.0.dev0,<23"]
-ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm>=21.0.0.dev0,<22"]
 
 [tool.uv.sources]
 halide-bin = { workspace = true }
@@ -55,18 +55,9 @@ halide-flatbuffers = { index = "halide" }
 halide-wabt = { index = "halide" }
 halide-runtime = { workspace = true }
 halide-llvm = { index = "halide" }
-imageio = [
-  { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" },
-  { index = "pypi", marker = "platform_machine != 'armv8l' and platform_machine != 'armv7l'" },
-]
-numpy = [
-  { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" },
-  { index = "pypi", marker = "platform_machine != 'armv8l' and platform_machine != 'armv7l'" },
-]
-pillow = [
-  { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" },
-  { index = "pypi", marker = "platform_machine != 'armv8l' and platform_machine != 'armv7l'" },
-]
+imageio = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+numpy = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
+pillow = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
 
 [[tool.uv.index]]
 name = "pypi"
@@ -85,11 +76,17 @@ explicit = true
 
 [tool.uv]
 package = false
+# piwheels only publishes ARM wheels for Raspberry Pi OS's Pythons (3.11 and
+# 3.13), so with requires-python >= 3.12, only lock ARM for 3.13+.
+environments = [
+  "platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+  "(platform_machine == 'armv7l' or platform_machine == 'armv8l') and python_full_version >= '3.13'",
+]
 conflicts = [
   [
     { package = "halide-workspace", group = "ci-llvm-main" },
+    { package = "halide-workspace", group = "ci-llvm-23" },
     { package = "halide-workspace", group = "ci-llvm-22" },
-    { package = "halide-workspace", group = "ci-llvm-21" },
   ],
 ]
 # numpy 2.4.6 and 2.5.2 only have piwheels ARM wheels locked; without this
@@ -108,7 +105,7 @@ build-constraint-dependencies = ["numpy!=2.4.6,!=2.5.2"]
 # base versions are kept in sync with the release version by tbump below.
 [[tool.uv.dependency-metadata]]
 name = "halide"
-version = "22.0.0"
+version = "23.0.0"
 requires-python = ">=3.12"
 requires-dist = [
   "halide-bin",
@@ -119,20 +116,20 @@ requires-dist = [
 
 [[tool.uv.dependency-metadata]]
 name = "halide-runtime"
-version = "22.0.0"
+version = "23.0.0"
 requires-python = ">=3.12"
 requires-dist = ["numpy>=1.26"]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-bin"
-version = "22.0.0"
+version = "23.0.0"
 requires-python = ">=3.12"
 
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"
 
 [tool.tbump.version]
-current = "22.0.0"
+current = "23.0.0"
 regex = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
 
 [tool.tbump.git]

@@ -789,7 +789,11 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
  *  to name-mangled win32 api calls to non-name-mangled versions.
  */
 void undo_win32_name_mangling(llvm::Module *m) {
+#if LLVM_VERSION >= 240
+    llvm::IRBuilder<> builder(*m);
+#else
     llvm::IRBuilder<> builder(m->getContext());
+#endif
     // For every function prototype...
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
         llvm::Function &f = *iter;

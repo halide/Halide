@@ -121,11 +121,10 @@ building the core pieces of Halide.
 | [Python]      | `>=3.12`           | `WITH_PYTHON_BINDINGS=ON`  | Regular, GIL-enabled CPython.                                                             |
 | [nanobind]    | `>=2.11,<2.12`     | `WITH_PYTHON_BINDINGS=ON`  | Required to build Halide's bindings, not downstream generator stubs.                      |
 
-Halide maintains the following compatibility policy with LLVM: Halide version
-`N` supports LLVM versions `N`, `N-1`, and `N-2`. Our binary distributions
-always include the latest `N` patch at time of release. For most users, we
-recommend using a pre-packaged binary release of LLVM rather than trying to
-build it yourself.
+Halide supports the latest stable version of LLVM, the previous stable version,
+and trunk. The current development branch supports LLVM 22, 23, and 24 (trunk).
+For most users, we recommend using a pre-packaged binary release of LLVM rather
+than trying to build it yourself.
 
 To build the apps, documentation, and tests, an extended set is needed.
 
@@ -349,7 +348,7 @@ $ cmake --preset=debug    # Debug mode, any single-config generator / compiler
 $ cmake --preset=release  # Release mode, any single-config generator / compiler
 ```
 
-The `macOS-coverage` and `macOS-fuzz` presets use Homebrew Clang 21. Their
+The `macOS-coverage` and `macOS-fuzz` presets use Homebrew Clang 22. Their
 toolchain defaults to the `macosx` SDK, resolved by CMake; override
 `CMAKE_OSX_SYSROOT` to use a different SDK. Clang discovers the standard headers
 from the selected SDK and its own installation.

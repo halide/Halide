@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(
     Halide
-    VERSION 22.0.0
+    VERSION 23.0.0
     DESCRIPTION "Halide compiler and libraries"
     HOMEPAGE_URL "https://halide-lang.org"
 )
@@ -193,7 +193,7 @@ find_package(Threads REQUIRED)
 
 ## LLVM
 find_package(
-    Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
+    Halide_LLVM 22...99 REQUIRED  # Use 99 to fake a minimum-only constraint
     COMPONENTS WebAssembly X86
     OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV
 )

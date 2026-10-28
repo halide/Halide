@@ -328,6 +328,7 @@ void CodeGen_PTX_Dev::init_module() {
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
+    init_builder();
 
     struct Intrinsic {
         const char *name;
@@ -389,13 +390,9 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
         llvm::Function *barrier;
         if ((barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all")) && barrier->getIntrinsicID() != 0) {
-            // LLVM 20.1.6 and above: https://github.com/llvm/llvm-project/pull/140615
             builder->CreateCall(barrier, builder->getInt32(0));
-        } else if ((barrier = module->getFunction("llvm.nvvm.barrier0")) && barrier->getIntrinsicID() != 0) {
-            // LLVM 21.1.5 and below: Testing for llvm.nvvm.barrier0 can be removed once we drop support for LLVM 20
-            builder->CreateCall(barrier);
         } else {
-            internal_error << "Could not find PTX barrier intrinsic llvm.nvvm.barrier0 nor llvm.nvvm.barrier.cta.sync.aligned.all\n";
+            internal_error << "Could not find PTX barrier intrinsic llvm.nvvm.barrier.cta.sync.aligned.all\n";
         }
         value = ConstantInt::get(i32_t, 0);
         return;
@@ -1062,12 +1059,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
+#if LLVM_VERSION < 240
     options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
     options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
     options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
+#endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
@@ -1124,7 +1123,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     pto.LoopUnrolling = do_loop_opt;
     pto.ForgetAllSCEVInLoopUnroll = true;
 
+#if LLVM_VERSION >= 240
+    llvm::PassBuilder pb(module->getContext(), target_machine.get(), pto);
+#else
     llvm::PassBuilder pb(target_machine.get(), pto);
+#endif
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;

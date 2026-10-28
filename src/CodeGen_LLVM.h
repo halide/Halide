@@ -214,6 +214,9 @@ protected:
 
     /** Grab all the context specific internal state. */
     virtual void init_context();
+    /** Create the IRBuilder for the current module. Call this after
+     * setting the module. */
+    void init_builder();
     /** Initialize the CodeGen_LLVM internal state to compile a fresh
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
@@ -722,6 +725,9 @@ protected:
 
     /** Attach LLVM's non-temporal metadata to a memory instruction. */
     void add_streaming_metadata(llvm::Instruction *inst);
+    /** Like add_streaming_metadata, but skips loads that are too narrow to
+     * be non-temporal. */
+    void add_streaming_load_metadata(llvm::Instruction *inst);
 
     /** Warning messages which we want to avoid displaying number of times */
     enum class WarningKind {
