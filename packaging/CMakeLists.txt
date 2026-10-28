@@ -401,6 +401,13 @@ cpack_add_component(
 )
 
 cpack_add_component(
+    Halide_PythonBin
+    DISPLAY_NAME "Python binary loader"
+    DESCRIPTION "The halide.bin module imported by the Python bindings"
+    DEPENDS Halide_Runtime
+)
+
+cpack_add_component(
     Halide_PythonRuntime
     DISPLAY_NAME "Python runtime bindings"
     DESCRIPTION "Python bindings for Halide runtime types and AOT modules"
