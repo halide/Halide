@@ -3664,6 +3664,12 @@ Func &Func::memoize(const EvictionKey &eviction_key) {
     return *this;
 }
 
+Func &Func::precompute() {
+    invalidate_cache();
+    func.schedule().precomputed() = true;
+    return compute_root();
+}
+
 Func &Func::store_in(MemoryType t) {
     invalidate_cache();
     func.schedule().memory_type() = t;

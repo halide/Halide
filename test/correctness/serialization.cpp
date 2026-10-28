@@ -119,6 +119,37 @@ int main() {
         }
     }
 
+    // The precompute() directive survives a round trip.
+    {
+        Func lut("lut"), g("g");
+        lut(x) = x * 3;
+        g(x) = lut(x % 8) + 1;
+        lut.precompute();
+
+        std::vector<uint8_t> data;
+        std::map<std::string, Parameter> params;
+        serialize_pipeline(Pipeline(g), data, params);
+        Pipeline deserialized = deserialize_pipeline(data, params);
+
+        Module m = deserialized.compile_to_module({}, "g", get_jit_target_from_environment());
+        int precomputed = 0;
+        for (const Buffer<> &b : m.buffers()) {
+            precomputed += b.name().find("_precomputed") != std::string::npos;
+        }
+        if (precomputed != 1) {
+            printf("Expected the deserialized pipeline to precompute lut\n");
+            return 1;
+        }
+
+        Buffer<int> result = deserialized.realize({16});
+        for (int i = 0; i < 16; i++) {
+            if (result(i) != (i % 8) * 3 + 1) {
+                printf("Mismatch at %d: expected %d, got %d\n", i, (i % 8) * 3 + 1, result(i));
+                return 1;
+            }
+        }
+    }
+
     // A corrupted buffer is still rejected: raising max_depth must not
     // disable the structural verification #9395 added.
     {

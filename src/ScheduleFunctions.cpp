@@ -2564,6 +2564,28 @@ void validate_output_schedules(const vector<Function> &outputs) {
     }
 }
 
+void validate_precomputed_schedules(const vector<Function> &outputs,
+                                    const map<string, Function> &env) {
+    for (const auto &[name, f] : env) {
+        if (!f.schedule().precomputed()) {
+            continue;
+        }
+        for (const Function &out : outputs) {
+            user_assert(!out.same_as(f))
+                << "Func \"" << name << "\" is scheduled precompute(), but it is an output "
+                << "of the pipeline. Only intermediate Funcs can be precomputed.\n";
+        }
+        user_assert(!f.schedule().memoized())
+            << "Func \"" << name << "\" is scheduled both precompute() and memoize(). "
+            << "A Func can only be one or the other.\n";
+        const LoopLevel &level = f.schedule().compute_level();
+        user_assert(level.is_root())
+            << "Func \"" << name << "\" is scheduled precompute(), so it must be computed "
+            << "at root, but it is scheduled to be "
+            << (level.is_inlined() ? "inlined" : "computed at " + level.to_string()) << ".\n";
+    }
+}
+
 void validate_fused_group_schedule_helper(const string &fn,
                                           size_t stage_index,
                                           const Definition &def_1,
@@ -2759,6 +2781,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
     any_memoized = false;
 
     validate_output_schedules(outputs);
+
+    validate_precomputed_schedules(outputs, env);
 
     validate_fused_groups_schedule(fused_groups, env);
 

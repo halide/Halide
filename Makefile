@@ -561,6 +561,7 @@ SOURCE_FILES = \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
+  PrecomputeConstants.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
@@ -773,6 +774,7 @@ HEADER_FILES = \
   Parameter.h \
   PartitionLoops.h \
   Pipeline.h \
+  PrecomputeConstants.h \
   Prefetch.h \
   PrefetchDirective.h \
   Profiling.h \

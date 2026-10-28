@@ -427,6 +427,11 @@ tests(
     pointer_arithmetic.cpp
     popc_clz_ctz_bounds.cpp
     powerpc_cpu_detect.cpp
+    precompute.cpp
+    precompute_compute_at.cpp
+    precompute_output.cpp
+    precompute_param.cpp
+    precompute_unbounded.cpp
     predicate_loads_used_in_inner_splits.cpp
     predicated_store_load.cpp
     predicated_store_load_single_lane.cpp
