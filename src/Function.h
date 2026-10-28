@@ -300,6 +300,9 @@ public:
     const std::vector<std::string> &get_trace_tags() const;
     // @}
 
+    /** Turn off all tracing of this Function, and drop its trace tags. */
+    void clear_tracing();
+
     /** Replace this Function's LoopLevels with locked copies that
      * cannot be mutated further. */
     void lock_loop_levels();

@@ -3,6 +3,7 @@ tests(
     SOURCES
     hidden_pure_definition.cpp
     metal_assertion_in_kernel.cpp
+    precompute_float_cross_compile.cpp
     require_const_false.cpp
     sliding_vectors.cpp
     unscheduled_update_def.cpp

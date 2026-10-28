@@ -246,6 +246,7 @@ struct FuncScheduleContents {
     // thereof) is picked up by each backend.
     int gpu_max_registers = 0;
     bool memoized = false;
+    bool precomputed = false;
     bool async = false;
     // This is an extent of the ring buffer and expected to be a positive integer.
     Expr ring_buffer;
@@ -393,6 +394,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memory_type = contents->memory_type;
     copy.contents->gpu_max_registers = contents->gpu_max_registers;
     copy.contents->memoized = contents->memoized;
+    copy.contents->precomputed = contents->precomputed;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
     copy.contents->ring_buffer = contents->ring_buffer;
@@ -433,6 +435,14 @@ bool &FuncSchedule::memoized() {
 
 bool FuncSchedule::memoized() const {
     return contents->memoized;
+}
+
+bool &FuncSchedule::precomputed() {
+    return contents->precomputed;
+}
+
+bool FuncSchedule::precomputed() const {
+    return contents->precomputed;
 }
 
 Expr &FuncSchedule::memoize_eviction_key() {

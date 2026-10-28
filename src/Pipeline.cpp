@@ -622,6 +622,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             << "Can't compile Pipeline with memoized output Func: " << f.name() << ". "
             << "Memoization is valid only on intermediate Funcs because it takes "
             << "control of buffer allocation.";
+        user_assert(!f.schedule().precomputed())
+            << "Can't compile Pipeline with precomputed output Func: " << f.name() << ". "
+            << "Only intermediate Funcs can be precomputed.";
     }
 
     string new_fn_name(fn_name);
