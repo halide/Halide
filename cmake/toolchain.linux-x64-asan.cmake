@@ -7,8 +7,7 @@
 #
 # Note: requires LLVM to be built with -DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind"
 #
-# Note: only tested with LLVM/Clang 16 as of this comment. Earlier versions
-# may likely work but are not tested.
+# Use a supported LLVM/Clang version for both Halide and its runtime.
 
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR i686)

@@ -606,7 +606,7 @@ HALIDE_ALWAYS_INLINE int64_t unwrap(IntLiteral t) {
 // Convert a provided pattern, expr, or constant int into the internal
 // representation we use in the matcher trees.
 template<typename T,
-         typename = typename std::decay<T>::type::pattern_tag>
+         typename = typename std::decay_t<T>::pattern_tag>
 HALIDE_ALWAYS_INLINE T pattern_arg(T t) {
     return t;
 }

@@ -5,7 +5,6 @@
 ; the AVX register width, and would rather handle the instruction
 ; legalization itself.
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <32 x i8> @paddusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alwaysinline {
   %1 = add <32 x i8> %a0, %a1
   %2 = icmp ugt <32 x i8> %a0, %1
@@ -13,7 +12,6 @@ define weak_odr <32 x i8> @paddusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alw
   ret <32 x i8> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <16 x i16> @padduswx16(<16 x i16> %a0, <16 x i16> %a1) nounwind alwaysinline {
   %1 = add <16 x i16> %a0, %a1
   %2 = icmp ugt <16 x i16> %a0, %1
@@ -21,7 +19,6 @@ define weak_odr <16 x i16> @padduswx16(<16 x i16> %a0, <16 x i16> %a1) nounwind 
   ret <16 x i16> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <32 x i8> @psubusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alwaysinline {
   %1 = icmp ugt <32 x i8> %a0, %a1
   %2 = select <32 x i1> %1, <32 x i8> %a0, <32 x i8> %a1
@@ -29,7 +26,6 @@ define weak_odr <32 x i8> @psubusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alw
   ret <32 x i8> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <16 x i16> @psubuswx16(<16 x i16> %a0, <16 x i16> %a1) nounwind alwaysinline {
   %1 = icmp ugt <16 x i16> %a0, %a1
   %2 = select <16 x i1> %1, <16 x i16> %a0, <16 x i16> %a1

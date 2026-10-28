@@ -272,10 +272,31 @@ void CodeGen_LLVM::initialize_llvm() {
     });
 }
 
-void CodeGen_LLVM::init_context() {
-    // Ensure our IRBuilder is using the current context.
+void CodeGen_LLVM::init_builder() {
+    internal_assert(module && context);
+#if LLVM_VERSION >= 240
+    builder = std::make_unique<IRBuilder<>>(*module);
+#else
     builder = std::make_unique<IRBuilder<>>(*context);
+#endif
 
+    if (any_strict_float) {
+        // Default all operations to strict, and relax any non-strict operations
+        // when possible. This is better than defaulting to relaxed and making
+        // some operations strict, because properties like no-nans are
+        // viral. It's no use having a strict comparison that respects nans if
+        // the source of the inputs was an op tagged with no-nans.
+        set_strict_fp_math();
+        // If the target has the strict_float flag, we act as if we're already
+        // inside a strict_float intrinsic.
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        // Default all operations to relaxed.
+        set_fast_fp_math();
+    }
+}
+
+void CodeGen_LLVM::init_context() {
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
     very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
@@ -296,21 +317,6 @@ void CodeGen_LLVM::init_context() {
 
     // Ensure no Value pointers carry over from previous context.
     struct_type_recovery.clear();
-
-    if (any_strict_float) {
-        // Default all operations to strict, and relax any non-strict operations
-        // when possible. This is better than defaulting to relaxed and making
-        // some operations strict, because properties like no-nans are
-        // viral. It's no use having a strict comparison that respects nans if
-        // the source of the inputs was an op tagged with no-nans.
-        set_strict_fp_math();
-        // If the target has the strict_float flag, we act as if we're already
-        // inside a strict_float intrinsic.
-        in_strict_float = target.has_feature(Target::StrictFloat);
-    } else {
-        // Default all operations to relaxed.
-        set_fast_fp_math();
-    }
 }
 
 void CodeGen_LLVM::init_module() {
@@ -318,6 +324,7 @@ void CodeGen_LLVM::init_module() {
 
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
+    init_builder();
 
     // Record the runtime's symbols now, before any pipeline functions are
     // emitted, so that runtime-namespace renaming can identify runtime-internal
@@ -440,6 +447,9 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
                      target.has_feature(Target::Feature::Debug);
     module->addModuleFlag(llvm::Module::Warning, "halide_enable_backtraces", enable_bt ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+#if LLVM_VERSION >= 240
+    module->addModuleFlag(llvm::Module::Error, "float-abi", MDString::get(*context, use_soft_float_abi() ? "soft" : "hard"));
+#endif
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
@@ -1116,9 +1126,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     global->setInitializer(buffer_struct);
 
     // Finally, dump it in the symbol table
-    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
-    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(halide_buffer_t_type, global, zero);
-    sym_push(buf.name() + ".buffer", global_ptr);
+    sym_push(buf.name() + ".buffer", global);
 }
 
 Constant *CodeGen_LLVM::embed_constant_scalar_value_t(const Expr &e) {
@@ -1165,8 +1173,7 @@ Constant *CodeGen_LLVM::embed_constant_scalar_value_t(const Expr &e) {
     // Ensure that the storage is aligned for halide_scalar_value_t
     storage->setAlignment(llvm::Align((int)sizeof(halide_scalar_value_t)));
 
-    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
-    return ConstantExpr::getInBoundsGetElementPtr(array_type, storage, zero);
+    return storage;
 }
 
 Constant *CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
@@ -1193,8 +1200,7 @@ Constant *CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
         GlobalValue::PrivateLinkage,
         constant);
 
-    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
-    return ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero);
+    return storage;
 }
 
 // Make a wrapper to call the function with an array of pointer
@@ -1255,8 +1261,6 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
                                                     const std::string &function_name, const std::vector<LoweredArgument> &args,
                                                     const MetadataNameMap &metadata_name_map) {
-    Constant *zero = ConstantInt::get(i32_t, 0);
-
     const int num_args = (int)args.size();
 
     auto map_string = [&metadata_name_map](const std::string &from) -> std::string {
@@ -1308,8 +1312,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
                 GlobalValue::PrivateLinkage,
                 ConstantArray::get(buffer_estimates_array, buffer_estimates_array_entries));
 
-            Value *zeros[] = {zero, zero};
-            buffer_estimates_array_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_estimates_array, buffer_estimates_array_storage, zeros);
+            buffer_estimates_array_ptr = buffer_estimates_array_storage;
         } else {
             buffer_estimates_array_ptr = Constant::getNullValue(ptr_t);
         }
@@ -1336,11 +1339,10 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 
     Constant *version = ConstantInt::get(i32_t, halide_filter_metadata_t::VERSION);
 
-    Value *zeros[] = {zero, zero};
     Constant *metadata_fields[] = {
         /* version */ version,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
-        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
+        /* arguments */ arguments_array_storage,
         /* target */ create_string_constant(target.to_string()),
         /* name */ create_string_constant(function_name)};
 
@@ -1390,28 +1392,11 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    llvm::PassInstrumentationCallbacks pic;
-#if LLVM_VERSION < 220
-    if (get_target().has_feature(Target::SVE) || get_target().has_feature(Target::SVE2)) {
-        // LLVM 21's LoopAccessAnalysis::getStrideFromAddRec() queries a
-        // scalable-vector access type's fixed element count, which hits a
-        // fatal assertion (TypeSize::getFixedValue on a scalable TypeSize).
-        // This is reached from LoopLoadEliminationPass, which the default
-        // pipeline always runs (independent of Halide's own loop-opt
-        // settings). Fixed upstream in LLVM 22 by guarding that query
-        // against ScalableVectorType. Loop load elimination looks for
-        // opportunities to forward a store to a later load across loop
-        // iterations, which Halide-generated code essentially never
-        // benefits from, so skip it entirely on affected SVE targets rather
-        // than accept a compiler crash (or, in a no-asserts LLVM build, a
-        // silently bogus stride).
-        pic.registerShouldRunOptionalPassCallback(
-            [](llvm::StringRef pass_name, const llvm::Any &) {
-                return pass_name != "LoopLoadEliminationPass";
-            });
-    }
+#if LLVM_VERSION >= 240
+    llvm::PassBuilder pb(module->getContext(), tm.get(), pto);
+#else
+    llvm::PassBuilder pb(tm.get(), pto);
 #endif
-    llvm::PassBuilder pb(tm.get(), pto, /*PGOOpt=*/std::nullopt, &pic);
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
@@ -2328,6 +2313,20 @@ void CodeGen_LLVM::add_streaming_metadata(llvm::Instruction *inst) {
     inst->setMetadata(llvm::LLVMContext::MD_nontemporal, nontemporal_node);
 }
 
+void CodeGen_LLVM::add_streaming_load_metadata(llvm::Instruction *inst) {
+    // There are no non-temporal loads narrower than 32 bits, and X86 isel
+    // crashes on them ("Unsupported store size"). Scalar loads hit this when
+    // inserted into vectors, as do masked loads, which LLVM 24+ scalarizes
+    // with the metadata intact.
+    llvm::Type *t = inst->getType();
+    const bool masked = isa<llvm::IntrinsicInst>(inst);
+    const uint64_t bits = masked ? t->getScalarSizeInBits() : t->getPrimitiveSizeInBits().getKnownMinValue();
+    if (bits < 32) {
+        return;
+    }
+    add_streaming_metadata(inst);
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
@@ -2351,7 +2350,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(op->type), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         if (op->is_streaming) {
-            add_streaming_metadata(load);
+            add_streaming_load_metadata(load);
         }
         value = load;
     } else {
@@ -2384,7 +2383,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 if (op->is_streaming) {
-                    add_streaming_metadata(val);
+                    add_streaming_load_metadata(val);
                 }
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = CreateInBoundsGEP(builder.get(), load_type, ptr, stride);
@@ -2402,7 +2401,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 if (op->is_streaming) {
-                    add_streaming_metadata(val);
+                    add_streaming_load_metadata(val);
                 }
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -2417,7 +2416,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 if (op->is_streaming) {
-                    add_streaming_metadata(val);
+                    add_streaming_load_metadata(val);
                 }
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -2953,7 +2952,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         }
         add_tbaa_metadata(load_inst, name, slice_index);
         if (is_streaming) {
-            add_streaming_metadata(load_inst);
+            add_streaming_load_metadata(load_inst);
         }
         slices.push_back(load_inst);
     }
@@ -3021,7 +3020,6 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
     Halide::Type value_type = op->value.type();
 
     // For atomicAdd, we check if op->value - store[index] is independent of store.
-    // For llvm version < 9, the atomicRMW operations only support integers so we also check that.
     Expr equiv_load = Load::make(value_type, op->name,
                                  op->index,
                                  Buffer<>(),
@@ -4217,10 +4215,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     }
     global->setAlignment(llvm::Align(alignment));
 
-    Constant *zero = ConstantInt::get(i32_t, 0);
-    Constant *zeros[] = {zero, zero};
-    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
-    return ptr;
+    return global;
 }
 
 void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Value *error_code) {
@@ -4910,12 +4905,10 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
         const int vscale = std::max(effective_vscale, 1);
-        // LLVM added VECREDUCE_MUL/FMUL lowering for SVE in LLVM 22.
-        const bool mul_ok = LLVM_VERSION >= 220 || effective_vscale == 0;
         const bool llvm_has_intrinsic =
             // Must be one of these ops
             ((op->op == VectorReduce::Add ||
-              (op->op == VectorReduce::Mul && mul_ok) ||
+              op->op == VectorReduce::Mul ||
               op->op == VectorReduce::Min ||
               op->op == VectorReduce::Max) &&
              (use_llvm_vp_intrinsics ||
@@ -5131,7 +5124,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     if (entry->empty()) {
         builder->SetInsertPoint(entry);
     } else {
-        builder->SetInsertPoint(entry, entry->getFirstInsertionPt());
+        builder->SetInsertPoint(entry->getFirstInsertionPt());
     }
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);

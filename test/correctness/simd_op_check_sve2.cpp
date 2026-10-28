@@ -725,8 +725,7 @@ private:
             // which makes it prone to false-positive detection as we only search strings line-by-line.
 
             // LDn       -       Structured Load strided elements
-            if (target.os != Target::IOS && target.os != Target::MacOS &&
-                Halide::Internal::get_llvm_version() >= 220) {
+            if (target.os != Target::IOS && target.os != Target::MacOS) {
                 for (int stride = 2; stride <= 4; ++stride) {
 
                     for (int factor : {1, 2, 4}) {
@@ -834,9 +833,7 @@ private:
                 Expr store_3 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve_or_sme()) {
-                    if (Halide::Internal::get_llvm_version() >= 220) {
-                        add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
-                    }
+                    add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
                 } else {
                     add_stn(sel_op("vst3.", "st3"), store_3);
                 }
@@ -863,9 +860,7 @@ private:
                 Expr store_4 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve_or_sme()) {
-                    if (Halide::Internal::get_llvm_version() >= 220) {
-                        add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
-                    }
+                    add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
                 } else {
                     add_stn(sel_op("vst4.", "st4"), store_4);
                 }
@@ -1477,12 +1472,6 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (Internal::get_llvm_version() < 220) {
-        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
-               Internal::get_llvm_version());
-        return 0;
-    }
-
     // IMPORTANT:
     // When adding new targets here, make sure to also update
     // can_run_code() in this file to include any new features used.

@@ -83,13 +83,6 @@ void check(Func g) {
 }
 
 int main(int argc, char **argv) {
-    if (Internal::get_llvm_version() < 220 &&
-        get_jit_target_from_environment().has_feature(Target::SVE2)) {
-        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
-               Internal::get_llvm_version());
-        return 0;
-    }
-
     Var x{"x"}, y{"y"}, xi{"xi"}, yi{"yi"};
 
     // In each case we'll say g(x, y) = f(y, x) and tile it. We will try power
@@ -185,8 +178,7 @@ int main(int argc, char **argv) {
         {
             // LLVM 22 has a codegen bug for some x86 versions here, so skip with AVX512
             // See: https://github.com/llvm/llvm-project/issues/191304
-            if (Internal::get_llvm_version() >= 220 &&
-                Internal::get_llvm_version() < 230 &&
+            if (Internal::get_llvm_version() < 230 &&
                 get_jit_target_from_environment().has_feature(Target::AVX512)) {
                 printf("Skipping one subtest for LLVM %d with AVX-512 due to known backend bugs.\n",
                        Internal::get_llvm_version());

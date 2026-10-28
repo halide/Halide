@@ -160,7 +160,7 @@ issue.
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, or trunk. At the time of writing,
-this means versions 23, 22, and 21 are supported, but 20 is not.
+this means versions 22, 23, and 24 (trunk) are supported, but 21 is not.
 
 We publish the LLVM builds we use in CI as Python packages on our
 [package index][halide-pypi]. This is the easiest way to get a suitable LLVM on
@@ -172,8 +172,8 @@ $ uv sync --frozen --group ci-llvm-22 --no-install-workspace
 $ export Halide_LLVM_ROOT=$(halide-llvm --prefix)
 ```
 
-Replace `22` with the desired LLVM major version (`21`, `22`, `23`, or `main`).
-The repository root is a uv workspace containing the three Python distributions.
+Replace `22` with the desired LLVM major version (`22`, `23`, or `main`). The
+repository root is a uv workspace containing the three Python distributions.
 `--no-install-workspace` installs only the development tools and LLVM package
 needed for a normal CMake build; `--frozen` uses the committed lockfile without
 evaluating or building the workspace packages. To build and install all three
@@ -197,11 +197,10 @@ script.
 First check it out from GitHub:
 
 ```shell
-$ git clone --depth 1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git
+$ git clone --depth 1 --branch llvmorg-22.1.8 https://github.com/llvm/llvm-project.git
 ```
 
-(LLVM 21.1.8 is the most recent released LLVM at the time of writing. For
-current trunk, use `main` instead)
+(These instructions use LLVM 22.1.8. For current trunk, use `main` instead.)
 
 Then build it like so:
 
@@ -411,10 +410,10 @@ Install any dependencies required by the chosen app first.
 > and RAM. Prefer the pre-built `halide-llvm` binaries (see
 > [Acquiring LLVM](#acquiring-llvm)) unless you need a custom configuration.
 
-First, download LLVM's sources (these instructions use the 21.1.8 release).
+First, download LLVM's sources (these instructions use the 22.1.8 release).
 
 ```
-D:\> git clone --depth 1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvmorg-22.1.8 https://github.com/llvm/llvm-project.git
 ```
 
 As above, run `vcvarsall.bat` to pick between x86 and x64. Then configure LLVM
