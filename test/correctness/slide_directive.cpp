@@ -240,9 +240,7 @@ int main(int argc, char **argv) {
             return 1;
         }
         // The window spans xi as well as one step of xo, so it is five wide,
-        // and folding rounds that up to a power of two. Sliding window works
-        // this out and leaves it behind for storage folding, which can't see
-        // the dimension any more by the time it runs.
+        // and folding rounds that up to a power of two.
         if (alloc.size != 8) {
             printf("Sliding over an intermediate Var gave f an allocation of "
                    "%d, expected 8\n",
@@ -325,6 +323,211 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // The region required can move with loops inside the dimension slid
+        // over too. Here it moves with x as well as y, and f is computed per
+        // value of x, but f's storage holds every x, so each x slides along y
+        // with a window of its own.
+        Func f("f"), g("g");
+        Var x("x"), y("y"), yo("yo"), yi("yi");
+        f(x, y) = counted(x + y);
+        g(x, y) = f(x, x + y) + f(x, x + y - 1);
+        g.split(y, yo, yi, 4, TailStrategy::RoundUp);
+        f.store_root().compute_at(g, x).slide(g, y);
+
+        call_count = 0;
+        Buffer<int> out = g.realize({8, 16});
+        for (int yy = 0; yy < 16; yy++) {
+            for (int xx = 0; xx < 8; xx++) {
+                int correct = (2 * xx + yy) + (2 * xx + yy - 1);
+                if (out(xx, yy) != correct) {
+                    printf("g(%d, %d) = %d instead of %d\n", xx, yy,
+                           out(xx, yy), correct);
+                    return 1;
+                }
+            }
+        }
+        // One value of f per output, plus one per column to warm up.
+        if (call_count != 8 * 17) {
+            printf("Sliding over a dimension the region also moves across: "
+                   "f ran %d times, expected %d\n",
+                   call_count, 8 * 17);
+            return 1;
+        }
+    }
+
+    {
+        // Warming the window up prepends iterations to the loop outside the
+        // dimension, and nothing else computed in that loop may run on them.
+        // h reads exactly the input's extent, so running it early would read
+        // out of bounds.
+        Buffer<int> input(size);
+        for (int i = 0; i < size; i++) {
+            input(i) = i;
+        }
+        Func f("f"), g("g"), h("h");
+        Var x("x"), xo("xo"), xi("xi");
+        f(x) = counted(x);
+        h(x) = input(x) - x;
+        g(x) = f(x) + f(x - 1) + h(x);
+        g.split(x, xo, xi, 2, TailStrategy::RoundUp);
+        h.compute_at(g, xo);
+        f.store_root().compute_at(g, xi).slide(g, x);
+
+        int n = evaluations(g, size);
+        if (n != ideal) {
+            printf("Sliding over the dimension with h computed at xo: f ran "
+                   "%d times, expected %d\n",
+                   n, ideal);
+            return 1;
+        }
+    }
+
+    {
+        // Something f consumes, computed outside the dimension, runs on the
+        // warm-up iterations too, but only over what f's warm-up needs. The
+        // input covers exactly what the algorithm reads, so anything more
+        // would read out of bounds.
+        Buffer<int> input(size + 1);
+        input.set_min(-1);
+        for (int i = -1; i < size; i++) {
+            input(i) = i;
+        }
+        Func f("f"), g("g"), h("h");
+        Var x("x"), xo("xo"), xi("xi");
+        h(x) = input(x);
+        f(x) = h(x);
+        g(x) = f(x) + f(x - 1);
+        g.split(x, xo, xi, 2, TailStrategy::RoundUp);
+        h.compute_at(g, xo);
+        f.store_root().compute_at(g, xi).slide(g, x);
+
+        Buffer<int> out = g.realize({size});
+        for (int i = 0; i < size; i++) {
+            if (out(i) != 2 * i - 1) {
+                printf("Sliding over the dimension with f's input computed "
+                       "at xo: g(%d) = %d instead of %d\n",
+                       i, out(i), 2 * i - 1);
+                return 1;
+            }
+        }
+    }
+
+    {
+        // An async producer runs ahead of its consumer, coupled by a
+        // semaphore on the folded storage, so the fold has to know how far
+        // it may run ahead as the dimension advances.
+        Func f("f"), g("g");
+        Var x("x"), xo("xo"), xi("xi");
+        f(x) = x * x;
+        g(x) = f(x) + f(x - 1);
+        g.split(x, xo, xi, 2, TailStrategy::RoundUp).unroll(xi);
+        f.store_root().compute_at(g, xi).slide(g, x).async();
+
+        AllocationSizeOf alloc(f.name());
+        g.add_custom_lowering_pass(&alloc, nullptr);
+        Callable c = g.compile_to_callable({});
+        const int n = 1024;
+        Buffer<int> out(n);
+        for (int trial = 0; trial < 100; trial++) {
+            out.fill(0);
+            if (c(out) != 0) {
+                return 1;
+            }
+            for (int i = 0; i < n; i++) {
+                int correct = i * i + (i - 1) * (i - 1);
+                if (out(i) != correct) {
+                    printf("Async slide: g(%d) = %d instead of %d\n", i, out(i), correct);
+                    return 1;
+                }
+            }
+        }
+        if (alloc.size == 0 || alloc.size > 4) {
+            printf("Sliding an async producer over the dimension gave f an "
+                   "allocation of %d, expected a small constant\n",
+                   alloc.size);
+            return 1;
+        }
+    }
+
+    {
+        // Splitting a loop by one doesn't change the loops generated, so it
+        // mustn't change how tightly f folds either, including when the index
+        // reaching back carries a promise about staying in range.
+        const int n = 16;
+        for (bool promise : {false, true}) {
+            for (int factor : {0, 1, 2}) {
+                Func f("f"), g("g");
+                Var x("x"), xo("xo"), xi("xi");
+                f(x) = x * x;
+                Expr back = x - 1;
+                if (promise) {
+                    back = unsafe_promise_clamped(back, 0, n - 1);
+                }
+                g(x) = f(x) + f(clamp(back, 0, n - 1));
+                g.bound(x, 0, n);
+                if (factor == 0) {
+                    f.store_root().compute_at(g, x).slide(g, x);
+                } else if (factor == 1) {
+                    g.split(x, xo, xi, 1);
+                    f.store_root().compute_at(g, xi).slide(g, x);
+                } else {
+                    g.align_bounds(x, factor).split(x, xo, xi, factor).unroll(xi);
+                    f.store_root().compute_at(g, xi).slide(g, x);
+                }
+
+                AllocationSizeOf alloc(f.name());
+                g.add_custom_lowering_pass(&alloc, nullptr);
+                Buffer<int> out = g.realize({n});
+                for (int i = 0; i < n; i++) {
+                    int p = std::max(i - 1, 0);
+                    if (out(i) != i * i + p * p) {
+                        printf("g(%d) = %d instead of %d\n", i, out(i), i * i + p * p);
+                        return 1;
+                    }
+                }
+                if (alloc.size != 2) {
+                    printf("f was allocated %d elements instead of 2, with x "
+                           "split by %d and an index that %s a promise\n",
+                           alloc.size, factor, promise ? "carries" : "does not carry");
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // The consumer reads f at reversed coordinates, so the window slides
+        // down the split dimension. The select makes the region required jump
+        // between the first two iterations and move by one after that.
+        const int w = 8, h = 8;
+        Var x("x"), y("y"), yo("yo"), yi("yi");
+        Func in("in"), f("f"), g("g");
+        in(x, y) = x * 3 + y;
+        f(x, y) = in(x, y) + in(x + 1, y) + in(x, y + 1);
+        Expr yy = select(y < 1, 0, 2) + y;
+        g(x, y) = f(15 - x, 16 - yy) + f(16 - x, 16 - yy);
+        in.compute_root();
+        g.split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+        f.store_at(g, Var::outermost()).compute_at(g, x).slide(g, y);
+
+        Buffer<int> out = g.realize({w, h});
+        auto f_ref = [](int i, int j) {
+            return (i * 3 + j) + (i * 3 + 3 + j) + (i * 3 + j + 1);
+        };
+        for (int j = 0; j < h; j++) {
+            for (int i = 0; i < w; i++) {
+                int jj = (j < 1 ? 0 : 2) + j;
+                int correct = f_ref(15 - i, 16 - jj) + f_ref(16 - i, 16 - jj);
+                if (out(i, j) != correct) {
+                    printf("Sliding down: g(%d, %d) = %d instead of %d\n",
+                           i, j, out(i, j), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
     // The rest of this file is the scheduling mistakes the directive rejects.
     // Each of them would otherwise slide a window over values that aren't
     // there any more, or quietly not slide at all.
@@ -353,22 +556,7 @@ int main(int argc, char **argv) {
         });
 
     failures += !expect_user_error(
-        "region_moves_with_inner_loop", "within a single value", [] {
-            Func f("f"), g("g");
-            Var x("x"), y("y"), yo("yo"), yi("yi");
-            f(x, y) = x + y;
-            // A shear: the region of f required moves with x as well as y.
-            g(x, y) = f(x, x + y) + f(x, x + y - 1);
-            g.split(y, yo, yi, 4);
-            // Sliding over y advances the window once per value of y, but x
-            // moves the region required too, so the window would have to
-            // advance within a single value of y as well.
-            f.store_root().compute_at(g, x).slide(g, y);
-            g.realize({8, 16});
-        });
-
-    failures += !expect_user_error(
-        "non_monotonic_dimension", "does not increase", [] {
+        "non_monotonic_dimension", "one at a time", [] {
             Func f("f"), g("g");
             Var x("x"), xo("xo"), xi("xi");
             f(x) = x;
@@ -382,7 +570,7 @@ int main(int argc, char **argv) {
         });
 
     failures += !expect_user_error(
-        "shift_inwards_moves_backwards", "does not always increase", [] {
+        "shift_inwards_moves_backwards", "one at a time", [] {
             Func f("f"), g("g");
             Var x("x"), xo("xo"), xi("xi");
             f(x) = x;
@@ -397,17 +585,43 @@ int main(int argc, char **argv) {
         });
 
     failures += !expect_user_error(
+        "interleaved_loops", "yi breaks the sequence", [] {
+            Func f("f"), g("g");
+            Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+            f(x, y) = x + y;
+            g(x, y) = f(x, y) + f(x - 1, y);
+            // Tiling puts yi between xo and xi, so x runs through each tile's
+            // four columns once per row of the tile, going backwards each
+            // time yi advances.
+            g.tile(x, y, xo, yo, xi, yi, 4, 4, TailStrategy::RoundUp);
+            f.store_root().compute_at(g, xi).slide(g, x);
+            g.realize({16, 16});
+        });
+
+    failures += !expect_user_error(
+        "parallel_dimension", "one iteration at a time", [] {
+            Func f("f"), g("g");
+            Var x("x");
+            f(x) = x;
+            g(x) = f(x) + f(x - 1);
+            // Each iteration of a parallel loop may run before the one
+            // before it, so there is no previous iteration to inherit from.
+            g.parallel(x);
+            f.store_root().compute_at(g, x).slide(g, x);
+            g.realize({16});
+        });
+
+    failures += !expect_user_error(
         "entangled_dimensions", "move the same dimension", [] {
             Func f("f"), g("g");
             Var x("x"), y("y"), xo("xo"), xi("xi");
-            f(x, y) = x + y;
-            g(x, y) = f(x, y) + f(x - 1, y);
-            g.split(x, xo, xi, 4);
+            f(x) = x;
+            g(x, y) = f(x + y) + f(x + y - 1);
+            g.split(x, xo, xi, 4, TailStrategy::RoundUp);
             // Sliding over several dimensions at once is fine, but these two
-            // aren't independent - xo is a split of x, so both of them move
-            // the window along f's first dimension, and it can only advance
-            // along that dimension once.
-            f.store_root().compute_at(g, xi).slide(g, x).slide(g, xo);
+            // aren't independent - both of them move the window along f's
+            // only dimension, and it can only advance along it once.
+            f.store_root().compute_at(g, xi).slide(g, x).slide(g, y);
             g.realize({16, 16});
         });
 

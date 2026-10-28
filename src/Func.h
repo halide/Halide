@@ -2697,19 +2697,25 @@ public:
      f.store_root().compute_at(g, ri).slide(g, r);
      \endcode
      *
-     * It is an error to slide over a dimension that doesn't count upwards as
-     * the loop nest runs, because a window only moves forwards. Reordering
-     * the loops of a split puts the smaller term on the outer loop, and
+     * The window is warmed up by starting the outermost loop the dimension
+     * varies over early, so that the values the first iteration needs are
+     * computed on the way in. Only what those values need runs on those extra
+     * iterations.
+     *
+     * The dimension must step up by exactly one each time it changes as the
+     * loop nest runs, because a window only moves forwards and has no gaps.
+     * Reordering the loops of a split puts the smaller term on the outer
+     * loop, tiling puts another loop between the two halves of a split, and
      * ShiftInwards moves the last iteration backwards unless the extent is a
-     * multiple of the split factor, so both of those are rejected.
+     * multiple of the split factor, so all of those are errors. So is sliding
+     * over a dimension that varies over a parallel, vectorized or otherwise
+     * non-serial loop.
      *
      * It is an error to slide over a dimension whose storage does not live
-     * across every loop that dimension varies over, or one where the region
-     * required also moves with a loop between the dimension and where this
-     * Func is computed. In both cases the window would have to reach values
-     * that are no longer there. It is also an error to name two dimensions
-     * that move the same dimension of this Func, such as a Var and a split of
-     * it, because the window can only advance along that dimension once. */
+     * across every loop that dimension varies over, because the window would
+     * have to reach values that are no longer there. It is also an error to
+     * name two dimensions that move the same dimension of this Func, because
+     * the window can only advance along that dimension once. */
     Func &slide(const Func &f, const VarOrRVar &var);
 
     /** Equivalent to the version of hoist_storage that takes a Var, but

@@ -496,21 +496,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     bool found_sliding_marker = false;
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::sliding_window_marker)) {
-            internal_assert(op->args.size() == 2 || op->args.size() == 4);
+            internal_assert(op->args.size() == 2);
             const StringImm *name = op->args[0].as<StringImm>();
             internal_assert(name);
             if (name->value == func.name()) {
                 found_sliding_marker = true;
-                if (op->args.size() == 4) {
-                    // Sliding window slid over a dimension rather than a loop,
-                    // and worked out how wide the window is. We can't rederive
-                    // that here, so take its word for it.
-                    auto dim = as_const_int(op->args[2]);
-                    auto width = as_const_int(op->args[3]);
-                    internal_assert(dim && width);
-                    slid_dim = (int)*dim;
-                    slid_width = (int)*width;
-                }
             }
         }
         return op;
@@ -525,16 +515,18 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
-    // Enclosing loop and let bounds, so that a let carrying a dimension can be
-    // bounded when we come to fold over it.
-    Scope<Interval> enclosing_bounds;
+    // The serial loops we're inside of, outermost first.
+    vector<std::pair<string, Interval>> loop_stack;
 
-    // Fold the storage of func over a monotonically increasing quantity. That
-    // is usually a loop variable, but may be a let carrying a dimension of a
-    // consumer that has been split across several loops.
+    // Fold the storage of func over a variable that steps by one each
+    // iteration of a loop. That is usually the loop variable, but may be a
+    // dimension built from it and some of the loops outside it (digits), in
+    // which case only the dimensions of the footprint that move with it alone
+    // can be folded.
     Stmt fold_over(const string &name, const Interval &var_bounds,
                    const Stmt &orig_body, const Stmt &orig,
-                   const std::function<Stmt(const Stmt &)> &rebuild) {
+                   const std::function<Stmt(const Stmt &)> &rebuild,
+                   const Scope<> &digits) {
 
         Stmt stmt;
         Stmt body = orig_body;
@@ -591,6 +583,19 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     max_required = simplify(required[dim].max);
                 }
             }
+
+            auto uses_digits = [&](const Expr &e) {
+                return e.defined() && expr_uses_vars(e, digits);
+            };
+            if (uses_digits(min) || uses_digits(max) ||
+                uses_digits(min_provided) || uses_digits(max_provided) ||
+                uses_digits(min_required) || uses_digits(max_required)) {
+                debug(3) << "\nNot considering folding " << func.name()
+                         << " over " << name << " dimension " << i - 1
+                         << " because the footprint moves with the loops "
+                         << name << " is built from, not just with " << name << "\n";
+                continue;
+            }
             string sema_name = func.name() + ".folding_semaphore." + unique_name('_');
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), sema_name);
 
@@ -607,13 +612,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                                 1);
             Expr extent = simplify(common_subexpression_elimination(extent_expr), bounds);
 
-            // The two ends of a clamped index move together, but the promises
-            // they carry about staying in range are not something the
-            // simplifier can cancel across, so the difference bounds to the
-            // whole extent and nothing folds. Stripping them doesn't change
-            // the value, only what can be proved about it, so take the
-            // stripped form when it bounds more tightly. It isn't always
-            // tighter: a promise can be the only thing bounding an index.
+            // The simplifier can't cancel promises across the two ends of a
+            // clamped index, so also try without them, and take whichever
+            // bounds more tightly. A promise can be the only thing bounding an
+            // index.
             Expr no_promises = remove_promises(extent_expr);
             if (!no_promises.same_as(extent_expr)) {
                 Expr stripped =
@@ -658,14 +660,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             bool can_fold_forwards = false, can_fold_backwards = false;
 
             if (!explicit_only) {
-                // We can't clobber data that will be read later.
-                // Either end advancing is enough. The footprint always fits
-                // in extent values, so if the max advances then everything
-                // below max - extent + 1 is outside every future footprint and
-                // is dead, and if the min advances then everything below it is
-                // dead. Either way the live values occupy extent distinct
-                // residues, and the other end is free to wander backwards
-                // within the window without aliasing anything live.
+                // We can't clobber data that will be read later. Either end
+                // advancing is enough: the footprint always fits in extent
+                // values, so either way everything live occupies distinct
+                // residues.
                 can_fold_forwards = (is_monotonic(min, name) == Monotonic::Increasing) ||
                                     (is_monotonic(max, name) == Monotonic::Increasing);
                 can_fold_backwards = (is_monotonic(max, name) == Monotonic::Decreasing) ||
@@ -678,11 +676,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     can_fold_backwards &= (is_monotonic(min_provided, name) == Monotonic::Decreasing);
                     // We need to be able to analyze the required footprint to
                     // know how much to release, and the amount released each
-                    // iteration can't be negative either. Checking the ends
-                    // above isn't enough for this, because either one alone
-                    // may satisfy it. The amount acquired is derived from
-                    // max_provided alone, which is why only that end is
-                    // checked just above.
+                    // iteration can't be negative either.
                     can_fold_forwards &= min_required.defined() &&
                                          is_monotonic(min_required, name) == Monotonic::Increasing;
                     can_fold_backwards &= max_required.defined() &&
@@ -694,7 +688,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // can_fold_forwards = can_fold_backwards = false;
 
             if (!can_fold_forwards && !can_fold_backwards) {
-                if (explicit_factor.defined()) {
+                // The dynamic tracking steps its counters back after the loop,
+                // by the whole extent, which is only right if the loop covers
+                // the whole of it by itself.
+                if (explicit_factor.defined() && digits.size() == 0) {
                     // If we didn't find a monotonic dimension, and we
                     // have an explicit fold factor, we need to
                     // dynamically check that the min/max do in fact
@@ -969,62 +966,84 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // safe to proceed.
             return op;
         }
-        ScopedBinding<Interval> bind(enclosing_bounds, op->name, Interval(op->min, op->max));
+        loop_stack.emplace_back(op->name, Interval(op->min, op->max));
+        Stmt result = fold_at_loop(op);
+        loop_stack.pop_back();
+        return result;
+    }
 
-        if (slides_over_a_dimension() && !slides_over(op->name)) {
-            // The schedule named a dimension, and it isn't this loop, so this
-            // is one of the loops it's spread across. Folding happens at the
-            // let that carries the dimension instead. Folding here would
-            // measure the footprint over a whole iteration of this loop,
-            // which is more than is ever live. A named dimension that is
-            // itself a loop falls through and folds here, like any other.
+    Stmt fold_at_loop(const For *op) {
+        // Sliding window marks what it slid this func over. Usually that's a
+        // loop variable, but it may be a dimension built from several loops,
+        // in which case the marker sits inside the innermost of them and its
+        // value is written in terms of all of them.
+        Expr slid_over;
+        bool builds_slid_over = false;
+        int depth = 0;
+        visit_with(
+            op->body,
+            [&](auto *self, const For *f) {
+                depth++;
+                self->visit_base(f);
+                depth--;
+            },
+            [&](auto *self, const Call *c) {
+                if (c->is_intrinsic(Call::sliding_window_marker) &&
+                    c->args[0].as<StringImm>()->value == func.name() &&
+                    expr_uses_var(c->args[1], op->name)) {
+                    if (depth > 0) {
+                        builds_slid_over = true;
+                    } else if (!slid_over.defined()) {
+                        slid_over = c->args[1];
+                    }
+                }
+                self->visit_base(c);
+            });
+
+        if (builds_slid_over) {
+            // Folding over this loop would measure the footprint over a whole
+            // iteration of it, which is more than is ever live. Fold over the
+            // dimension at the innermost loop it's built from instead.
             return IRMutator::visit(op);
         }
 
-        return fold_over(op->name, Interval(op->min, op->max), op->body, op,
-                         [&](const Stmt &b) { return op->with(op->min, op->max, b); });
-    }
-
-    // Was this func told to slide over particular dimensions?
-    bool slides_over_a_dimension() const {
-        const auto &levels = func.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [](const LoopLevel &l) {
-            return l.defined() && !l.is_inlined() && !l.is_root();
-        });
-    }
-
-    // Was this func told to slide over the dimension this loop or let
-    // carries? Sliding window renames a loop it rewinds by appending ".$n",
-    // which a LoopLevel naming the original Var no longer matches, so undo
-    // that before asking.
-    bool slides_over(const std::string &name) const {
-        std::string stripped = name;
-        while (ends_with(stripped, ".$n")) {
-            stripped.resize(stripped.size() - 3);
-        }
-        const auto &levels = func.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
-            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(stripped);
-        });
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        Interval let_bounds = bounds_of_expr_in_scope(op->value, enclosing_bounds);
-        ScopedBinding<Interval> bind(enclosing_bounds, op->name, let_bounds);
-
-        if (slides_over(op->name) && let_bounds.is_bounded()) {
-            return fold_over(op->name, let_bounds, op->body, op,
-                             [&](const Stmt &b) { return LetStmt::make(op->name, op->value, b); });
+        const Variable *slid_over_var = slid_over.as<Variable>();
+        if (!slid_over.defined() || (slid_over_var && slid_over_var->name == op->name)) {
+            return fold_over(op->name, Interval(op->min, op->max), op->body, op, [&](const Stmt &b) { return op->with(op->min, op->max, b); }, Scope<>());
         }
 
-        return IRMutator::visit(op);
+        // Fold over the dimension instead of the loop variable. Sliding window
+        // only slides over a dimension that steps by one as the loops run, so
+        // the previous value of it is the previous iteration, but it also has
+        // to move one-for-one with this loop.
+        Expr loop_var = Variable::make(Int(32), op->name);
+        Expr base = simplify(slid_over - loop_var);
+        if (expr_uses_var(base, op->name)) {
+            debug(3) << "Not folding " << func.name() << " over " << slid_over
+                     << " because it doesn't move one-for-one with " << op->name << "\n";
+            return IRMutator::visit(op);
+        }
+
+        Scope<> digits;
+        Expr lo = slid_over, hi = slid_over;
+        for (auto it = loop_stack.rbegin(); it != loop_stack.rend(); it++) {
+            if (it->first != op->name && expr_uses_var(slid_over, it->first)) {
+                digits.push(it->first);
+            }
+            lo = substitute(it->first, it->second.min, lo);
+            hi = substitute(it->first, it->second.max, hi);
+        }
+
+        string name = unique_name('t');
+        Stmt body = substitute(op->name, Variable::make(Int(32), name) - base, op->body);
+        return fold_over(name, Interval(simplify(lo), simplify(hi)), body, op, [&](const Stmt &b) {
+                             if (b.same_as(body)) {
+                                 return Stmt(op);
+                             }
+                             return op->with(op->min, op->max, LetStmt::make(name, slid_over, b)); }, digits);
     }
 
 public:
-    // Set when sliding window slid over a dimension and told us how wide the
-    // window is, because the dimension is gone from the IR by the time we run.
-    int slid_dim = -1, slid_width = 0;
-
     struct Fold {
         int dim;
         Expr factor;
@@ -1063,34 +1082,6 @@ class StorageFolding : public IRMutator {
             debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
         }
         body = folder(body);
-
-        // Sliding window slid this func over a dimension rather than a loop,
-        // and told us how wide the window is.
-        //
-        // We take its word for it. The dimension is a let by the time sliding
-        // window sees it and is gone by the time we run, because the
-        // simplifier substitutes it away, so there's nothing here to measure.
-        // Measuring the footprint over any of the loops the dimension is
-        // spread across doesn't answer the question either - it counts values
-        // that are never simultaneously live, which is why an explicit
-        // fold_storage of the right factor gets rejected on such a schedule.
-        //
-        // The cost of that trust is that a wrong width here is an allocation
-        // that is too small rather than an error. Sliding window checks the
-        // two things that would make it wrong before emitting the marker: that
-        // the storage lives across every loop the dimension varies over, and
-        // that the region required doesn't move with a loop between the
-        // dimension and the producer.
-        if (folder.slid_width > 0 && folder.slid_dim >= 0) {
-            internal_assert(folder.slid_width > 0 && folder.slid_dim < func.dimensions())
-                << "Sliding window asked to fold " << op->name << " dimension "
-                << folder.slid_dim << " by " << folder.slid_width << "\n";
-            Expr factor = (int)next_power_of_two((uint64_t)folder.slid_width);
-            body = FoldStorageOfFunction(op->name, folder.slid_dim, factor, "")(body);
-            folder.dims_folded.push_back({folder.slid_dim, factor});
-            debug(3) << "Folding " << op->name << " dimension " << folder.slid_dim
-                     << " by " << factor << ", as sliding window requested\n";
-        }
 
         // If the user explicitly requested storage folding via Func::fold_storage,
         // storage folding may have bailed out before reaching the correct loop.

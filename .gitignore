@@ -284,6 +284,3 @@ CLAUDE.local.md
 !packaging/HalideConfig.cmake
 !packaging/HalideCompilerConfig.cmake
 !packaging/HalideAutoschedulersConfig.cmake
-
-# Scratch pads for local experiments, not tests
-test/*/scratch.cpp
