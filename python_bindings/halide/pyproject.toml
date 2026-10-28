@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-  "pybind11>=2.11.1",
+  "nanobind>=2.11,<2.12",
   "scikit-build-core>=1.0.3",
   "setuptools-scm>=8.3.1",
 ]
@@ -15,7 +15,7 @@ maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dynamic = ['version', 'dependencies']
 dependencies = [
   "imageio>=2",
@@ -47,8 +47,6 @@ classifiers = [
   "Programming Language :: C++",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
@@ -83,9 +81,10 @@ cmake.source-dir = ".."
 build.targets = ["Halide_Python"]
 install.components = ["Halide_Python"]
 wheel.install-dir = "halide"
+wheel.py-api = "cp312"
 sdist.inclusion-mode = "explicit"
 sdist.include = ["pyproject.toml", "README.md", "_dynamic_metadata.py"]
-sdist.exclude = ["dependencies/update-*.sh"]
+sdist.exclude = ["dependencies/update-*.sh", "tools/halidoscope/**"]
 
 [tool.scikit-build.sdist.force-include]
 "../../cmake" = "cmake"

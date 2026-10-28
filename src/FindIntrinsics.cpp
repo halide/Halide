@@ -23,6 +23,12 @@ bool find_intrinsics_for_type(const Type &t) {
 
 Expr widen(Expr a) {
     Type result_type = a.type().widen();
+    if (const Broadcast *b = a.as<Broadcast>()) {
+        // Widen the broadcast value, as the simplifier would: the intrinsics
+        // are lowered in codegen, after it runs, and LLVM does not sink a
+        // vector extension of a splat into the splat.
+        return Broadcast::make(Cast::make(result_type.with_lanes(b->value.type().lanes()), b->value), b->lanes);
+    }
     return Cast::make(result_type, std::move(a));
 }
 

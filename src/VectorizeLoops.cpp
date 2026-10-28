@@ -438,24 +438,12 @@ protected:
             // reinterpret, then transpose the result back to the convention
             // expected by the rest of vectorization.
             if (widening > 1 && op->value.type().lanes() > 1) {
-                vector<Expr> source_lanes;
-                source_lanes.reserve(op->value.type().lanes());
-                for (int i = 0; i < op->value.type().lanes(); i++) {
-                    source_lanes.push_back(Shuffle::make_slice(value, i * widening, 1, widening));
-                }
-                value = Shuffle::make_interleave(source_lanes);
+                value = Shuffle::make_transpose(value, widening);
             }
 
             Expr result = Reinterpret::make(t, value);
             if (widening > 1 && op->type.lanes() > 1) {
-                vector<int> indices;
-                indices.reserve(t.lanes());
-                for (int result_lane = 0; result_lane < op->type.lanes(); result_lane++) {
-                    for (int iteration = 0; iteration < widening; iteration++) {
-                        indices.push_back(iteration * op->type.lanes() + result_lane);
-                    }
-                }
-                result = Shuffle::make({result}, indices);
+                result = Shuffle::make_transpose(result, op->type.lanes());
             }
             return result;
         }
@@ -1423,40 +1411,6 @@ protected:
         }
 
         return s;
-    }
-
-    Expr scalarize(Expr e) {
-        // This method returns a select tree that produces a vector lanes
-        // result expression
-        user_assert(replacements.size() == 1) << "Can't scalarize nested vectorization\n";
-        string var = replacements.begin()->first;
-        Expr replacement = replacements.begin()->second;
-
-        Expr result;
-        int lanes = replacement.type().lanes();
-
-        for (int i = lanes - 1; i >= 0; --i) {
-            // Hide all the vector let values in scope with a scalar version
-            // in the appropriate lane.
-            for (Scope<Expr>::const_iterator iter = scope.cbegin(); iter != scope.cend(); ++iter) {
-                e = substitute(iter.name(),
-                               get_lane(Variable::make(iter.value().type(), iter.name()), i),
-                               e);
-            }
-
-            // Replace uses of the vectorized variable with the extracted
-            // lane expression
-            e = substitute(var, i, e);
-
-            if (i == lanes - 1) {
-                result = Broadcast::make(e, lanes);
-            } else {
-                Expr cond = (replacement == Broadcast::make(i, lanes));
-                result = Select::make(cond, Broadcast::make(e, lanes), result);
-            }
-        }
-
-        return result;
     }
 
     // Recompute all replacements for vectorized vars based on

@@ -422,6 +422,75 @@ static void test_concat() {
     }
 }
 
+// Attributes that pick a dimension are read straight out of the model and
+// used to index per-dimension vectors, so an out-of-range value must be
+// rejected rather than indexing past the end.
+static void test_out_of_range_axes() {
+    std::vector<Tensor> node_inputs;
+
+    // OneHot: axis may be at most the input rank.
+    onnx::NodeProto one_hot_node;
+    one_hot_node.set_name("one_hot_node");
+    one_hot_node.set_op_type("OneHot");
+    one_hot_node.add_input("indices");
+    one_hot_node.add_input("depth");
+    one_hot_node.add_input("values");
+    one_hot_node.add_output("y");
+    onnx::AttributeProto *attr = one_hot_node.add_attribute();
+    attr->set_name("axis");
+    attr->set_i(5);
+    node_inputs.resize(3);
+    node_inputs[0].shape = {4};
+    node_inputs[1].shape = {};
+    node_inputs[2].shape = {2};
+    bool rejected = false;
+    try {
+        convert_node(one_hot_node, node_inputs);
+    } catch (const std::invalid_argument &) {
+        rejected = true;
+    }
+    EXPECT_EQ(true, rejected);
+
+    // Transpose: perm entries must be in [0, rank).
+    onnx::NodeProto transpose_node;
+    transpose_node.set_name("transpose_node");
+    transpose_node.set_op_type("Transpose");
+    transpose_node.add_input("x");
+    transpose_node.add_output("y");
+    attr = transpose_node.add_attribute();
+    attr->set_name("perm");
+    attr->add_ints(-1);
+    attr->add_ints(0);
+    node_inputs.resize(1);
+    node_inputs[0].shape = {3, 4};
+    rejected = false;
+    try {
+        convert_node(transpose_node, node_inputs);
+    } catch (const std::invalid_argument &) {
+        rejected = true;
+    }
+    EXPECT_EQ(true, rejected);
+
+    // Split: the split attribute must have one entry per output.
+    onnx::NodeProto split_node;
+    split_node.set_name("split_node");
+    split_node.set_op_type("Split");
+    split_node.add_input("x");
+    split_node.add_output("y0");
+    split_node.add_output("y1");
+    attr = split_node.add_attribute();
+    attr->set_name("split");
+    attr->add_ints(4);
+    node_inputs[0].shape = {4};
+    rejected = false;
+    try {
+        convert_node(split_node, node_inputs);
+    } catch (const std::invalid_argument &) {
+        rejected = true;
+    }
+    EXPECT_EQ(true, rejected);
+}
+
 static void test_constant_fill() {
     constexpr float const_value = 2.0f;
     onnx::NodeProto concat_node;
@@ -545,6 +614,7 @@ int main() {
     test_sum();
     test_where_broadcast();
     test_concat();
+    test_out_of_range_axes();
     test_constant_fill();
     test_model();
     printf("Success!\n");

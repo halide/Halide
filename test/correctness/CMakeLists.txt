@@ -252,6 +252,8 @@ tests(
     gpu_free_sync.cpp
     gpu_give_input_buffers_device_allocations.cpp
     gpu_jit_explicit_copy_to_device.cpp
+    gpu_lanes_reduction.cpp
+    gpu_lanes_reduction_codegen.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
     gpu_max_registers.cpp
@@ -282,6 +284,7 @@ tests(
     gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
+    gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp
     growing_stack.cpp
     half_native_interleave.cpp
@@ -455,6 +458,7 @@ tests(
     reused_args.cpp
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
+    rfactor_guarded_merge.cpp
     rfactor_inner_dim_non_commutative.cpp
     rfactor_specialize_rvar_bounds.cpp
     round.cpp
@@ -530,6 +534,7 @@ tests(
     struct_nested_field_store.cpp
     struct_type.cpp
     struct_type_dot_product.cpp
+    struct_type_record_field_reads.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     target.cpp

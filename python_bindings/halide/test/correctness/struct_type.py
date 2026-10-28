@@ -51,6 +51,11 @@ def test_type_struct_basics():
     assert hl.Int(32).struct_type is None
     assert not hl.Int(32).is_struct()
 
+    field = hl.StructField("values", hl.Int(32), 4)
+    field.array_extent = None
+    assert field.array_extent is None
+    assert field == hl.StructField("values", hl.Int(32), None)
+
 
 # Struct types are treated as an ordinary opaque element type throughout the
 # compiler: a Func whose value is pack_struct(...), consumed via field() by

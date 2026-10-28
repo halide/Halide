@@ -22,8 +22,8 @@ and is preferred by some contributors, but is unsupported for third parties
 to use the Makefile, don't forget to verify that any new tests are added to the
 CMake build too before pushing.
 
-Halide needs LLVM 21, 22, or 23 (trunk also works). Easiest way to get one is
-via a `uv`-managed Python virtual env; activate it before building so CMake can
+Halide needs LLVM 22, 23, or 24 (trunk). Easiest way to get one is via a
+`uv`-managed Python virtual env; activate it before building so CMake can
 autodetect the LLVM install:
 
 ```shell
@@ -223,7 +223,7 @@ shared library that can be loaded at schedule time
 
 ### Python bindings
 
-`python_bindings/` mirrors the C++ API via pybind11 (`src/`), with its own
+`python_bindings/` mirrors the C++ API via nanobind (`src/`), with its own
 `test/`, `tutorial/`, and `apps/` mirroring the top-level layout. Public API
 changes in `Halide::` should come with a matching binding update here.
 

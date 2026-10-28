@@ -1111,6 +1111,13 @@ void CodeGen_ARM::init_module() {
             }
 
             const auto full_name = [&]() -> string {
+                // LLVM 24 removed the AArch64 NEON integer min/max intrinsics
+                // in favor of the generic intrinsics, which also work on older LLVMs.
+                if (target.bits == 64 && !is_sve_or_streaming &&
+                    (intrin.ret_type.is_int() || intrin.ret_type.is_uint()) &&
+                    (string(intrin.name) == "min" || string(intrin.name) == "max")) {
+                    return concat_strings("llvm.", intrin_name);
+                }
                 const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
                 if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
                     const char *prefix =
@@ -2075,8 +2082,31 @@ void CodeGen_ARM::visit(const Shuffle *op) {
         op->slice_begin() < stride &&
         load->type.lanes() == stride * op->type.lanes()) {
 
+#if LLVM_VERSION >= 240
+        // LLVM 24 folds slices into deinterleave shuffles, obscuring the
+        // interleaved-load pattern. Load one native-width result at a time.
+        const Ramp *ramp = load->index.as<Ramp>();
+        internal_assert(ramp && is_const_one(ramp->stride));
+        const int native_lanes = target_vscale() == 0 ? native_vector_bits() / op->type.bits() : op->type.lanes();
+        vector<Value *> slices;
+        for (int i = 0; i < op->type.lanes(); i += native_lanes) {
+            const int slice_lanes = std::min(native_lanes, op->type.lanes() - i);
+            const int offset = i * stride;
+            Expr slice_index = Ramp::make(simplify(ramp->base + offset), ramp->stride, slice_lanes * stride);
+            Expr slice_predicate = Shuffle::make_slice({load->predicate}, offset, 1, slice_lanes * stride);
+            Expr slice_load = load->with(slice_index, slice_predicate, load->alignment + offset);
+            Value *loaded = codegen_dense_vector_load(slice_load.as<Load>(), nullptr, /* slice_to_native */ false);
+            vector<int> indices(slice_lanes);
+            for (int j = 0; j < slice_lanes; j++) {
+                indices[j] = op->slice_begin() + j * stride;
+            }
+            slices.push_back(CodeGen_CPU::shuffle_vectors(loaded, indices));
+        }
+        value = concat_vectors(slices);
+#else
         value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
         value = CodeGen_CPU::shuffle_vectors(value, op->indices);
+#endif
         return;
     }
 
@@ -2303,13 +2333,7 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
     }
 
     // Lower into llvm.vector.interleave intrinsic.
-    // LLVM only supports non-power-of-2 strides (e.g. 3) for scalable
-    // vectors starting in LLVM 22.
-#if LLVM_VERSION >= 220
     const std::set<int> supported_strides{2, 3, 4, 8};
-#else
-    const std::set<int> supported_strides{2, 4, 8};
-#endif
     const int stride = vecs.size();
     const int src_lanes = get_vector_num_elements(vecs[0]->getType());
 
@@ -2374,11 +2398,7 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
             }
 
             // Lower slice with stride into llvm.vector.deinterleave intrinsic
-#if LLVM_VERSION >= 220
             const std::set<int> supported_strides{2, 3, 4, 8};
-#else
-            const std::set<int> supported_strides{2, 4, 8};
-#endif
             if (supported_strides.find(slice_stride) != supported_strides.end() &&
                 dst_lanes * slice_stride == src_lanes &&
                 indices.front() < slice_stride &&  // Start position cannot be larger than stride

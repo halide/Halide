@@ -450,6 +450,30 @@ int main(int argc, char **argv) {
         f.compile_jit();
     }
 
+    // Lowering a widening op widens a broadcast operand's value, not the
+    // vector (as the simplifier would), so codegen emits no vector extension
+    // of a splat.
+    {
+        Expr s = Variable::make(UInt(16), "s");
+        Expr v = Variable::make(UInt(8, 2), "v");
+        auto check_lowered = [](const Expr &e, const Expr &expected) {
+            Expr result = lower_intrinsics(e);
+            if (!equal(result, expected)) {
+                std::cerr << "failure!\n"
+                          << "test: " << e << "\n"
+                          << "result: " << result << "\n"
+                          << "expected: " << expected << "\n";
+                abort();
+            }
+        };
+        check_lowered(widen_right_mul(u32x, Broadcast::make(s, 4)),
+                      u32x * Broadcast::make(u32(s), 4));
+        check_lowered(widening_mul(u16x, Broadcast::make(s, 4)),
+                      u32(u16x) * Broadcast::make(u32(s), 4));
+        check_lowered(widen_right_add(u16x, Broadcast::make(v, 2)),
+                      u16x + Broadcast::make(u16(v), 2));
+    }
+
     printf("Success!\n");
     return 0;
 }

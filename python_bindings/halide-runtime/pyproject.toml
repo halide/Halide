@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-  "pybind11>=2.11.1",
+  "nanobind>=2.11,<2.12",
   "scikit-build-core~=1.0.3",
   "setuptools-scm>=8.3.1",
 ]
@@ -15,7 +15,7 @@ maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Standalone Halide runtime: load and call precompiled Halide AOT kernels without depending on libHalide (no compiler, no LLVM)."
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dynamic = ['version']
 dependencies = ["numpy>=1.26"]
 keywords = ["array", "image processing", "runtime", "aot", "halide"]
@@ -60,7 +60,9 @@ cmake.source-dir = ".."
 build.targets = ["Halide_PythonRuntime"]
 install.components = ["Halide_PythonRuntime"]
 wheel.install-dir = "halide"
+wheel.py-api = "cp312"
 sdist.inclusion-mode = "explicit"
+sdist.exclude = ["tools/halidoscope/**"]
 sdist.include = ["pyproject.toml", "README.md", "_dynamic_metadata.py"]
 
 [tool.scikit-build.sdist.force-include]

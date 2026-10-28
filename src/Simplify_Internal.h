@@ -393,6 +393,38 @@ public:
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
 
+    // Bounds and alignment of free variables, lazily copied into
+    // bounds_and_alignment_info on first lookup.
+    const Scope<Interval> *outer_bounds;
+    const Scope<ModulusRemainder> *outer_alignment;
+    const ExprInfo *find_outer_bounds_and_alignment_info(const std::string &name);
+
+    HALIDE_ALWAYS_INLINE
+    const ExprInfo *find_bounds_and_alignment_info(const std::string &name) {
+        if (const ExprInfo *info = bounds_and_alignment_info.find(name)) {
+            return info;
+        }
+        return find_outer_bounds_and_alignment_info(name);
+    }
+
+    /** Looks up the alignment of let and free vars (see
+     * find_bounds_and_alignment_info), for analyses that take an
+     * AlignmentLookup. */
+    AlignmentLookup let_var_alignment() {
+        return [this](const std::string &name) {
+            const ExprInfo *info = find_bounds_and_alignment_info(name);
+            return info ? info->alignment : ModulusRemainder{};
+        };
+    }
+
+    /** Whether e is known to lie in [lo, hi): an integer constant, or a
+     * variable with known constant bounds (see
+     * find_bounds_and_alignment_info), or a broadcast of either. Doesn't
+     * simplify or build any IR, so it is safe to call with the raw node a
+     * rewrite rule has bound to a wildcard (see IRMatcher::in_range). Returns
+     * false when nothing is known. */
+    bool known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi);
+
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;

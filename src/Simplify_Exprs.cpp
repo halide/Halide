@@ -266,8 +266,24 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     }
 }
 
+bool Simplify::known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi) {
+    if (e->node_type == IRNodeType::Broadcast) {
+        e = ((const Broadcast *)e)->value.get();
+    }
+    if (e->node_type == IRNodeType::IntImm) {
+        const int64_t v = ((const IntImm *)e)->value;
+        return lo <= v && v < hi;
+    } else if (e->node_type == IRNodeType::Variable) {
+        if (const ExprInfo *b = find_bounds_and_alignment_info(((const Variable *)e)->name)) {
+            return (b->bounds.min_defined && lo <= b->bounds.min &&
+                    b->bounds.max_defined && b->bounds.max < hi);
+        }
+    }
+    return false;
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *info) {
-    if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
+    if (const ExprInfo *b = find_bounds_and_alignment_info(op->name)) {
         if (info) {
             *info = *b;
         }
@@ -373,7 +389,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     // unreachable loads.
     if (is_const_one(op->predicate)) {
         string alloc_extent_name = op->name + ".total_extent_bytes";
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->type.bytes() > alloc_info->bounds) {
                 in_unreachable = true;
@@ -437,7 +453,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
                // It's a multi-dimensional multiramp.
-               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr, let_var_alignment()) &&
                mr.dimensions() > 1 &&
                // The innermost stride isn't already one.
                !is_const_one(mr.strides[0]) &&

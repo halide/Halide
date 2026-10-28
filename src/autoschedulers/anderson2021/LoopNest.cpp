@@ -3296,7 +3296,7 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
     // Inline it into the children
     for (auto &i : children) {
         if (i->calls(f)) {
-            std::unique_ptr<LoopNest> new_child{new LoopNest};
+            auto new_child = std::make_unique<LoopNest>();
             new_child->copy_from(*i);
             new_child->inline_func(f);
             i = new_child.release();
@@ -3692,7 +3692,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     if (!innermost && (!in_realization || size.empty() || vector_dim == -1 || size[vector_dim] == 1) &&
         can_compute_here) {
 
-        std::unique_ptr<LoopNest> r{new LoopNest};
+        auto r = std::make_unique<LoopNest>();
         r->copy_from(*this);
         r->compute_here(f, true, v, in_threads_loop, params, target);
         if (!in_realization) {

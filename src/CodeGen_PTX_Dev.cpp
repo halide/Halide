@@ -328,6 +328,7 @@ void CodeGen_PTX_Dev::init_module() {
     init_context();
 
     module = get_initial_module_for_ptx_device(target, context);
+    init_builder();
 
     struct Intrinsic {
         const char *name;
@@ -389,15 +390,48 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
         llvm::Function *barrier;
         if ((barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all")) && barrier->getIntrinsicID() != 0) {
-            // LLVM 20.1.6 and above: https://github.com/llvm/llvm-project/pull/140615
             builder->CreateCall(barrier, builder->getInt32(0));
-        } else if ((barrier = module->getFunction("llvm.nvvm.barrier0")) && barrier->getIntrinsicID() != 0) {
-            // LLVM 21.1.5 and below: Testing for llvm.nvvm.barrier0 can be removed once we drop support for LLVM 20
-            builder->CreateCall(barrier);
         } else {
-            internal_error << "Could not find PTX barrier intrinsic llvm.nvvm.barrier0 nor llvm.nvvm.barrier.cta.sync.aligned.all\n";
+            internal_error << "Could not find PTX barrier intrinsic llvm.nvvm.barrier.cta.sync.aligned.all\n";
         }
         value = ConstantInt::get(i32_t, 0);
+        return;
+    }
+
+    if (op->is_intrinsic({Call::gpu_shuffle_down, Call::gpu_shuffle_up,
+                          Call::gpu_shuffle_xor, Call::gpu_shuffle_idx})) {
+        internal_assert(op->args.size() == 3 && op->type.is_scalar() && op->type.bits() == 32)
+            << Expr(op) << "\n";
+        auto width = as_const_int(op->args[2]);
+        internal_assert(width && *width >= 1 && *width <= 32 && (*width & (*width - 1)) == 0)
+            << Expr(op) << "\n";
+        bool up = op->is_intrinsic(Call::gpu_shuffle_up);
+        string mode = (op->is_intrinsic(Call::gpu_shuffle_down) ? "down" :
+                       up                                       ? "up" :
+                       op->is_intrinsic(Call::gpu_shuffle_xor)  ? "bfly" :
+                                                                  "idx");
+        string suffix = op->type.is_float() ? ".f32" : ".i32";
+        // The high bits of c mark the bits of the lane id that are fixed
+        // within each group of lanes, and the low bits are a clamp on the
+        // source lane within the group.
+        int segmask = 32 - (int)*width;
+        Expr c = (segmask << 8) | (up ? 0 : 31);
+        std::vector<Expr> args = {op->args[0], op->args[1], c};
+        string name;
+        if (target.get_cuda_capability_lower_bound() >= 70) {
+            // Only the lanes in this group participate, so other groups
+            // in the same warp may be on a different path.
+            Expr membermask = -1;
+            if (*width < 32) {
+                Expr laneid = Call::make(Int(32), "llvm.nvvm.read.ptx.sreg.laneid", {}, Call::PureExtern);
+                membermask = ((1 << (int)*width) - 1) << (laneid & segmask);
+            }
+            args.insert(args.begin(), membermask);
+            name = "llvm.nvvm.shfl.sync." + mode + suffix;
+        } else {
+            name = "llvm.nvvm.shfl." + mode + suffix;
+        }
+        value = codegen(Call::make(op->type, name, args, Call::PureExtern));
         return;
     }
 
@@ -1025,12 +1059,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
+#if LLVM_VERSION < 240
     options.AllowFPOpFusion = CodeGen_GPU_Dev::any_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !CodeGen_GPU_Dev::any_strict_float;
     options.NoNaNsFPMath = !CodeGen_GPU_Dev::any_strict_float;
 #endif
     options.HonorSignDependentRoundingFPMathOption = !CodeGen_GPU_Dev::any_strict_float;
+#endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
@@ -1087,7 +1123,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     pto.LoopUnrolling = do_loop_opt;
     pto.ForgetAllSCEVInLoopUnroll = true;
 
+#if LLVM_VERSION >= 240
+    llvm::PassBuilder pb(module->getContext(), target_machine.get(), pto);
+#else
     llvm::PassBuilder pb(target_machine.get(), pto);
+#endif
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;

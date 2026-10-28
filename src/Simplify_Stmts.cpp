@@ -336,7 +336,7 @@ Stmt Simplify::visit(const Store *op) {
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
     if (is_const_one(op->predicate)) {
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->value.type().bytes() > alloc_info->bounds) {
                 in_unreachable = true;
@@ -393,7 +393,7 @@ Stmt Simplify::visit(const Store *op) {
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
                // It's a multi-dimensional multiramp
-               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr, let_var_alignment()) &&
                mr.dimensions() > 1 &&
                // The innermost stride isn't already one
                !is_const_one(mr.strides[0]) &&

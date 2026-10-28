@@ -326,7 +326,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     internal_assert(memcmp(header.e_ident, elf_magic, sizeof(elf_magic)) == 0);
     internal_assert(header.e_type == Object::ET_REL || header.e_type == Object::ET_DYN);
 
-    std::unique_ptr<Object> obj(new Object());
+    auto obj = std::make_unique<Object>();
     obj->set_type((Object::Type)header.e_type)
         .set_machine(header.e_machine)
         .set_version(header.e_version)

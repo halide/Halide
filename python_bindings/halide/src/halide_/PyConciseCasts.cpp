@@ -3,9 +3,9 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_concise_casts(py::module &m) {
+void define_concise_casts(py::module_ &m) {
     // explicit cast should be tried before
-    //  the pybind11::implicitly_convertible<T, Expr> conversion
+    //  the nanobind::implicitly_convertible<T, Expr> conversion
     m.def("f64", [](double v) -> Expr {
         return Expr(v);
     });
@@ -36,7 +36,7 @@ void define_concise_casts(py::module &m) {
     m.def("u8", [](uint8_t v) -> Expr {
         return Expr(v);
     });
-    // pybind11::implicitly_convertible<T, Expr> conversions
+    // nanobind::implicitly_convertible<T, Expr> conversions
     m.def("f64", Halide::ConciseCasts::f64);
     m.def("f32", Halide::ConciseCasts::f32);
     m.def("i64", Halide::ConciseCasts::i64);

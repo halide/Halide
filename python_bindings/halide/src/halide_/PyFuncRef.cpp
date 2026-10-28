@@ -5,7 +5,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_func_ref(py::module &m) {
+void define_func_ref(py::module_ &m) {
     auto undefined_lhs_funcref_expr_class =
         py::class_<UnevaluatedFuncRefExpr>(m, "_UnevaluatedFuncRefExpr");
 
