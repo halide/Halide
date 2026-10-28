@@ -4713,8 +4713,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
     if (op->is_interleave()) {
         value = interleave_vectors(vecs);
-    } else if (op->is_transpose()) {
-        int cols = op->transpose_factor();
+    } else if (auto transpose_cols = op->is_transpose()) {
+        int cols = *transpose_cols;
         int rows = op->vectors[0].type().lanes() / cols;
         if (is_power_of_two(cols) &&
             !is_power_of_two(rows)) {
