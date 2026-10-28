@@ -17,6 +17,15 @@ if (WITH_PYTHON_BINDINGS)
         PATTERN "*.py"
     )
 
+    # halide/__init__.py imports halide.bin, which the halide-bin wheel ships.
+    # Monolithic installs need it too; there, libHalide is found via RPATH, so
+    # its library search is a no-op.
+    install(
+        FILES "${Halide_Python_SOURCE_DIR}/halide-bin/src/halide/bin/__init__.py"
+        DESTINATION "${Halide_INSTALL_PYTHONDIR}/bin"
+        COMPONENT Halide_PythonBin
+    )
+
     # The compiler distribution owns the top-level package initializer and the
     # remaining compiler-side Python sources.
     install(
