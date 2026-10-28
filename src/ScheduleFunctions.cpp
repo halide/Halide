@@ -184,6 +184,25 @@ Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Ty
     return AddPredicates(cond, func, type)(s);
 }
 
+// The dimensions of a stage whose extent is known, from a bound,
+// align_bounds, or an RDom, to be a multiple of some Expr.
+map<string, Expr> known_extent_alignments(const FuncSchedule &func_s, const StageSchedule &stage_s) {
+    map<string, Expr> result;
+    for (const auto &entry : func_s.bounds()) {
+        const Bound &i = entry.second;
+        if (i.extent.defined()) {
+            result[i.var] = i.extent;
+        }
+        if (i.modulus.defined()) {
+            result[i.var] = i.modulus;
+        }
+    }
+    for (const ReductionVariable &i : stage_s.rvars()) {
+        result[i.var] = i.extent;
+    }
+    return result;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
@@ -199,26 +218,8 @@ Stmt build_loop_nest(
     // then wrapping it in for loops.
     Stmt stmt = body;
 
-    // A map of the dimensions for which we know the extent is a
-    // multiple of some Expr. This can happen due to a bound, or
-    // align_bounds directive, or if a dim comes from the inside
-    // of a split.
-    map<string, Expr> dim_extent_alignment;
-
-    // First hunt through the bounds for them.
-    for (const auto &entry : func_s.bounds()) {
-        const Bound &i = entry.second;
-        if (i.extent.defined()) {
-            dim_extent_alignment[i.var] = i.extent;
-        }
-        if (i.modulus.defined()) {
-            dim_extent_alignment[i.var] = i.modulus;
-        }
-    }
-    // Then use any reduction domain.
-    for (const ReductionVariable &i : stage_s.rvars()) {
-        dim_extent_alignment[i.var] = i.extent;
-    }
+    // Splits add the dims that come from their inside.
+    map<string, Expr> dim_extent_alignment = known_extent_alignments(func_s, stage_s);
 
     vector<Split> splits = stage_s.splits();
 
@@ -2234,6 +2235,109 @@ public:
     }
 };
 
+// A window slides forwards one value at a time, so the loops a dimension of a
+// consumer is split into must count through its values in order: serial,
+// adjacent, outer outside inner, and with no tail that skips or repeats values
+// anywhere but the outermost of them.
+void validate_slide_level(const Function &f, const LoopLevel &l, const Function &g,
+                          const StageSchedule &s) {
+    const string &v = l.var_name();
+    auto matches = [&](const string &n) {
+        return n == v || ends_with(n, "." + v);
+    };
+    const string error_prefix = "Func " + f.name() + " was told to slide over " +
+                                l.to_string() + ", but ";
+
+    map<string, Expr> alignment = known_extent_alignments(g.schedule(), s);
+    // The vars the dimension is currently split into, outermost first.
+    vector<string> digits;
+    for (const Split &split : s.splits()) {
+        if (digits.empty() && matches(split.old_var)) {
+            digits.push_back(split.old_var);
+        }
+        apply_split(split, "", alignment);
+        auto k = std::find(digits.begin(), digits.end(), split.old_var);
+        switch (split.split_type) {
+        case Split::SplitVar:
+            if (k != digits.end()) {
+                bool exact = is_const_one(split.factor) || alignment.count(split.outer);
+                user_assert(exact ||
+                            (k == digits.begin() &&
+                             split.tail != TailStrategy::ShiftInwards &&
+                             split.tail != TailStrategy::ShiftInwardsAndBlend))
+                    << error_prefix << "the split of " << split.old_var
+                    << " with TailStrategy::" << split.tail << " means it does not "
+                    << "step through its values one at a time. Only the outermost "
+                    << "split of the dimension may have a tail, and it can't shift "
+                    << "inwards. Use TailStrategy::RoundUp or GuardWithIf, or "
+                    << "align_bounds.\n";
+                *k = split.inner;
+                digits.insert(k, split.outer);
+            }
+            break;
+        case Split::RenameVar:
+            if (k != digits.end()) {
+                *k = split.outer;
+            }
+            break;
+        case Split::FuseVars:
+            user_assert(std::find(digits.begin(), digits.end(), split.outer) == digits.end() &&
+                        std::find(digits.begin(), digits.end(), split.inner) == digits.end())
+                << error_prefix << "it is fused into " << split.old_var
+                << ". A window can't slide over a fused dimension.\n";
+            break;
+        }
+    }
+
+    // Dims are innermost first.
+    vector<Dim> loops(s.dims().rbegin(), s.dims().rend());
+    if (digits.empty()) {
+        for (const Dim &d : loops) {
+            if (matches(d.var)) {
+                digits.push_back(d.var);
+                break;
+            }
+        }
+        if (digits.empty()) {
+            return;
+        }
+    }
+    size_t pos = 0;
+    while (loops[pos].var != digits[0]) {
+        pos++;
+    }
+    for (size_t i = 0; i < digits.size(); i++) {
+        const Dim *d = pos + i < loops.size() ? &loops[pos + i] : nullptr;
+        user_assert(d && d->var == digits[i] &&
+                    (d->for_type == ForType::Serial || d->for_type == ForType::Unrolled))
+            << error_prefix << "the loop " << (d ? d->var : digits[i])
+            << " breaks the sequence. A window can only slide along loops that "
+            << "run in order, one iteration at a time, so the loops the "
+            << "dimension is split into must be serial and adjacent, outer "
+            << "outside inner.\n";
+    }
+}
+
+void validate_slide_levels(const Function &f, const map<string, Function> &env) {
+    for (const LoopLevel &l : f.schedule().slide_levels()) {
+        auto it = env.find(l.func());
+        if (it == env.end()) {
+            continue;
+        }
+        const Function &g = it->second;
+        vector<Definition> defs = g.updates();
+        if (g.has_pure_definition()) {
+            defs.push_back(g.definition());
+        }
+        for (size_t i = 0; i < defs.size(); i++) {
+            for (const Specialization &spec : defs[i].specializations()) {
+                defs.push_back(spec.definition);
+            }
+            validate_slide_level(f, l, g, defs[i].schedule());
+        }
+    }
+}
+
 // Check a schedule is legal, throwing an error if it is not. Returns whether or
 // not a realization of the Func should be injected. Unused intermediate Funcs
 // that somehow made it into the Func DAG can be discarded. May also return a
@@ -2411,6 +2515,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                 << "other scheduling operations, e.g. parallel() and vectorize()).\n\n";
         }
     }
+
+    validate_slide_levels(f, env);
 
     if (is_output) {
         // None of the checks below apply to outputs

@@ -1064,7 +1064,6 @@ struct SlideLet {
     // their bounds, all written in terms of names in scope at the loop.
     Expr value;
     vector<pair<string, Interval>> loops;
-    vector<ForType> for_types;
 };
 
 // Find the lets inside a Stmt that a Func was told to slide over, and that
@@ -1073,16 +1072,13 @@ class FindSlideLets : public IRVisitor {
     const Function &func;
     Scope<Expr> lets;
     vector<pair<string, Interval>> loops;
-    vector<ForType> for_types;
 
     using IRVisitor::visit;
 
     void visit(const For *op) override {
         loops.emplace_back(op->name, Interval(expand_expr(op->min, lets),
                                               expand_expr(op->max, lets)));
-        for_types.push_back(op->for_type);
         op->body.accept(this);
-        for_types.pop_back();
         loops.pop_back();
     }
 
@@ -1095,7 +1091,7 @@ class FindSlideLets : public IRVisitor {
                 self->visit_base(pc);
             });
             if (contains_producer) {
-                result.push_back({op->name, value, loops, for_types});
+                result.push_back({op->name, value, loops});
             }
         }
         ScopedBinding<Expr> bind(lets, op->name, value);
@@ -1152,75 +1148,6 @@ struct SlideTarget {
     }
 };
 
-// A window advances along what it slides over one step at a time. Given the
-// value of a let, and the serial loops enclosing it from outermost to
-// innermost, check that it goes up by exactly one each time the innermost of
-// those loops advances, including when that makes the loops outside it advance
-// and the ones inside it wrap around. Loops outside the outermost one it
-// depends on are ignored. The scope bounds any variables in the loop bounds.
-// Returns the name of a loop that breaks this, or an empty string if none
-// does.
-string loop_that_breaks_single_steps(const Expr &e,
-                                     const vector<pair<string, Interval>> &loops,
-                                     const Scope<Interval> &scope) {
-    // The loops e moves with, outermost first, with how far e moves each time
-    // one of them advances, and how many iterations it runs for.
-    struct Digit {
-        string name;
-        int64_t step;
-        Expr extent;
-    };
-    vector<Digit> digits;
-    for (const auto &[name, b] : loops) {
-        Expr extent;
-        if (b.is_bounded()) {
-            extent = simplify(b.max - b.min + 1);
-            Interval eb = bounds_of_expr_in_scope(extent, scope);
-            if (eb.is_bounded()) {
-                eb.min = simplify(eb.min);
-                if (is_const(eb.min) && equal(eb.min, simplify(eb.max))) {
-                    extent = eb.min;
-                }
-            }
-            if (is_const_one(extent)) {
-                // It never advances.
-                continue;
-            }
-        }
-        ConstantInterval d = derivative_bounds(e, name);
-        if (!d.is_single_point()) {
-            return name;
-        }
-        if (digits.empty() && d.min == 0) {
-            continue;
-        }
-        for (const Digit &outer : digits) {
-            if (!b.is_bounded() ||
-                !derivative_bounds(b.min, outer.name).is_single_point(0) ||
-                !derivative_bounds(b.max, outer.name).is_single_point(0)) {
-                return name;
-            }
-        }
-        digits.push_back({name, d.min, extent});
-    }
-
-    // Each loop advancing, with every loop inside it wrapping back around to
-    // its first iteration, has to move e on by exactly one from where the
-    // loops inside it left it.
-    Expr span = 0;
-    for (size_t i = digits.size(); i-- > 0;) {
-        if (!can_prove(make_const(Int(32), digits[i].step) == span + 1, scope)) {
-            debug(3) << "Advancing " << digits[i].name << " moves " << e << " by "
-                     << digits[i].step << " instead of " << span + 1 << "\n";
-            return digits[i].name;
-        }
-        if (i > 0 && digits[i].step != 0) {
-            span = simplify(span + (int)digits[i].step * (digits[i].extent - 1));
-        }
-    }
-    return "";
-}
-
 // Perform sliding window optimization for all functions
 class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
@@ -1240,7 +1167,7 @@ class SlidingWindow : public IRMutator {
     // live across them.
     list<size_t> sliding_loop_depth;
     // The loops we're inside of, outermost first.
-    vector<pair<string, ForType>> loop_stack;
+    vector<string> loop_stack;
     // For each let in scope, the loops its value depends on, directly or
     // through other lets.
     Scope<set<string>> let_loops;
@@ -1260,8 +1187,7 @@ class SlidingWindow : public IRMutator {
             [&](auto *self, const Variable *v) {
                 if (const set<string> *s = let_loops.find(v->name)) {
                     result.insert(s->begin(), s->end());
-                } else if (std::any_of(loop_stack.begin(), loop_stack.end(),
-                                       [&](const auto &l) { return l.first == v->name; })) {
+                } else if (std::find(loop_stack.begin(), loop_stack.end(), v->name) != loop_stack.end()) {
                     result.insert(v->name);
                 }
             });
@@ -1318,7 +1244,7 @@ class SlidingWindow : public IRMutator {
         for (const SlideLet &l : finder.result) {
             set<string> used = loops_used(l.value);
             size_t outer = 0;
-            while (outer < loop_stack.size() && !used.count(loop_stack[outer].first)) {
+            while (outer < loop_stack.size() && !used.count(loop_stack[outer])) {
                 outer++;
             }
             if (outer < depth) {
@@ -1328,51 +1254,17 @@ class SlidingWindow : public IRMutator {
                 user_error
                     << "Func " << func.name() << " was told to slide over "
                     << slide_level_name(func, l.name) << ", but that "
-                    << "dimension varies over the loop " << loop_stack[outer].first
+                    << "dimension varies over the loop " << loop_stack[outer]
                     << ", which is outside " << func.name() << "'s storage. Sliding "
                     << "would read values from a previous iteration of that "
                     << "loop, which have been thrown away by then. Store "
                     << func.name() << " at a coarser level, or slide over a "
                     << "dimension that doesn't span that loop.\n";
             }
-            auto check_serial = [&](const string &loop, ForType t) {
-                user_assert(t == ForType::Serial || t == ForType::Unrolled)
-                    << "Func " << func.name() << " was told to slide over "
-                    << slide_level_name(func, l.name) << ", but that dimension "
-                    << "varies over the loop " << loop << ", which is " << t
-                    << ". A window can only slide along loops that run in "
-                    << "order, one iteration at a time.\n";
-            };
-            if (outer < loop_stack.size()) {
-                // It slides at that outer loop instead.
-                check_serial(loop_stack[outer].first, loop_stack[outer].second);
+            if (outer < loop_stack.size() || !expr_uses_var(l.value, name)) {
+                // It slides at an outer or inner loop instead.
                 continue;
             }
-            if (!expr_uses_var(l.value, name)) {
-                // It slides at an inner loop instead.
-                continue;
-            }
-            for (size_t i = 0; i < l.loops.size(); i++) {
-                check_serial(l.loops[i].first, l.for_types[i]);
-            }
-
-            // The window advances by one each time the let does, so the let
-            // has to step through its values one at a time as the loops run,
-            // including on any warm-up iterations prepended to this one.
-            vector<pair<string, Interval>> loops = l.loops;
-            loops.insert(loops.begin(), {name, Interval::everything()});
-            string bad = loop_that_breaks_single_steps(l.value, loops, bounds_scope);
-            user_assert(bad.empty())
-                << "Func " << func.name() << " was told to slide over "
-                << slide_level_name(func, l.name) << ", but that dimension does "
-                << "not step through its values one at a time as the loop nest "
-                << "runs: the loop " << bad << " breaks the sequence. A window "
-                << "moves forwards one value at a time, so sliding would skip "
-                << "or repeat values. Reordering the loops of a split, putting "
-                << "another loop between them (as tile does), or a ShiftInwards "
-                << "tail strategy where the extent isn't a multiple of the split "
-                << "factor all do this. Slide over a dimension that counts "
-                << "upwards instead.\n";
 
             SlideTarget t{l.name, l.value, l.loops};
             ConstantInterval stride = derivative_bounds(l.value, name);
@@ -1449,14 +1341,7 @@ class SlidingWindow : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (!(op->for_type == ForType::Serial || op->for_type == ForType::Unrolled)) {
-            for (const Function &func : sliding) {
-                user_assert(!slides_over(func, op->name))
-                    << "Func " << func.name() << " was told to slide over "
-                    << slide_level_name(func, op->name) << ", but that loop is "
-                    << op->for_type << ". A window can only slide along loops "
-                    << "that run in order, one iteration at a time.\n";
-            }
-            loop_stack.emplace_back(op->name, op->for_type);
+            loop_stack.push_back(op->name);
             Stmt s = IRMutator::visit(op);
             loop_stack.pop_back();
             return s;
@@ -1598,7 +1483,7 @@ class SlidingWindow : public IRMutator {
             Interval lo = bounds_of_expr_in_scope(loop_min, bounds_scope);
             Interval hi = bounds_of_expr_in_scope(loop_max, bounds_scope);
             ScopedBinding<Interval> bind(bounds_scope, name, Interval(lo.min, hi.max));
-            loop_stack.emplace_back(name, op->for_type);
+            loop_stack.push_back(name);
             body = mutate(body);
             loop_stack.pop_back();
         }

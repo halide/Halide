@@ -546,7 +546,7 @@ int main(int argc, char **argv) {
             Var x("x"), y("y"), yo("yo"), yi("yi");
             f(x, y) = x + y;
             g(x, y) = f(x, y) + f(x, y - 1);
-            g.split(y, yo, yi, 4);
+            g.split(y, yo, yi, 4, TailStrategy::RoundUp);
             // y is spread across yo and yi, but f's storage only lives for
             // one iteration of yo. Sliding over y would expect values from a
             // previous iteration of yo, and the allocation holding them has
@@ -556,7 +556,7 @@ int main(int argc, char **argv) {
         });
 
     failures += !expect_user_error(
-        "non_monotonic_dimension", "one at a time", [] {
+        "non_monotonic_dimension", "xi breaks the sequence", [] {
             Func f("f"), g("g");
             Var x("x"), xo("xo"), xi("xi");
             f(x) = x;
@@ -564,7 +564,7 @@ int main(int argc, char **argv) {
             // Reordering the split puts the small term on the outer loop, so
             // x runs 0, 8, 16, ... and then 1, 9, 17, ... A window can only
             // move forwards, so there is nothing sensible to slide here.
-            g.split(x, xo, xi, 8).reorder(xo, xi);
+            g.split(x, xo, xi, 8, TailStrategy::RoundUp).reorder(xo, xi);
             f.store_root().compute_at(g, xo).slide(g, x);
             g.realize({32});
         });
