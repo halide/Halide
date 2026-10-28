@@ -1065,6 +1065,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const std::map<std::string, FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
     const auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     const auto memoized = func_schedule->memoized();
+    const auto precomputed = func_schedule->precomputed();
     const auto async = func_schedule->async();
     const auto ring_buffer = deserialize_expr(func_schedule->ring_buffer_type(), func_schedule->ring_buffer());
     const auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
@@ -1098,6 +1099,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     hl_func_schedule.wrappers() = wrappers;
     hl_func_schedule.memory_type() = memory_type;
     hl_func_schedule.memoized() = memoized;
+    hl_func_schedule.precomputed() = precomputed;
     hl_func_schedule.async() = async;
     hl_func_schedule.ring_buffer() = ring_buffer;
     hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;

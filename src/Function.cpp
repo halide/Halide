@@ -1215,6 +1215,13 @@ void Function::trace_bounds_required() {
 void Function::add_trace_tag(const std::string &trace_tag) {
     contents->trace_tags.push_back(trace_tag);
 }
+void Function::clear_tracing() {
+    contents->trace_loads = false;
+    contents->trace_stores = false;
+    contents->trace_realizations = false;
+    contents->trace_bounds_required = false;
+    contents->trace_tags.clear();
+}
 
 bool Function::is_tracing_loads() const {
     return contents->trace_loads;

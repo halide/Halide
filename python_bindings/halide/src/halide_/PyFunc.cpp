@@ -220,6 +220,7 @@ void define_func(py::module &m) {
             .def("ring_buffer", &Func::ring_buffer)
             .def("bound_storage", &Func::bound_storage)
             .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
+            .def("precompute", &Func::precompute)
             .def("compute_inline", &Func::compute_inline)
             .def("eager_inline", (Func & (Func::*)(const std::vector<Func> &)) & Func::eager_inline, py::arg("fs"))
             .def("eager_inline", [](Func &func, const py::args &args) -> Func & {

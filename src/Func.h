@@ -2677,6 +2677,48 @@ public:
      */
     Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 
+    /** Evaluate this Func once, while the pipeline is compiled, and embed the
+     * result in the generated code as a constant Buffer. Every call to this
+     * Func reads that Buffer instead. Implies compute_root(). This is useful
+     * for small lookup tables that the algorithm defines by arithmetic: the
+     * schedule can choose to tabulate them on one target and leave them
+     * inlined on another.
+     *
+     * The Func must be constant: its definitions, and those of every Func it
+     * depends on, may not read a Param, an ImageParam, an input Buffer
+     * argument, or the result of an impure extern call. Embedded Buffers and
+     * RDoms with constant bounds are fine. Funcs with extern definitions
+     * can't be precomputed.
+     *
+     * The region evaluated is the region that bounds inference allocates for
+     * the Func, which must be a compile-time constant. Padding introduced by
+     * the schedule (the Func's own splits, align_bounds(), a consumer
+     * vectorized with TailStrategy::RoundUp, ...) is evaluated and embedded
+     * too. If the region depends on a Param or on the size of an output,
+     * compilation fails; use bound() to fix it. Reads outside the region
+     * fail the usual bounds check on the embedded Buffer.
+     *
+     * The Func is evaluated by JIT on the host, with a default schedule, so
+     * scheduling directives on it that don't change the region (vectorize,
+     * parallel, store_in, ...) are ignored. Target queries such as
+     * target_arch_is() are answered for the compilation target. Floating-point
+     * results are those of the host; compilation warns if the Func computes
+     * floating-point values for a target with a different architecture, bit
+     * width, or OS, unless strict_float is in use. The Func may not be an
+     * output of the pipeline, and may not be computed anywhere but at root.
+     * Wrappers created with in() or clone_in() read the embedded Buffer, so
+     * the table can still be staged, e.g. into GPU shared memory. Identical
+     * precomputed Buffers (same type, shape and contents) are embedded only
+     * once per Module.
+     *
+     * Unlike memoize(), which is a run-time cache keyed on the values of
+     * Params, and has to look up (and may evict and recompute) its entries on
+     * every call, precompute() does all of its work at compile time, takes no
+     * Params, and has no run-time cost beyond reading the constant Buffer. A
+     * Func can't be both memoized and precomputed.
+     */
+    Func &precompute();
+
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the
      * production is complete. If this Func's store level is different
