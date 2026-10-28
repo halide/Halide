@@ -104,6 +104,41 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Specializing a Func computed inside a kernel makes a copy of each
+        // shared allocation within it per branch, all with the same name. The
+        // branches are exclusive, so the copies can share one allocation.
+        Func g("g"), h("h"), out("out");
+        Var x("x"), y("y"), xi("xi"), yi("yi"), yo("yo");
+
+        Param<bool> p;
+
+        g(x, y) = x + y;
+        h(x, y) = g(x, y) + g(x + 1, y);
+        out(x, y) = h(x, y);
+
+        out.gpu_tile(x, y, xi, yi, 16, 16);
+        h.compute_at(out, x);
+        h.specialize(p).split(y, yo, yi, 8).gpu_threads(x, yi);
+        h.split(y, yo, yi, 4).gpu_threads(x, yi);
+        g.compute_at(h, yo).store_in(MemoryType::GPUShared).gpu_threads(x, y);
+
+        for (bool val : {true, false}) {
+            p.set(val);
+            Buffer<int> result = out.realize({64, 64});
+            for (int y = 0; y < result.height(); y++) {
+                for (int x = 0; x < result.width(); x++) {
+                    int correct = 2 * x + 2 * y + 1;
+                    if (result(x, y) != correct) {
+                        printf("result(%d, %d) = %d instead of %d\n",
+                               x, y, result(x, y), correct);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

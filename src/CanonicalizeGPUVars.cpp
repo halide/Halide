@@ -4,6 +4,7 @@
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "DeviceInterface.h"
+#include "ExtractWMMAOperations.h"
 #include "IR.h"
 #include "IRMutator.h"
 #include "Substitute.h"
@@ -45,8 +46,9 @@ class CountGPUBlocksThreads : public IRVisitor {
     // same dimension, not a new one.
     bool in_lanes = false;
 
-    // The device API of the GPU loops being counted. Only CUDA turns a tile
-    // allocation into a loop over lanes.
+    // The device API of the GPU loops being counted. Only the APIs with a
+    // lane-striped matrix unit (CUDA and Metal) turn a tile allocation into a
+    // loop over lanes.
     DeviceAPI device_api;
 
     void visit(const For *op) override {
@@ -88,7 +90,7 @@ class CountGPUBlocksThreads : public IRVisitor {
         // allocation in loops over the lanes of a warp, so count it as a lane
         // dimension.
         const bool wmma = op->memory_type == MemoryType::Tile &&
-                          device_api == DeviceAPI::CUDA;
+                          device_api_has_lane_matrix_unit(device_api);
         int dl = wmma && !in_lanes;
         ScopedValue<bool> old_in_lanes(in_lanes, in_lanes || wmma);
         nl += dl;
@@ -140,7 +142,7 @@ class CanonicalizeGPUVars : public IRMutator {
         ScopedValue<bool> old(in_wmma_alloc,
                               in_wmma_alloc ||
                                   (op->memory_type == MemoryType::Tile &&
-                                   device_api == DeviceAPI::CUDA));
+                                   device_api_has_lane_matrix_unit(device_api)));
         return IRMutator::visit(op);
     }
 

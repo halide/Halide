@@ -586,6 +586,12 @@ protected:
         Stmt then_case = mutate(op->then_case);
         Stmt then_preamble = host_side_preamble;
         host_side_preamble = Stmt();
+        // The two branches never both run, so nothing allocated in one is live
+        // in the other. Give them distinct stages, so that allocations of the
+        // same Func made in each (e.g. by a specialization) can be coalesced.
+        if (!in_threads && op->else_case.defined()) {
+            barrier_stage++;
+        }
         Stmt else_case = mutate(op->else_case);
         Stmt else_preamble = host_side_preamble;
 
