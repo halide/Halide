@@ -15,31 +15,90 @@ namespace ggml {
 
 using namespace Halide;
 
-// A decode Func's constant table (a Buffer it reads), if any.
-inline Buffer<> table_of(Func f) {
-    Buffer<> b;
+// Whether f is a constant: a definition of its arguments alone, reading no
+// Funcs or Params, but maybe Buffers it embeds (a Tabulate's lut: a
+// codebook's mux, a bit field's decode, or a grid's points, read from the
+// Lattice's list).
+inline bool constant(Func f) {
+    const Internal::Function &fn = f.function();
+    if (!fn.has_pure_definition() || fn.has_update_definition() || fn.has_extern_definition()) return false;
+    bool reads = false;
+    for (const Expr &v : fn.definition().values()) {
+        Internal::visit_with(
+            v, [&](auto *self, const Internal::Call *c) {
+                reads |= c->call_type == Internal::Call::Halide || (c->call_type == Internal::Call::Image && !c->image.defined()) || c->param.defined();
+                self->visit_base(c); },
+            [&](auto *, const Internal::Variable *x) { reads |= x->param.defined() || x->reduction_domain.defined(); });
+    }
+    return !reads;
+}
+
+// A lut (Tabulate's): a constant of (element, index).
+inline bool is_lut(const Func &f) {
+    return constant(f) && f.dimensions() == 2;
+}
+
+// The Funcs f's definitions call.
+inline std::vector<Func> callees(Func f) {
+    std::vector<Func> fs;
+    auto add = [&](const Expr &v) {
+        Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
+            if (c->call_type == Internal::Call::Halide &&
+                std::none_of(fs.begin(), fs.end(), [&](const Func &h) { return h.name() == c->name; })) {
+                fs.push_back(Func(Internal::Function(c->func)));
+            }
+            self->visit_base(c);
+        });
+    };
+    for (const Expr &v : f.function().definition().values()) {
+        add(v);
+    }
+    return fs;
+}
+
+// The calls to g in f's definition.
+inline std::vector<const Internal::Call *> calls_to(Func f, const Func &g) {
+    std::vector<const Internal::Call *> cs;
     for (const Expr &v : f.function().definition().values()) {
         Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
-            if (c->call_type == Internal::Call::Image && c->image.defined()) b = c->image;
+            if (c->call_type == Internal::Call::Halide && c->name == g.name()) cs.push_back(c);
             self->visit_base(c);
         });
     }
-    return b;
+    return cs;
 }
 
-// Whether f is a constant: a definition of its arguments alone, reading no
-// Funcs, Buffers or Params (a Tabulate's lut).
-inline bool constant(Func f) {
-    if (f.function().has_update_definition()) return false;
-    bool reads = false;
-    for (const Expr &v : f.function().definition().values()) {
-        Internal::visit_with(
-            v, [&](auto *self, const Internal::Call *c) {
-                reads |= c->call_type == Internal::Call::Halide || c->call_type == Internal::Call::Image || c->param.defined();
-                self->visit_base(c); },
-            [&](auto *, const Internal::Variable *x) { reads |= x->param.defined() || x->image.defined() || x->reduction_domain.defined(); });
+// The extent of a call's argument a over all values of the caller's
+// arguments (a lut's element j % per: per; its index, a byte or clamped to
+// the table: its entries); 0 if unbounded.
+inline int extent_of(const Expr &a) {
+    Internal::Scope<Internal::Interval> any;
+    Internal::visit_with(a, [&](auto *, const Internal::Variable *x) {
+        if (!any.contains(x->name)) any.push(x->name, Internal::Interval::everything());
+    });
+    Internal::Interval i = Internal::bounds_of_expr_in_scope(a, any);
+    auto lo = i.has_lower_bound() ? Internal::as_const_int(Internal::simplify(i.min)) : std::nullopt;
+    auto hi = i.has_upper_bound() ? Internal::as_const_int(Internal::simplify(i.max)) : std::nullopt;
+    return lo && hi ? (int)(*hi - *lo + 1) : 0;
+}
+
+// A decode Func's table: a precomputed lut (Func::precompute(), a constant
+// Buffer once lowered) it reads, if any.
+inline Func table_of(Func f) {
+    for (Func g : callees(f)) {
+        if (g.function().schedule().precomputed()) return g;
     }
-    return !reads;
+    return Func();
+}
+
+// The values per index (a row) of the table decode f reads.
+inline int table_rows(Func f) {
+    Func t = table_of(f);
+    int rows = 0;
+    for (const Internal::Call *c : calls_to(f, t)) {
+        rows = std::max(rows, extent_of(c->args[0]));
+    }
+    return rows;
 }
 
 // Which components' decode to pick, by their port tags (schemes/tags.h):
@@ -64,8 +123,8 @@ inline Pick all_but(ApproximationTags t) {
 // The decode Funcs eager_inline can fold into a consumer, of rs[first, last),
 // of the components `pick` (e.g. the codes' decode, or all but the codes':
 // the scales, offsets and the values decoded from them); with `tables`, the
-// ones reading a table instead, which a vectorized inline would gather from:
-// see tables().
+// ones reading a table (a precomputed lut: see luts()) instead, which a
+// vectorized inline would gather from: see tables().
 inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, const Pick &pick = all_but({}), size_t first = 0, size_t last = SIZE_MAX, bool tables = false) {
     std::vector<Func> fs;
     for (size_t i = first; i < std::min(last, rs.size()); i++) {
@@ -327,13 +386,49 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     return cond.defined() ? dot.update().specialize(cond) : dot.update();
 }
 
-// Whether a kernel decodes bit fields through constant tables (Tabulate): on
-// CPUs. A table moves the decode off the SIMD units, which bound the dot
-// (Apple M3 Max, q5_0, one thread, medians over link layouts: vec_dot from
-// 0.80x GGML's speed to 1.01x, gemv on single rows from 0.86x to 1.0x, gemm
-// M = 32 from 2.2x to 2.7x).
-inline bool use_tables(const Target &t) {
-    return !t.has_gpu_feature();
+// How a kernel reads its luts (Tabulate's: a value per element and index,
+// see is_lut()), by what they cost inlined: a lut whose definition reads a
+// Buffer (a grid's points: the Lattice's list) is precomputed on every target
+// (Func::precompute(): a constant table of its values), as inlined its decode
+// would be that read and more; one of 16 bytes or fewer (a codebook's 16
+// int8 values) is inlined on CPUs, a register table lookup (NEON's tbl,
+// x86's pshufb), and on GPUs staged in threadgroup memory (metal_luts()); the
+// rest, arithmetic on their index (bit fields' decodes: q5's high bits, even
+// signs, nvfp4's ue4m3 scales), are precomputed with `tables`, else inlined
+// as the arithmetic. `tables` on CPUs: a table moves the decode off the SIMD
+// units, which bound the dot (Apple M3 Max, q5_0, one thread, medians over
+// link layouts: vec_dot from 0.80x GGML's speed to 1.01x, gemv on single
+// rows from 0.86x to 1.0x, gemm M = 32 from 2.2x to 2.7x). Call before any
+// other directive on rs's decode: the precomputed luts then leave its
+// decode_funcs(), and their readers read a table (table_of()).
+inline bool register_lut(const std::vector<ApproximationResult> &rs, const Func &lut) {
+    int per = 0, entries = 0;
+    for (const ApproximationResult &r : rs) {
+        for (Func f : r.decode_funcs()) {
+            for (const Internal::Call *c : calls_to(f, lut)) {
+                per = std::max(per, extent_of(c->args[0]));
+                entries = std::max(entries, extent_of(c->args[1]));
+            }
+        }
+    }
+    return per && entries && per * entries * lut.type().bytes() <= 16;
+}
+
+inline void luts(const std::vector<ApproximationResult> &rs, bool tables) {
+    std::set<std::string> seen;
+    for (const ApproximationResult &r : rs) {
+        for (Func f : r.decode_funcs()) {
+            if (!is_lut(f) || !seen.insert(f.name()).second) continue;
+            bool data = false;
+            for (const Expr &v : f.function().definition().values()) {
+                Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
+                    data |= c->call_type == Internal::Call::Image;
+                    self->visit_base(c);
+                });
+            }
+            if (data || (tables && !register_lut(rs, f))) f.precompute();
+        }
+    }
 }
 
 // The table decoders that tables() stages: all but tables of one value per
@@ -342,22 +437,7 @@ inline bool use_tables(const Target &t) {
 inline std::vector<Func> staged_tables(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> fs;
     for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
-        if (table_of(f).dim(0).extent() != 1) fs.push_back(f);
-    }
-    return fs;
-}
-
-// The Funcs f's definition calls.
-inline std::vector<Func> callees(Func f) {
-    std::vector<Func> fs;
-    for (const Expr &v : f.function().definition().values()) {
-        Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
-            if (c->call_type == Internal::Call::Halide &&
-                std::none_of(fs.begin(), fs.end(), [&](const Func &h) { return h.name() == c->name; })) {
-                fs.push_back(Func(Internal::Function(c->func)));
-            }
-            self->visit_base(c);
-        });
+        if (table_rows(f) != 1) fs.push_back(f);
     }
     return fs;
 }
@@ -386,7 +466,10 @@ inline bool plain_read(Func f) {
 // vec_dot 1.16-1.2x); staged in a SIMD register, each is a lane move (half
 // the gain).
 inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
-    std::vector<Func> idx = callees(g);
+    std::vector<Func> idx;
+    for (Func f : callees(g)) {
+        if (!f.function().schedule().precomputed()) idx.push_back(f);  // (not its table)
+    }
     if (idx.size() != 1) return;
     std::vector<std::pair<Func, Func>> staged;  // (Func read as is, its caller)
     if (plain_read(idx[0])) {
@@ -442,7 +525,7 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
         if (cs.empty()) continue;
         Func g = f.clone_in(cs);
         Var j = g.args()[0], jo("jo"), ji("ji");
-        g.compute_at(at).split(j, jo, ji, table_of(f).dim(0).extent()).vectorize(ji).unroll(jo);
+        g.compute_at(at).split(j, jo, ji, table_rows(f)).vectorize(ji).unroll(jo);
         for (size_t k = 1; k < g.args().size(); k++) {
             g.unroll(g.args()[k]);
         }
@@ -1704,6 +1787,7 @@ enum class Fold {
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
                     bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
+    luts(rs, true);
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -1797,18 +1881,13 @@ inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) 
     return count;
 }
 
-// A codebook's lut: a constant (codebook_lut()) of (port, index).
-inline bool is_lut(const Func &f) {
-    return constant(f) && f.dimensions() == 2;
-}
-
 // Metal: lut f per threadgroup, at out's loop `at`, in threadgroup memory.
 inline void metal_lut(Func f, Func out, const Var &at) {
     Var p = f.args()[0], i = f.args()[1];
     f.compute_at(out, at).store_in(MemoryType::GPUShared).reorder(i, p).gpu_threads(i);
 }
 
-// Metal: the codebooks' luts (codebook_lut()), each computed per
+// Metal: the codebooks' luts (codebook_lut(); register_lut()), each computed per
 // threadgroup (at out's innermost gpu_blocks loop) into threadgroup memory,
 // an entry per thread, as GGML's kernel_mul_mv_iq4_nl_f32 copies
 // kvalues_iq4nl. (M3 Max, iq4_nl, iq4_xs and mxfp4 on f32 and q8 acts: gemv
@@ -1819,7 +1898,7 @@ inline void metal_lut(Func f, Func out, const Var &at) {
 // table's device buffer, about even: 0.97-1.03x.)
 inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
     for (Func f : decoders(rs)) {
-        if (is_lut(f)) metal_lut(f, out, Var("no"));
+        if (is_lut(f) && register_lut(rs, f)) metal_lut(f, out, Var("no"));
     }
 }
 
@@ -2142,7 +2221,7 @@ inline void inline_until(Func f, const std::vector<Func> &to) {
 // M >= 16, 16 x 8 below (2 simdgroups): o needs M >= 8, N >= 32 (edge tiles
 // shift inwards). Steps of 64 values (two 32-value blocks; one where K is an
 // odd number of them).
-inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt) {
+inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
     if (fmt.block % 8) throw std::invalid_argument("metal_mm: blocks of a multiple of 8 values");
     const int t = 8;
     // (names apart from the other specializations' loops, which compute
@@ -2163,7 +2242,11 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     // iq4_nl and mxfp4 on f32 acts, vs packed_muxes's select tree on packed
     // words: M = 16 1.03-1.06x, M = 64..128 0.94-0.98x, M = 512 even; inlined
     // as a select tree, 0.82-0.92x)
-    for (Func f : clone_paths(ws, is_lut)) {
+    std::set<std::string> staged;
+    for (Func f : decoders(rs)) {
+        if (is_lut(f) && register_lut(rs, f)) staged.insert(f.name());
+    }
+    for (Func f : clone_paths(ws, [&](const Func &f) { return staged.count(f.name()) > 0; })) {
         metal_lut(f, out, n);
     }
     Stage sd = Stage(dot), su = dot.update();
@@ -2251,7 +2334,7 @@ inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, cons
             return Call::make(dot.function(), c->args, c->value_index, c->func.follow_global_wrappers);
         });
     }
-    metal_mm(mm, out, dot, wh, xh, r, fmt);
+    metal_mm(mm, out, dot, wh, xh, r, fmt, rs);
     metal_rows(out, rows, r, rs, fmt.sub);
 }
 
@@ -2433,6 +2516,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
                     bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true,
                     Expr row_bytes = Expr(), bool gemm_index_words = false) {
+    luts(rs, !t.has_gpu_feature());
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");

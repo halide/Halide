@@ -13,8 +13,7 @@
 // value (in the top bits of an int8) and scales divided alike (Type0Quant).
 // KleidiAI's qsi8cx (weights) and qai8dx (activations) scale per row
 // (kleidiai.h): `rowwise`; they reduce over a row's `blocks` blocks, K / QK,
-// which the caller passes (an Expr; e.g. an input's extent). `tables`: bit
-// fields decoded through constant tables (Tabulate; see use_tables).
+// which the caller passes (an Expr; e.g. an input's extent).
 // `acc`: how a dot of the format accumulates: undefined, in f32; with
 // ".acc16" (f16.acc16), an Accumulate at the format's own 16-bit float, for
 // formats stored as one such float per value, as GGML's f16 vec_dot sums in
@@ -52,7 +51,7 @@ inline Format sub_blocks(Format f, int sub) {
 // values indexed (index in block, block, ...), not flat (see BlockReshape).
 // `blocks`: a row's, for the rowwise formats (undefined: only their ports'
 // shapes are of use).
-inline Format format(const std::string &spec, bool aos = false, bool scaled = false, bool indexed = false, Expr blocks = Expr(), bool tables = false) {
+inline Format format(const std::string &spec, bool aos = false, bool scaled = false, bool indexed = false, Expr blocks = Expr()) {
     std::vector<std::string> t;
     for (size_t i = 0, j; i <= spec.size(); i = j + 1) {
         j = std::min(spec.find('.', i), spec.size());
@@ -63,7 +62,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
         for (size_t i = 1; i < t.size(); i++) {
             if (t[i] != "acc16") rest += "." + t[i];
         }
-        Format f = format(rest, aos, scaled, indexed, blocks, tables);
+        Format f = format(rest, aos, scaled, indexed, blocks);
         ApproximationPorts ports = f.scheme.defined() ? f.scheme.signature({{"values", Float(32), 2}}).outputs : ApproximationPorts{};
         if (f.block != 1 || ports.size() != 1 || !ports[0].type->is_float() || ports[0].type->bits() != 16) throw std::invalid_argument("acc16: a format of 16-bit float values, not " + spec);
         f.acc = Accumulate{*ports[0].type};
@@ -78,21 +77,21 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     sscanf(lay.c_str(), "%dx%d", &rows, &chunk);
     if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4, scaled * 4) : offset(8, scaled * 4), lay, scaled * 4, indexed), QK, rows, chunk};
     if (type == "q4_1" && codes.empty()) return {q4_1(lay, indexed), QK, rows, chunk};
-    if (type == "q5_0" && codes.empty()) return {q5_0(lay, indexed, tables), QK, rows, chunk};
-    if (type == "q5_1" && codes.empty()) return {q5_1(lay, indexed, tables), QK, rows, chunk};
+    if (type == "q5_0" && codes.empty()) return {q5_0(lay, indexed), QK, rows, chunk};
+    if (type == "q5_1" && codes.empty()) return {q5_1(lay, indexed), QK, rows, chunk};
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
     if (type == "q8_1" && codes.empty()) return {q8_1(lay, indexed), QK, rows, chunk};
     if (type == "mxfp4" && codes.empty()) return {mxfp4(lay, indexed), QK, rows, chunk};
     if (type == "iq4_nl" && codes.empty()) return {iq4_nl(lay, indexed), QK, rows, chunk};
-    if (type == "nvfp4" && codes.empty()) return sub_blocks({nvfp4(lay, indexed, tables), NVFP4Quant::block, rows, chunk}, NVFP4Quant::n);
+    if (type == "nvfp4" && codes.empty()) return sub_blocks({nvfp4(lay, indexed), NVFP4Quant::block, rows, chunk}, NVFP4Quant::n);
     if (type == "iq4_xs" && codes.empty()) return sub_blocks({iq4_xs(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "tq2_0" && codes.empty()) return {tq2_0(lay, indexed), QK_K, rows, chunk};
     if (type == "tq1_0" && codes.empty()) return {tq1_0(lay, indexed), QK_K, rows, chunk};
     if (type == "q1_0" && codes.empty()) return {q1_0(lay, indexed), SignQuant::block, rows, chunk * 8};
-    if (type == "iq2_xxs" && codes.empty()) return sub_blocks({iq2_xxs(lay, indexed, tables), QK_K, rows, chunk}, 32);
-    if (type == "iq2_xs" && codes.empty()) return sub_blocks({iq2_xs(lay, indexed, tables), QK_K, rows, chunk}, 16);
+    if (type == "iq2_xxs" && codes.empty()) return sub_blocks({iq2_xxs(lay, indexed), QK_K, rows, chunk}, 32);
+    if (type == "iq2_xs" && codes.empty()) return sub_blocks({iq2_xs(lay, indexed), QK_K, rows, chunk}, 16);
     if (type == "iq2_s" && codes.empty()) return sub_blocks({iq2_s(lay, indexed), QK_K, rows, chunk}, 16);
-    if (type == "iq3_xxs" && codes.empty()) return sub_blocks({iq3_xxs(lay, indexed, tables), QK_K, rows, chunk}, 32);
+    if (type == "iq3_xxs" && codes.empty()) return sub_blocks({iq3_xxs(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "iq3_s" && codes.empty()) return sub_blocks({iq3_s(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "iq1_s" && codes.empty()) return sub_blocks({iq1_s(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "iq1_m" && codes.empty()) return sub_blocks({iq1_m(lay, indexed), QK_K, rows, chunk}, 16);

@@ -84,11 +84,10 @@ inline Approximation iq2_grid(const std::string &name, const std::vector<uint16_
     return grid(name, points, 2, 8, {8, 25, 43});
 }
 
-// Signs of each 8 codes, the 7 bits of even parity GGML keeps (ksigns_iq2xs);
-// `tables`: decoded through a table (as GGML's NEON reads keven_signs).
-inline Approximation even_signs(bool tables) {
-    Approximation s = Compose{sign_bits(), EvenSigns{}};
-    return tables ? Approximation(Tabulate{s, 8, 128}) : s;
+// Signs of each 8 codes, the 7 bits of even parity GGML keeps (ksigns_iq2xs),
+// decoded through a table (Tabulate; as GGML's NEON reads keven_signs).
+inline Approximation even_signs() {
+    return Tabulate{Compose{sign_bits(), EvenSigns{}}, 8, 128};
 }
 
 // Raw sign bits, 8 per byte (iq2_s, iq3_s).
@@ -115,10 +114,10 @@ inline Approximation trusted(const std::string &type, const std::string &lay, bo
 // block_iq2_xxs {f16 d; u16 qs[32]}: per 32 values, 8 bytes (a u64): the 4
 // grid indices (kgrid_2bit_256) in bytes 0-3, the 4 sign indices at bits 32 +
 // 7l, the scale s (2s + 1) at bit 60; d * 8 in d.
-inline Approximation iq2_xxs(const std::string &lay, bool indexed = false, bool tables = false) {
+inline Approximation iq2_xxs(const std::string &lay, bool indexed = false) {
     return trusted("iq2_xxs", lay, indexed, {{"d", Float(16)}, {"qs", UInt(64), QK_K / 32}}, {"qs", "d"},
                    {ScaledCodes{32, -43, 43, 1, 31},
-                    Parallel{{"codes", Compose{SignSplit{}, Parallel{iq2_grid("kgrid_2bit_256", kgrid_2bit_256()), even_signs(tables)}}},
+                    Parallel{{"codes", Compose{SignSplit{}, Parallel{iq2_grid("kgrid_2bit_256", kgrid_2bit_256()), even_signs()}}},
                              {"scales", odd_scales(4)},
                              {"scale", Compose{scale_by(8), fp16()}}},
                     Parallel{BitFields{UInt(64), {{"grid", 8, 4, 0, 8}, {"signs", 7, 4, 32, 7}, {"scales", 4, 1, 60}}}, Identity{}}});
@@ -127,10 +126,10 @@ inline Approximation iq2_xxs(const std::string &lay, bool indexed = false, bool 
 // block_iq2_xs {f16 d; u16 qs[32]; u8 scales[8]}: per 8 values a u16, the
 // grid index (kgrid_2bit_512) in bits 0-8, the sign index in 9-15; scales
 // per 16 values, nibbles (low first); d * 8 in d.
-inline Approximation iq2_xs(const std::string &lay, bool indexed = false, bool tables = false) {
+inline Approximation iq2_xs(const std::string &lay, bool indexed = false) {
     return trusted("iq2_xs", lay, indexed, {{"d", Float(16)}, {"qs", UInt(16), QK_K / 8}, {"scales", UInt(8), QK_K / 32}}, {"qs", "scales", "d"},
                    {ScaledCodes{16, -43, 43, 1, 31},
-                    Parallel{{"codes", Compose{SignSplit{}, Parallel{iq2_grid("kgrid_2bit_512", kgrid_2bit_512()), even_signs(tables)}}},
+                    Parallel{{"codes", Compose{SignSplit{}, Parallel{iq2_grid("kgrid_2bit_512", kgrid_2bit_512()), even_signs()}}},
                              {"scales", Compose{odd_scales(4), BitPack{4}}},
                              {"scale", Compose{scale_by(8), fp16()}}},
                     Parallel{BitFields{UInt(16), {{"grid", 9, 1, 0, 0, UInt(16)}, {"signs", 7, 1, 9}}}, Identity{}, Identity{}}});
@@ -152,11 +151,11 @@ inline Approximation iq2_s(const std::string &lay, bool indexed = false) {
 // digits 4 + 8i, the top 62) in qs[0:64] (on CPUs, the schedule reads them a
 // word at a time: staged_indices()); per 32 values a u32 in qs[64:96], the 4
 // sign indices (per 8) at bits 7l, the scale s (2s + 1) at bit 28; d * 4 in d.
-inline Approximation iq3_xxs(const std::string &lay, bool indexed = false, bool tables = false) {
+inline Approximation iq3_xxs(const std::string &lay, bool indexed = false) {
     return trusted("iq3_xxs", lay, indexed, {{"d", Float(16)}, {"qs", UInt(8), QK_K / 4}, {"scales_and_signs", UInt(32), QK_K / 32}},
                    {"qs", "scales_and_signs", "d"},
                    {ScaledCodes{32, -62, 62, 1, 31},
-                    Parallel{{"codes", Compose{SignSplit{}, Parallel{grid("kgrid_256", kgrid_256(), 3, 4, {4, 12, 20, 28, 36, 44, 52, 62}), even_signs(tables)}}},
+                    Parallel{{"codes", Compose{SignSplit{}, Parallel{grid("kgrid_256", kgrid_256(), 3, 4, {4, 12, 20, 28, 36, 44, 52, 62}), even_signs()}}},
                              {"scales", odd_scales(4)},
                              {"scale", Compose{scale_by(4), fp16()}}},
                     Parallel{Identity{}, BitFields{UInt(32), {{"signs", 7, 4, 0, 7}, {"scales", 4, 1, 28}}}, Identity{}}});

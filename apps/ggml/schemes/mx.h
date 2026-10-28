@@ -182,13 +182,12 @@ struct NVFP4Quant {
 
 // block_nvfp4 {u8 d[4]; u8 qs[32]}: per sub-block of 16, its scale's byte
 // in d and 8 bytes of its codes' fields packed as q4_0's (code j in the low
-// nibble of byte j, code j + 8 in its high nibble). `tables`: the scales
-// decoded through a table of each byte's (as GGML's NEON vec_dot: clang
+// nibble of byte j, code j + 8 in its high nibble). The scales decode
+// through a table of each byte's (Tabulate; as GGML's NEON vec_dot: clang
 // tabulates its ggml_ue4m3_to_fp32).
-inline Approximation nvfp4(const std::string &lay, bool indexed = false, bool tables = false) {
+inline Approximation nvfp4(const std::string &lay, bool indexed = false) {
     const int n = NVFP4Quant::n, block = NVFP4Quant::block;
-    Approximation scales = tables ? Approximation(Tabulate{ue4m3_half(), 1}) : ue4m3_half();
-    return Compose{BlockReshape{block, indexed}, NVFP4Quant{}, Parallel{{"codes", e2m1_codes()}, {"scales", scales}},
+    return Compose{BlockReshape{block, indexed}, NVFP4Quant{}, Parallel{{"codes", e2m1_codes()}, {"scales", Tabulate{ue4m3_half(), 1}}},
                    Parallel{{"codes", Compose{BlockReshape{n}, PlanarFieldPack{4, n / 2}, Unblock{n / 2}}}},
                    layout(lay, {{"d", UInt(8), block / n}, {"qs", UInt(8), block / 2}}, {"qs", "d"})};
 }

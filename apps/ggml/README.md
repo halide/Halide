@@ -260,8 +260,9 @@ about a quarter of the blocks.
 q5_0 and q5_1 are q4_0's and q4_1's quantizers at 5 bits (`Type0Quant`,
 `Type1Quant`: GGML's "type-0" and "type-1"), each unsigned code split
 (`BitSplit`, `schemes/common.h`) into its low nibble, packed as q4's (`qs`), and
-its fifth bit, packed densely (`BitPack`: `qh`, bit j of its little-endian word
-is code j's). Their kernels are the same recipes, with no new schedule code.
+its fifth bit, packed densely (`BitPack`: `qh`, 4 bytes, bit j % 8 of byte j / 8
+is code j's, decoded a byte at a time through a table, `Tabulate`). Their
+kernels are the same recipes, with no new schedule code.
 
 mxfp4 (`schemes/mx.h`) is OCP MX's FP4 as GGML stores it: per block of 32, an
 e8m0 scale byte `e` and the e2m1 codes, packed as q4_0's. Its quantizer
@@ -313,15 +314,16 @@ The grid formats iq2_xxs, iq2_xs, iq2_s, iq3_xxs, iq3_s, iq1_s and iq1_m
 (`dequantize_row_iq*`) is a `ScaledCodes` stage (int8 codes times an odd
 sub-block scale times the fp16 one) over lossless units: each group of 8 codes
 (iq3: 4) is a point of a lattice grid (`Lattice`: GGML's `kgrid_*` lists, their
-digits mapped to values by a `codebook`), decoded through a constant table of
-the points' codes (`Tabulate`: a row per point, an embedded Buffer), times signs
-(iq2_xxs, iq2_xs, iq3_xxs: 7 bits of even parity per 8 values, `EvenSigns`,
-GGML's `ksigns_iq2xs`; iq2_s, iq3_s: 8 raw bits) or, for iq1, plus a ±1/8 delta
-per run (`RunShift`, codes at 8 times their value). The indices' high bits,
-signs and scales are bit fields of GGML's structs (`BitFields`, `BitSplit`,
-`BitPack`); iq1_m's fp16 scale is spread over the top nibbles of its 4 scale
-words (`fp16_bits`, `Inverse`). The encode is `TrustedInverse` (core): an extern
-stage (`ExternQuantize`, `define_extern` of `ggml_trusted_quantize` in
+digits mapped to values by a `codebook`), decoded through a table of the points'
+codes (`Tabulate`: a row per point, computed from the list; schedules precompute
+it into a constant table, `Func::precompute()`), times signs (iq2_xxs, iq2_xs,
+iq3_xxs: 7 bits of even parity per 8 values, `EvenSigns`, GGML's `ksigns_iq2xs`;
+iq2_s, iq3_s: 8 raw bits) or, for iq1, plus a ±1/8 delta per run (`RunShift`,
+codes at 8 times their value). The indices' high bits, signs and scales are bit
+fields of GGML's structs (`BitFields`, `BitSplit`, `BitPack`); iq1_m's fp16
+scale is spread over the top nibbles of its 4 scale words (`fp16_bits`,
+`Inverse`). The encode is `TrustedInverse` (core): an extern stage
+(`ExternQuantize`, `define_extern` of `ggml_trusted_quantize` in
 `harness/trusted.cpp`) calling `ggml_quantize_chunk`, paired with the native
 decode. GGML's grid quantizers are searches, not compositions: per group they
 pick signs by parity (flipping the least-weighted value), try 13–31 trial

@@ -77,8 +77,8 @@ int main() {
     lattice("kgrid_256", ggml::kgrid_256(), 3, 4, {4, 12, 20, 28, 36, 44, 52, 62});
     lattice("kgrid_512", ggml::kgrid_512(), 3, 4, {1, 3, 5, 7, 9, 11, 13, 15});
     lattice("kgrid_1bit_2048", ggml::kgrid_1bit_2048(), 2, 8, {-1, 0, 1});
-    bijections.emplace_back("even signs", ggml::Inverse{ggml::even_signs(true)}, 128, UInt(8));
-    bijections.emplace_back("even signs (untabulated)", ggml::Inverse{ggml::even_signs(false)}, 128, UInt(8));
+    bijections.emplace_back("even signs", ggml::Inverse{ggml::even_signs()}, 128, UInt(8));
+    bijections.emplace_back("even signs (untabulated)", ggml::Inverse{Compose{ggml::sign_bits(), ggml::EvenSigns{}}}, 128, UInt(8));
     for (const auto &[name, a, entries, t] : bijections) {
         Distribution d = Distribution::uniform_int(0, entries - 1);
         for (const Property &p : {lossless()}) {
