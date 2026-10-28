@@ -378,7 +378,8 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
         // Check if shuffle can be treated as a broadcast.
         if (const Shuffle *shuff = x.as<Shuffle>()) {
             int factor = x.type().lanes() / ty.lanes();
-            if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
+            auto broadcast_factor = shuff->is_broadcast();
+            if (broadcast_factor && *broadcast_factor % factor == 0) {
                 x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
                                                                    shuff->indices.begin() + ty.lanes()));
             }
@@ -1271,14 +1272,16 @@ class VectorReducePatterns : public IRMutator {
 
             if (sig.flags & Signature::ScalarB) {
                 if (const Shuffle *shuff = b.as<Shuffle>()) {
-                    if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
+                    auto broadcast_factor = shuff->is_broadcast();
+                    if (broadcast_factor && *broadcast_factor % factor == 0) {
                         internal_assert(shuff->vectors.size() == 1);
                         b = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
                     }
                 } else if (const Shuffle *shuff = a.as<Shuffle>()) {
                     // If the types are equal, we can commute the ops.
+                    auto broadcast_factor = shuff->is_broadcast();
                     if (a.type().element_of() == b.type().element_of() &&
-                        shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
+                        broadcast_factor && *broadcast_factor % factor == 0) {
                         internal_assert(shuff->vectors.size() == 1);
                         a = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
                         std::swap(a, b);

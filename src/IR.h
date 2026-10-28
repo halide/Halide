@@ -1253,12 +1253,12 @@ struct Shuffle : public ExprNode<Shuffle> {
      * row-major. Otherwise returns nullopt. */
     std::optional<int> is_transpose() const;
 
-    /** Check if this shuffle can be represented as a repeating pattern that
-     * repeats the same shuffle of the single input vector some number of times.
+    /** If this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of
+     * times, returns the number of repetitions. Otherwise returns nullopt.
      * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
      */
-    bool is_broadcast() const;
-    int broadcast_factor() const;
+    std::optional<int> is_broadcast() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */

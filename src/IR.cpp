@@ -1159,26 +1159,7 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
 }
 
-bool Shuffle::is_broadcast() const {
-    int lanes = indices.size();
-    int factor = broadcast_factor();
-    if (factor == 0 || factor >= lanes) {
-        return false;
-    }
-    int broadcasted_lanes = lanes / factor;
-
-    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
-        return false;
-    }
-    for (int i = 0; i < lanes; i++) {
-        if (indices[i % broadcasted_lanes] != indices[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-int Shuffle::broadcast_factor() const {
+std::optional<int> Shuffle::is_broadcast() const {
     int lanes = indices.size();
     int broadcasted_lanes = 0;
     for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
@@ -1186,11 +1167,20 @@ int Shuffle::broadcast_factor() const {
             break;
         }
     }
-    if (broadcasted_lanes > 0) {
-        return lanes / broadcasted_lanes;
-    } else {
-        return 0;
+    int factor = broadcasted_lanes > 0 ? lanes / broadcasted_lanes : 0;
+    if (factor == 0 || factor >= lanes) {
+        return std::nullopt;
     }
+    broadcasted_lanes = lanes / factor;
+    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
+        return std::nullopt;
+    }
+    for (int i = 0; i < lanes; i++) {
+        if (indices[i % broadcasted_lanes] != indices[i]) {
+            return std::nullopt;
+        }
+    }
+    return factor;
 }
 
 bool Shuffle::is_interleave() const {
@@ -1363,7 +1353,7 @@ std::optional<int> Shuffle::is_transpose() const {
             }
         }
     }
-    return std::optional<int>(cols);
+    return cols;
 }
 
 bool Shuffle::is_slice() const {
