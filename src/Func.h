@@ -62,6 +62,11 @@ struct VarOrRVar {
 
 class ImageParam;
 class FuncVec;
+class Approximation;
+struct ApproximationResult;
+struct DerivedPort;
+struct DerivedSubstitution;
+enum class DerivedPortCheck;
 
 namespace Internal {
 struct AssociativeOp;
@@ -1669,6 +1674,34 @@ public:
     Func clone_in(const std::vector<Func> &fs);
     //@}
 
+    /** Eagerly and destructively replace every call to this Func inside
+     * each Func in 'consumers' with a call to the round trip
+     * p.decode(p.encode(*this)) instead. The substitution happens
+     * immediately, like Func::rfactor() and the targeted form of
+     * Func::in(), but substitutes a different computation rather than an
+     * identity wrapper -- see Approximation.h and
+     * doc/Approximation.md for the rationale. Because the
+     * substitution is eager, it can only rewrite Funcs that are already
+     * fully defined at the point of the call -- there is no counterpart to
+     * the global Func::in() that also covers Funcs written later. */
+    ApproximationResult approximate_by(const Approximation &p, const std::vector<Func> &consumers);
+
+    /** Eagerly and destructively replace every call to this Func (a term,
+     * e.g. a block sum outlined by a schedule) inside each Func in
+     * 'consumers' with a read of a derived port (see Derive and
+     * DerivedPort), provided that this Func equals the port's definition
+     * under real-valued semantics (see match_derived_port(); a mismatch is
+     * an error that prints both normal forms). The replacement is lossy,
+     * bounded by the port's declared bound (DerivedSubstitution::error_bound),
+     * and it is an error if the port declares none. With
+     * DerivedPortCheck::Runtime, the replacement also checks the declared
+     * relation where it reads the port. */
+    // @{
+    DerivedSubstitution approximate_by(const DerivedPort &port, const std::vector<Func> &consumers);
+    DerivedSubstitution approximate_by(const DerivedPort &port, const std::vector<Func> &consumers,
+                                       DerivedPortCheck check);
+    // @}
+
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
      * that the Func has a pure definition which is a simple call to a
@@ -3209,6 +3242,11 @@ Stage::eager_inline(const Func &first, Args &&...args) {
 }
 
 namespace Internal {
+
+/** Why eager_inline() would reject `f`, as the rest of the sentence
+ * "eager_inline() cannot inline <name>" (ending in a newline), or an empty
+ * string if it can be inlined. The schedule is checked as it stands now. */
+std::string eager_inline_obstacle(const Function &f);
 
 template<typename Last>
 inline void check_types(const Tuple &t, int idx) {
