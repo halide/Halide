@@ -2335,7 +2335,8 @@ struct TransposeOp {
         }
         const Shuffle &v = (const Shuffle &)e;
         auto transpose_factor = v.is_transpose();
-        return transpose_factor &&
+        return v.vectors.size() == 1 && 
+               transpose_factor &&
                vec.template match<bound>(*v.vectors[0].get(), state) &&
                factor.template match<(bound | bindings<Vec>::mask)>(*transpose_factor, state);
     }

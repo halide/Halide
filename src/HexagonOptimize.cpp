@@ -1272,15 +1272,15 @@ class VectorReducePatterns : public IRMutator {
 
             if (sig.flags & Signature::ScalarB) {
                 if (const Shuffle *shuff = b.as<Shuffle>()) {
-                    auto broadcast_factor = shuff->is_broadcast();
-                    if (broadcast_factor && *broadcast_factor % factor == 0) {
+                    if ( auto broadcast_factor = shuff->is_broadcast(); 
+                        broadcast_factor && *broadcast_factor % factor == 0) {
                         internal_assert(shuff->vectors.size() == 1);
                         b = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
                     }
                 } else if (const Shuffle *shuff = a.as<Shuffle>()) {
                     // If the types are equal, we can commute the ops.
-                    auto broadcast_factor = shuff->is_broadcast();
-                    if (a.type().element_of() == b.type().element_of() &&
+                    if ( auto broadcast_factor = shuff->is_broadcast();
+                        a.type().element_of() == b.type().element_of() &&
                         broadcast_factor && *broadcast_factor % factor == 0) {
                         internal_assert(shuff->vectors.size() == 1);
                         a = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
