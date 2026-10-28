@@ -786,11 +786,17 @@ void check_vectors() {
     check(concat_vectors({ramp(x, 2, 4), ramp(x + 8, 2, 4)}), ramp(x, 2, 8));
     check(concat_vectors({ramp(x, 3, 2), ramp(x + 6, 3, 2), ramp(x + 12, 3, 2)}), ramp(x, 3, 6));
 
+    // Self-interleaves, and transposes of broadcast and repeat_each_lane
+    check(interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)}),
+          Shuffle::make_repeat_each_lane(ramp(x, 2, 4), 2));
+    check(Shuffle::make_transpose(Shuffle::make_broadcast(ramp(x, 2, 4), 3), 4),
+          Shuffle::make_repeat_each_lane(ramp(x, 2, 4), 3));
+    check(Shuffle::make_transpose(Shuffle::make_repeat_each_lane(ramp(x, 2, 4), 3), 3),
+          Shuffle::make_broadcast(ramp(x, 2, 4), 3));
+
     // Now some ones that can't work
     {
-        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
-        check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x + 2, 2, 4)});
+        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x + 2, 2, 4)});
         check(e, e);
         e = interleave_vectors({ramp(x, 3, 4), ramp(x + 1, 3, 4)});
         check(e, e);

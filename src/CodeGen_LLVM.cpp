@@ -4708,6 +4708,10 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
     if (op->is_interleave()) {
         value = interleave_vectors(vecs);
+    } else if (op->is_repeat_each_lane()) {
+        // A single shufflevector is the simplest thing, and LLVM backends
+        // generally lower it well (better than an interleave tree).
+        value = shuffle_vectors(vecs[0], op->indices);
     } else if (op->is_transpose()) {
         int cols = op->transpose_factor();
         int rows = op->vectors[0].type().lanes() / cols;

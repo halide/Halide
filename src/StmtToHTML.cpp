@@ -2172,6 +2172,14 @@ private:
             args.emplace_back(op->slice_stride());
             args.emplace_back(static_cast<int>(op->indices.size()));
             print_function_call("slice_vectors", args, type_str);
+        } else if (op->is_repeat_each_lane()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(op->repeat_each_lane_factor());
+            print_function_call("repeat_each_lane", args, type_str);
+        } else if (op->is_broadcast()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(op->broadcast_factor());
+            print_function_call("broadcast", args, type_str);
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {

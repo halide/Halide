@@ -1132,12 +1132,27 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
 }
 
 Expr Shuffle::make_broadcast(Expr vector, int factor) {
-    std::vector<int> indices(factor * vector.type().lanes());
-    for (int ix = 0; ix < factor; ix++) {
-        std::iota(indices.begin() + ix * vector.type().lanes(),
-                  indices.begin() + (ix + 1) * vector.type().lanes(), 0);
+    internal_assert(factor > 0) << "Repeat factor must be positive.\n";
+    if (factor == 1) {
+        return vector;
     }
+    const int lanes = vector.type().lanes();
+    std::vector<int> indices(factor * lanes);
+    for (size_t i = 0; i < indices.size(); i++) {
+        indices[i] = (int)i % lanes;
+    }
+    return make({std::move(vector)}, indices);
+}
 
+Expr Shuffle::make_repeat_each_lane(Expr vector, int factor) {
+    internal_assert(factor > 0) << "Repeat factor must be positive.\n";
+    if (factor == 1) {
+        return vector;
+    }
+    std::vector<int> indices(factor * vector.type().lanes());
+    for (size_t i = 0; i < indices.size(); i++) {
+        indices[i] = (int)i / factor;
+    }
     return make({std::move(vector)}, indices);
 }
 
@@ -1160,18 +1175,16 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
 }
 
 bool Shuffle::is_broadcast() const {
-    int lanes = indices.size();
-    int factor = broadcast_factor();
-    if (factor == 0 || factor >= lanes) {
+    if (vectors.size() != 1) {
         return false;
     }
-    int broadcasted_lanes = lanes / factor;
-
-    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
+    const int src_lanes = vectors[0].type().lanes();
+    const int lanes = (int)indices.size();
+    if (src_lanes < 2 || lanes % src_lanes != 0 || lanes / src_lanes < 2) {
         return false;
     }
     for (int i = 0; i < lanes; i++) {
-        if (indices[i % broadcasted_lanes] != indices[i]) {
+        if (indices[i] != i % src_lanes) {
             return false;
         }
     }
@@ -1179,18 +1192,29 @@ bool Shuffle::is_broadcast() const {
 }
 
 int Shuffle::broadcast_factor() const {
-    int lanes = indices.size();
-    int broadcasted_lanes = 0;
-    for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
-        if (indices[broadcasted_lanes] != broadcasted_lanes) {
-            break;
+    return (int)indices.size() / vectors[0].type().lanes();
+}
+
+bool Shuffle::is_repeat_each_lane() const {
+    if (vectors.size() != 1) {
+        return false;
+    }
+    const int src_lanes = vectors[0].type().lanes();
+    const int lanes = (int)indices.size();
+    if (src_lanes < 2 || lanes % src_lanes != 0 || lanes / src_lanes < 2) {
+        return false;
+    }
+    const int factor = lanes / src_lanes;
+    for (int i = 0; i < lanes; i++) {
+        if (indices[i] != i / factor) {
+            return false;
         }
     }
-    if (broadcasted_lanes > 0) {
-        return lanes / broadcasted_lanes;
-    } else {
-        return 0;
-    }
+    return true;
+}
+
+int Shuffle::repeat_each_lane_factor() const {
+    return (int)indices.size() / vectors[0].type().lanes();
 }
 
 bool Shuffle::is_interleave() const {

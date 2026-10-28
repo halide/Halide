@@ -395,6 +395,25 @@ public:
                 check("tbl.16b", 16 * w, in_u16(x * 4));
             }
 
+            if (!arm32) {
+                // Repeating each element of a short vector k times (e.g. from
+                // vectorizing f(x / k)) should be a single tbl per output
+                // vector, not a sequence of dups and unzips.
+                check("tbl", 16 * w, in_u8(x / 8));
+                check("tbl", 16 * w, in_i8(x / 4));
+                check("tbl", 8 * w, in_u16(x / 4));
+
+                // A dense store of such a vector for small k, or k == 4 with
+                // wide types, is better done as an interleaving store.
+                check("st2", 32 * w, in_u8(x / 2));
+                check("st3", 48 * w, in_u8(x / 3));
+                check("st4", 16 * w, in_f32(x / 4));
+            } else {
+                check("vst2.8", 32 * w, in_u8(x / 2));
+                check("vst3.8", 24 * w, in_u8(x / 3));
+                check("vst4.16", 16 * w, in_u16(x / 4));
+            }
+
             // VLDM     X       F, D    Load Multiple Registers
             // VLDR     X       F, D    Load Single Register
             // We generally generate vld instead

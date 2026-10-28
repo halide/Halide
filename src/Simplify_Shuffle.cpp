@@ -115,6 +115,39 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
         }
     }
 
+    // An interleave of a vector with itself repeats each lane.
+    if (op->is_interleave() &&
+        new_vectors.size() > 1 &&
+        new_vectors[0].type().lanes() > 1) {
+        bool self_interleave = true;
+        for (size_t i = 1; i < new_vectors.size() && self_interleave; i++) {
+            self_interleave = equal(new_vectors[i], new_vectors[0]);
+        }
+        if (self_interleave) {
+            return Shuffle::make_repeat_each_lane(new_vectors[0], (int)new_vectors.size());
+        }
+    }
+
+    if (op->is_transpose()) {
+        const int cols = op->transpose_factor();
+        const Shuffle *inner = new_vectors[0].as<Shuffle>();
+        if (inner && inner->vectors.size() == 1) {
+            const Expr &v = inner->vectors[0];
+            // Transposing k copies of a vector gives k copies of each lane.
+            if (inner->is_broadcast() && cols == v.type().lanes()) {
+                return Shuffle::make_repeat_each_lane(v, inner->broadcast_factor());
+            }
+            // Transposing k copies of each lane gives k copies of the vector.
+            if (inner->is_repeat_each_lane() && cols == inner->repeat_each_lane_factor()) {
+                return Shuffle::make_broadcast(v, cols);
+            }
+        } else if (const Broadcast *b = new_vectors[0].as<Broadcast>();
+                   b && b->value.type().is_vector() && cols == b->value.type().lanes()) {
+            // A Broadcast node of a vector is equivalent to a broadcast shuffle.
+            return Shuffle::make_repeat_each_lane(b->value, b->lanes);
+        }
+    }
+
     // A shuffle of a single vector that is itself a shuffle of a single
     // vector, where the two compose to the identity (e.g. two transposes
     // that undo each other), is just that vector.
