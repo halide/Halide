@@ -1,0 +1,110 @@
+diff --git a/ggml/CMakeLists.txt b/ggml/CMakeLists.txt
+index 4af7fc881..ebbdc1b65 100644
+--- a/ggml/CMakeLists.txt
++++ b/ggml/CMakeLists.txt
+@@ -153,2 +153,3 @@ option(GGML_CPU_REPACK       "ggml: use runtime weight conversion of Q4_0 to Q4_
+ option(GGML_CPU_KLEIDIAI     "ggml: use KleidiAI optimized kernels if applicable" OFF)
++set(GGML_CPU_HALIDE "" CACHE FILEPATH "ggml: Halide kernels and backend (path to Halide's apps/ggml/llama/ggml-halide.cmake)")
+ option(GGML_SSE42            "ggml: enable SSE 4.2"          ${INS_ENB})
+diff --git a/ggml/src/CMakeLists.txt b/ggml/src/CMakeLists.txt
+index 947732000..9910895c6 100644
+--- a/ggml/src/CMakeLists.txt
++++ b/ggml/src/CMakeLists.txt
+@@ -588,2 +588,7 @@ endif()
+ 
++if (GGML_CPU_HALIDE)
++    # the HALIDE backend (apps/ggml/llama)
++    include(${GGML_CPU_HALIDE})
++    ggml_halide_add_backend()
++endif()
+ ggml_add_backend(BLAS)
+diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
+index 1c18b82cd..9a844b388 100644
+--- a/ggml/src/ggml-backend-reg.cpp
++++ b/ggml/src/ggml-backend-reg.cpp
+@@ -64,2 +64,6 @@
+ 
++#ifdef GGML_USE_HALIDE_BACKEND
++extern "C" ggml_backend_reg_t ggml_backend_halide_reg(void);
++#endif
++
+ #ifdef GGML_USE_BLAS
+@@ -158,2 +162,6 @@ struct ggml_backend_registry {
+ #endif
++#ifdef GGML_USE_HALIDE_BACKEND
++        // before BLAS: the first ACCEL device supporting a MUL_MAT gets it
++        register_backend(ggml_backend_halide_reg());
++#endif
+ #ifdef GGML_USE_BLAS
+diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
+index 71f55b490..03a556645 100644
+--- a/ggml/src/ggml-cpu/CMakeLists.txt
++++ b/ggml/src/ggml-cpu/CMakeLists.txt
+@@ -725,2 +725,8 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+ 
++    # Halide's kernels (Halide's apps/ggml/llama): GGML_CPU_HALIDE, its ggml-halide.cmake
++    if (GGML_CPU_HALIDE)
++        include(${GGML_CPU_HALIDE})
++        ggml_halide_add_to(${GGML_CPU_NAME})
++        target_compile_definitions(${GGML_CPU_NAME} PRIVATE GGML_USE_HALIDE)
++    endif()
+ endfunction()
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index 7c274c03b..5d2ef1a11 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -214,3 +214,10 @@ typedef pthread_t ggml_thread_t;
+ 
++#ifdef GGML_USE_HALIDE
++// Halide's vec_dot kernels replace these at init (GGML_HALIDE=vec_dot)
++void ggml_halide_override_traits(struct ggml_type_traits_cpu * traits, bool * overridden);
++static bool halide_vec_dot[GGML_TYPE_COUNT];
++static struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
++#else
+ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
++#endif
+     [GGML_TYPE_F32] = {
+@@ -1307,3 +1314,7 @@ void ggml_compute_forward_mul_mat(
+ 
++#ifdef GGML_USE_HALIDE
++    if (!params->use_ref && src1_cont && !halide_vec_dot[src0->type]) {
++#else
+     if (!params->use_ref && src1_cont) {
++#endif
+         for (int64_t i13 = 0; i13 < ne13; i13++)
+@@ -1386,3 +1397,7 @@ UseGgmlGemm1:;
+ #if GGML_USE_LLAMAFILE
++#ifdef GGML_USE_HALIDE
++    if (!params->use_ref && src1->type != vec_dot_type && !halide_vec_dot[src0->type]) {
++#else
+     if (!params->use_ref && src1->type != vec_dot_type) {
++#endif
+         const void* wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+@@ -3900,2 +3915,6 @@ void ggml_cpu_init(void) {
+ 
++#ifdef GGML_USE_HALIDE
++            ggml_halide_override_traits(type_traits_cpu, halide_vec_dot);
++#endif
++
+ #ifdef GGML_USE_OPENMP
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
+index 81ff5d79f..b471249f3 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.cpp
++++ b/ggml/src/ggml-cpu/ggml-cpu.cpp
+@@ -41,2 +41,6 @@
+ 
++#ifdef GGML_USE_HALIDE
++extern "C" ggml_backend_buffer_type_t ggml_backend_cpu_halide_buffer_type(void);
++#endif
++
+ std::vector<ggml_backend_buffer_type_t> & ggml_backend_cpu_get_extra_buffer_types() {
+@@ -45,2 +49,9 @@ std::vector<ggml_backend_buffer_type_t> & ggml_backend_cpu_get_extra_buffer_type
+ 
++#ifdef GGML_USE_HALIDE
++        // first: weights take the first extra buffer type that supports them
++        if (ggml_backend_cpu_halide_buffer_type()) {
++            bufts.push_back(ggml_backend_cpu_halide_buffer_type());
++        }
++#endif
++
+ #if defined(__AMX_INT8__) && defined(__AVX512VNNI__)

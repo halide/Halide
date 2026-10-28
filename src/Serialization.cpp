@@ -158,8 +158,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::LockedCache;
     case MemoryType::VTCM:
         return Serialize::MemoryType::VTCM;
-    case MemoryType::AMXTile:
-        return Serialize::MemoryType::AMXTile;
+    case MemoryType::Tile:
+        return Serialize::MemoryType::Tile;
     case MemoryType::GPR:
         return Serialize::MemoryType::GPR;
     default:

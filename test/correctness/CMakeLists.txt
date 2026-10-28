@@ -14,6 +14,7 @@ tests(
     aligned_split_partition.cpp
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
+    amx_matmul.cpp
     approximate_by.cpp
     approximation_codec.cpp
     approximation_components.cpp
@@ -392,6 +393,7 @@ tests(
     memoize_output_invalid.cpp
     memoize_redefine_eviction_key.cpp
     metal_precompiled_shaders.cpp
+    metal_simdgroup_matmul.cpp
     metal_threads_too_large.cpp
     metal_vector_too_large.cpp
     min_extent.cpp
@@ -567,7 +569,6 @@ tests(
     target.cpp
     target_query.cpp
     thread_id_outside_block_id.cpp
-    tiled_matmul.cpp
     tiled_matmul_errors.cpp
     too_many_args.cpp
     tracing.cpp
@@ -645,6 +646,8 @@ tests(
     vulkan_bool_scalar_abi.cpp
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
+    wmma_matmul.cpp
+    wmma_row_max.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
     wrapper_never_used.cpp
