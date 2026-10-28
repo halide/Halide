@@ -1,6 +1,8 @@
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <set>
@@ -352,6 +354,11 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 }
 
 CodeGen_C::~CodeGen_C() {
+    if (output_streambuf) {
+        // An error interrupted a function body.
+        stream.rdbuf(output_streambuf);
+    }
+
     set_name_mangling_mode(NameMangling::Default);
 
     if (is_header()) {
@@ -1314,7 +1321,16 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
 string CodeGen_C::print_expr(const Expr &e) {
     id = "$$ BAD ID $$";
+    const Call *call = e.as<Call>();
+    const bool has_side_effects = call && !call->is_pure();
+    ScopedValue<bool> old_printing_impure_expr(
+        printing_impure_expr,
+        has_side_effects || e.as<Load>() || (call && call->is_intrinsic(Call::image_load)));
     e.accept(this);
+    if (has_side_effects) {
+        // Calls with side effects must happen where they are computed.
+        id = force_declaration(id);
+    }
     return id;
 }
 
@@ -1338,45 +1354,334 @@ void CodeGen_C::print_stmt(const Stmt &s) {
     s.accept(this);
 }
 
-string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
-    auto cached = cache.find(rhs);
-    if (cached == cache.end()) {
-        id = unique_name('_');
-        const char *const_flag = output_kind == CPlusPlusImplementation ? " const " : "";
-        if (t.is_handle()) {
-            // Don't print void *, which might lose useful type information. just use auto.
-            stream << get_indent() << "auto *";
-        } else {
-            stream << get_indent() << print_type(t, AppendSpace);
+namespace {
+
+// Markers in a buffered function body. A reference to a pending value
+// is value_ref, the value's index, value_end. The place where a value
+// is computed is value_decl, its index, value_end.
+constexpr char value_ref = '\x01';
+constexpr char value_end = '\x02';
+constexpr char value_decl = '\x03';
+constexpr char scope_begin = '\x04';
+constexpr char scope_end = '\x05';
+
+// Call text(begin, size) for each run of plain text in s, and
+// marker(kind, index, end) for each marker, where end is the position
+// just past the marker. The index is -1 for scope markers.
+template<typename TextFn, typename MarkerFn>
+void scan_markers(const string &s, TextFn text, MarkerFn marker) {
+    static const char markers[] = {value_ref, value_decl, scope_begin, scope_end, 0};
+    size_t i = 0;
+    while (i < s.size()) {
+        size_t j = s.find_first_of(markers, i);
+        if (j == string::npos) {
+            j = s.size();
         }
-        stream << const_flag << id << " = " << rhs << ";\n";
-        cache[rhs] = id;
-    } else {
+        if (j > i) {
+            text(i, j - i);
+        }
+        if (j == s.size()) {
+            break;
+        }
+        if (s[j] == scope_begin || s[j] == scope_end) {
+            i = j + 1;
+            marker(s[j], -1, i);
+        } else {
+            i = s.find(value_end, j) + 1;
+            marker(s[j], std::atoi(s.c_str() + j + 1), i);
+        }
+    }
+}
+
+// True if s is wrapped in a single pair of parentheses.
+bool is_parenthesized(const string &s) {
+    if (s.size() < 2 || s.front() != '(' || s.back() != ')') {
+        return false;
+    }
+    int depth = 0;
+    for (size_t i = 0; i + 1 < s.size(); i++) {
+        if (s[i] == '(') {
+            depth++;
+        } else if (s[i] == ')') {
+            depth--;
+            if (depth == 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// True if s needs no parentheses to be used as an operand: a name, a
+// literal or a value reference, followed by any number of calls,
+// subscripts and member accesses, or a parenthesized expression.
+// String and character literals are not parsed, so they make this false.
+bool is_postfix_expression(const string &s) {
+    if (s.empty() || s.find_first_of("\"'") != string::npos) {
+        return false;
+    }
+    if (s[0] == '(') {
+        return is_parenthesized(s);
+    }
+    int depth = 0;
+    for (char c : s) {
+        if (c == '(' || c == '[') {
+            depth++;
+        } else if (c == ')' || c == ']') {
+            depth--;
+        } else if (depth == 0 &&
+                   !(std::isalnum((unsigned char)c) || c == '_' || c == '.' || c == ':' ||
+                     c == value_ref || c == value_end)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// True if the parenthesized string s has a comma that is not nested in
+// further brackets.
+bool has_top_level_comma(const string &s) {
+    int depth = 0;
+    for (size_t i = 1; i + 1 < s.size(); i++) {
+        char c = s[i];
+        if (c == '(' || c == '[' || c == '{') {
+            depth++;
+        } else if (c == ')' || c == ']' || c == '}') {
+            depth--;
+        } else if (c == ',' && depth == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
+    const bool pure = !printing_impure_expr && !open_scope_ids.empty();
+    std::map<string, string> &values = pure ? pure_cache : cache;
+    auto cached = values.find(rhs);
+    if (cached != values.end()) {
         id = cached->second;
+        return id;
+    }
+
+    id = unique_name('_');
+    const char *const_flag = output_kind == CPlusPlusImplementation ? " const " : "";
+    ostringstream declaration;
+    if (t.is_handle()) {
+        // Don't print void *, which might lose useful type information. just use auto.
+        declaration << get_indent() << "auto *";
+    } else {
+        declaration << get_indent() << print_type(t, AppendSpace);
+    }
+    declaration << const_flag << id << " = ";
+
+    if (open_scope_ids.empty() || t.is_handle() || starts_with(rhs, "{")) {
+        // Outside of a function body, and for handles and initializer
+        // lists, which can't be used as operands, declare it right away.
+        stream << declaration.str() << rhs << ";\n";
+    } else {
+        PendingValue value;
+        value.name = id;
+        value.declaration = declaration.str();
+        if (t.is_scalar() && t.bits() < 32 && !t.is_bool()) {
+            value.cast = "(" + print_type(t) + ")";
+        }
+        value.rhs = rhs;
+        value.scope = open_scope_ids.back();
+        value.force_declaration = false;
+        int index = (int)pending_values.size();
+        pending_values.push_back(std::move(value));
+        stream << value_decl << index << value_end;
+        id = value_ref + std::to_string(index) + value_end;
+    }
+    values[rhs] = id;
+    if (pure) {
+        pure_cache_keys.push_back(rhs);
     }
     return id;
 }
 
+string CodeGen_C::force_declaration(const string &id) {
+    if (id.size() < 3 || id.front() != value_ref || id.back() != value_end) {
+        return id;
+    }
+    PendingValue &value = pending_values[std::atoi(id.c_str() + 1)];
+    value.force_declaration = true;
+    return value.name;
+}
+
+void CodeGen_C::emit_function_body() {
+    stream.rdbuf(output_streambuf);
+    output_streambuf = nullptr;
+    string body = function_body.str();
+    function_body.str("");
+
+    const int n = (int)pending_values.size();
+    vector<int> uses(n, 0);
+    auto add_use = [&](int v, int scope) {
+        uses[v]++;
+        // Moving a value into another scope could make it run more
+        // often, or after a store that changes its result.
+        if (pending_values[v].scope != scope) {
+            pending_values[v].force_declaration = true;
+        }
+    };
+    auto no_text = [](size_t, size_t) {};
+
+    // Count the uses in the body.
+    vector<int> scopes;
+    int scope_id = 0;
+    scan_markers(body, no_text, [&](char kind, int v, size_t) {
+        if (kind == scope_begin) {
+            scopes.push_back(scope_id++);
+        } else if (kind == scope_end) {
+            scopes.pop_back();
+        } else if (kind == value_ref) {
+            add_use(v, scopes.empty() ? -1 : scopes.back());
+        }
+    });
+
+    // Count the uses in the values that are used themselves. A value
+    // only refers to values computed before it.
+    auto is_used = [&](int v) {
+        return uses[v] > 0 || pending_values[v].force_declaration;
+    };
+    auto is_inlined = [&](int v) {
+        return uses[v] == 1 && !pending_values[v].force_declaration;
+    };
+    for (int v = n - 1; v >= 0; v--) {
+        if (is_used(v)) {
+            int scope = pending_values[v].scope;
+            scan_markers(pending_values[v].rhs, no_text, [&](char, int w, size_t) {
+                add_use(w, scope);
+            });
+        }
+    }
+
+    // Expand the values in the order they were computed in, so that the
+    // values inlined into a value are expanded before it. Inlining stops
+    // where brackets would nest too deeply, both for readability and
+    // because compilers limit the nesting depth (256 in clang).
+    const int max_nesting = 32;
+    vector<string> expansion(n);
+    vector<int> nesting(n, 0);
+    auto expand = [&](const string &s, bool limit_nesting, string &result) {
+        int depth = 0, max_depth = 0;
+        scan_markers(
+            s,
+            [&](size_t begin, size_t size) {
+                for (size_t i = begin; i < begin + size; i++) {
+                    if (s[i] == '(' || s[i] == '[') {
+                        max_depth = std::max(max_depth, ++depth);
+                    } else if (s[i] == ')' || s[i] == ']') {
+                        depth--;
+                    }
+                }
+                result.append(s, begin, size);
+            },
+            [&](char kind, int v, size_t end) {
+                PendingValue &value = pending_values[v];
+                if (kind == value_decl) {
+                    if (is_used(v) && !is_inlined(v)) {
+                        result += value.declaration;
+                        result += expansion[v];
+                        result += ";\n";
+                    }
+                    return;
+                }
+                if (kind != value_ref) {
+                    return;
+                }
+                const bool postfix = is_postfix_expression(value.rhs);
+                const int value_depth = depth + nesting[v] + (postfix ? 0 : 1) + (value.cast.empty() ? 0 : 1);
+                if (limit_nesting && is_inlined(v) && value_depth > max_nesting) {
+                    value.force_declaration = true;
+                }
+                if (!is_inlined(v)) {
+                    result += value.name;
+                    return;
+                }
+                string e = std::move(expansion[v]);
+                if (!postfix) {
+                    e = "(" + e + ")";
+                }
+                if (!value.cast.empty()) {
+                    e = "(" + value.cast + e + ")";
+                }
+                // Drop the parentheses around a value that is a whole
+                // call argument, subscript, condition, or rhs.
+                char before = result.empty() ? 0 : result.back();
+                char after = end < s.size() ? s[end] : 0;
+                if (is_parenthesized(e) && !has_top_level_comma(e) &&
+                    ((before == '(' && after == ')') ||
+                     (before == '[' && after == ']') ||
+                     (ends_with(result, " = ") && after == ';'))) {
+                    result.append(e, 1, e.size() - 2);
+                } else {
+                    result += e;
+                }
+                max_depth = std::max(max_depth, value_depth);
+            });
+        return max_depth;
+    };
+    for (int v = 0; v < n; v++) {
+        if (is_used(v)) {
+            nesting[v] = expand(pending_values[v].rhs, true, expansion[v]);
+        }
+    }
+
+    // The declarations are in the body, so expand it after deciding on
+    // all values.
+    string result;
+    expand(body, false, result);
+    stream << result;
+    pending_values.clear();
+}
+
 void CodeGen_C::open_scope() {
     cache.clear();
+    if (open_scope_ids.empty()) {
+        // Collect the function body, so that we know which values are
+        // used only once by the time we write it out.
+        output_streambuf = stream.rdbuf(function_body.rdbuf());
+        next_scope_id = 0;
+    }
     stream << get_indent();
     indent++;
-    stream << "{\n";
+    stream << "{\n"
+           << scope_begin;
+    open_scope_ids.push_back(next_scope_id++);
+    pure_cache_scope_begin.push_back(pure_cache_keys.size());
 }
 
 void CodeGen_C::close_scope(const std::string &comment) {
     cache.clear();
     indent--;
-    stream << get_indent();
+    stream << scope_end << get_indent();
     if (!comment.empty()) {
         stream << "} // " << comment << "\n";
     } else {
         stream << "}\n";
     }
+    open_scope_ids.pop_back();
+    // The values computed in this scope are not visible outside of it.
+    while (pure_cache_keys.size() > pure_cache_scope_begin.back()) {
+        pure_cache.erase(pure_cache_keys.back());
+        pure_cache_keys.pop_back();
+    }
+    pure_cache_scope_begin.pop_back();
+    if (open_scope_ids.empty()) {
+        emit_function_body();
+    }
 }
 
 void CodeGen_C::visit(const Variable *op) {
-    if (starts_with(op->name, "::")) {
+    if (!op->name.empty() && op->name[0] == value_ref) {
+        // A let value substituted into its body.
+        id = op->name;
+    } else if (starts_with(op->name, "::")) {
         // This is the name of a global, so we can't modify it.
         id = op->name;
     } else {
@@ -1549,6 +1854,81 @@ void CodeGen_C::visit(const StringImm *op) {
     id = oss.str();
 }
 
+namespace {
+
+// Print a finite float (or double) as a literal that compilers must
+// parse to exactly the same value: the decimal number if it is exactly
+// representable (C99 6.4.4.2, C++ [lex.fcon]), and not longer than the
+// hexadecimal float literal, which is exact by construction.
+string exact_float_literal(double value, bool is_double) {
+    const int mantissa_bits = is_double ? 52 : 23;
+    const int exponent_bias = is_double ? 1023 : 127;
+    const char *suffix = is_double ? "" : "f";
+    const uint64_t bits = is_double ? reinterpret_bits<uint64_t>(value) : reinterpret_bits<uint32_t>((float)value);
+    const bool negative = (bits >> (mantissa_bits + (is_double ? 11 : 8))) & 1;
+    const int exponent = (int)((bits >> mantissa_bits) & (is_double ? 0x7ff : 0xff));
+    const uint64_t mantissa = bits & ((uint64_t(1) << mantissa_bits) - 1);
+    const string sign = negative ? "-" : "";
+
+    // Normal numbers are 1.mantissa * 2^(exponent - bias), subnormal
+    // numbers 0.mantissa * 2^(1 - bias).
+    const int unbiased_exponent = exponent == 0 ? 1 - exponent_bias : exponent - exponent_bias;
+    ostringstream hex;
+    hex << sign << (exponent == 0 ? "0x0" : "0x1");
+    // Pad the mantissa to a whole number of hex digits, and drop trailing zeros.
+    int digits = (mantissa_bits + 3) / 4;
+    uint64_t hex_mantissa = mantissa << (digits * 4 - mantissa_bits);
+    while (hex_mantissa != 0 && (hex_mantissa & 0xf) == 0) {
+        hex_mantissa >>= 4;
+        digits--;
+    }
+    if (hex_mantissa != 0) {
+        hex << "." << std::hex << std::setw(digits) << std::setfill('0') << hex_mantissa << std::dec;
+    }
+    hex << "p" << unbiased_exponent << suffix;
+
+    // The value is significand * 2^power, with an odd significand.
+    uint64_t significand = exponent == 0 ? mantissa : ((uint64_t(1) << mantissa_bits) | mantissa);
+    int power = unbiased_exponent - mantissa_bits;
+    if (significand == 0) {
+        return sign + "0.0" + suffix;
+    }
+    while ((significand & 1) == 0) {
+        significand >>= 1;
+        power++;
+    }
+    // Its decimal digits are significand * 2^power, or significand *
+    // 5^-power with the point -power digits from the right, if that fits
+    // in 64 bits.
+    int fraction_digits = 0;
+    if (power >= 0) {
+        if (power >= 64 || (power > 0 && (significand >> (64 - power)) != 0)) {
+            return hex.str();
+        }
+        significand <<= power;
+    } else {
+        for (; fraction_digits < -power; fraction_digits++) {
+            if (significand > std::numeric_limits<uint64_t>::max() / 5) {
+                return hex.str();
+            }
+            significand *= 5;
+        }
+    }
+    string decimal = std::to_string(significand);
+    if (fraction_digits == 0) {
+        decimal += ".0";
+    } else {
+        if ((int)decimal.size() <= fraction_digits) {
+            decimal.insert(0, fraction_digits + 1 - decimal.size(), '0');
+        }
+        decimal.insert(decimal.size() - fraction_digits, ".");
+    }
+    decimal = sign + decimal + suffix;
+    return decimal.size() <= hex.str().size() ? decimal : hex.str();
+}
+
+}  // namespace
+
 void CodeGen_C::visit(const FloatImm *op) {
     if (std::isnan(op->value)) {
         id = "nan_f32()";
@@ -1557,6 +1937,14 @@ void CodeGen_C::visit(const FloatImm *op) {
             id = "inf_f32()";
         } else {
             id = "neg_inf_f32()";
+        }
+    } else if (hex_float_literals) {
+        string literal = exact_float_literal(op->value, op->type.bits() == 64);
+        if (op->type.bits() == 16) {
+            // The literal is a float, so this needs a conversion.
+            print_assignment(op->type, literal);
+        } else {
+            id = literal;
         }
     } else {
         // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
@@ -1674,13 +2062,13 @@ void CodeGen_C::visit(const Call *op) {
         open_scope();
         string true_case = print_expr(op->args[1]);
         stream << get_indent() << result_id << " = " << true_case << ";\n";
-        close_scope("if " + cond_id);
+        close_scope("if");
         if (op->args.size() == 3) {
             stream << get_indent() << "else\n";
             open_scope();
             string false_case = print_expr(op->args[2]);
             stream << get_indent() << result_id << " = " << false_case << ";\n";
-            close_scope("if " + cond_id + " else");
+            close_scope("if else");
         }
         rhs << result_id;
     } else if (op->is_intrinsic(Call::require)) {
@@ -2136,6 +2524,9 @@ void CodeGen_C::visit(const Store *op) {
 
 void CodeGen_C::visit(const Let *op) {
     string id_value = print_expr(op->value);
+    // The body refers to the value by its id, so that the cache still
+    // recognizes expressions of it. The value stays where it is though.
+    force_declaration(id_value);
     Expr body = op->body;
     if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load that references this directly
@@ -2230,6 +2621,9 @@ void CodeGen_C::visit(const VectorReduce *op) {
 
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
+    // The body refers to the value by its id, so that the cache still
+    // recognizes expressions of it. The value stays where it is though.
+    force_declaration(id_value);
     Stmt body = op->body;
 
     if (op->value.type().is_handle() && op->name != "__user_context") {
@@ -2304,8 +2698,8 @@ void CodeGen_C::visit(const Fork *op) {
 }
 
 void CodeGen_C::visit(const Acquire *op) {
-    string id_sem = print_expr(op->semaphore);
-    string id_count = print_expr(op->count);
+    string id_sem = force_declaration(print_expr(op->semaphore));
+    string id_count = force_declaration(print_expr(op->count));
     open_scope();
     stream << get_indent() << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
     open_scope();
@@ -2330,7 +2724,8 @@ void CodeGen_C::visit(const Atomic *op) {
 
 void CodeGen_C::visit(const For *op) {
     string id_min = print_expr(op->min);
-    string id_max = print_expr(op->max);
+    // The loop condition is evaluated on every iteration.
+    string id_max = force_declaration(print_expr(op->max));
 
     if (op->for_type == ForType::Parallel) {
         stream << get_indent() << "#pragma omp parallel for\n";
@@ -2426,7 +2821,7 @@ void CodeGen_C::visit(const Allocate *op) {
             // it would have constant size).
             internal_assert(!op->extents.empty());
 
-            size_id = print_assignment(Int(64), print_expr(op->extents[0]));
+            size_id = force_declaration(print_assignment(Int(64), print_expr(op->extents[0])));
             size_id_type = Int(64);
 
             for (size_t i = 1; i < op->extents.size(); i++) {
@@ -2438,7 +2833,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 } else {
                     new_size_id_rhs = concat_strings(size_id, " * ", next_extent);
                 }
-                size_id = print_assignment(Int(64), new_size_id_rhs);
+                size_id = force_declaration(print_assignment(Int(64), new_size_id_rhs));
             }
             stream << get_indent() << "if (("
                    << size_id << " > ((int64_t(1) << 31) - 1)) || (("
@@ -2463,7 +2858,7 @@ void CodeGen_C::visit(const Allocate *op) {
                                                  Variable::make(size_id_type, size_id),
                                                  make_const(size_id_type, 0));
             conditional_size = simplify(conditional_size);
-            size_id = print_assignment(Int(64), print_expr(conditional_size));
+            size_id = force_declaration(print_assignment(Int(64), print_expr(conditional_size)));
         }
 
         Allocation alloc;
@@ -2555,13 +2950,13 @@ void CodeGen_C::visit(const IfThenElse *op) {
     stream << get_indent() << "if (" << cond_id << ")\n";
     open_scope();
     op->then_case.accept(this);
-    close_scope("if " + cond_id);
+    close_scope("if");
 
     if (op->else_case.defined()) {
         stream << get_indent() << "else\n";
         open_scope();
         op->else_case.accept(this);
-        close_scope("if " + cond_id + " else");
+        close_scope("if else");
     }
 }
 
