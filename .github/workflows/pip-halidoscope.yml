@@ -2,10 +2,17 @@ name: Build Halidoscope wheels
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the built wheels to PyPI'
+        type: boolean
+        default: false
   pull_request:
     paths:
       - 'tools/halidoscope/**'
       - '.github/workflows/pip-halidoscope.yml'
+  release:
+    types: [ published ]
   push:
     branches: [ main ]
     paths:
@@ -25,6 +32,12 @@ permissions:
 # version is kept in sync with Halide's release version via tbump (see
 # tool.tbump.file entries for tools/halidoscope/src-tauri/Cargo.toml et al.
 # in the top-level pyproject.toml), not via a per-commit dynamic version.
+#
+# Wheels are published to PyPI when a GitHub release is published, or when
+# this workflow is run manually with `publish` checked (e.g. to publish from a
+# release branch). Since the version only changes with Halide's version, a
+# post-release of Halide reuses the existing Halidoscope version; such uploads
+# are skipped rather than failing.
 jobs:
   build:
     name: Build wheel for ${{ matrix.platform_tag }}
@@ -107,3 +120,21 @@ jobs:
         with:
           name: wheels-halidoscope-${{ matrix.platform_tag }}
           path: tools/halidoscope/wheelhouse/*.whl
+
+  publish:
+    name: Publish on PyPI
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-halidoscope-*
+          merge-multiple: true
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
