@@ -32,6 +32,9 @@ public:
     }
 
     void generate() {
+        // (the decode's luts: bit fields' arithmetic inlined, vectorized
+        // with the decode; see ggml::luts)
+        if (!quantize) ggml::luts({codec.result}, false);
         if (ggml::format(type).block == 1) {  // values (no blocks): vectorized, the conversion inlined
             Func f = quantize ? codec.encoded[0] : codec.decoded;
             Var k = f.args()[0], ko("ko"), ki("ki");
