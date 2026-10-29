@@ -455,6 +455,17 @@ inline bool plain_read(Func f) {
            Internal::expr_uses_var(read->args[0], k);
 }
 
+// The elements of the struct field array f reads (q5's qh: 4), 0 if f
+// reads none.
+inline int array_extent(Func f) {
+    if (f.function().has_update_definition()) return 0;
+    const Internal::Call *read = f.function().definition().values()[0].as<Internal::Call>();
+    if (!read || !read->is_intrinsic(Internal::Call::struct_field_read)) return 0;
+    const StructTypeInfo *s = read->args[0].type().struct_type();
+    auto i = Internal::as_const_int(read->args[1]);
+    return s && i ? s->fields[*i].array_extent.value_or(0) : 0;
+}
+
 // A table decode g's indices, if read as is (iq3_xxs's grid index bytes;
 // not its sign indices, 7-bit fields), else, if `nested` (a per-format
 // parameter, mul_mat's gemm tiles), the bytes read as is that they are
@@ -491,7 +502,22 @@ inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
         }
     }
     for (auto [f, caller] : staged) {
-        const int lanes = t.bits / f.type().bits();
+        // a struct field array narrower than a GPR (q5's qh, 4 bytes) a word
+        // of its own, loaded at its offset (ldr w, as GGML's memcpy to a
+        // uint32_t). A GPR-wide word would be shifted inwards over the
+        // struct's other fields (q5_0's: from 2 bytes before the block, past
+        // the buffer's start for the first), each index byte then a shift
+        // and a mask (not ubfiz), and LLVM would take d from it (shift,
+        // fmov) instead of loading it (M3 Max, q5_0 q8_0 vec_dot: 67
+        // instructions per 2 blocks to 63, K = 4096 0.86x the time, gemv
+        // 0.96-0.99x)
+        int lanes = t.bits / f.type().bits();
+        if (int n = array_extent(f); n > 0 && n < lanes) {
+            lanes = 1;
+            while (lanes < n) {
+                lanes *= 2;
+            }
+        }
         Func w = f.in(caller);
         Var k = w.args()[0], ko("ko"), ki("ki");
         w.compute_at(at).store_in(MemoryType::GPR).split(k, ko, ki, lanes).unroll(ko).vectorize(ki);

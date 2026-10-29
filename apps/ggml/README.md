@@ -271,7 +271,9 @@ q5_0 and q5_1 are q4_0's and q4_1's quantizers at 5 bits (`Type0Quant`,
 (`BitSplit`, `schemes/common.h`) into its low nibble, packed as q4's (`qs`), and
 its fifth bit, packed densely (`BitPack`: `qh`, 4 bytes, bit j % 8 of byte j / 8
 is code j's, decoded a byte at a time through a table, `Tabulate`). Their
-kernels are the same recipes, with no new schedule code.
+kernels are the same recipes; on CPUs each block's `qh` is staged as one 32-bit
+word in a general-purpose register (as GGML's `memcpy` to a `uint32_t`), each
+table index one shift and mask of it.
 
 mxfp4 (`schemes/mx.h`) is OCP MX's FP4 as GGML stores it: per block of 32, an
 e8m0 scale byte `e` and the e2m1 codes, packed as q4_0's. Its quantizer
