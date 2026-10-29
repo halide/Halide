@@ -372,11 +372,17 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::load_struct_scratch(const string &name,
 
     string w;
     for (int i = 0; i < n; i++) {
-        string byte = "(" + name + "[" + slot + (i ? " + " + std::to_string(i) : "") + "] & 255u)";
+        string byte = concat_strings("(", name, "[", slot,
+                                     (i ? concat_strings(" + ", i) : string()),
+                                     "] & 255u)");
         if (i != 0) {
-            byte = "(" + byte + " << " + std::to_string(8 * i) + "u)";
+            byte = concat_strings("(", byte, " << ", 8 * i, "u)");
         }
-        w = w.empty() ? byte : ("(" + w + " | " + byte + ")");
+        if (w.empty()) {
+            w = std::move(byte);
+        } else {
+            w = concat_strings("(", w, " | ", byte, ")");
+        }
     }
 
     if (t.is_bool()) {
@@ -419,11 +425,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::store_struct_scratch(const string &name,
     for (int i = 0; i < n; i++) {
         string byte = w;
         if (i != 0) {
-            byte = "(" + byte + " >> " + std::to_string(8 * i) + "u)";
+            byte = concat_strings("(", byte, " >> ", 8 * i, "u)");
         }
-        byte = "(" + byte + " & 255u)";
+        byte = concat_strings("(", byte, " & 255u)");
         stream << get_indent() << name << "[" << slot
-               << (i ? " + " + std::to_string(i) : "") << "] = " << byte << ";\n";
+               << (i ? concat_strings(" + ", i) : string()) << "] = " << byte << ";\n";
     }
 }
 
