@@ -65,7 +65,8 @@ const char *usage =
     "  --cold                   cycle >= 512 MiB of weight copies (cache-cold)\n"
     "  --no-keep-awake          let Halide's idle threads sleep during samples\n"
     "  --no-pretouch            don't fault in every page of the loaded images' __TEXT and\n"
-    "                           __DATA_CONST at startup (see README: layout sensitivity)\n"
+    "                           __DATA_CONST at startup, nor the 16 KB past each input\n"
+    "                           buffer (see README: layout sensitivity)\n"
     "  --json                   JSON lines instead of CSV\n"
     "  --verbose                echo GGML's log\n";
 
@@ -150,6 +151,24 @@ struct Emitter {
         fflush(stdout);
     }
 };
+
+// An input buffer followed by >= 16 KB of resident (written) slack. macOS
+// malloc page-aligns large blocks, so e.g. a K=4096 f32 act row ends exactly at
+// a 16 KB page edge, and the page after it is often mapped but never touched.
+// Streaming a buffer to within ~2 KB of such a page makes the hardware
+// prefetcher walk the missing translation on every call (failures aren't
+// cached), halving the IPC of long-bodied kernels that read the buffer. Real
+// inputs live in reused compute buffers with resident neighbours.
+std::vector<uint8_t> input_buffer(size_t n, bool slack) {
+    constexpr size_t kSlack = 16 << 10;
+    std::vector<uint8_t> v;
+    if (slack) {
+        v.reserve(n + kSlack);
+        v.resize(n + kSlack);
+    }
+    v.resize(n);
+    return v;
+}
 
 #ifdef __APPLE__
 // Read one byte of every page of an image's __TEXT and __DATA_CONST, so that all
@@ -285,7 +304,7 @@ int main(int argc, char **argv) {
                 std::vector<float> wf(s.N * s.K);
                 for (float &x : wf)
                     x = normal(rng);
-                std::vector<uint8_t> w(wbytes * copies);
+                std::vector<uint8_t> w = input_buffer(wbytes * copies, o.pretouch);
                 quantize_rows(wt, wf.data(), w.data(), s.N, s.K);
                 for (int c = 1; c < copies; c++)
                     memcpy(&w[c * wbytes], w.data(), wbytes);
@@ -295,7 +314,7 @@ int main(int argc, char **argv) {
 
                 for (ggml_type at : ats) {
                     if (s.K % ggml_blck_size(at)) continue;
-                    std::vector<uint8_t> a(ggml_row_size(at, s.K) * s.M);
+                    std::vector<uint8_t> a = input_buffer(ggml_row_size(at, s.K) * s.M, o.pretouch);
                     convert_rows(at, af.data(), a.data(), s.M, s.K);
                     Inputs in{wt, at, s, op == GQ_vec_dot ? 1 : o.threads, &w, copies, &a};
                     Reference ref = reference(in, af);
