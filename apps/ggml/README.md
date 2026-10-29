@@ -98,6 +98,15 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   DRAM-streaming gemv. Whether that page was touched depends on link layout and
   on which other kernels ran earlier in the process, so without the pretouch
   timings of byte-identical kernels shift with unrelated code changes.
+- The same effect hits the harness's heap inputs: macOS malloc page-aligns large
+  blocks, so e.g. a K=4096 f32 act row (16 KB) ends at a page edge, and whether
+  the next page was ever touched depends on the process's heap history. When it
+  wasn't, kernels that stream that buffer (K-quants, grid IQ, tq, iq4_xs with
+  f32 acts) ran 1.7-3.2x slower in a random subset of processes: the hardware
+  prefetcher, running ~2 KB ahead, walks the missing translation on every call.
+  So the inputs are allocated with 16 KB of written slack past their end (also
+  skipped by `--no-pretouch`). Real activations live in reused compute buffers
+  whose neighbouring pages are resident.
 
 ## Formats and codecs
 
