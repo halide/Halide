@@ -115,13 +115,13 @@ protected:
          *  it (in units of the value's own size); the slot index is derived
          *  internally. Returns a WGSL expression. */
         std::string load_struct_scratch(const std::string &name,
-                                       const std::string &idx, Type t);
+                                        const std::string &idx, Type t);
         /** Split a scalar value into bytes and store them into struct-backed
          *  scratch (the mirror image of load_struct_scratch). Emits
          *  statements. */
         void store_struct_scratch(const std::string &name,
-                                 const std::string &idx,
-                                 const std::string &value, Type t);
+                                  const std::string &idx,
+                                  const std::string &value, Type t);
         std::string print_assignment(Type t, const std::string &rhs) override;
         std::string print_const(Type t, const std::string &rhs);
         std::string print_assignment_or_const(Type t, const std::string &rhs,
