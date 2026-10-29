@@ -264,7 +264,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --python 'cpython-3.10.20-macos-aarch64-none' --group ci-llvm-main --no-install-project
+          uv sync --python 'cpython-3.12-macos-aarch64-none' --group ci-llvm-main --no-install-project
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
