@@ -76,7 +76,7 @@ list(TRANSFORM python_sources
     OUTPUT_VARIABLE python_sources_source_dir
 )
 
-set(stamp_file "$<CONFIG>/Halide_Python_sources.stamp")
+set(stamp_file "Halide_Python_sources-$<CONFIG>.stamp")
 add_custom_command(
     OUTPUT "${stamp_file}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory $<TARGET_FILE_DIR:Halide_Python>
