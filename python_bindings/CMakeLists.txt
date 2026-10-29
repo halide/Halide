@@ -48,7 +48,15 @@ endif ()
 if (WITH_PYTHON_BINDINGS)
     # Avoid backslash escapes in vcpkg's find_package wrapper on Windows.
     file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
-    find_package(nanobind 2.11...<2.12 CONFIG REQUIRED HINTS "${Python_SITEARCH}/nanobind/cmake")
+    # nanobind's version file only accepts requests within one major version,
+    # so check the minimum separately to allow nanobind 3.x as well.
+    find_package(nanobind CONFIG REQUIRED HINTS "${Python_SITEARCH}/nanobind/cmake")
+    if (nanobind_VERSION VERSION_LESS 2.11)
+        message(
+            FATAL_ERROR "Halide's Python bindings require nanobind 2.11 or newer, "
+            "but found ${nanobind_VERSION} at ${nanobind_DIR}"
+        )
+    endif ()
 endif ()
 
 # Note: this must happen, especially when WITH_PYTHON_BINDINGS is OFF.

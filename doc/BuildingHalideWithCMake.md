@@ -119,7 +119,7 @@ building the core pieces of Halide.
 | [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | In-process Wasm JIT only, never AOT (see below). Unstable API; exact version required.    |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | In-process Wasm JIT only, never AOT (see below). Difficult to build. See [WebAssembly.md] |
 | [Python]      | `>=3.12`           | `WITH_PYTHON_BINDINGS=ON`  | Regular, GIL-enabled CPython.                                                             |
-| [nanobind]    | `>=2.11,<2.12`     | `WITH_PYTHON_BINDINGS=ON`  | Required to build Halide's bindings, not downstream generator stubs.                      |
+| [nanobind]    | `>=2.11`           | `WITH_PYTHON_BINDINGS=ON`  | Required to build Halide's bindings, not downstream generator stubs.                      |
 
 Halide supports the latest stable version of LLVM, the previous stable version,
 and trunk. The current development branch supports LLVM 22, 23, and 24 (trunk).
