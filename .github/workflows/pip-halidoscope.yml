@@ -51,6 +51,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
