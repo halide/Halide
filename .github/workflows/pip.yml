@@ -25,6 +25,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -61,7 +63,7 @@ jobs:
           echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
 
       - name: Install LLVM
-        if: matrix.os != 'ubuntu-latest'
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           uv sync --frozen --group ci-llvm-${{ steps.halide-version.outputs.major }} \
@@ -122,6 +124,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -164,7 +168,7 @@ jobs:
           path: dist-runtime
 
       - name: Unpack halide-bin for wheel repair
-        if: matrix.os != 'ubuntu-latest'
+        if: runner.os != 'Linux'
         shell: bash
         run: python -m zipfile -e dist-bin/*.whl opt/halide-bin
 
@@ -245,6 +249,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -328,6 +334,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -381,11 +389,15 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.12", "3.13", "3.14", "3.15"]
-        platform: [linux, windows, macos-intel, macos-arm]
+        platform: [linux, linux-arm, windows, macos-intel, macos-arm]
         include:
           - platform: linux
             os: ubuntu-latest
             platform_tag: manylinux_x86_64
+            runtime_suffix: .so
+          - platform: linux-arm
+            os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
             runtime_suffix: .so
           - platform: windows
             os: windows-latest
