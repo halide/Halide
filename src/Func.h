@@ -282,7 +282,9 @@ public:
      * no residual. A part's Func accumulates its terms with the common
      * invariant factors removed, over the same RVars and predicate, with this
      * update's schedule; the update itself becomes a write-back that adds up
-     * the parts scaled by their factors, as for hoist_invariants().
+     * the parts scaled by their factors, as for hoist_invariants(). That
+     * includes the hoisted right shifts of bit fields, of an integer sum's
+     * parts.
      *
      * There is nothing to split if there is a single group and every term
      * calls it. Then this stage is left as it is (no factor is hoisted) and the
@@ -386,8 +388,50 @@ public:
      *
      * This reduces the number of factor applications from |R| to one per pure
      * point. Terms without a hoistable factor are still split into separate
-     * intermediates. It is an error if there is neither a distributable invariant
-     * factor nor more than one outer term to split.
+     * intermediates.
+     *
+     * In an integer sum, the right shift of a bit field is a factor too. A bit
+     * field (x >> s) & m, with m a non-negative constant, is exactly 2^-s times
+     * x & (m << s), the field read in place. So where its position s is
+     * invariant (decided as above, modulo the bounds of the RVars and of the
+     * bounded pure vars, also seeing through the index arithmetic of a split:
+     * ((ro * 4 + c) * 16 + ri) % 64 / 16 is c given c's bound()), the
+     * intermediate accumulates the term with its fields read in place and the
+     * write-back shifts its sum right by s, once. That is exact where nothing
+     * wraps, which is what decides how far s may go: every field the term reads
+     * at an invariant position must be at the same one, and the term must be
+     * linear in them (built from them by integer casts, shifts left by a
+     * constant, sums, differences, products with values that read no such
+     * field, and widening_mul(), widening_add(), and widening_sub()). Then with
+     * the fields in [0, m << k], let k be the greatest shift at which no value
+     * on the way from them to the term wraps, nor does the term's sum over the
+     * whole domain (whose extents must be constant), by constant bounds (with
+     * the bounds of the values of the Funcs the term calls). The shift hoisted
+     * is d = select(0 <= s && s <= k, s, 0): all of s or none of it, since
+     * hoisting part of a shift would still shift every term. The intermediate
+     * reads (x >> (s - d)) & (m << d), 2^d times the field, and the write-back
+     * applies the term's other factors to (intermediate >> d). d is a constant
+     * wherever s is, e.g. once the pure var it depends on is unrolled. A term
+     * with no such field, or for which k is 0, keeps its shifts. For example,
+     * with w a uint8 Func and a an int8 one, after splitting r by 16 and
+     * rfactoring the outer RVar into c (one plane of fields per c):
+     * \code
+     * g(c) = 0;
+     * g(c) += i32(widening_mul(i8((w(r) >> (2 * c)) & 3), a(r)));  // r in [0, 16)
+     * auto intms = g.update().hoist_invariants();
+     * \endcode
+     * rewrites g as if it were (192, the field at bit 6 read in place, would
+     * not fit the int8, so k is 5 and d = select(2 * c <= 5, 2 * c, 0)):
+     * \code
+     * g_intm0(c) = 0;
+     * g_intm0(c) += i32(widening_mul(i8((w(r) >> (2 * c - d)) & (3 << d)), a(r)));
+     *
+     * g(c) = 0;
+     * g(c) += g_intm0(c) >> d;
+     * \endcode
+     *
+     * It is an error if there is neither a distributable invariant factor (a
+     * hoistable shift included) nor more than one outer term to split.
      */
     FuncVec hoist_invariants();
 

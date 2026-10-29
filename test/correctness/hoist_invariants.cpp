@@ -1155,6 +1155,301 @@ int hoist_invariants_nothing_to_hoist_rejected_test() {
     return 0;
 }
 
+// In an integer sum, the right shift of a bit field (x >> s) & m at a
+// position s invariant over the reduction is one more factor: the fields
+// are read in place, x & (m << s), and the sum is shifted once, where that
+// is exact. Planes of 2-bit fields, as GGML's q2_K and tq2_0: value i of 64
+// is the field at bit 2 * (i / 16) of byte i % 16.
+struct FieldInputs {
+    static constexpr int Planes = 4, Positions = 16, Values = Planes * Positions;
+    Buffer<uint8_t> wb{Positions};
+    Buffer<int8_t> ab{Values};
+    Func w{"w"}, a{"a"};
+    FieldInputs() {
+        for (int i = 0; i < Positions; i++) {
+            wb(i) = (uint8_t)(i * 89 + 7);
+        }
+        wb(0) = 255;  // every field 3
+        for (int i = 0; i < Values; i++) {
+            ab(i) = (int8_t)(i * 37 + 11);
+        }
+        ab(0) = -128;
+        Var v{"v"};
+        w(v) = wb(v);
+        a(v) = ab(v);
+    }
+    int field(int i) const {
+        return (wb(i % Positions) >> (2 * (i / Positions))) & 3;
+    }
+    // The dot of plane c's fields with their a, scaled by 2^d.
+    int plane_dot(int c, int d = 0) const {
+        int sum = 0;
+        for (int i = c * Positions; i < (c + 1) * Positions; i++) {
+            sum += (field(i) << d) * ab(i);
+        }
+        return sum;
+    }
+};
+
+bool check_shift(bool ok, const string &what) {
+    if (!ok) {
+        printf("%s\n", what.c_str());
+    }
+    return ok;
+}
+
+// The dot of the fields (as int8 codes) with an int8 Func, per plane after an
+// rfactor() (c), as GGML's tq2_0 vec_dot: the shifts of the planes at bits 2
+// and 4 hoist (their fields read in place, 12 and 48, fit an int8); bit 6's
+// don't (192 doesn't), so it is read as before.
+int hoist_invariants_field_shift_test(bool scheduled) {
+    using In = FieldInputs;
+    In in;
+    RDom r(0, In::Values, "r");
+    Func f{"f"};
+    f() = 0;
+    Expr field = (in.w(r % In::Positions) >> cast<uint8_t>(2 * (r / In::Positions))) & cast<uint8_t>(3);
+    f() += cast<int>(widening_mul(cast<int8_t>(field), in.a(r)));
+    RVar rp{"rp"}, ri{"ri"};
+    Var c{"c"};
+    f.update().split(r, rp, ri, In::Positions);
+    Func planes = f.update().rfactor(rp, c);
+    FuncVec intms = planes.update().hoist_invariants();
+    if (!check_shift(intms.size() == 1, "field shift: expected one intermediate")) {
+        return 1;
+    }
+    Func g = intms[0];
+    if (scheduled) {
+        planes.compute_root().unroll(c);
+        planes.update().unroll(c);
+        g.compute_at(planes, c);
+        g.update().atomic().vectorize(ri);
+    }
+    int ref = 0;
+    for (int p = 0; p < In::Planes; p++) {
+        ref += in.plane_dot(p);
+    }
+    Buffer<int> out = f.realize();
+    if (!check_shift(out() == ref, "field shift: wrong result")) {
+        return 1;
+    }
+    if (scheduled) {
+        return 0;
+    }
+    // The intermediate holds each plane's dot times 2^d.
+    Buffer<int> gout = g.realize({In::Planes});
+    const int d[In::Planes] = {0, 2, 4, 0};
+    for (int p = 0; p < In::Planes; p++) {
+        if (!check_shift(gout(p) == in.plane_dot(p, d[p]),
+                         "field shift: the intermediate of plane " + std::to_string(p) + " is " +
+                             std::to_string(gout(p)) + ", not " + std::to_string(in.plane_dot(p, d[p])))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// The sum over the domain must fit with the fields read in place: an int16
+// sum of 16 products of a field in [0, 3] and an int8 fits in place at shift
+// 2 (16 * 3 * 128 * 4 = 24576), not 4. The shift is hoisted along with an
+// invariant factor s, and, given the groups, in the part calling a but not
+// in the residual. The position 2 * c is invariant over r, but bounded
+// only by c's bound.
+int hoist_invariants_field_shift_sum_bound_test(bool groups) {
+    using In = FieldInputs;
+    In in;
+    RDom r(0, In::Positions, "r");
+    Var c{"c"};
+    Func s{"s"};
+    s(c) = cast<int16_t>(c - 2);
+    Func f{"f"};
+    f(c) = cast<int16_t>(0);
+    Expr field = (in.w(r) >> cast<uint8_t>(2 * c)) & cast<uint8_t>(3);
+    Expr term = s(c) * (cast<int16_t>(field) * cast<int16_t>(in.a(c * In::Positions + r)));
+    f(c) += groups ? term + cast<int16_t>(in.w(r) & 1) : term;
+    f.bound(c, 0, In::Planes);
+    FuncVec intms = groups ? f.update().hoist_invariants({in.a}) : f.update().hoist_invariants();
+    if (!check_shift(intms.size() == (groups ? 2 : 1) && intms[0].defined() && (!groups || intms[1].defined()),
+                     "field shift sum bound: unexpected intermediates")) {
+        return 1;
+    }
+    Buffer<int16_t> out = f.realize({In::Planes});
+    Buffer<int16_t> gout = intms[0].realize({In::Planes});
+    int residual_sum = 0;
+    for (int i = 0; i < In::Positions; i++) {
+        residual_sum += in.wb(i) & 1;
+    }
+    const int d[In::Planes] = {0, 2, 0, 0};
+    for (int p = 0; p < In::Planes; p++) {
+        const int expected = (int16_t)((p - 2) * in.plane_dot(p) + (groups ? residual_sum : 0));
+        if (!check_shift(out(p) == expected, "field shift sum bound: wrong result for plane " + std::to_string(p)) ||
+            !check_shift(gout(p) == in.plane_dot(p, d[p]),
+                         "field shift sum bound: wrong intermediate of plane " + std::to_string(p))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// As tq2_0's planes: the position by a middle split of the domain, value i
+// of 128 at plane (i % 64) / 16, i.e. ((ro * 4 + c) * 16 + ri) % 64 / 16
+// after the split and rfactor(), which is c only given c's bound (without
+// which nothing is hoisted).
+int hoist_invariants_field_shift_split_test() {
+    using In = FieldInputs;
+    In in;
+    constexpr int Halves = 2;
+    RDom r(0, Halves * In::Values, "r");
+    auto make = [&](bool bounded, Func &planes) {
+        Func f{"f"};
+        f() = 0;
+        Expr i = r % In::Values;
+        Expr field = (in.w(i % In::Positions) >> cast<uint8_t>(2 * (i / In::Positions))) & cast<uint8_t>(3);
+        f() += cast<int>(widening_mul(cast<int8_t>(field), in.a(i)));
+        RVar ra{"ra"}, ro{"ro"}, rc{"rc"}, ri{"ri"};
+        Var c{"c"};
+        f.update().split(r, ra, ri, In::Positions).split(ra, ro, rc, In::Planes);
+        planes = f.update().rfactor(rc, c);
+        if (bounded) {
+            planes.bound(c, 0, In::Planes);
+        }
+        return f;
+    };
+    Func planes;
+    Func unbounded = make(false, planes);
+    if (Halide::exceptions_enabled()) {
+        bool error = false;
+        try {
+            planes.update().hoist_invariants();
+        } catch (const Halide::CompileError &e) {
+            error = string(e.what()).find("could not find multiple reduction terms") != string::npos;
+        }
+        if (!check_shift(error, "field shift split: hoisted without c's bound")) {
+            return 1;
+        }
+    }
+    Func f = make(true, planes);
+    Func g = planes.update().hoist_invariants()[0];
+    int ref = 0;
+    for (int p = 0; p < In::Planes; p++) {
+        ref += Halves * in.plane_dot(p);
+    }
+    Buffer<int> out = f.realize();
+    if (!check_shift(out() == ref, "field shift split: wrong result")) {
+        return 1;
+    }
+    Buffer<int> gout = g.realize({In::Planes});
+    const int d[In::Planes] = {0, 2, 4, 0};
+    for (int p = 0; p < In::Planes; p++) {
+        if (!check_shift(gout(p) == Halves * in.plane_dot(p, d[p]),
+                         "field shift split: wrong intermediate of plane " + std::to_string(p))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// With an invariant factor hoisted, the term's body is CSE'd, so the fields
+// may be read under Lets (here of the index c * 16 + r): the shift is still
+// hoisted when its position is invariant, and not when it depends on r.
+int hoist_invariants_field_shift_let_test() {
+    using In = FieldInputs;
+    In in;
+    RDom r(0, In::Positions, "r");
+    Var c{"c"};
+    Func s{"s"};
+    s(c) = c - 2;
+    auto make = [&](const string &name, const std::function<Expr(Expr)> &position) {
+        Func f{name};
+        Expr i = c * In::Positions + r;
+        Expr field = (in.w(i % In::Positions) >> cast<uint8_t>(position(i))) & cast<uint8_t>(3);
+        f(c) = 0;
+        f(c) += s(c) * cast<int>(widening_mul(cast<int8_t>(field), in.a(i)));
+        f.bound(c, 0, In::Planes);
+        return f;
+    };
+    Func f = make("f", [&](const Expr &) { return 2 * c; });
+    Func g = f.update().hoist_invariants()[0];
+    Buffer<int> out = f.realize({In::Planes});
+    Buffer<int> gout = g.realize({In::Planes});
+    const int d[In::Planes] = {0, 2, 4, 0};
+    for (int p = 0; p < In::Planes; p++) {
+        if (!check_shift(out(p) == (p - 2) * in.plane_dot(p),
+                         "field shift let: wrong result for plane " + std::to_string(p)) ||
+            !check_shift(gout(p) == in.plane_dot(p, d[p]),
+                         "field shift let: the intermediate of plane " + std::to_string(p) + " is " +
+                             std::to_string(gout(p)) + ", not " + std::to_string(in.plane_dot(p, d[p])))) {
+            return 1;
+        }
+    }
+    // Hoisting s(c) again leaves the variant shift in place.
+    Func h = make("h", [&](const Expr &i) { return i / 4 % 4 * 2; });
+    Func hg = h.update().hoist_invariants()[0];
+    Buffer<int> hout = h.realize({In::Planes});
+    Buffer<int> hgout = hg.realize({In::Planes});
+    for (int p = 0; p < In::Planes; p++) {
+        int dot = 0;
+        for (int j = 0; j < In::Positions; j++) {
+            const int i = p * In::Positions + j;
+            dot += ((in.wb(j) >> (i / 4 % 4 * 2)) & 3) * in.ab(i);
+        }
+        if (!check_shift(hout(p) == (p - 2) * dot && hgout(p) == dot,
+                         "field shift let: wrong variant result for plane " + std::to_string(p))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Sums whose shifts are not hoisted: there is then nothing to hoist.
+int hoist_invariants_field_shift_rejected_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    using In = FieldInputs;
+    In in;
+    RDom r(0, In::Positions, "r");
+    Var c{"c"};
+    auto field = [&](const Expr &s, int m = 3) {
+        return (in.w(r) >> cast<uint8_t>(s)) & cast<uint8_t>(m);
+    };
+    auto i8 = [](const Expr &e) { return cast<int8_t>(e); };
+    auto i32 = [](const Expr &e) { return cast<int>(e); };
+    auto rejected = [&](const string &name, const Expr &increment, bool use_max = false) {
+        Func f{name};
+        f(c) = cast(increment.type(), 0);
+        if (use_max) {
+            f(c) = max(f(c), increment);
+        } else {
+            f(c) += increment;
+        }
+        try {
+            f.update().hoist_invariants();
+        } catch (const Halide::CompileError &e) {
+            return check_shift(string(e.what()).find("could not find multiple reduction terms") != string::npos,
+                               name + ": unexpected error:\n" + e.what());
+        }
+        printf("%s: hoisted a shift it should not have\n", name.c_str());
+        return false;
+    };
+    bool ok = true;
+    // The position depends on r.
+    ok &= rejected("f1", i32(field(2 * (r / 4))));
+    // Not linear in the fields.
+    ok &= rejected("f2", i32(field(2 * c)) * i32(field(2 * c)));
+    // (A cast of a sum: one term, not a sum to split.)
+    ok &= rejected("f3", i32(cast<int16_t>(field(2 * c)) + 1));
+    // Fields at different positions.
+    ok &= rejected("f4", i32(cast<int16_t>(field(2 * c)) + cast<int16_t>(field(2 * c + 1))));
+    // A field of 8 bits doesn't fit the int8 even shifted down.
+    ok &= rejected("f5", i32(widening_mul(i8(field(c, 255)), in.a(r))));
+    // 3 << 6 doesn't fit the int8 (at most 3 << 5 does).
+    ok &= rejected("f6", i32(widening_mul(i8(field(6)), in.a(r))));
+    ok &= rejected("f7", cast<float>(field(2 * c)));
+    ok &= rejected("f8", i32(field(2 * c)), true);
+    return ok ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1191,6 +1486,13 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (block index, finer factor rejected)", hoist_invariants_block_index_finer_rejected_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
+        {"hoist_invariants test (field shift)", [] { return hoist_invariants_field_shift_test(false); }},
+        {"hoist_invariants test (field shift, scheduled)", [] { return hoist_invariants_field_shift_test(true); }},
+        {"hoist_invariants test (field shift, sum bound)", [] { return hoist_invariants_field_shift_sum_bound_test(false); }},
+        {"hoist_invariants test (field shift, sum bound, groups)", [] { return hoist_invariants_field_shift_sum_bound_test(true); }},
+        {"hoist_invariants test (field shift, split classes)", hoist_invariants_field_shift_split_test},
+        {"hoist_invariants test (field shift, rejected)", hoist_invariants_field_shift_rejected_test},
+        {"hoist_invariants test (field shift, let)", hoist_invariants_field_shift_let_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;

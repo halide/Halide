@@ -936,11 +936,14 @@ void flatten_exact_chain(const Expr &e, IRNodeType op, const std::function<bool(
 
 struct HoistedFactor {
     IRNodeType op;
-    Expr factor;      // The loop-invariant distributable factor, expressed in
-                      // the preserved update's coordinate system.
-    Expr inner_body;  // The remaining body after removing the factor. It keeps
-                      // its natural type; changing the accumulation type is the
-                      // job of the separate change_type() directive.
+    Expr factor;          // The loop-invariant distributable factor, expressed in
+                          // the preserved update's coordinate system.
+    Expr inner_body;      // The remaining body after removing the factor. It keeps
+                          // its natural type; changing the accumulation type is the
+                          // job of the separate change_type() directive.
+    Expr shift = Expr();  // If defined, an exact right shift to apply before the
+                          // factor (of a sum's bit fields, see hoist_field_shift());
+                          // `factor` may then be undefined.
 };
 
 struct HoistedTerm {
@@ -1027,20 +1030,25 @@ struct InvarianceBounds {
     vector<pair<string, Interval>> pure_vars;
 };
 
+// A simplification of an expression equal to it wherever the variables are in
+// the given bounds.
+using BoundedSimplifier = std::function<Expr(const Expr &, const Scope<> &, const Scope<Interval> &)>;
+
 // If `leaf` is invariant over the reduction, the form of it to apply once at
 // write-back; nullopt if it depends on an RVar. `reduction_vars` is the set of
 // RVar names the factor must not reference, and `bounds` holds the constant
-// bounds for deciding invariance modulo those bounds.
+// bounds for deciding invariance modulo those bounds, by `simplifier`.
 optional<Expr> invariant_form(const Expr &leaf,
                               const Scope<> &reduction_vars,
-                              const InvarianceBounds &bounds) {
+                              const InvarianceBounds &bounds,
+                              const BoundedSimplifier &simplifier = simplify_with_reduction_bounds) {
     auto is_rvar_free = [&](const Expr &e) {
         return !expr_uses_vars(e, reduction_vars);
     };
     if (is_rvar_free(leaf)) {
         return leaf;
     }
-    if (Expr simplified = simplify_with_reduction_bounds(leaf, reduction_vars, bounds.rvars);
+    if (Expr simplified = simplifier(leaf, reduction_vars, bounds.rvars);
         is_rvar_free(simplified)) {
         // Equal to `leaf` for every RVar value the reduction runs, so it is
         // invariant and can be applied once at write-back.
@@ -1048,7 +1056,7 @@ optional<Expr> invariant_form(const Expr &leaf,
     }
     if (Expr within_bounds = bounds.pure_vars.empty() ?
                                  Expr() :
-                                 simplify_with_reduction_bounds(leaf, reduction_vars, bounds.rvars_and_pure_vars);
+                                 simplifier(leaf, reduction_vars, bounds.rvars_and_pure_vars);
         within_bounds.defined() && is_rvar_free(within_bounds)) {
         // Equal to `leaf` only within the explicit bounds of the pure vars.
         // Those bound the region the Func is computed over now, but could
@@ -1176,7 +1184,8 @@ Expr apply_hoisted_factor(const Expr &r, const optional<HoistedFactor> &factor) 
     if (!factor) {
         return r;
     }
-    return make_binary_op(factor->op, factor->factor, r);
+    Expr result = factor->shift.defined() ? (r >> factor->shift) : r;
+    return factor->factor.defined() ? make_binary_op(factor->op, factor->factor, result) : result;
 }
 
 // Selects the calls a part of hoist_invariants(parts) isolates.
@@ -1473,6 +1482,369 @@ HoistedTerm hoist_part(const Expr &part, const InvariantForm &invariant) {
     }
     Expr body = common_subexpression_elimination(factored.body);
     return {HoistedFactor{IRNodeType::Mul, common_subexpression_elimination(factor), body}, body, 0};
+}
+
+// The increment of a sum update f(...) = f(...) + increment (or += or -=),
+// and the associativity proof of the update as that sum. The proof is not
+// associative if the update is not such a sum (the increment may be undefined).
+pair<Expr, AssociativeOp> sum_increment(const Function &function, const Definition &definition) {
+    // Find the self-reference among the terms of the sum; the increment is the
+    // rest.
+    vector<pair<bool, Expr>> terms;
+    flatten_signed_sum(substitute_in_all_lets(definition.values()[0]), false, terms);
+    Expr self_ref, increment;
+    int self_refs = 0;
+    for (const auto &[negated, term] : terms) {
+        const Call *call = term.as<Call>();
+        if (!negated && call && call->call_type == Call::Halide && call->name == function.name()) {
+            self_ref = term;
+            self_refs++;
+            continue;
+        }
+        increment = negated ? sub_terms(increment, term) : add_terms(increment, term);
+    }
+    AssociativeOp prover_result;
+    if (self_refs == 1 && increment.defined()) {
+        // The prover need not see through the increment, which may have a
+        // form it does not recognize (e.g. 0 - x), so stand in a variable for it.
+        Expr y = Variable::make(increment.type(), unique_name('y'));
+        prover_result = prove_associativity(function.name(), definition.args(), {Add::make(self_ref, y)});
+    }
+    const bool is_sum = prover_result.associative() &&
+                        prover_result.pattern.ops.size() == 1 &&
+                        prover_result.pattern.ops[0].node_type() == IRNodeType::Add &&
+                        !prover_result.xs[0].var.empty();
+    return {increment, is_sum ? prover_result : AssociativeOp()};
+}
+
+// e with each product by a constant distributed over the sums and
+// differences it multiplies: (a + b) * k -> a * k + b * k. Exact, also modulo
+// 2^n.
+Expr distribute_constant_products(const Expr &e) {
+    std::function<Expr(const Expr &, const Expr &)> times = [&](const Expr &x, const Expr &k) -> Expr {
+        if (const Add *op = x.as<Add>()) {
+            return times(op->a, k) + times(op->b, k);
+        }
+        if (const Sub *op = x.as<Sub>()) {
+            return times(op->a, k) - times(op->b, k);
+        }
+        return Mul::make(x, k);
+    };
+    return mutate_with(e, [&](auto *self, const Mul *op) -> Expr {
+        Expr a = self->mutate(op->a), b = self->mutate(op->b);
+        if (is_const(b)) {
+            return times(a, b);
+        }
+        if (is_const(a)) {
+            return times(b, a);
+        }
+        return Mul::make(a, b);
+    });
+}
+
+// simplify_with_reduction_bounds(), also seeing through the index arithmetic
+// of a split: a position computed from a split index, e.g.
+// ((((ro * 4 + c) * 2 + rp) * 16 + ri) % 128) / 32, is c given the bounds of
+// c, rp and ri, which the simplifier doesn't find, as it doesn't reassociate
+// the terms whose coefficient the divisor divides out of the sum. So each
+// division or modulo of a sum by a positive constant k, in a signed type of
+// at least 32 bits (which doesn't overflow, as the simplifier assumes), the
+// products
+// distributed, splits the terms whose constant coefficient k divides, k * q,
+// from the rest, r (exact: Euclidean division and modulo):
+//   (k * q + r) % k -> r % k, and r if r is in [0, k)
+//   (k * q + r) / k -> q + r / k, and q if r is in [0, k)
+Expr simplify_split_indices(const Expr &e, const Scope<> &reduction_vars, const Scope<Interval> &bounds) {
+    Expr x = simplify_with_reduction_bounds(e, reduction_vars, bounds);
+    x = simplify_with_reduction_bounds(distribute_constant_products(x), reduction_vars, bounds);
+    auto in_range = [&](const Expr &r, int64_t k) {
+        Interval i = bounds_of_expr_in_scope(r, bounds);
+        if (!i.is_bounded()) {
+            return false;
+        }
+        optional<int64_t> lo = as_const_int(simplify(i.min)), hi = as_const_int(simplify(i.max));
+        return lo && hi && *lo >= 0 && *hi < k;
+    };
+    auto split = [&](const Expr &a, int64_t k, Expr &q, Expr &r) {
+        vector<pair<bool, Expr>> terms;
+        flatten_signed_sum(a, false, terms);
+        for (const auto &[negated, t] : terms) {
+            const Mul *mul = t.as<Mul>();
+            optional<int64_t> c = mul ? as_const_int(mul->b) : as_const_int(t);
+            if (c && *c % k == 0) {
+                Expr qt = mul ? Mul::make(mul->a, make_const(t.type(), *c / k)) : make_const(t.type(), *c / k);
+                q = negated ? sub_terms(q, qt) : add_terms(q, qt);
+            } else {
+                r = negated ? sub_terms(r, t) : add_terms(r, t);
+            }
+        }
+        if (!r.defined()) {
+            r = make_zero(a.type());
+        }
+    };
+    auto mod = [&](auto *self, const Mod *op) -> Expr {
+        Expr a = self->mutate(op->a);
+        optional<int64_t> k = as_const_int(op->b);
+        if (!op->type.is_int() || op->type.bits() < 32 || !k || *k <= 0) {
+            return Mod::make(a, op->b);
+        }
+        Expr q, r;
+        split(a, *k, q, r);
+        return in_range(r, *k) ? r : Mod::make(r, op->b);
+    };
+    auto div = [&](auto *self, const Div *op) -> Expr {
+        Expr a = self->mutate(op->a);
+        optional<int64_t> k = as_const_int(op->b);
+        if (!op->type.is_int() || op->type.bits() < 32 || !k || *k <= 0) {
+            return Div::make(a, op->b);
+        }
+        Expr q, r;
+        split(a, *k, q, r);
+        Expr quotient = q.defined() ? q : make_zero(op->type);
+        return in_range(r, *k) ? quotient : quotient + Div::make(r, op->b);
+    };
+    x = mutate_with(x, std::move(mod), std::move(div));
+    return simplify_with_reduction_bounds(x, reduction_vars, bounds);
+}
+
+// A bit field (x >> s) & m, with m a non-negative constant.
+struct BitField {
+    Expr x, s;
+    uint64_t m;
+};
+
+optional<BitField> as_bit_field(const Expr &e) {
+    const Call *a = Call::as_intrinsic(e, {Call::bitwise_and});
+    const Call *sh = a ? Call::as_intrinsic(a->args[0], {Call::shift_right}) : nullptr;
+    if (!sh || !e.type().is_int_or_uint()) {
+        return std::nullopt;
+    }
+    if (optional<uint64_t> m = as_const_uint(a->args[1])) {
+        return BitField{sh->args[0], sh->args[1], *m};
+    }
+    if (optional<int64_t> m = as_const_int(a->args[1]); m && *m >= 0) {
+        return BitField{sh->args[0], sh->args[1], (uint64_t)*m};
+    }
+    return std::nullopt;
+}
+
+// For hoist_field_shift(): the constant bounds of `e` with each of the
+// bit fields in `fields` read in place at shift k, (x >> (s - k)) & (m << k),
+// which is exactly 2^k times the field if m << k is in the field's type. If
+// `e` is linear in the fields (built from them by int casts, constant left
+// shifts, sums, differences, products with values that read no field, and
+// widening ops) and no value on the way from them to `e` wraps, `e` is then
+// exactly 2^k times its value. Returns nullopt if `e` reads none of the
+// fields, and also sets `ok` to false if it does but not so.
+optional<ConstantInterval> scaled_field_bounds(const Expr &e, int k, const std::set<const Call *> &fields,
+                                               const ValueBounds &bounds, bool &ok) {
+    auto reads_field = [&](const Expr &x) {
+        bool found = false;
+        visit_with(x, [&](auto *self, const Call *op) {
+            found = found || fields.count(op);
+            if (!found) {
+                self->visit_base(op);
+            }
+        });
+        return found;
+    };
+    auto fail = [&]() -> optional<ConstantInterval> {
+        ok = false;
+        return std::nullopt;
+    };
+    auto fits = [&](const ConstantInterval &i) -> optional<ConstantInterval> {
+        if (!ConstantInterval::bounds_of_type(e.type()).contains(i)) {
+            return fail();
+        }
+        return i;
+    };
+    auto recurse = [&](const Expr &x) {
+        return ok ? scaled_field_bounds(x, k, fields, bounds, ok) : std::nullopt;
+    };
+    if (!e.type().is_int_or_uint()) {
+        return reads_field(e) ? fail() : std::nullopt;
+    }
+    if (const Call *op = e.as<Call>(); op && fields.count(op)) {
+        const uint64_t m = as_bit_field(e)->m;
+        if (k >= 63 || m > ((uint64_t)std::numeric_limits<int64_t>::max() >> k)) {
+            return fail();
+        }
+        return fits(ConstantInterval(0, (int64_t)(m << k)));
+    }
+    if (Expr exact = exact_widening_form(e); exact.defined()) {
+        return recurse(exact);
+    }
+    if (const Cast *op = e.as<Cast>()) {
+        if (!op->value.type().is_int_or_uint()) {
+            return reads_field(e) ? fail() : std::nullopt;
+        }
+        optional<ConstantInterval> i = recurse(op->value);
+        return i ? fits(*i) : std::nullopt;
+    }
+    if (const Call *op = Call::as_intrinsic(e, {Call::shift_left})) {
+        optional<ConstantInterval> i = recurse(op->args[0]);
+        if (!ok || !i) {
+            return reads_field(op->args[1]) ? fail() : std::nullopt;
+        }
+        optional<int64_t> b = as_const_int(op->args[1]);
+        if (optional<uint64_t> u = as_const_uint(op->args[1])) {
+            b = (int64_t)*u;
+        }
+        if (!b || *b < 0 || *b >= 62) {
+            return fail();
+        }
+        return fits(*i * ((int64_t)1 << *b));
+    }
+    if (e.node_type() == IRNodeType::Add || e.node_type() == IRNodeType::Sub ||
+        e.node_type() == IRNodeType::Mul) {
+        auto [a, b] = *as_binary_operands(e);
+        optional<ConstantInterval> ia = recurse(a), ib = recurse(b);
+        if (!ok || (!ia && !ib)) {
+            return std::nullopt;
+        }
+        if (e.node_type() == IRNodeType::Mul) {
+            if (ia && ib) {
+                return fail();
+            }
+            return fits(ia ? *ia * bounds(b) : bounds(a) * *ib);
+        }
+        // Only the fields' terms scale: a sum with a field-free term (other
+        // than zero, e.g. the 0 - x of a -= update) does not.
+        if (!ia && is_const_zero(a)) {
+            ia = ConstantInterval::single_point(0);
+        }
+        if (!ib && is_const_zero(b)) {
+            ib = ConstantInterval::single_point(0);
+        }
+        if (!ia || !ib) {
+            return fail();
+        }
+        return fits(e.node_type() == IRNodeType::Add ? *ia + *ib : *ia - *ib);
+    }
+    return reads_field(e) ? fail() : std::nullopt;
+}
+
+// The number of points of an update's reduction domain, if its extents are
+// constant (and the product fits an int32).
+optional<int64_t> reduction_points(const Definition &definition) {
+    int64_t points = 1;
+    for (const ReductionVariable &rv : definition.schedule().rvars()) {
+        optional<int64_t> extent = as_const_int(simplify(rv.extent));
+        if (!extent || *extent < 0 || *extent > std::numeric_limits<int32_t>::max()) {
+            return std::nullopt;
+        }
+        points *= std::max<int64_t>(*extent, 1);
+        if (points > std::numeric_limits<int32_t>::max()) {
+            return std::nullopt;
+        }
+    }
+    return points;
+}
+
+// A sum's term with the right shift of its bit fields hoisted out (see
+// hoist_invariants()): `body` reads each field (x >> s) & m in place, as
+// (x >> (s - shift)) & (m << shift), so it is 2^shift times the term, and
+// the write-back shifts the term's sum right by `shift`.
+struct ShiftedTerm {
+    Expr body, shift;
+};
+
+// The hoisted shift of the bit fields `term`, accumulated alone by a sum over
+// `points` points, reads at a position invariant over the reduction, if
+// there is one: all such fields are at the same position s, `term` is
+// linear in them (see scaled_field_bounds()), and s is at most the greatest
+// k for which, with the fields read in place at k, neither `term` nor the
+// sum wraps. The shift is select(0 <= s <= k, s, 0): a partial shift would
+// still shift every term. Exact, as every term of the sum is then a
+// multiple of 2^shift.
+optional<ShiftedTerm> hoist_field_shift(const Expr &let_term, const Scope<> &reduction_vars,
+                                        const InvarianceBounds &invariance_bounds,
+                                        const optional<int64_t> &points) {
+    // A position bound by a Let would hide its RVars from the invariance test.
+    const Expr term = substitute_in_all_lets(let_term);
+    if (!points || !term.type().is_int_or_uint() || !expr_uses_vars(term, reduction_vars)) {
+        return std::nullopt;
+    }
+    std::set<const Call *> fields;
+    Expr position;
+    bool same_position = true;
+    visit_with(term, [&](auto *self, const Call *op) {
+        if (optional<BitField> f = as_bit_field(Expr(op))) {
+            if (optional<Expr> s = invariant_form(f->s, reduction_vars, invariance_bounds, simplify_split_indices)) {
+                same_position = same_position && (!position.defined() || equal(position, *s));
+                position = *s;
+                fields.insert(op);
+                return;
+            }
+        }
+        self->visit_base(op);
+    });
+    if (fields.empty() || !same_position) {
+        return std::nullopt;
+    }
+
+    optional<FuncValueBounds> func_bounds;
+    ValueBounds bounds = [&](const Expr &e) {
+        if (!func_bounds) {
+            func_bounds = value_bounds_of_calls(term);
+        }
+        return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &*func_bounds);
+    };
+    int max_shift = 0;
+    for (int k = 1; k < term.type().bits(); k++) {
+        bool ok = true;
+        optional<ConstantInterval> i = scaled_field_bounds(term, k, fields, bounds, ok);
+        if (!ok || !i) {
+            break;
+        }
+        ConstantInterval sum = *i * *points;
+        sum.include(0);
+        if (!ConstantInterval::bounds_of_type(term.type()).contains(sum)) {
+            break;
+        }
+        max_shift = k;
+    }
+    if (max_shift == 0) {
+        return std::nullopt;
+    }
+    const Type st = position.type();
+    Expr shift = simplify(select(make_zero(st) <= position && position <= make_const(st, max_shift),
+                                 position, make_zero(st)));
+    if (is_const_zero(shift)) {
+        return std::nullopt;
+    }
+    Expr body = mutate_with(term, [&](auto *self, const Call *op) -> Expr {
+        if (!fields.count(op)) {
+            return self->visit_base(op);
+        }
+        BitField f = *as_bit_field(Expr(op));
+        Expr d = cast(f.s.type(), shift);
+        return (f.x >> (f.s - d)) & (make_const(op->type, f.m) << d);
+    });
+    return ShiftedTerm{common_subexpression_elimination(body), shift};
+}
+
+// Hoist the shifts of the bit fields out of the integer sums' terms (see
+// hoist_field_shift()), as one more factor of each term.
+void hoist_field_shifts(vector<vector<HoistedTerm>> &hoisted_terms, const AssociativeOp &prover_result,
+                        const Definition &definition, const Scope<> &reduction_vars,
+                        const InvarianceBounds &invariance_bounds) {
+    const optional<int64_t> points = reduction_points(definition);
+    for (size_t i = 0; i < hoisted_terms.size(); i++) {
+        if (prover_result.pattern.ops[i].node_type() != IRNodeType::Add) {
+            continue;
+        }
+        for (HoistedTerm &term : hoisted_terms[i]) {
+            if (optional<ShiftedTerm> shifted = hoist_field_shift(term.body, reduction_vars, invariance_bounds, points)) {
+                if (!term.factor) {
+                    term.factor = HoistedFactor{IRNodeType::Mul, Expr(), shifted->body};
+                }
+                term.factor->inner_body = shifted->body;
+                term.factor->shift = shifted->shift;
+                term.body = shifted->body;
+            }
+        }
+    }
 }
 
 // The RDom an update definition reduces over, if any.
@@ -1976,6 +2348,7 @@ FuncVec Stage::hoist_invariants() {
         extract_hoisted_terms(definition.values(), prover_result,
                               function.name(), reduction_vars,
                               constant_bounds);
+    hoist_field_shifts(hoisted_terms, prover_result, definition, reduction_vars, constant_bounds);
     const bool any_hoisted = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
                                          [](const auto &terms) {
                                              return std::any_of(terms.begin(), terms.end(),
@@ -2035,33 +2408,10 @@ FuncVec Stage::hoist_invariants_impl(const vector<std::function<bool(const Expr 
         << "hoist_invariants() with a list of Funcs requires a single-valued sum reduction, "
         << "but " << name() << " is Tuple-valued.\n";
 
-    // Find the self-reference among the terms of the sum; the increment is the
-    // rest.
-    vector<pair<bool, Expr>> terms;
-    flatten_signed_sum(substitute_in_all_lets(definition.values()[0]), false, terms);
-    Expr self_ref, increment;
-    int self_refs = 0;
-    for (const auto &[negated, term] : terms) {
-        const Call *call = term.as<Call>();
-        if (!negated && call && call->call_type == Call::Halide && call->name == function.name()) {
-            self_ref = term;
-            self_refs++;
-            continue;
-        }
-        increment = negated ? sub_terms(increment, term) : add_terms(increment, term);
-    }
+    Expr increment;
     AssociativeOp prover_result;
-    if (self_refs == 1 && increment.defined()) {
-        // The prover need not see through the increment, which may have a
-        // form it does not recognize (e.g. 0 - x), so stand in a variable for it.
-        Expr y = Variable::make(increment.type(), unique_name('y'));
-        prover_result = prove_associativity(function.name(), definition.args(), {Add::make(self_ref, y)});
-    }
-    const bool is_sum = prover_result.associative() &&
-                        prover_result.pattern.ops.size() == 1 &&
-                        prover_result.pattern.ops[0].node_type() == IRNodeType::Add &&
-                        !prover_result.xs[0].var.empty();
-    user_assert(is_sum)
+    std::tie(increment, prover_result) = sum_increment(function, definition);
+    user_assert(prover_result.associative())
         << "hoist_invariants() with a list of Funcs requires a sum reduction, "
         << function.name() << "(...) = " << function.name() << "(...) + increment (or += or -=), but "
         << name() << " is:\n"
@@ -2111,6 +2461,7 @@ FuncVec Stage::hoist_invariants_impl(const vector<std::function<bool(const Expr 
     for (const Expr &e : part_exprs) {
         hoisted_terms[0].push_back(hoist_part(e, invariant));
     }
+    hoist_field_shifts(hoisted_terms, prover_result, definition, reduction_vars, constant_bounds);
 
     FuncVec result = define_hoisted_reductions(function, definition, name(), dim_vars, var_splits,
                                                prover_result, hoisted_terms, reduction_bounds);
