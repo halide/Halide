@@ -101,6 +101,27 @@ protected:
                                AppendSpaceIfNeeded append_space =
                                    DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
+        /** The WGSL element type used to *declare* an array of the given type.
+         *  A struct type has no WGSL representation, so struct-backed scratch
+         *  is declared as one u32 word per struct byte (byte-indexed, not
+         *  byte-addressed: slot k occupies 4 bytes); everything else uses
+         *  print_type(). */
+        std::string print_storage_element_type(Type type);
+        /** True if the named allocation is struct-backed (stored in the
+         *  byte-indexed word scratch described by print_storage_element_type). */
+        bool struct_backed_allocation(const std::string &name);
+        /** Reassemble a scalar value out of struct-backed scratch (a u32 array
+         *  with one word per byte). `idx` is the element index as Halide emits
+         *  it (in units of the value's own size); the slot index is derived
+         *  internally. Returns a WGSL expression. */
+        std::string load_struct_scratch(const std::string &name,
+                                       const std::string &idx, Type t);
+        /** Split a scalar value into bytes and store them into struct-backed
+         *  scratch (the mirror image of load_struct_scratch). Emits
+         *  statements. */
+        void store_struct_scratch(const std::string &name,
+                                 const std::string &idx,
+                                 const std::string &value, Type t);
         std::string print_assignment(Type t, const std::string &rhs) override;
         std::string print_const(Type t, const std::string &rhs);
         std::string print_assignment_or_const(Type t, const std::string &rhs,
@@ -247,6 +268,11 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
     if (type.is_float()) {
         user_assert(type.bits() == 32) << "WGSL only supports 32-bit floats";
         oss << "f32";
+    } else if (type.is_handle()) {
+        // A handle (pointer) is 64 bits wide and has no representation in shader
+        // code. The main way one reaches here is a mutex lock handed to a kernel,
+        // which is rejected earlier (see FindAtomicMutex in add_kernel).
+        user_error << "WebGPU does not support handle types in shader code.\n";
     } else {
         switch (type.bits()) {
         case 1:
@@ -257,8 +283,12 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
         case 32:
             oss << (type.is_uint() ? "u" : "i") << "32";
             break;
+        case 64:
+            user_error << "WebGPU does not support 64-bit integers.\n";
+            break;
         default:
-            user_error << "Invalid integer bitwidth for WGSL";
+            user_error << "Can't represent an integer with this many bits in WGSL: "
+                       << type << "\n";
             break;
         }
     }
@@ -280,11 +310,151 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
     return oss.str();
 }
 
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_storage_element_type(Type type) {
+    // WGSL has no struct type, so a struct-typed allocation is stored as
+    // byte-indexed word scratch: Halide indexes such scratch in units of one
+    // byte, so it needs one storage slot per byte. Note this is an indexing
+    // convention, not memory layout: WGSL arrays are addressed in elements, and
+    // each slot here is a full u32 whose low 8 bits hold one struct byte
+    // (WGSL's 8-bit scalars are gated behind a Dawn experimental extension, so
+    // - like the D3D12 backend, which has no 8-bit type either - we widen each
+    // byte to a u32).
+    if (type.is_struct()) {
+        return "u32";
+    }
+    return print_type(type);
+}
+
+bool CodeGen_WebGPU_Dev::CodeGen_WGSL::struct_backed_allocation(const string &name) {
+    if (const auto *alloc = allocations.find(name)) {
+        return alloc->type.is_struct();
+    }
+    auto it = workgroup_allocations.find(name);
+    if (it != workgroup_allocations.end()) {
+        return it->second->type.is_struct();
+    }
+    return false;
+}
+
+namespace {
+// Halide indexes struct-backed scratch in units of the accessed value's own size
+// (what the C-derived backends get by casting the allocation pointer to the
+// field type). Since the scratch has one slot per byte, the slot index is
+// idx * size. NOTE: the result is a slot index into the u32 array, *not* a
+// byte offset into linear memory.
+string byte_slot_index(const string &idx, int size) {
+    return size == 1 ? idx : ("(" + idx + " * " + std::to_string(size) + ")");
+}
+}  // namespace
+
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::load_struct_scratch(const string &name,
+                                                             const string &idx, Type t) {
+    // Reassemble a scalar value of type t from t.bytes() consecutive slots of
+    // struct-backed scratch (see print_storage_element_type).
+    //
+    // Halide indexes struct-backed scratch in units of the accessed value's own
+    // size (exactly what the Metal/D3D12 backends get for free by casting the
+    // allocation pointer to the field type), so the slot index is the index
+    // times the value size (see byte_slot_index). Bytes are packed
+    // little-endian *within the assembled u32 word* (not a memory-order claim:
+    // no byte-addressed memory is involved). This matches the convention already
+    // baked into this backend's emulate_narrow_load path and the equivalent fix
+    // in the Vulkan backend.
+    //
+    // Each slot is a u32 whose low 8 bits hold one byte, so the assembled word
+    // is a u32 that we reinterpret (never numerically convert) into the
+    // register type this backend uses for t (i32 for Int, u32 for UInt, f32 for
+    // Float).
+    const int n = t.bytes();
+    user_assert(n == 1 || n == 2 || n == 4)
+        << "WGSL does not support struct fields of type " << t;
+    const string slot = byte_slot_index(idx, n);
+
+    string w;
+    for (int i = 0; i < n; i++) {
+        string byte = "(" + name + "[" + slot + (i ? " + " + std::to_string(i) : "") + "] & 255u)";
+        if (i != 0) {
+            byte = "(" + byte + " << " + std::to_string(8 * i) + "u)";
+        }
+        w = w.empty() ? byte : ("(" + w + " | " + byte + ")");
+    }
+
+    if (t.is_bool()) {
+        return "(" + w + " != 0u)";
+    } else if (t.is_float()) {
+        user_assert(t.bits() == 32) << "WGSL only supports 32-bit floats";
+        return "bitcast<f32>(" + w + ")";
+    } else if (t.is_uint()) {
+        // The assembled word is already zero-extended into u32, which is the
+        // register type this backend uses for every uint.
+        return w;
+    } else if (n == 4) {
+        return "bitcast<i32>(" + w + ")";
+    } else {
+        // w holds 0..2^(8n)-1, so the i32 conversion is exact; shift left/right
+        // to sign-extend.
+        const string shift = std::to_string(32 - 8 * n);
+        return "(i32(" + w + ") << " + shift + ") >> " + shift;
+    }
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::store_struct_scratch(const string &name,
+                                                            const string &idx,
+                                                            const string &value, Type t) {
+    // Mirror image of load_struct_scratch(): split the (already printed) value
+    // into t.bytes() consecutive slots, packing little-endian within the value's
+    // u32 word representation.
+    const int n = t.bytes();
+    user_assert(n == 1 || n == 2 || n == 4)
+        << "WGSL does not support struct fields of type " << t;
+    const string slot = byte_slot_index(idx, n);
+
+    // Raw bits as a u32 word, taken without numerically converting the value.
+    // Narrow values live in i32 (signed) or u32 (unsigned) registers; the low
+    // n bytes are the value either way.
+    const string w = t.is_bool() ? "select(0u, 1u, " + value + ")" :
+                     t.is_uint() ? value :
+                                   "bitcast<u32>(" + value + ")";
+
+    for (int i = 0; i < n; i++) {
+        string byte = w;
+        if (i != 0) {
+            byte = "(" + byte + " >> " + std::to_string(8 * i) + "u)";
+        }
+        byte = "(" + byte + " & 255u)";
+        stream << get_indent() << name << "[" << slot
+               << (i ? " + " + std::to_string(i) : "") << "] = " << byte << ";\n";
+    }
+}
+
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     const Stmt &s, const string &name, const vector<DeviceArgument> &args) {
     debug(2) << "Adding WGSL shader " << name << "\n";
 
     kernel_name = name;
+
+    // Halide serializes an atomic update it can't prove safe by wrapping it in a
+    // mutex (AddAtomicMutex.cpp). Reject that here, *before* emitting the kernel
+    // arguments: the lock is host memory, so it arrives as a handle argument, and
+    // printing that type would otherwise die with an opaque "handle/64-bit" error
+    // instead of naming the real problem. (A shader can't call into the runtime to
+    // take a lock; and even where it could spin on one, WebGPU gives no guarantee
+    // that a whole workgroup is co-resident, so a held lock risks deadlock.)
+    // Same restriction as the other GPU backends: see CodeGen_PTX_Dev.cpp,
+    // CodeGen_OpenCL_Dev.cpp and CodeGen_D3D12Compute_Dev.cpp.
+    class FindAtomicMutex : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Atomic *op) override {
+            user_assert(op->mutex_name.empty())
+                << "The atomic update requires a mutex lock, which is not supported in WebGPU.\n";
+            IRVisitor::visit(op);
+        }
+    };
+    {
+        FindAtomicMutex fam;
+        s.accept(&fam);
+    }
 
     // Look for buffer accesses that will require emulation via atomics.
     class FindBufferAccessesRequiringEmulation : public IRVisitor {
@@ -388,14 +558,22 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     close_scope("shader " + name);
 
     for (const auto &[name, alloc] : workgroup_allocations) {
+        // A struct is stored as byte-indexed u32 scratch: one slot per struct
+        // byte (print_storage_element_type emits u32), so the declared slot
+        // count must be scaled from elements to bytes.
+        const int struct_bytes = alloc->type.bytes();
         std::stringstream length;
-        if (is_const(alloc->extents[0])) {
-            length << alloc->extents[0];
+        if (const auto n = as_const_int(alloc->extents[0])) {
+            length << (alloc->type.is_struct() ? *n * struct_bytes : *n);
+        } else if (alloc->type.is_struct()) {
+            // The byte budget is in bytes, and the array has one slot per byte,
+            // so the slot count is the budget itself.
+            length << "workgroup_mem_bytes";
         } else {
-            length << "workgroup_mem_bytes / " << alloc->type.bytes();
+            length << "workgroup_mem_bytes / " << struct_bytes;
         }
         stream << "var<workgroup> " << print_name(name)
-               << " : array<" << print_type(alloc->type) << ", "
+               << " : array<" << print_storage_element_type(alloc->type) << ", "
                << length.str() << ">;\n";
     }
     workgroup_allocations.clear();
@@ -428,14 +606,15 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        // A struct is stored as a raw byte array (print_storage_type emits a byte
-        // element type), so size is an element count and must be scaled to bytes.
+        // A struct is stored as byte-indexed u32 scratch: one slot per struct
+        // byte (print_storage_element_type emits u32), so size is an element
+        // count and must be scaled to a slot count (bytes).
         if (op->type.is_struct()) {
             size *= op->type.bytes();
         }
 
         stream << get_indent() << "var " << print_name(op->name)
-               << " : array<" << print_type(op->type) << ", " << size << ">;\n";
+               << " : array<" << print_storage_element_type(op->type) << ", " << size << ">;\n";
 
         Allocation alloc;
         alloc.type = op->type;
@@ -700,9 +879,14 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
     const string name = print_name(op->name);
     const string bits_str = std::to_string(bits);
     const string elements = std::to_string(32 / bits);
+    const bool struct_backed = struct_backed_allocation(op->name);
 
     // Cast a loaded value to the result type if necessary,
     auto cast_if_needed = [&](const string &value) {
+        if (struct_backed) {
+            // load_struct_scratch() already produced the result type.
+            return value;
+        }
         if (result_type != alloc_type) {
             return print_type(result_type) + "(" + value + ")";
         } else {
@@ -733,7 +917,12 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
     const string idx = print_expr(op->index);
     if (op->type.is_scalar()) {
         string rhs;
-        if (buffers_with_emulated_accesses.count(op->name)) {
+        if (struct_backed_allocation(op->name)) {
+            // Struct-backed scratch is one u32 per byte; reassemble the field's
+            // bytes (bit-reinterpreting, not converting) rather than reading a
+            // single element.
+            rhs = load_struct_scratch(name, idx, result_type);
+        } else if (buffers_with_emulated_accesses.count(op->name)) {
             if (bits == 32) {
                 rhs = "bitcast<" + print_type(result_type) +
                       ">(atomicLoad(&" + name + "[" + idx + "]))";
@@ -755,7 +944,9 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
             stream << get_indent() << id << "[" << i << "] = ";
             const string idx_i = idx + "[" + std::to_string(i) + "]";
             string rhs;
-            if (buffers_with_emulated_accesses.count(op->name)) {
+            if (struct_backed_allocation(op->name)) {
+                rhs = load_struct_scratch(name, idx_i, result_type);
+            } else if (buffers_with_emulated_accesses.count(op->name)) {
                 if (bits == 32) {
                     rhs = concat_strings("bitcast<", print_type(result_type),
                                          ">(atomicLoad(&", name, "[", idx_i, "]))");
@@ -840,6 +1031,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
 
     // Cast a value to the store type if necessary,
     auto cast_if_needed = [&](const string &value) {
+        if (struct_backed_allocation(op->name)) {
+            // store_struct_scratch() reinterprets the raw bits itself.
+            return value;
+        }
         if (alloc_type != value_type) {
             return print_type(alloc_type) + "(" + value + ")";
         } else {
@@ -892,7 +1087,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
     const string rhs = print_expr(op->value);
 
     if (op->value.type().is_scalar()) {
-        if (buffers_with_emulated_accesses.count(op->name)) {
+        if (struct_backed_allocation(op->name)) {
+            // Struct-backed scratch is one u32 per byte; split the value into its
+            // bytes instead of storing into a single (wrongly-typed) element.
+            store_struct_scratch(name, idx, rhs, value_type);
+        } else if (buffers_with_emulated_accesses.count(op->name)) {
             if (bits == 32) {
                 stream << get_indent() << "atomicStore(&"
                        << name << "[" << idx << "], "
@@ -909,7 +1108,9 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
         for (int i = 0; i < op->value.type().lanes(); ++i) {
             const string idx_i = idx + "[" + std::to_string(i) + "]";
             string value_i = rhs + "[" + std::to_string(i) + "]";
-            if (buffers_with_emulated_accesses.count(op->name)) {
+            if (struct_backed_allocation(op->name)) {
+                store_struct_scratch(name, idx_i, value_i, value_type);
+            } else if (buffers_with_emulated_accesses.count(op->name)) {
                 if (bits == 32) {
                     stream << get_indent() << "atomicStore(&"
                            << name << "[" << idx_i << "], "

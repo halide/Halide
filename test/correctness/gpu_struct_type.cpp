@@ -62,6 +62,41 @@ void run_variant(const char *name, float d_offset, int code_mul, MemoryType prod
     }
 }
 
+void run_bool_variant(MemoryType producer_storage, bool vectorize) {
+    Type block_t = Type::Struct({{"flags", Bool(), 8}});
+    Var i("i"), blk("blk"), bo("bo"), bi("bi");
+    Func producer("bool_producer"), result("bool_result");
+    std::vector<Expr> vals;
+    for (int k = 0; k < 8; k++) {
+        vals.push_back((blk + k) % 3 == 0);
+    }
+    producer(blk) = pack_struct(block_t, vals);
+    result(i, blk) = select(field(producer(blk), "flags")[i], 17, -9);
+
+    result.gpu_tile(blk, bo, bi, 4);
+    if (vectorize) {
+        result.vectorize(i, 4);
+    }
+    producer.compute_at(result, producer_storage == MemoryType::GPUShared ? bo : bi);
+    if (producer_storage == MemoryType::GPUShared) {
+        producer.store_in(MemoryType::GPUShared);
+        producer.gpu_threads(blk);
+    }
+
+    Buffer<int> out = result.realize({8, 8});
+    out.copy_to_host();
+    for (int b = 0; b < 8; b++) {
+        for (int k = 0; k < 8; k++) {
+            int expected = (b + k) % 3 == 0 ? 17 : -9;
+            if (out(k, b) != expected) {
+                printf("gpu_struct_type (bool, shared=%d, vectorize=%d): result(%d, %d) = %d instead of %d\n",
+                       producer_storage == MemoryType::GPUShared, vectorize, k, b, out(k, b), expected);
+                exit(1);
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
@@ -71,6 +106,10 @@ int main(int argc, char **argv) {
 
     run_variant("gpu_threads compute_at", 0.5f, 3, MemoryType::Register);
     run_variant("gpu shared compute_at", 1.5f, 5, MemoryType::GPUShared);
+    for (MemoryType storage : {MemoryType::Register, MemoryType::GPUShared}) {
+        run_bool_variant(storage, false);
+        run_bool_variant(storage, true);
+    }
 
     printf("Success!\n");
     return 0;
