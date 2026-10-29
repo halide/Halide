@@ -6,11 +6,41 @@ namespace Internal {
 using std::vector;
 
 Expr IRMutator::mutate(const Expr &e) {
-    return e.defined() ? e.get()->mutate_expr(this) : Expr();
+    // The switch is in a lambda so that clang simplifies it into a single
+    // indexed virtual call before it is inlined.
+    auto dispatch = [&](const BaseExprNode *op) -> Expr {
+        switch (op->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        return visit((const T *)op);
+            HALIDE_FOR_EACH_IR_EXPR(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+        default:
+            unknown_node_type_error(op->node_type);
+        }
+    };
+    if (!e.defined()) {
+        return Expr();
+    }
+    return dispatch(e.get());
 }
 
 Stmt IRMutator::mutate(const Stmt &s) {
-    return s.defined() ? s.get()->mutate_stmt(this) : Stmt();
+    auto dispatch = [&](const BaseStmtNode *op) -> Stmt {
+        switch (op->node_type) {
+#define HALIDE_VISIT_CASE(T) \
+    case IRNodeType::T:      \
+        return visit((const T *)op);
+            HALIDE_FOR_EACH_IR_STMT(HALIDE_VISIT_CASE)
+#undef HALIDE_VISIT_CASE
+        default:
+            unknown_node_type_error(op->node_type);
+        }
+    };
+    if (!s.defined()) {
+        return Stmt();
+    }
+    return dispatch(s.get());
 }
 
 Expr IRMutator::visit(const IntImm *op) {

@@ -3,6 +3,7 @@
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "Var.h"
 
 namespace {
