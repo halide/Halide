@@ -293,10 +293,36 @@ public:
         throw py::value_error("Unsupported Buffer<> type.");
     }
 
+    void copy_from(const Buffer &other) {
+        check_copy_from(other);
+        runtime_buffer().copy_from(other.runtime_buffer());
+    }
+
 private:
     void require_defined() const {
         if (!defined_) {
             throw py::value_error("Undefined buffer");
+        }
+    }
+
+    // Runtime::Buffer::copy_from() reads the source at the destination's
+    // element size and crops both buffers along the destination's dimensions,
+    // so a mismatch in either reads (and crops) past the end of the source.
+    void check_copy_from(const Buffer &other) const {
+        require_defined();
+        other.require_defined();
+        const RuntimeBuffer &dst = runtime_buffer();
+        const RuntimeBuffer &src = other.runtime_buffer();
+        if (src.dimensions() != dst.dimensions()) {
+            std::ostringstream out;
+            out << "Cannot copy a buffer with " << src.dimensions() << " dimensions into a buffer with "
+                << dst.dimensions() << " dimensions.";
+            throw py::value_error(out.str().c_str());
+        }
+        if (src.type().bytes() != dst.type().bytes()) {
+            std::ostringstream out;
+            out << "Cannot copy a buffer of type " << src.type() << " into a buffer of type " << dst.type() << ".";
+            throw py::value_error(out.str().c_str());
         }
     }
 
@@ -382,7 +408,7 @@ void define_buffer(py::module_ &m) {
         .def("set_host_dirty", [](Buffer &b, bool dirty) { b.runtime_buffer().set_host_dirty(dirty); }, py::arg("dirty") = true)
         .def("set_device_dirty", [](Buffer &b, bool dirty) { b.runtime_buffer().set_device_dirty(dirty); }, py::arg("dirty") = true)
         .def("copy", [](const Buffer &b) { return Buffer::from_runtime(b.runtime_buffer().copy(), unique_name(), true); })
-        .def("copy_from", [](Buffer &b, const Buffer &other) { b.runtime_buffer().copy_from(other.runtime_buffer()); })
+        .def("copy_from", &Buffer::copy_from)
         .def("reverse_axes", [](const Buffer &b) {
             std::vector<int> order;
             for (int i = b.runtime_buffer().dimensions() - 1; i >= 0; --i) {

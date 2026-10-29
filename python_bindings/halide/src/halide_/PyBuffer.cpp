@@ -145,6 +145,22 @@ void check_out_of_bounds(Buffer<> &buf, const std::vector<int> &pos) {
     }
 }
 
+// copy_from() reads the source at the destination's element size and crops
+// both buffers along the destination's dimensions, so a mismatch in either
+// reads (and crops) past the end of the source.
+void check_copy_from(const Buffer<> &dst, const Buffer<> &src) {
+    if (src.dimensions() != dst.dimensions()) {
+        std::ostringstream o;
+        o << "Cannot copy a buffer with " << src.dimensions() << " dimensions into a buffer with " << dst.dimensions() << " dimensions.";
+        throw py::value_error(o.str().c_str());
+    }
+    if (src.type().bytes() != dst.type().bytes()) {
+        std::ostringstream o;
+        o << "Cannot copy a buffer of type " << halide_type_to_string(src.type()) << " into a buffer of type " << halide_type_to_string(dst.type()) << ".";
+        throw py::value_error(o.str().c_str());
+    }
+}
+
 }  // namespace
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
@@ -358,7 +374,10 @@ void define_buffer(py::module_ &m) {
                  py::arg("dirty") = true)
 
             .def("copy", &Buffer<>::copy)
-            .def("copy_from", &Buffer<>::copy_from<void, Buffer<>::AnyDims>)
+            .def("copy_from", [](Buffer<> &b, const Buffer<> &other) -> void {
+                check_copy_from(b, other);
+                b.copy_from(other);  //
+            })
             .def("reverse_axes", [](Buffer<> &b) -> Buffer<> {
                 const int d = b.dimensions();
                 std::vector<int> order;
