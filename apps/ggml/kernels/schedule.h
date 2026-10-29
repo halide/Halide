@@ -2349,17 +2349,14 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
 // q4_1 at M = 8 and 12, their decode staged per tile of 8 acts).
 // One kernel: both behind out's specialization (dot's, done on the host).
 inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m) {
-    using namespace Internal;
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    Func rows = dot.clone_in(out);
-    Stage mm = Stage(out).specialize(M >= min_m && N >= 32);
-    Definition d = out.function().definition().specializations().back().definition;
-    for (Expr &v : d.values()) {
-        v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
-            if (c->name != rows.name()) return self->visit_base(c);
-            return Call::make(dot.function(), c->args, c->value_index, c->func.follow_global_wrappers);
-        });
-    }
+    // out reads dot through a wrapper (via): the gemm's branch inlines it at
+    // once, reading dot; then via reads the clone, and the other branches
+    // inline it, reading the clone
+    Func via = dot.in(out);
+    Stage mm = Stage(out).specialize(M >= min_m && N >= 32).eager_inline(via);
+    Func rows = dot.clone_in(via);
+    out.eager_inline(via);
     metal_mm(mm, out, dot, wh, xh, r, fmt, rs);
     metal_rows(out, rows, r, rs, fmt.sub);
 }
