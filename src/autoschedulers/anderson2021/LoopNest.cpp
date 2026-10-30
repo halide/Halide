@@ -319,12 +319,14 @@ std::vector<int> LoopNest::unrolled_loops(const Target &target,
                                           const LoopNest *parent,
                                           const LoopNest *grandparent) const {
     internal_assert(innermost);
-    const auto &grandparent_bounds = grandparent->get_bounds(node);
     std::vector<int> unrolled(parent->size.size(), 0);
 
+    // This also covers loops directly under the root, which have no grandparent.
     if (parent->node != node) {
         return unrolled;
     }
+
+    const auto &grandparent_bounds = grandparent->get_bounds(node);
 
     int64_t total_extent = 1;
     for (size_t i = 0; i < parent->size.size(); i++) {
