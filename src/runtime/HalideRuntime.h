@@ -25,7 +25,7 @@
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
 #define HALIDE_VERSION_MAJOR 22
-#define HALIDE_VERSION_MINOR 0
+#define HALIDE_VERSION_MINOR 1
 #define HALIDE_VERSION_PATCH 0
 
 #ifdef __cplusplus

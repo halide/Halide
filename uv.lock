@@ -26,18 +26,18 @@ build-constraints = [
 
 [[manifest.dependency-metadata]]
 name = "halide"
-version = "22.0.0"
+version = "22.1.0"
 requires-dist = ["halide-bin", "halide-runtime", "imageio>=2", "pillow ; platform_machine == 'armv7l' or platform_machine == 'armv8l'"]
 requires-python = ">=3.12"
 
 [[manifest.dependency-metadata]]
 name = "halide-bin"
-version = "22.0.0"
+version = "22.1.0"
 requires-python = ">=3.12"
 
 [[manifest.dependency-metadata]]
 name = "halide-runtime"
-version = "22.0.0"
+version = "22.1.0"
 requires-dist = ["numpy>=1.26"]
 requires-python = ">=3.12"
 
@@ -379,7 +379,7 @@ wheels = [
 
 [[package]]
 name = "halide"
-version = "22.0.0"
+version = "22.1.0"
 source = { editable = "python_bindings/halide" }
 dependencies = [
     { name = "halide-bin" },
@@ -399,7 +399,7 @@ requires-dist = [
 
 [[package]]
 name = "halide-bin"
-version = "22.0.0"
+version = "22.1.0"
 source = { editable = "python_bindings/halide-bin" }
 
 [[package]]
@@ -464,7 +464,7 @@ wheels = [
 
 [[package]]
 name = "halide-runtime"
-version = "22.0.0"
+version = "22.1.0"
 source = { editable = "python_bindings/halide-runtime" }
 dependencies = [
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },

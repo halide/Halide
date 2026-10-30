@@ -104,7 +104,7 @@ build-constraint-dependencies = ["numpy!=2.4.6,!=2.5.2"]
 # base versions are kept in sync with the release version by tbump below.
 [[tool.uv.dependency-metadata]]
 name = "halide"
-version = "22.0.0"
+version = "22.1.0"
 requires-python = ">=3.12"
 requires-dist = [
   "halide-bin",
@@ -115,20 +115,20 @@ requires-dist = [
 
 [[tool.uv.dependency-metadata]]
 name = "halide-runtime"
-version = "22.0.0"
+version = "22.1.0"
 requires-python = ">=3.12"
 requires-dist = ["numpy>=1.26"]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-bin"
-version = "22.0.0"
+version = "22.1.0"
 requires-python = ">=3.12"
 
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"
 
 [tool.tbump.version]
-current = "22.0.0"
+current = "22.1.0"
 regex = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
 
 [tool.tbump.git]
