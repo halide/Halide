@@ -214,7 +214,7 @@ The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
 CMake can find LLVM, set the following cache variable:
 
 ```shell
-$ cmake ... -DHalide_ROOT=/opt/homebrew/opt/llvm
+$ cmake ... -DHalide_LLVM_ROOT=/opt/homebrew/opt/llvm
 ```
 
 Or use the `macOS` CMake preset, which does this for you.
