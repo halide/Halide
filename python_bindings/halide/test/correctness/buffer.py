@@ -756,6 +756,32 @@ def test_buffer_contiguous_requests():
             assert False, "a non-contiguous buffer satisfied a contiguous request"
 
 
+def test_copy_from_mismatched_buffers():
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        dst = buffer_type(np.zeros(16, dtype=np.float32))
+        src = buffer_type(np.full(16, 7, dtype=np.uint8))
+        try:
+            dst.copy_from(src)
+        except ValueError as e:
+            assert "type uint8 into a buffer of type float32" in str(e)
+        else:
+            assert False, "copy_from accepted a source with a different element size"
+
+        dst = buffer_type(np.zeros((2,) * 6, dtype=np.uint8))
+        src = buffer_type(np.zeros((2,) * 5, dtype=np.uint8))
+        try:
+            dst.copy_from(src)
+        except ValueError as e:
+            assert "with 5 dimensions into a buffer with 6" in str(e)
+        else:
+            assert False, "copy_from accepted a source with a different dimensionality"
+
+        # Element types of the same size still copy.
+        dst = buffer_type(np.zeros(4, dtype=np.uint8))
+        dst.copy_from(buffer_type(np.array([True, False, True, True])))
+        assert np.array_equal(np.asarray(dst), [1, 0, 1, 1])
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -770,6 +796,7 @@ if __name__ == "__main__":
     test_buffer_export_lifetime()
     test_buffer_ndarray_dtypes()
     test_buffer_contiguous_requests()
+    test_copy_from_mismatched_buffers()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()
