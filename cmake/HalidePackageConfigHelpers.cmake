@@ -92,16 +92,18 @@ function(_Halide_install_pkgdeps)
     set(installPrefix "$<$<PATH:IS_RELATIVE,${ARG_DESTINATION}>:\${CMAKE_INSTALL_PREFIX}/>")
 
     # Private dependencies on shared libraries are recorded in the
-    # per-configuration files (as IMPORTED_LINK_DEPENDENT_LIBRARIES), so read
-    # those along with the main export file.
+    # per-configuration file (as IMPORTED_LINK_DEPENDENT_LIBRARIES), so read
+    # it along with the main export file.
     cmake_path(GET ARG_EXPORT_FILE STEM LAST_ONLY exportStem)
+    set(exportDir "\$ENV{DESTDIR}${installPrefix}${ARG_DESTINATION}")
     _Halide_install_code(
-        "file(GLOB export_files \"\$ENV{DESTDIR}${installPrefix}${ARG_DESTINATION}/${exportStem}*.cmake\")"
-        "set(target_cmake \"\")"
-        "foreach (export_file IN LISTS export_files)"
-        "  file(READ \"\${export_file}\" export_contents)"
-        "  string(APPEND target_cmake \"\${export_contents}\")"
-        "endforeach ()"
+        "file(READ \"${exportDir}/${ARG_EXPORT_FILE}\" target_cmake)"
+        "string(TOLOWER \"\${CMAKE_INSTALL_CONFIG_NAME}\" export_config)"
+        "set(config_file \"${exportDir}/${exportStem}-\${export_config}.cmake\")"
+        "if (EXISTS \"\${config_file}\")"
+        "  file(READ \"\${config_file}\" config_contents)"
+        "  string(APPEND target_cmake \"\${config_contents}\")"
+        "endif ()"
         "file(WRITE \"${depFile}.in\" \"\")"
     )
 
