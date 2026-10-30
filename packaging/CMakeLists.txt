@@ -151,12 +151,17 @@ install(
     TYPE DOC
 )
 
+# The excluded directories hold Sphinx-only sources, which would otherwise be
+# installed as empty directories.
 install(
     DIRECTORY "${Halide_SOURCE_DIR}/doc"
     COMPONENT Halide_Documentation
     TYPE DOC
     FILES_MATCHING
     PATTERN "*.md"
+    PATTERN "_static" EXCLUDE
+    PATTERN "api" EXCLUDE
+    PATTERN "tutorial_website" EXCLUDE
 )
 
 ##
