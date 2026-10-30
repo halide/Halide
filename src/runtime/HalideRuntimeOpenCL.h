@@ -38,6 +38,11 @@ extern int halide_opencl_run(void *user_context,
 extern void halide_opencl_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
+
+/** Release all currently-unused device allocations back to the OpenCL
+ * driver. See halide_reuse_device_allocations. */
+extern int halide_opencl_release_unused_device_allocations(void *user_context);
+
 /** Set the platform name for OpenCL to use (e.g. "Intel" or
  * "NVIDIA"). The argument is copied internally. The opencl runtime
  * will select a platform that includes this as a substring. If never
