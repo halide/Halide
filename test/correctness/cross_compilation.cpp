@@ -15,11 +15,13 @@ int main(int argc, char **argv) {
 
     const std::string targets[] = {
         "arm-32-android",
+        "arm-32-freebsd",
         "arm-32-ios",
         "arm-32-linux",
         "arm-32-noos-semihosting",
         "arm-64-android",
         "arm-64-android-hvx",
+        "arm-64-freebsd",
         "arm-64-ios",
         "arm-64-ios-armv8a",
         "arm-64-ios-armv81a",
@@ -40,9 +42,11 @@ int main(int argc, char **argv) {
         "arm-64-windows-d3d12compute-hlsl_sm66",
         "arm-64-windows-d3d12compute-hlsl_sm69",
         "wasm-32-wasmrt",
+        "x86-32-freebsd",
         "x86-32-linux",
         "x86-32-osx",
         "x86-32-windows",
+        "x86-64-freebsd",
         "x86-64-linux",
         "x86-64-osx",
         "x86-64-windows",
@@ -110,6 +114,15 @@ int main(int argc, char **argv) {
                 object_contents.find("_argv") == std::string::npos ||
                 object_contents.find("_metadata") == std::string::npos) {
                 std::cerr << "Windows object is missing exported AOT entry points: " << outputs.at(OutputFileType::object) << "\n";
+                return 1;
+            }
+        }
+
+        if (target.os == Target::FreeBSD) {
+            // The ELF header records the target OS ABI (ELFOSABI_FREEBSD).
+            const std::vector<char> object_data = Internal::read_entire_file(outputs.at(OutputFileType::object));
+            if (object_data.size() < 8 || object_data[7] != 9) {
+                std::cerr << "FreeBSD object does not have the FreeBSD ELF OS ABI: " << outputs.at(OutputFileType::object) << "\n";
                 return 1;
             }
         }
