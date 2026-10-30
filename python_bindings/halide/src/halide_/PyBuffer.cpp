@@ -161,6 +161,31 @@ void check_copy_from(const Buffer<> &dst, const Buffer<> &src) {
     }
 }
 
+// Validate a dimension index from Python before it reaches a
+// Halide::Runtime::Buffer<> method. Those methods guard the index only with
+// assert(), which is compiled out of release builds (including the wheels), so
+// without this an out-of-range axis reads, and for the in-place manipulators
+// writes, past the end of the buffer's dimension array. allow_end permits
+// d == dimensions(), which embed() uses to append a dimension.
+void check_dimension_index(const Buffer<> &buf, int d, bool allow_end = false) {
+    const int dims = buf.dimensions();
+    if (d < 0 || d > (allow_end ? dims : dims - 1)) {
+        std::ostringstream o;
+        o << "dimension " << d << " is out of range for a buffer with " << dims << " dimensions";
+        throw py::index_error(o.str().c_str());
+    }
+}
+
+// Validate the number of dimensions addressed by the vector forms (crop(rect),
+// translate(delta), transpose(order)), for the same reason. transpose needs an
+// exact match; crop and translate accept fewer.
+void check_dimension_count(const Buffer<> &buf, size_t n, bool exact) {
+    const int dims = buf.dimensions();
+    if (exact ? ((int)n != dims) : ((int)n > dims)) {
+        throw py::value_error("Incorrect number of dimensions.");
+    }
+}
+
 }  // namespace
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
@@ -398,118 +423,141 @@ void define_buffer(py::module_ &m) {
 
             .def("crop",  //
                  [](Buffer<> &b, int d, int min, int extent) -> void {
+                     check_dimension_index(b, d);
                      b.crop(d, min, extent);  //
                  },
                  py::arg("dimension"), py::arg("min"), py::arg("extent"))
             .def("crop",  //
                  [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> void {
+                     check_dimension_count(b, rect.size(), /*exact=*/false);
                      b.crop(rect);  //
                  },
                  py::arg("rect"))
 
             .def("cropped",  //
                  [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
+                     check_dimension_index(b, d);
                      return b.cropped(d, min, extent);  //
                  },
                  py::arg("dimension"), py::arg("min"), py::arg("extent"))
             .def("cropped",  //
                  [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
+                     check_dimension_count(b, rect.size(), /*exact=*/false);
                      return b.cropped(rect);  //
                  },
                  py::arg("rect"))
 
             .def("embed",  //
                  [](Buffer<> &b, int d, int pos) -> void {
+                     check_dimension_index(b, d, /*allow_end=*/true);
                      b.embed(d, pos);  //
                  },
                  py::arg("dimension"), py::arg("pos"))
             .def("embedded",  //
                  [](Buffer<> &b, int d, int pos) -> Buffer<> {
+                     check_dimension_index(b, d, /*allow_end=*/true);
                      return b.embedded(d, pos);  //
                  },
                  py::arg("dimension"), py::arg("pos"))
 
             .def("embed",  //
                  [](Buffer<> &b, int d) -> void {
+                     check_dimension_index(b, d, /*allow_end=*/true);
                      b.embed(d);  //
                  },
                  py::arg("dimension"))
             .def("embedded",  //
                  [](Buffer<> &b, int d) -> Buffer<> {
+                     check_dimension_index(b, d, /*allow_end=*/true);
                      return b.embedded(d);  //
                  },
                  py::arg("dimension"))
 
             .def("slice",  //
                  [](Buffer<> &b, int d, int pos) -> void {
+                     check_dimension_index(b, d);
                      b.slice(d, pos);  //
                  },
                  py::arg("dimension"), py::arg("pos"))
             .def("sliced",  //
                  [](Buffer<> &b, int d, int pos) -> Buffer<> {
+                     check_dimension_index(b, d);
                      return b.sliced(d, pos);  //
                  },
                  py::arg("dimension"), py::arg("pos"))
 
             .def("slice",  //
                  [](Buffer<> &b, int d) -> void {
+                     check_dimension_index(b, d);
                      b.slice(d);  //
                  },
                  py::arg("dimension"))
             .def("sliced",  //
                  [](Buffer<> &b, int d) -> Buffer<> {
+                     check_dimension_index(b, d);
                      return b.sliced(d);  //
                  },
                  py::arg("dimension"))
 
             .def("translate",  //
                  [](Buffer<> &b, int d, int dx) -> void {
+                     check_dimension_index(b, d);
                      b.translate(d, dx);  //
                  },
                  py::arg("dimension"), py::arg("dx"))
             .def("translate",  //
                  [](Buffer<> &b, const std::vector<int> &delta) -> void {
+                     check_dimension_count(b, delta.size(), /*exact=*/false);
                      b.translate(delta);  //
                  },
                  py::arg("delta"))
 
             .def("translated",  //
                  [](Buffer<> &b, int d, int dx) -> Buffer<> {
+                     check_dimension_index(b, d);
                      return b.translated(d, dx);  //
                  },
                  py::arg("dimension"), py::arg("dx"))
             .def("translated",  //
                  [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
+                     check_dimension_count(b, delta.size(), /*exact=*/false);
                      return b.translated(delta);  //
                  },
                  py::arg("delta"))
 
             .def("transpose",  //
                  [](Buffer<> &b, int d1, int d2) -> void {
+                     check_dimension_index(b, d1);
+                     check_dimension_index(b, d2);
                      b.transpose(d1, d2);  //
                  },
                  py::arg("d1"), py::arg("d2"))
 
             .def("transposed",  //
                  [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+                     check_dimension_index(b, d1);
+                     check_dimension_index(b, d2);
                      return b.transposed(d1, d2);  //
                  },
                  py::arg("d1"), py::arg("d2"))
 
             .def("transpose",  //
                  [](Buffer<> &b, const std::vector<int> &order) -> void {
+                     check_dimension_count(b, order.size(), /*exact=*/true);
                      b.transpose(order);  //
                  },
                  py::arg("order"))
 
             .def("transposed",  //
                  [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
+                     check_dimension_count(b, order.size(), /*exact=*/true);
                      return b.transposed(order);  //
                  },
                  py::arg("order"))
 
             .def("dim",  //
                  [](Buffer<> &b, int dimension) -> BufferDimension {
+                     check_dimension_index(b, dimension);
                      return b.dim(dimension);  //
                  },
                  py::arg("dimension"), py::keep_alive<0, 1>()  // Keep Buffer<> alive while Dimension exists

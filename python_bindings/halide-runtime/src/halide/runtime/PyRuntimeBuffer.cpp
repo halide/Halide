@@ -45,6 +45,31 @@ float16_t value_cast<float16_t>(const py::object &value) {
     return float16_t(py::cast<double>(value));
 }
 
+// Validate a dimension index from Python before it reaches a
+// Halide::Runtime::Buffer<> method. Those methods guard the index only with
+// assert(), which is compiled out of release builds (including the wheels), so
+// without this an out-of-range axis reads, and for the in-place manipulators
+// writes, past the end of the buffer's dimension array. allow_end permits
+// d == dimensions(), which embed() uses to append a dimension.
+void check_dimension_index(const RuntimeBuffer &buf, int d, bool allow_end = false) {
+    const int dims = buf.dimensions();
+    if (d < 0 || d > (allow_end ? dims : dims - 1)) {
+        std::ostringstream o;
+        o << "dimension " << d << " is out of range for a buffer with " << dims << " dimensions";
+        throw py::index_error(o.str().c_str());
+    }
+}
+
+// Validate the number of dimensions addressed by the vector forms (crop(rect),
+// translate(delta), transpose(order)), for the same reason. transpose needs an
+// exact match; crop and translate accept fewer.
+void check_dimension_count(const RuntimeBuffer &buf, size_t n, bool exact) {
+    const int dims = buf.dimensions();
+    if (exact ? ((int)n != dims) : ((int)n > dims)) {
+        throw py::value_error("Incorrect number of dimensions.");
+    }
+}
+
 class Buffer {
 public:
     Buffer() = default;
@@ -419,27 +444,27 @@ void define_buffer(py::module_ &m) {
         .def("allocate", [](Buffer &b) { b.runtime_buffer().allocate(nullptr, nullptr); })
         .def("deallocate", [](Buffer &b) { b.runtime_buffer().deallocate(); })
         .def("device_deallocate", [](Buffer &b) { b.runtime_buffer().device_deallocate(); })
-        .def("crop", [](Buffer &b, int d, int min, int extent) { b.runtime_buffer().crop(d, min, extent); }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
-        .def("crop", [](Buffer &b, const std::vector<std::pair<int, int>> &rect) { b.runtime_buffer().crop(rect); }, py::arg("rect"))
-        .def("cropped", [](const Buffer &b, int d, int min, int extent) { return b.view(b.runtime_buffer().cropped(d, min, extent)); })
-        .def("cropped", [](const Buffer &b, const std::vector<std::pair<int, int>> &rect) { return b.view(b.runtime_buffer().cropped(rect)); })
-        .def("embed", [](Buffer &b, int d, int pos) { b.runtime_buffer().embed(d, pos); })
-        .def("embed", [](Buffer &b, int d) { b.runtime_buffer().embed(d); })
-        .def("embedded", [](const Buffer &b, int d, int pos) { return b.view(b.runtime_buffer().embedded(d, pos)); })
-        .def("embedded", [](const Buffer &b, int d) { return b.view(b.runtime_buffer().embedded(d)); })
-        .def("slice", [](Buffer &b, int d, int pos) { b.runtime_buffer().slice(d, pos); })
-        .def("slice", [](Buffer &b, int d) { b.runtime_buffer().slice(d); })
-        .def("sliced", [](const Buffer &b, int d, int pos) { return b.view(b.runtime_buffer().sliced(d, pos)); })
-        .def("sliced", [](const Buffer &b, int d) { return b.view(b.runtime_buffer().sliced(d)); })
-        .def("translate", [](Buffer &b, int d, int dx) { b.runtime_buffer().translate(d, dx); })
-        .def("translate", [](Buffer &b, const std::vector<int> &delta) { b.runtime_buffer().translate(delta); })
-        .def("translated", [](const Buffer &b, int d, int dx) { return b.view(b.runtime_buffer().translated(d, dx)); })
-        .def("translated", [](const Buffer &b, const std::vector<int> &delta) { return b.view(b.runtime_buffer().translated(delta)); })
-        .def("transpose", [](Buffer &b, int d1, int d2) { b.runtime_buffer().transpose(d1, d2); })
-        .def("transpose", [](Buffer &b, const std::vector<int> &order) { b.runtime_buffer().transpose(order); })
-        .def("transposed", [](const Buffer &b, int d1, int d2) { return b.view(b.runtime_buffer().transposed(d1, d2)); })
-        .def("transposed", [](const Buffer &b, const std::vector<int> &order) { return b.view(b.runtime_buffer().transposed(order)); })
-        .def("dim", [](Buffer &b, int dimension) { return b.runtime_buffer().dim(dimension); }, py::keep_alive<0, 1>())
+        .def("crop", [](Buffer &b, int d, int min, int extent) { check_dimension_index(b.runtime_buffer(), d); b.runtime_buffer().crop(d, min, extent); }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        .def("crop", [](Buffer &b, const std::vector<std::pair<int, int>> &rect) { check_dimension_count(b.runtime_buffer(), rect.size(), /*exact=*/false); b.runtime_buffer().crop(rect); }, py::arg("rect"))
+        .def("cropped", [](const Buffer &b, int d, int min, int extent) { check_dimension_index(b.runtime_buffer(), d); return b.view(b.runtime_buffer().cropped(d, min, extent)); })
+        .def("cropped", [](const Buffer &b, const std::vector<std::pair<int, int>> &rect) { check_dimension_count(b.runtime_buffer(), rect.size(), /*exact=*/false); return b.view(b.runtime_buffer().cropped(rect)); })
+        .def("embed", [](Buffer &b, int d, int pos) { check_dimension_index(b.runtime_buffer(), d, /*allow_end=*/true); b.runtime_buffer().embed(d, pos); })
+        .def("embed", [](Buffer &b, int d) { check_dimension_index(b.runtime_buffer(), d, /*allow_end=*/true); b.runtime_buffer().embed(d); })
+        .def("embedded", [](const Buffer &b, int d, int pos) { check_dimension_index(b.runtime_buffer(), d, /*allow_end=*/true); return b.view(b.runtime_buffer().embedded(d, pos)); })
+        .def("embedded", [](const Buffer &b, int d) { check_dimension_index(b.runtime_buffer(), d, /*allow_end=*/true); return b.view(b.runtime_buffer().embedded(d)); })
+        .def("slice", [](Buffer &b, int d, int pos) { check_dimension_index(b.runtime_buffer(), d); b.runtime_buffer().slice(d, pos); })
+        .def("slice", [](Buffer &b, int d) { check_dimension_index(b.runtime_buffer(), d); b.runtime_buffer().slice(d); })
+        .def("sliced", [](const Buffer &b, int d, int pos) { check_dimension_index(b.runtime_buffer(), d); return b.view(b.runtime_buffer().sliced(d, pos)); })
+        .def("sliced", [](const Buffer &b, int d) { check_dimension_index(b.runtime_buffer(), d); return b.view(b.runtime_buffer().sliced(d)); })
+        .def("translate", [](Buffer &b, int d, int dx) { check_dimension_index(b.runtime_buffer(), d); b.runtime_buffer().translate(d, dx); })
+        .def("translate", [](Buffer &b, const std::vector<int> &delta) { check_dimension_count(b.runtime_buffer(), delta.size(), /*exact=*/false); b.runtime_buffer().translate(delta); })
+        .def("translated", [](const Buffer &b, int d, int dx) { check_dimension_index(b.runtime_buffer(), d); return b.view(b.runtime_buffer().translated(d, dx)); })
+        .def("translated", [](const Buffer &b, const std::vector<int> &delta) { check_dimension_count(b.runtime_buffer(), delta.size(), /*exact=*/false); return b.view(b.runtime_buffer().translated(delta)); })
+        .def("transpose", [](Buffer &b, int d1, int d2) { check_dimension_index(b.runtime_buffer(), d1); check_dimension_index(b.runtime_buffer(), d2); b.runtime_buffer().transpose(d1, d2); })
+        .def("transpose", [](Buffer &b, const std::vector<int> &order) { check_dimension_count(b.runtime_buffer(), order.size(), /*exact=*/true); b.runtime_buffer().transpose(order); })
+        .def("transposed", [](const Buffer &b, int d1, int d2) { check_dimension_index(b.runtime_buffer(), d1); check_dimension_index(b.runtime_buffer(), d2); return b.view(b.runtime_buffer().transposed(d1, d2)); })
+        .def("transposed", [](const Buffer &b, const std::vector<int> &order) { check_dimension_count(b.runtime_buffer(), order.size(), /*exact=*/true); return b.view(b.runtime_buffer().transposed(order)); })
+        .def("dim", [](Buffer &b, int dimension) { check_dimension_index(b.runtime_buffer(), dimension); return b.runtime_buffer().dim(dimension); }, py::keep_alive<0, 1>())
         .def("for_each_element", [](Buffer &b, const py::callable &f) {
             std::vector<int> position(b.runtime_buffer().dimensions());
             b.runtime_buffer().for_each_element([&](const int *pos) {

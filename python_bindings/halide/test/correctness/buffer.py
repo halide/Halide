@@ -386,6 +386,62 @@ def test_oob():
         assert "index 6 is out of bounds for axis 1 with min=0, extent=6" in str(e)
 
 
+def _assert_raises(exc, fn):
+    try:
+        fn()
+    except exc:
+        return
+    assert False, f"Did not see expected {exc.__name__}!"
+
+
+# An out-of-range dimension index (as opposed to an element index, covered by
+# test_oob above) used to be forwarded straight to the Runtime::Buffer method,
+# whose only bounds guard is an assert() that is compiled out in release builds.
+# That read, and for the in-place manipulators wrote, past the dimension array.
+# Both Buffer types now reject it with an exception instead.
+def _check_dimension_oob(Buffer, Type):
+    def make():
+        return Buffer(Type, [4, 6])  # 2-D
+
+    # Single-axis manipulators: valid axes are 0 and 1.
+    for d in (2, -1):
+        _assert_raises(IndexError, lambda d=d: make().dim(d))
+        _assert_raises(IndexError, lambda d=d: make().crop(d, 0, 1))
+        _assert_raises(IndexError, lambda d=d: make().cropped(d, 0, 1))
+        _assert_raises(IndexError, lambda d=d: make().slice(d))
+        _assert_raises(IndexError, lambda d=d: make().sliced(d))
+        _assert_raises(IndexError, lambda d=d: make().translate(d, 1))
+        _assert_raises(IndexError, lambda d=d: make().translated(d, 1))
+    _assert_raises(IndexError, lambda: make().transpose(0, 2))
+    _assert_raises(IndexError, lambda: make().transposed(2, 0))
+
+    # embed accepts an axis one past the end (it appends), but not beyond.
+    make().embed(2)
+    make().embedded(2)
+    _assert_raises(IndexError, lambda: make().embed(3))
+    _assert_raises(IndexError, lambda: make().embedded(3))
+
+    # Vector forms: too many dimensions, or (for transpose) a non-matching count.
+    _assert_raises(ValueError, lambda: make().crop([(0, 1), (0, 1), (0, 1)]))
+    _assert_raises(ValueError, lambda: make().translate([0, 0, 0]))
+    _assert_raises(ValueError, lambda: make().transpose([0]))
+    _assert_raises(ValueError, lambda: make().transposed([0]))
+
+    # Valid indices still work.
+    b = make()
+    assert b.dim(1).extent() == 6
+    assert b.cropped(0, 0, 2).dim(0).extent() == 2
+    assert b.transposed(0, 1).dim(0).extent() == 6
+
+
+def test_oob_dimension():
+    _check_dimension_oob(hl.Buffer, hl.Int(16))
+
+
+def test_oob_dimension_runtime():
+    _check_dimension_oob(hlr.Buffer, hlr.Type(0, 16))
+
+
 def test_cropped_buffer():
     """
     Test that Buffer.cropped
@@ -809,5 +865,7 @@ if __name__ == "__main__":
     test_buffer_to_str()
     test_scalar_buffers()
     test_oob()
+    test_oob_dimension()
+    test_oob_dimension_runtime()
     test_cropped_buffer()
     test_translated_buffer()
