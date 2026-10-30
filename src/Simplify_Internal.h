@@ -235,13 +235,13 @@ public:
         // infer everything there is to infer about a constant. The best we can
         // do at this point is just wrap to the right number of bits.
         int dropped_bits = 64 - t.bits();
+        // Shift left as unsigned, since left-shifting a negative value is UB.
         if (t.is_int()) {
-            c <<= dropped_bits;
+            c = (int64_t)((uint64_t)c << dropped_bits);
             c >>= dropped_bits;  // sign-extend
         } else if (t.is_uint()) {
             // For uints, normalization is considerably less problematic
-            c <<= dropped_bits;
-            c = (int64_t)(((uint64_t)c >> dropped_bits));  // zero-extend
+            c = (int64_t)(((uint64_t)c << dropped_bits) >> dropped_bits);  // zero-extend
         }
         return c;
     }
