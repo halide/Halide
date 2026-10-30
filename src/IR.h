@@ -1247,19 +1247,18 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle is an in-place transpose of a single vector. The
-     * factor is the number of columns of the source matrix, or equivalently,
-     * the number of rows of the destination matrix, interpreting a vector as a
-     * matrix stored row-major. */
-    bool is_transpose() const;
-    int transpose_factor() const;
+    /** If this shuffle is an in-place transpose of a single vector, returns the
+     * number of columns of the source matrix, or equivalently the number of rows
+     * of the destination matrix, interpreting a vector as a matrix stored
+     * row-major. Otherwise returns nullopt. */
+    std::optional<int> is_transpose() const;
 
-    /** Check if this shuffle can be represented as a repeating pattern that
-     * repeats the same shuffle of the single input vector some number of times.
+    /** If this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of
+     * times, returns the number of repetitions. Otherwise returns nullopt.
      * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
      */
-    bool is_broadcast() const;
-    int broadcast_factor() const;
+    std::optional<int> is_broadcast() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
