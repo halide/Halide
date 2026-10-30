@@ -558,7 +558,13 @@ if (WITH_SERIALIZATION)
     find_package(FlatBuffers REQUIRED)
     _Halide_pkgdep(FlatBuffers NAMESPACE flatbuffers)
 
-    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    # Prefer the static library, but some distributions (e.g. Arch) only
+    # build the shared one.
+    if (TARGET flatbuffers::flatbuffers)
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    else ()
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers_shared)
+    endif ()
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
     set(fb_dir "${Halide_BINARY_DIR}/include/flatc")
