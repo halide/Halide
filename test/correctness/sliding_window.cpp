@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <algorithm>
 #include <stdio.h>
 
 using namespace Halide;
@@ -14,6 +15,31 @@ extern "C" void *my_malloc(JITUserContext *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
     exit(1);
 }
+
+// Reports the size of a producer's allocation, or 0 if it isn't constant.
+class AllocationSizeOf : public Internal::IRMutator {
+    const std::string producer;
+
+    using IRMutator::visit;
+
+    Internal::Stmt visit(const Internal::Allocate *op) override {
+        if (op->name == producer) {
+            int64_t total = 1;
+            for (const auto &e : op->extents) {
+                total *= Internal::as_const_int(e).value_or(0);
+            }
+            size = (int)total;
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    int size = 0;
+
+    AllocationSizeOf(std::string producer)
+        : producer(std::move(producer)) {
+    }
+};
 
 int main(int argc, char **argv) {
     Var x, y;
@@ -394,6 +420,55 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding in registers over two loops at once. A rolled register array
+        // only carries values across the innermost loop it lives in, so f can
+        // roll over x but not also over yi. If it tries to do both, the values
+        // it expects to still be there from the previous yi were overwritten
+        // by the sweep of the x loop.
+        Var yo, yi;
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1);
+
+        g.split(y, yo, yi, 4);
+        f.store_at(g, yo).compute_at(g, x).store_in(MemoryType::Register);
+
+        Buffer<int> im = g.realize({12, 12});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = (x * 3 + y) + ((x - 1) * 3 + y) + (x * 3 + y - 1);
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // A consumer that clamps its coordinate, so that the region required
+        // of the producer is flat for a while and then starts moving. The loop
+        // can't be rewound to warm this up, because rewinding it doesn't move
+        // the window; it has to warm up on the first iteration instead.
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(max(x, 4), y) + f(max(x, 4) + 2, y);
+
+        f.store_root().compute_at(g, x);
+
+        Buffer<int> im = g.realize({15, 15});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = std::max(x, 4) * 3 + y + (std::max(x, 4) + 2) * 3 + y;
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // Sliding a producer along the outer loop of a pair of outputs fused
         // together with compute_with. Previously triggered an internal compiler
         // error referencing a missing .loop_min symbol on the fused loop.
@@ -436,6 +511,148 @@ int main(int argc, char **argv) {
         if (count != 10) {
             printf("f1 was called %d times instead of %d times\n", count, 10);
             return 1;
+        }
+    }
+
+    {
+        // Two funcs sliding over the same loop, where one consumes the other,
+        // and the outer func also consumes both. Both need to warm up their
+        // windows, but over different numbers of iterations.
+        // Sliding warms up its window by computing a little more than is
+        // required at the edges, so give the input some slack.
+        Buffer<int> input(9, 9);
+        input.set_min(-4, -4);
+        input.fill([](int x, int y) { return x * 100 + y; });
+
+        Var yo, yi;
+        Func f, g, h;
+        f(x, y) = input(x, y);
+        g(x, y) = (f(x + 1, y) + f(x - 1, y)) * 2;
+        h(x, y) = (f(x + 1, y) + f(x - 1, y)) + (g(x + 1, y) + g(x - 1, y));
+
+        h.never_partition_all().split(y, yo, yi, 1, TailStrategy::RoundUp);
+        h.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);
+        f.never_partition_all().store_at(h, yo).compute_at(h, x);
+        g.never_partition_all().store_root().compute_at(h, x);
+
+        Buffer<int> im = h.realize({1, 1});
+        // f(x, y) = 100x + y, so g(x, y) = 400x + 4y, and
+        // h(0, 0) = (100 + -100) + (400 + -400) = 0. Any coordinate mix-up
+        // moves this, unlike a constant input.
+        int correct = 0;
+        if (im(0, 0) != correct) {
+            printf("h(0, 0) = %d instead of %d\n", im(0, 0), correct);
+            return 1;
+        }
+    }
+
+    {
+        // g is computed inside h's production and slides over the outermost
+        // loop, while f and h both slide over yi and warm up their windows by
+        // rewinding it. g has to start when h's warm-up does - any earlier and
+        // it runs extra times, which corrupts its own sliding.
+        const int size = 15;
+        Var yo, yi;
+        Buffer<int> ref;
+        for (int slide = 0; slide < 2; slide++) {
+            Func f, g, h, out;
+            f(x, y) = x * 3 + y;
+            g(x, y) = f(x * 2 - 1, y * 2 - 1) + f(x * 2, y * 2 + 2);
+            h(x, y) = (f(x, y + 1) + f(x, y - 2)) +
+                      (g(x / 2 + 2, y / 2 - 2) + g(x / 2 - 2, y / 2 + 2));
+            out(x, y) = h(x * 2 + 1, y * 2 - 2) + h(x * 2 + 1, y * 2 + 2);
+
+            if (slide) {
+                out.split(y, yo, yi, 4, TailStrategy::RoundUp);
+                f.store_at(out, yo).compute_at(out, yi);
+                g.store_at(out, Var::outermost()).compute_at(h, Var::outermost());
+                h.store_at(out, yo).compute_at(out, yi);
+            } else {
+                f.compute_root();
+                g.compute_root();
+                h.compute_root();
+            }
+
+            Buffer<int> im = out.realize({size, size});
+            if (!slide) {
+                ref = im;
+            } else {
+                for (int y = 0; y < size; y++) {
+                    for (int x = 0; x < size; x++) {
+                        if (im(x, y) != ref(x, y)) {
+                            printf("out(%d, %d) = %d instead of %d\n",
+                                   x, y, im(x, y), ref(x, y));
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    {
+        // Bounds inference emits a .min/.max let per enclosing loop level, and
+        // sliding rewrites each one with a bound valid where it sits. Here acc
+        // walks rt carrying step, which slides along it. The panel feeding
+        // step is the same for every row, so it can be computed outside the
+        // loop over groups of rows, at a different level from step. Either way
+        // it is read at one step and nowhere else, so its allocation should be
+        // one step's worth, not the whole walk.
+        const int W = 8, Y = 4, R = 2, N = 16;
+        for (bool panel_outside_row_loop : {false, true}) {
+            Var t("t"), yo("yo"), yw("yw"), yi("yi");
+            RDom rt(0, N, "rt");
+            RDom rx(0, W, "rx");
+
+            Func panel("panel"), step("step"), acc("acc"), out("out");
+            panel(x, t) = cast<float>(x + t);
+            step(y, t) = 0.f;
+            step(y, t) += panel(rx, t) + y;
+            acc(x, y) = 0.f;
+            acc(x, y) = acc(x, y) * (step(y, rt) - step(y, rt - 1)) + panel(x, rt);
+            out(x, y) = acc(x, y);
+
+            out.bound(x, 0, W).bound(y, 0, Y).split(y, yo, yi, Y).compute_root();
+            acc.compute_at(out, yo);
+            acc.update().split(y, yw, yi, R).reorder(x, yi, yw, rt);
+            step.store_at(out, yo).compute_at(acc, yw);
+            if (panel_outside_row_loop) {
+                panel.compute_at(acc, rt);
+            } else {
+                panel.compute_at(acc, yw);
+            }
+
+            AllocationSizeOf alloc(panel.name());
+            out.add_custom_lowering_pass(&alloc, nullptr);
+            Buffer<float> result = out.realize({W, Y});
+
+            auto step_of = [&](int yy, int tt) {
+                float s = 0;
+                for (int j = 0; j < W; j++) {
+                    s += (float)(j + tt) + yy;
+                }
+                return s;
+            };
+            for (int yy = 0; yy < Y; yy++) {
+                for (int j = 0; j < W; j++) {
+                    float a = 0;
+                    for (int i = 0; i < N; i++) {
+                        a = a * (step_of(yy, i) - step_of(yy, i - 1)) + (float)(j + i);
+                    }
+                    if (result(j, yy) != a) {
+                        printf("out(%d, %d) = %f instead of %f\n", j, yy,
+                               (double)result(j, yy), a);
+                        return 1;
+                    }
+                }
+            }
+            if (alloc.size != W) {
+                printf("With the panel computed %s it was allocated %d "
+                       "elements instead of %d\n",
+                       panel_outside_row_loop ? "outside the row loop" : "with everything else",
+                       alloc.size, W);
+                return 1;
+            }
         }
     }
 

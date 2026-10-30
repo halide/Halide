@@ -3684,6 +3684,15 @@ Func &Func::hoist_storage(const Func &f, const Var &var) {
     return hoist_storage(LoopLevel(f, var));
 }
 
+Func &Func::slide(const Func &f, const VarOrRVar &var) {
+    invalidate_cache();
+    // The dimension is named rather than the loop, because after splitting
+    // there may be no single loop that corresponds to it. Calls accumulate,
+    // because a window can slide over more than one dimension at once.
+    func.schedule().slide_levels().emplace_back(f, var);
+    return *this;
+}
+
 Func &Func::hoist_storage_root() {
     return hoist_storage(LoopLevel::root());
 }
