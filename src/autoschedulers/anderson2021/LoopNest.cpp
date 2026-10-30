@@ -366,7 +366,6 @@ bool accessed_at_constant_indices(const std::vector<int> &unrolled, const Functi
 void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target,
                                                             StageMap<Sites> &sites,
                                                             NodeMap<bool> &can_be_promoted_to_registers,
-                                                            const LoopNest *grandparent,
                                                             const LoopNest *parent) const {
     for (const auto *alloc_node : store_at) {
         const auto &store_site = sites.get(&alloc_node->stages[0]);
@@ -379,13 +378,17 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
     }
 
     for (const auto &c : children) {
-        c->get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, parent, this);
-    }
+        c->get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, this);
 
-    if (innermost) {
-        auto unrolled = unrolled_loops(target, parent, grandparent);
+        // Handle innermost loops here, where both their parent (this) and
+        // grandparent (our parent) are known.
+        if (!c->innermost) {
+            continue;
+        }
 
-        for (const auto *e : stage->incoming_edges) {
+        auto unrolled = c->unrolled_loops(target, this, parent);
+
+        for (const auto *e : c->stage->incoming_edges) {
             if (sites.get(&e->producer->stages[0]).gpu_store_memory_type != GPUMemoryType::Local) {
                 continue;
             }
@@ -461,7 +464,7 @@ void LoopNest::get_sites(const Target &target,
 
 bool LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const {
     NodeMap<bool> can_be_promoted_to_registers;
-    get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, nullptr, nullptr);
+    get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, nullptr);
 
     for (auto &node : can_be_promoted_to_registers) {
         if (!node.second) {
