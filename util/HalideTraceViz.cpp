@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <list>
 #include <map>
 #include <memory>
@@ -1144,8 +1145,16 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         // via the commandline, which is handy for experimentations.
         flag_processor(&state);
 
-        // allocate the surface after all tags and flags are processed
-        surface = std::make_unique<Surface>(state.globals.frame_size);
+        // allocate the surface after all tags and flags are processed.
+        // frame_size can come from a trace tag, and Surface sizes and
+        // indexes its layers with int arithmetic, so the pixel count
+        // must fit in an int.
+        const Point &frame_size = state.globals.frame_size;
+        if (frame_size.x <= 0 || frame_size.y <= 0 ||
+            (int64_t)frame_size.x * frame_size.y > std::numeric_limits<int>::max()) {
+            fail() << "Invalid frame size: " << frame_size.x << "x" << frame_size.y;
+        }
+        surface = std::make_unique<Surface>(frame_size);
 
         if (state.globals.auto_layout_grid.x < 0 || state.globals.auto_layout_grid.y < 0) {
             int cells_needed = 0;
