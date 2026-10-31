@@ -100,6 +100,14 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
+
+    // WebGPU via Node requires all references to any GPU objects be released,
+    // otherwise the process will not exit.
+    input.device_free();
+    output.device_free();
+    input_no_host.device = 0;
+    output_no_host.device = 0;
+    halide_device_release(nullptr, interface);
 #else
     printf("[SKIP] No GPU target enabled.\n");
 #endif
