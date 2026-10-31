@@ -146,14 +146,14 @@ public:
         }
 
         for (size_t i = 0; i < storage_strides.size(); ++i) {
-            if (!valid(i)) {
-                aslog(2) << "stride " << i << ": invalid\n";
-                continue;
-            }
             aslog(2) << "storage_stride " << i << ": " << storage_strides[i] << "\n";
         }
 
         for (size_t i = 0; i < index_strides.size(); ++i) {
+            if (!valid(i)) {
+                aslog(2) << "index_stride " << i << ": invalid\n";
+                continue;
+            }
             for (size_t j = 0; j < index_strides[i].size(); ++j) {
                 aslog(2) << "index_stride " << i << ", storage_stride " << j << ": " << index_strides[i][j] << " ";
             }
