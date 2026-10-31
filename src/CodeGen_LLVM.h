@@ -54,6 +54,8 @@ struct ExternSignature;
 
 namespace Internal {
 
+struct StmtSourceMap;
+
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
  * for taking a Halide Stmt and producing llvm bitcode, machine
@@ -64,6 +66,20 @@ class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
     static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
+
+    ~CodeGen_LLVM() override;
+
+    /** If set, compile() emits debug info that points into this printed
+     * Module, which must be a printing of the Module passed to it. If null,
+     * and the target has the DebugSymbols feature, compile() prints the
+     * Module itself, and the debug info refers to a file named after it. */
+    const StmtSourceMap *debug_source = nullptr;
+
+    /** For targets with the DebugSymbolsConceptual feature: the printing of
+     * the conceptual Stmt of the Module that the debug info points into. If
+     * null, compile() prints it itself, and the debug info refers to a file
+     * named after the Module. */
+    const StmtSourceMap *debug_conceptual_source = nullptr;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
@@ -188,6 +204,37 @@ protected:
     bool in_strict_float = false;
     bool any_strict_float = false;
 
+    /** Debug info state for targets with the DebugSymbols feature. Null
+     * otherwise, and outside of compile(). */
+    struct DebugInfo;
+    std::unique_ptr<DebugInfo> debug_info;
+
+    /** Describe a named value to the debugger, if there is debug info. An
+     * arg_no above zero makes it the arg_no-th parameter of the function. */
+    void add_debug_variable(const std::string &name, const Type &type, llvm::Value *value, unsigned arg_no = 0);
+
+    /** Set up debug_info for the module being generated, pointing into
+     * source, a printing of input, or if conceptual is set, into
+     * conceptual_source, a printing of the conceptual Stmt of input.
+     * Printings that are null are made from input. With line_tables_only, it
+     * only says which code came from where. */
+    void init_debug_info(const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
+                         const Module *input, bool conceptual, bool line_tables_only);
+
+    /** If there is debug info, give the function being generated a
+     * subprogram, starting at where node was printed. If node is null, it is
+     * the function of the Module being compiled. A null return_type is void.
+     * The args say whether each argument is a buffer, and its type. */
+    void begin_debug_function(const std::string &name, const std::string &linkage_name,
+                              const IRNode *node, const Type *return_type,
+                              const std::vector<std::pair<bool, Type>> &args);
+
+    /** Finish the subprogram of the function being generated, if any. */
+    void end_debug_function();
+
+    /** Finish the debug info of the module being generated, if any. */
+    void finalize_debug_info();
+
     /** Emit any target-specific fence required after non-temporal stores. */
     virtual void emit_streaming_store_fence();
 
@@ -251,8 +298,8 @@ protected:
     llvm::Type *void_t = nullptr, *i1_t = nullptr, *i8_t = nullptr, *i16_t = nullptr, *i32_t = nullptr, *i64_t = nullptr, *f16_t = nullptr, *f32_t = nullptr, *f64_t = nullptr;
     llvm::PointerType *ptr_t = nullptr;
     llvm::StructType *halide_buffer_t_type = nullptr,
-                     *type_t_type,
-                     *dimension_t_type,
+                     *type_t_type = nullptr,
+                     *dimension_t_type = nullptr,
                      *metadata_t_type = nullptr,
                      *argument_t_type = nullptr,
                      *scalar_value_t_type = nullptr,
@@ -810,9 +857,12 @@ private:
 
 }  // namespace Internal
 
-/** Given a Halide module, generate an llvm::Module. */
+/** Given a Halide module, generate an llvm::Module. See
+ * CodeGen_LLVM::debug_source and debug_conceptual_source for those. */
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
-                                           llvm::LLVMContext &context);
+                                           llvm::LLVMContext &context,
+                                           const Internal::StmtSourceMap *debug_source = nullptr,
+                                           const Internal::StmtSourceMap *debug_conceptual_source = nullptr);
 
 }  // namespace Halide
 

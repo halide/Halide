@@ -208,6 +208,9 @@ struct Target {
         HLSL_SM68 = halide_target_feature_hlsl_sm68,
         HLSL_SM69 = halide_target_feature_hlsl_sm69,
         NoMetadata = halide_target_feature_no_metadata,
+        DebugSymbols = halide_target_feature_debug_symbols,
+        DebugSymbolsConceptual = halide_target_feature_debug_symbols_conceptual,
+        GPUDebugSymbols = halide_target_feature_gpu_debug_symbols,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

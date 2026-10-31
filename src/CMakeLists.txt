@@ -442,7 +442,7 @@ target_sources(Halide PRIVATE "${Halide_SOURCE_DIR}/tools/Halide.natvis")
 
 set(C_TEMPLATE_FILES CodeGen_C_prologue CodeGen_C_vectors)
 
-set(HTML_TEMPLATE_FILES StmtToHTML_dependencies.html StmtToHTML.js StmtToHTML.css)
+set(HTML_TEMPLATE_FILES StmtToHTML.js StmtToHTML.css)
 
 ##
 # Build and import the runtime.

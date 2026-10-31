@@ -17,6 +17,7 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
+#include "IRPrinter.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
@@ -340,10 +341,51 @@ JITModule::JITModule() {
     jit_module = new JITModuleContents();
 }
 
+namespace {
+
+// Debug info of JIT-compiled code points into a .stmt file in the temp
+// directory, named after its contents so that recompiling the same pipeline
+// reuses it.
+std::string write_jit_stmt_file(const std::string &module_name, const std::string &text, const std::string &extension) {
+    llvm::MD5 md5;
+    md5.update(text);
+    llvm::MD5::MD5Result digest = md5.final();
+    llvm::SmallString<32> checksum;
+    llvm::MD5::stringifyResult(digest, checksum);
+
+    llvm::SmallString<256> path;
+    llvm::sys::path::system_temp_directory(/* ErasedOnReboot */ true, path);
+    llvm::sys::path::append(path, "halide-jit-" + module_name + "-" + checksum.str().substr(0, 16).str() + extension);
+    if (!llvm::sys::fs::exists(path)) {
+        std::error_code error;
+        llvm::raw_fd_ostream out(path, error);
+        if (error) {
+            debug(1) << "Could not write " << path.str().str() << ": " << error.message() << "\n";
+        } else {
+            out << text;
+        }
+    }
+    debug(1) << "Debug info of JIT module " << module_name << " refers to " << path.str().str() << "\n";
+    return path.str().str();
+}
+
+}  // namespace
+
 JITModule::JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies) {
     jit_module = new JITModuleContents();
-    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, *jit_module->context));
+    std::optional<StmtSourceMap> debug_source, conceptual_source;
+    if (m.target().has_feature(Target::DebugSymbols)) {
+        debug_source = print_with_source_map(m);
+        debug_source->path = write_jit_stmt_file(m.name(), debug_source->text, ".stmt");
+    } else if (m.target().has_feature(Target::DebugSymbolsConceptual)) {
+        conceptual_source = print_with_source_map(m.get_conceptual_stmt());
+        conceptual_source->path = write_jit_stmt_file(m.name(), conceptual_source->text, ".conceptual.stmt");
+    }
+    std::unique_ptr<llvm::Module> llvm_module(
+        compile_module_to_llvm_module(m, *jit_module->context,
+                                      debug_source ? &*debug_source : nullptr,
+                                      conceptual_source ? &*conceptual_source : nullptr));
     std::vector<JITModule> deps_with_runtime = dependencies;
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
@@ -415,9 +457,13 @@ void compile_module_impl(
                             llvm::jitlink::JITLinkMemoryManager &
 #endif
                         ) {
-            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
+            auto layer = std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
+            if (target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) {
+                layer->registerJITEventListener(*llvm::JITEventListener::createGDBRegistrationListener());
+            }
+            return layer;
         };
     } else {
         linkerBuilder = [](llvm::orc::ExecutionSession &session
@@ -439,6 +485,35 @@ void compile_module_impl(
                                   .setCompileFunctionCreator(compilerBuilder)
                                   .setObjectLinkingLayerCreator(linkerBuilder)
                                   .create());
+
+    if ((target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) &&
+        llvm::isa<llvm::orc::ObjectLinkingLayer>(JIT->getObjLinkingLayer())) {
+        // Tell debuggers about the code, through the GDB JIT interface. The
+        // functions that register it with the debugger are looked up among
+        // the symbols of the process, which do not include them when LLVM is
+        // linked statically, so define them there. They are also exported
+        // from libHalide (see exported_symbols.ldscript/.osx) for the lookups
+        // that go through dlsym.
+        if (llvm::orc::JITDylibSP process = JIT->getProcessSymbolsJITDylib()) {
+            llvm::orc::SymbolMap symbols;
+            auto define = [&](const char *name, auto *fn) {
+                symbols[JIT->mangleAndIntern(name)] =
+                    llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(fn), llvm::JITSymbolFlags::Exported);
+            };
+            define("llvm_orc_registerJITLoaderGDBAllocAction", &llvm_orc_registerJITLoaderGDBAllocAction);
+#if LLVM_VERSION < 220
+            define("llvm_orc_registerJITLoaderGDBWrapper", &llvm_orc_registerJITLoaderGDBWrapper);
+#endif
+            if (llvm::Error error = process->define(llvm::orc::absoluteSymbols(std::move(symbols)))) {
+                debug(1) << "Could not define the debugger registration functions for JIT code: "
+                         << llvm::toString(std::move(error)) << "\n";
+            }
+        }
+        if (llvm::Error error = llvm::orc::enableDebuggerSupport(*JIT)) {
+            debug(1) << "Could not enable debugger support for JIT code: "
+                     << llvm::toString(std::move(error)) << "\n";
+        }
+    }
 
     auto ctors = llvm::orc::getConstructors(*m);
     llvm::orc::CtorDtorRunner ctorRunner(JIT->getMainJITDylib());

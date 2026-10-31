@@ -964,7 +964,9 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
         llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage, wrapper_name, module.get());
     llvm::BasicBlock *block =
         llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    IRBuilderBase::InsertPoint here = builder->saveIP();
+    IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
+    // This code belongs to another function, with no debug info.
+    builder->SetCurrentDebugLocation(DebugLoc());
     builder->SetInsertPoint(block);
 
     if (split_arg0) {
@@ -991,8 +993,6 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
 
     // Available regardless of SME streaming mode
     wrapper->addFnAttr("aarch64_pstate_sm_compatible");
-
-    builder->restoreIP(here);
 
     llvm::verifyFunction(*wrapper);
     return wrapper;
@@ -2661,7 +2661,9 @@ void CodeGen_ARM::visit(const Call *op) {
             fn = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, op->name, module.get());
 
             llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
-            IRBuilderBase::InsertPoint here = builder->saveIP();
+            IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
+            // This code belongs to another function, with no debug info.
+            builder->SetCurrentDebugLocation(DebugLoc());
             builder->SetInsertPoint(block);
 
             // Body
@@ -2677,7 +2679,6 @@ void CodeGen_ARM::visit(const Call *op) {
             fn->addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(*context, 1, 16));
             fn->addFnAttr(llvm::Attribute::NoInline);
             internal_assert(!verifyFunction(*fn, &llvm::errs()));
-            builder->restoreIP(here);
         }
         value = builder->CreateCall(fn, {});
         return;

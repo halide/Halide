@@ -49,6 +49,15 @@ public:
 
     void set_kernel_max_registers(int n) override;
 
+    void set_line_info(const Stmt &conceptual_stmt, const StmtSourceMap *conceptual_source, bool in_code) override {
+        debug_source = conceptual_source;
+        line_info_in_code = in_code;
+    }
+
+    DeviceCodeLines device_code_lines() override {
+        return lines;
+    }
+
     static void test();
 
     std::vector<char> compile_to_src() override;
@@ -63,6 +72,10 @@ public:
     }
 
 protected:
+    // Whether the line information stays in the PTX, and the PTX with it.
+    bool line_info_in_code = false;
+    DeviceCodeLines lines;
+
     using CodeGen_LLVM::visit;
 
     /** What the schedule asked for, if anything. Zero leaves it to ptxas. */
@@ -234,6 +247,13 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     function->setCallingConv(llvm::CallingConv::PTX_Kernel);
 
+    std::vector<std::pair<bool, Type>> debug_args;
+    debug_args.reserve(args.size());
+    for (const auto &arg : args) {
+        debug_args.emplace_back(arg.is_buffer, arg.type);
+    }
+    begin_debug_function(name, name, stmt.get(), nullptr, debug_args);
+
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
@@ -262,7 +282,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     debug(1) << "Generating llvm bitcode for kernel...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
-    stmt.accept(this);
+    codegen(stmt);
 
     // Now we need to end the function
     builder->CreateRetVoid();
@@ -304,6 +324,8 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                  << kernel_max_registers << " registers per thread\n";
     }
 
+    end_debug_function();
+
     // Now verify the function is ok
     verifyFunction(*function);
 
@@ -329,6 +351,10 @@ void CodeGen_PTX_Dev::init_module() {
 
     module = get_initial_module_for_ptx_device(target, context);
     init_builder();
+
+    if (debug_source) {
+        init_debug_info(debug_source, nullptr, nullptr, false, /* line_tables_only */ true);
+    }
 
     struct Intrinsic {
         const char *name;
@@ -1045,6 +1071,8 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
+    finalize_debug_info();
+
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
     /*int argc = sizeof(argv)/sizeof(char*);*/
@@ -1191,6 +1219,22 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
              << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
+    if (debug_source) {
+        lines.text = std::string(outstr.begin(), outstr.end());
+        if (!line_info_in_code) {
+            std::string ptx;
+            for (size_t start = 0; start < lines.text.size();) {
+                size_t end = std::min(lines.text.find('\n', start), lines.text.size());
+                std::string_view line = std::string_view(lines.text).substr(start, end - start);
+                if (!is_ptx_line_info(line)) {
+                    ptx.append(line);
+                    ptx.push_back('\n');
+                }
+                start = end + 1;
+            }
+            buffer.assign(ptx.begin(), ptx.end());
+        }
+    }
 
     // Dump the SASS too if the cuda SDK is in the path
     debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";

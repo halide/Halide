@@ -900,7 +900,9 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
                                "halide.hexagon." + name, module.get());
     llvm::BasicBlock *block =
         llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    IRBuilderBase::InsertPoint here = builder->saveIP();
+    IRBuilderBase::InsertPointGuard insert_point_guard(*builder);
+    // This code belongs to another function, with no debug info.
+    builder->SetCurrentDebugLocation(DebugLoc());
     builder->SetInsertPoint(block);
 
     vector<Value *> args;
@@ -975,8 +977,6 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
 
     // Always inline these wrappers.
     wrapper->addFnAttr(llvm::Attribute::AlwaysInline);
-
-    builder->restoreIP(here);
 
     llvm::verifyFunction(*wrapper);
     return wrapper;
