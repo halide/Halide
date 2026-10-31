@@ -114,7 +114,7 @@ building the core pieces of Halide.
 | ------------- | ------------------ | -------------------------- | ----------------------------------------------------------------------------------------- |
 | [LLVM]        | _see policy below_ | _always_                   | WebAssembly and X86 targets are required.                                                 |
 | [Clang]       | `==LLVM`           | _always_                   |                                                                                           |
-| [LLD]         | `==LLVM`           | _always_                   |                                                                                           |
+| [LLD]         | `==LLVM`           | `Halide_WASM_BACKEND` set  | Links Wasm modules for the in-process Wasm JIT.                                           |
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                                                           |
 | [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | In-process Wasm JIT only, never AOT (see below). Unstable API; exact version required.    |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | In-process Wasm JIT only, never AOT (see below). Difficult to build. See [WebAssembly.md] |
@@ -215,7 +215,7 @@ The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
 CMake can find LLVM, set the following cache variable:
 
 ```shell
-$ cmake ... -DHalide_ROOT=/opt/homebrew/opt/llvm
+$ cmake ... -DHalide_LLVM_ROOT=/opt/homebrew/opt/llvm
 ```
 
 Or use the `macOS` CMake preset, which does this for you.
@@ -478,11 +478,11 @@ in-process. This only affects Halide's WebAssembly _JIT_ (used by the self-tests
 and by JIT users targeting Wasm); it has **no effect on AOT compilation**, which
 emits a Wasm object file that runs in an external engine and needs neither wabt
 nor V8. If you don't plan to run Wasm via JIT, set `Halide_WASM_BACKEND=OFF` to
-drop the wabt/V8 dependency entirely — AOT Wasm codegen is unaffected.
+drop the wabt/V8 and LLD dependencies entirely — AOT Wasm codegen is unaffected.
 
-| Option                | Default | Description                                                                                                                                                           |
-| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Halide_WASM_BACKEND` | `wabt`  | Backend for the in-process Wasm JIT. Can be `wabt`, `V8`, or a false value such as `OFF`. `OFF` builds Halide without a Wasm JIT engine (and without its dependency). |
+| Option                | Default | Description                                                                                                                                                             |
+| --------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Halide_WASM_BACKEND` | `wabt`  | Backend for the in-process Wasm JIT. Can be `wabt`, `V8`, or a false value such as `OFF`. `OFF` builds Halide without a Wasm JIT engine (and without its dependencies). |
 
 ### Installing
 

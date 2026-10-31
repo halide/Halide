@@ -191,10 +191,26 @@ option(THREADS_PREFER_PTHREAD_FLAG
 )
 find_package(Threads REQUIRED)
 
+## WasmExecutor backend selection
+set(Halide_WASM_BACKEND "wabt" CACHE STRING "Which backend to use for Halide's WASM testing.")
+set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
+
+if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
+    message(WARNING "wabt is not yet supported on Windows")
+    set(Halide_WASM_BACKEND "OFF")
+endif ()
+
 ## LLVM
+
+# The WasmExecutor links WebAssembly modules in-process with LLD.
+set(Halide_LLVM_LLD "")
+if (Halide_WASM_BACKEND)
+    set(Halide_LLVM_LLD LLD)
+endif ()
+
 find_package(
     Halide_LLVM 21...99 REQUIRED  # Use 99 to fake a minimum-only constraint
-    COMPONENTS WebAssembly X86
+    COMPONENTS WebAssembly X86 ${Halide_LLVM_LLD}
     OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV
 )
 
