@@ -17,6 +17,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
+#include "OptimizeShuffles.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -2626,6 +2627,28 @@ void CodeGen_ARM::visit(const Ramp *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
+    if (op->is_intrinsic(Call::dynamic_shuffle) &&
+        op->type.is_vector() &&
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of(), target)) {
+        const int table_lanes = op->args[0].type().lanes();
+        // Each table register holds 16 (AArch64) or 8 (ARMv7) bytes.
+        const int reg_lanes = target.bits == 64 ? 16 : 8;
+        const int regs = (table_lanes + reg_lanes - 1) / reg_lanes;
+        // AArch64 tbl can produce 8 or 16 lanes. ARMv7 vtbl produces 8.
+        const int slice_lanes = (target.bits == 64 && op->type.lanes() > 8) ? 16 : 8;
+        const string intrin = target.bits == 64 ?
+                                  "llvm.aarch64.neon.tbl" + std::to_string(regs) + (slice_lanes == 8 ? ".v8i8" : ".v16i8") :
+                                  "llvm.arm.neon.vtbl" + std::to_string(regs);
+        Value *table = codegen(op->args[0]);
+        vector<Value *> tables;
+        tables.reserve(regs);
+        for (int i = 0; i < regs; i++) {
+            tables.push_back(slice_vector(table, i * reg_lanes, reg_lanes));
+        }
+        value = codegen_dynamic_shuffle(op, slice_lanes, intrin, tables);
+        return;
+    }
+
     if (op->is_intrinsic(Call::sorted_avg)) {
         value = codegen(halving_add(op->args[0], op->args[1]));
         return;
