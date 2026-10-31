@@ -129,6 +129,8 @@ DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(fopen)
 DECLARE_CPP_INITMOD(fopen_lfs)
 DECLARE_CPP_INITMOD(force_include_types)
+DECLARE_CPP_INITMOD(freebsd_host_cpu_count)
+DECLARE_CPP_INITMOD(freebsd_thread_id)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
 DECLARE_CPP_INITMOD(fuchsia_thread_id)
@@ -489,6 +491,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setOS(llvm::Triple::IOS);
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
+        } else if (target.os == Target::FreeBSD) {
+            triple.setOS(llvm::Triple::FreeBSD);
         }
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
@@ -515,6 +519,11 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::FreeBSD) {
+            triple.setOS(llvm::Triple::FreeBSD);
+            if (target.bits == 32) {
+                triple.setEnvironment(llvm::Triple::GNUEABIHF);
+            }
         } else if (target.os == Target::Windows) {
             user_assert(target.bits == 64) << "Windows ARM targets must be 64-bit.\n";
             triple.setVendor(llvm::Triple::PC);
@@ -576,6 +585,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
+        } else if (target.os == Target::FreeBSD) {
+            triple.setOS(llvm::Triple::FreeBSD);
         } else if (target.os == Target::Android) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::Android);
@@ -968,6 +979,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         add_posix_threads();
     };
 
+    const auto add_freebsd_posix_threads = [&] {
+        modules.push_back(get_initmod_freebsd_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
     const auto add_darwin_posix_threads = [&] {
         modules.push_back(get_initmod_osx_thread_id(c, bits_64, debug));
         add_posix_threads();
@@ -1000,6 +1016,17 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
                 add_linux_posix_threads();
+                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
+            } else if (t.os == Target::FreeBSD) {
+                add_allocator();
+                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_freebsd_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
+                add_freebsd_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
                 add_allocator();

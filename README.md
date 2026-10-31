@@ -5,7 +5,7 @@ high-performance image and array processing code on modern machines. Halide
 currently targets:
 
 - CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V, WebAssembly
-- Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
+- Operating systems: Linux, Windows, macOS, Android, iOS, FreeBSD, Qualcomm QuRT
 - GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft Direct X 12, Vulkan
 
 Rather than being a standalone programming language, Halide is embedded in C++.
