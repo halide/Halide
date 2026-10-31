@@ -2054,6 +2054,62 @@ void CodeGen_ARM::visit(const Load *op) {
     CodeGen_CPU::visit(op);
 }
 
+// If every operand of the shuffle is the same vector, return that vector and
+// rewrite the indices to refer to its lanes. Then look through any further
+// shuffles of that form beneath it (e.g. a transpose of a broadcast of a
+// vector, or an interleave of a vector with itself), composing the indices.
+// Returns an undefined Expr if the shuffle reads from distinct vectors.
+Expr compose_single_source_shuffles(const Shuffle *op, std::vector<int> &indices) {
+    auto single_source = [](const Shuffle *s) {
+        for (size_t i = 1; i < s->vectors.size(); i++) {
+            if (!equal(s->vectors[i], s->vectors[0])) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    if (!single_source(op)) {
+        return Expr();
+    }
+    indices = op->indices;
+    Expr src = op->vectors[0];
+    for (int &i : indices) {
+        i %= src.type().lanes();
+    }
+    while (const Shuffle *s = src.as<Shuffle>()) {
+        if (!single_source(s)) {
+            break;
+        }
+        const int lanes = s->vectors[0].type().lanes();
+        for (int &i : indices) {
+            i = s->indices[i] % lanes;
+        }
+        src = s->vectors[0];
+    }
+    return src;
+}
+
+// Check if the indices are of the form base + i / k for some k >= 2, i.e.
+// each of a run of consecutive elements is repeated k times. Excludes
+// broadcasts of a single element.
+bool is_repeat_each_element(const std::vector<int> &indices) {
+    const int n = (int)indices.size();
+    int k = 1;
+    while (k < n && indices[k] == indices[0]) {
+        k++;
+    }
+    if (k < 2 || k == n) {
+        return false;
+    }
+    for (int i = 0; i < n; i++) {
+        if (indices[i] != indices[0] + i / k) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void CodeGen_ARM::visit(const Shuffle *op) {
     // For small strided loads on non-Apple hardware, we may want to use vld2,
     // vld3, vld4, etc. These show up in the IR as slice shuffles of wide dense
@@ -2100,6 +2156,21 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     }
 
     if (target_vscale() == 0) {
+        // Repeating each element of a vector k times (e.g. from vectorizing
+        // f(x / k)) shows up as a transpose of a broadcast of a vector, or as
+        // an interleave of a vector with itself. The generic lowering of those
+        // forms produces several shuffles that LLVM can't fuse back together,
+        // while LLVM lowers a single shufflevector of this form to one tbl,
+        // zip, or dup per output vector on AArch64. (On 32-bit ARM LLVM's
+        // lowering of such shufflevectors is worse, so leave that alone.)
+        if (target.bits == 64 && op->type.bits() > 1) {
+            std::vector<int> indices;
+            Expr src = compose_single_source_shuffles(op, indices);
+            if (src.defined() && is_repeat_each_element(indices)) {
+                value = CodeGen_CPU::shuffle_vectors(codegen(src), indices);
+                return;
+            }
+        }
         CodeGen_CPU::visit(op);
         return;
     }
