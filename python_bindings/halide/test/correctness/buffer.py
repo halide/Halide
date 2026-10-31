@@ -782,6 +782,55 @@ def test_copy_from_mismatched_buffers():
         assert np.array_equal(np.asarray(dst), [1, 0, 1, 1])
 
 
+def test_dimension_out_of_range():
+    # crop/slice/dim and friends forward the dimension index to the runtime
+    # buffer, whose bounds check on it is an assert() that is gone in release
+    # builds. The bindings must reject an out-of-range dimension instead.
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+
+        def expect_raises(exc, fn):
+            try:
+                fn()
+            except exc:
+                pass
+            else:
+                assert False, f"{buffer_type.__name__}: expected {exc.__name__}"
+
+        # A fresh 2-D buffer per mutating call, so a bad index can't leave it
+        # in a half-modified state between checks.
+        def buf():
+            return buffer_type(np.zeros((4, 6), dtype=np.uint8))
+
+        expect_raises(IndexError, lambda: buf().dim(5))
+        expect_raises(IndexError, lambda: buf().dim(-1))
+        expect_raises(IndexError, lambda: buf().crop(5, 0, 1))
+        expect_raises(IndexError, lambda: buf().cropped(5, 0, 1))
+        expect_raises(IndexError, lambda: buf().slice(5, 0))
+        expect_raises(IndexError, lambda: buf().sliced(5, 0))
+        expect_raises(IndexError, lambda: buf().translate(5, 1))
+        expect_raises(IndexError, lambda: buf().translated(5, 1))
+        expect_raises(IndexError, lambda: buf().transpose(0, 5))
+        expect_raises(IndexError, lambda: buf().transposed(0, 5))
+        # embed() may name the dimension one past the end (2 here), but not beyond.
+        expect_raises(IndexError, lambda: buf().embed(9))
+        expect_raises(IndexError, lambda: buf().embedded(9))
+
+        # Vector overloads walk one dimension per entry.
+        expect_raises(ValueError, lambda: buf().crop([(0, 1)] * 5))
+        expect_raises(ValueError, lambda: buf().translate([0] * 5))
+        expect_raises(ValueError, lambda: buf().transpose([0, 1, 2]))
+
+        # In-range calls still work.
+        b = buf()
+        b.crop(0, 0, 2)
+        assert b.dim(0).extent() == 2
+        b = buf()
+        e0, e1 = b.dim(0).extent(), b.dim(1).extent()
+        bt = b.transposed(0, 1)
+        assert bt.dim(0).extent() == e1 and bt.dim(1).extent() == e0
+        assert buf().embedded(2).dimensions() == 3
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -797,6 +846,7 @@ if __name__ == "__main__":
     test_buffer_ndarray_dtypes()
     test_buffer_contiguous_requests()
     test_copy_from_mismatched_buffers()
+    test_dimension_out_of_range()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()
