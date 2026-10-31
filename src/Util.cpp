@@ -41,6 +41,13 @@ extern char **environ;
 #include <ucontext.h>      // For swapcontext
 #endif
 
+#ifdef __FreeBSD__
+#define CAN_GET_RUNNING_PROGRAM_NAME
+#include <climits>       // For PATH_MAX
+#include <sys/sysctl.h>  // For KERN_PROC_PATHNAME
+#include <ucontext.h>    // For swapcontext
+#endif
+
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
@@ -223,6 +230,11 @@ string running_program_name() {
     ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
 #elif defined(__APPLE__)
     ssize_t len = ::_NSGetExecutablePath(path, &size);
+#elif defined(__FreeBSD__)
+    // procfs is not mounted by default, so ask the kernel directly.
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+    size_t path_len = size;
+    ssize_t len = ::sysctl(mib, 4, path, &path_len, nullptr, 0) == 0 ? (ssize_t)path_len : -1;
 #endif
     if (len != -1) {
 #if defined(__linux__)
