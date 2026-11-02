@@ -821,11 +821,12 @@ Expr peel_store_permutations(const Store *op, Expr *index) {
     Expr value = op->value;
     *index = op->index;
     while (const Shuffle *shuffle = value.as<Shuffle>()) {
-        if (!shuffle->is_transpose()) {
+        auto factor = shuffle->is_transpose();
+        if (!factor) {
             break;
         }
         // Transposing both sides of the store cancels out.
-        const int rows = value.type().lanes() / shuffle->transpose_factor();
+        const int rows = value.type().lanes() / *factor;
         *index = Shuffle::make_transpose(*index, rows);
         value = shuffle->vectors[0];
     }
