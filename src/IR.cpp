@@ -1382,7 +1382,7 @@ std::optional<int> Shuffle::is_transpose() const {
     return cols;
 }
 
-bool Shuffle::is_slice() const {
+std::optional<Shuffle::Slice> Shuffle::is_slice() const {
     size_t input_lanes = 0;
     for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
@@ -1390,7 +1390,11 @@ bool Shuffle::is_slice() const {
 
     // A slice is a ramp where the output does not contain all of the
     // lanes of the input.
-    return indices.size() < input_lanes && is_ramp(indices, slice_stride());
+    const int stride = indices.size() >= 2 ? indices[1] - indices[0] : 1;
+    if (indices.size() < input_lanes && is_ramp(indices, stride)) {
+        return Slice{indices[0], stride};
+    }
+    return std::nullopt;
 }
 
 bool Shuffle::is_extract_element() const {

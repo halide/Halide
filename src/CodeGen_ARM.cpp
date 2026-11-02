@@ -83,16 +83,17 @@ class SubstituteInStridedLoads : public IRMutator {
     }
 
     Expr visit(const Shuffle *op) override {
-        int stride = op->slice_stride();
+        auto slice = op->is_slice();
         const Variable *var = op->vectors[0].as<Variable>();
         const Expr *vec = nullptr;
-        if (var &&
+        if (slice &&
+            var &&
             poisoned_vars.count(var->name) == 0 &&
             op->vectors.size() == 1 &&
-            2 <= stride && stride <= 4 &&
-            op->slice_begin() < stride &&
+            2 <= slice->stride && slice->stride <= 4 &&
+            slice->begin < slice->stride &&
             (vec = loads.find(var->name))) {
-            return Shuffle::make_slice({*vec}, op->slice_begin(), op->slice_stride(), op->type.lanes());
+            return Shuffle::make_slice({*vec}, slice->begin, slice->stride, op->type.lanes());
         } else {
             return IRMutator::visit(op);
         }
@@ -2072,14 +2073,15 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     // into native vectors, which triggers shuffle instructions rather than
     // vld2, vld3, vld4. So here we explicitly do the load as a single big dense
     // load.
-    int stride = op->slice_stride();
+    auto slice = op->is_slice();
+    const int stride = slice ? slice->stride : 0;
     const Load *load = op->vectors[0].as<Load>();
     if (target.os != Target::IOS && target.os != Target::MacOS &&
         load &&
         op->vectors.size() == 1 &&
-        op->is_slice() &&
+        slice &&
         2 <= stride && stride <= 4 &&
-        op->slice_begin() < stride &&
+        slice->begin < stride &&
         load->type.lanes() == stride * op->type.lanes()) {
 
 #if LLVM_VERSION >= 240
@@ -2098,7 +2100,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
             Value *loaded = codegen_dense_vector_load(slice_load.as<Load>(), nullptr, /* slice_to_native */ false);
             vector<int> indices(slice_lanes);
             for (int j = 0; j < slice_lanes; j++) {
-                indices[j] = op->slice_begin() + j * stride;
+                indices[j] = slice->begin + j * stride;
             }
             slices.push_back(CodeGen_CPU::shuffle_vectors(loaded, indices));
         }

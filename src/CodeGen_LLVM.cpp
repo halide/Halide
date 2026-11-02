@@ -4822,7 +4822,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
         // Do a concat and then a single shuffle
         value = concat_vectors(vecs);
-        if (op->is_slice() && op->slice_stride() == 1) {
+        if (auto slice = op->is_slice(); slice && slice->stride == 1) {
             value = slice_vector(value, op->indices[0], op->indices.size());
         } else {
             value = shuffle_vectors(value, op->indices);

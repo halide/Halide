@@ -1457,11 +1457,11 @@ void IRPrinter::visit(const Shuffle *op) {
         openf("extract_element");
         print_list(op->vectors);
         stream << paren(", ") << imm_int(op->indices[0]);
-    } else if (op->is_slice()) {
+    } else if (auto slice = op->is_slice()) {
         openf("slice_vectors");
         print_list(op->vectors);
-        stream << paren(", ") << imm_int(op->slice_begin())
-               << paren(", ") << imm_int(op->slice_stride())
+        stream << paren(", ") << imm_int(slice->begin)
+               << paren(", ") << imm_int(slice->stride)
                << paren(", ") << imm_int(op->indices.size());
     } else if (auto cols = op->is_transpose()) {
         openf("transpose_vector");

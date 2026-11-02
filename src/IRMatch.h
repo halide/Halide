@@ -2268,11 +2268,14 @@ struct SliceOp {
             return false;
         }
         const Shuffle &v = (const Shuffle &)e;
-        return v.vectors.size() == 1 &&
-               v.is_slice() &&
+        if (v.vectors.size() != 1) {
+            return false;
+        }
+        auto slice = v.is_slice();
+        return slice &&
                vec.template match<bound>(*v.vectors[0].get(), state) &&
-               base.template match<(bound | bindings<Vec>::mask)>(v.slice_begin(), state) &&
-               stride.template match<(bound | bindings<Vec>::mask | bindings<Base>::mask)>(v.slice_stride(), state) &&
+               base.template match<(bound | bindings<Vec>::mask)>(slice->begin, state) &&
+               stride.template match<(bound | bindings<Vec>::mask | bindings<Base>::mask)>(slice->stride, state) &&
                lanes.template match<(bound | bindings<Vec>::mask | bindings<Base>::mask | bindings<Stride>::mask)>(v.type.lanes(), state);
     }
 

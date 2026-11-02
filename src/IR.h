@@ -1278,13 +1278,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * vector arguments, and if so, the offset and stride of the
      * slice. */
     ///@{
-    bool is_slice() const;
-    int slice_begin() const {
-        return indices[0];
-    }
-    int slice_stride() const {
-        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
-    }
+    struct Slice {
+        int begin, stride;
+    };
+    std::optional<Slice> is_slice() const;
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector
