@@ -14,6 +14,7 @@ tests(
     aligned_split_partition.cpp
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
+    amx_matmul.cpp
     argmax.cpp
     arm_cpu_detect.cpp
     arm_dot_product_by_element.cpp
@@ -539,7 +540,6 @@ tests(
     target.cpp
     target_query.cpp
     thread_id_outside_block_id.cpp
-    tiled_matmul.cpp
     tiled_matmul_errors.cpp
     too_many_args.cpp
     tracing.cpp
@@ -615,6 +615,8 @@ tests(
     vulkan_bool_scalar_abi.cpp
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
+    wmma_matmul.cpp
+    wmma_row_max.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
     wrapper_never_used.cpp
