@@ -291,7 +291,7 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     auto addr = JIT.lookup(name);
     internal_assert(addr) << llvm::toString(addr.takeError()) << "\n";
 
-    void *f = (void *)addr->getValue();
+    void *f = (void *)addr->toPtr<void()>();
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -319,7 +319,7 @@ public:
                 iter = module.exports().find(name.substr(1));
             }
             if (iter != module.exports().end()) {
-                return (uint64_t)iter->second.address;
+                return llvm::orc::ExecutorAddr::fromPtr(iter->second.address).getValue();
             }
         }
         uint64_t result = SectionMemoryManager::getSymbolAddress(name);
@@ -369,6 +369,7 @@ void compile_module_impl(
     string error_string;
 
     llvm::for_each(*m, set_function_attributes_from_halide_target_options);
+    apply_arm64e_pointer_authentication(*m, target);
 
     llvm::TargetOptions options;
     get_target_options(*m, options);

@@ -261,6 +261,9 @@ Target calculate_host_target() {
 
 #ifdef __APPLE__
     detection = CpuDetect::detect_arm_features(ops, host_arm_arch);
+#if defined(__arm64e__)
+    initial_features.push_back(Target::ARM64e);
+#endif
 #endif  // __APPLE__
 
 #ifdef __linux__
@@ -663,6 +666,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"x86apx", Target::X86APX},
     {"simulator", Target::Simulator},
     {"no_metadata", Target::NoMetadata},
+    {"arm64e", Target::ARM64e},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -909,6 +913,7 @@ void Target::validate_features() const {
     // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
     if (arch == X86) {
         do_check_bad(*this, {
+                                ARM64e,
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
@@ -956,6 +961,7 @@ void Target::validate_features() const {
                             });
     } else if (arch == WebAssembly) {
         do_check_bad(*this, {
+                                ARM64e,
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
@@ -1024,6 +1030,11 @@ void Target::validate_features() const {
         << "Target feature sme2 requires exactly one SME_SVL feature.\n";
     user_assert(has_feature(SME2) || num_sme_svl_features == 0)
         << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
+
+    if (has_feature(ARM64e)) {
+        user_assert(arch == ARM && bits == 64 && (os == IOS || os == MacOS))
+            << "Target feature arm64e requires 64-bit ARM on iOS or macOS. (" << *this << ")\n";
+    }
 }
 
 Target::Target(const std::string &target) {
@@ -1220,6 +1231,8 @@ const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_
         {Target::AVX, Target::SSE41},
 
         // ARM
+        {Target::ARM64e, Target::ARMFp16},
+        {Target::ARM64e, Target::ARMv83a},
         {Target::SVE2, Target::ARMDotProd},
         {Target::SVE2, Target::ARMFp16},
         {Target::SVE, Target::ARMFp16},
@@ -1494,6 +1507,9 @@ int Target::get_arm_v8_lower_bound() const {
     }
     if (has_feature(Target::ARMv89a)) {
         return 89;
+    }
+    if (has_feature(Target::ARM64e)) {
+        return 83;
     }
     return -1;
 }
@@ -1822,6 +1838,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }};
 
     const std::vector<Feature> matching_features = {{
+        ARM64e,
         ASAN,
         Debug,
         EnableBacktraces,
