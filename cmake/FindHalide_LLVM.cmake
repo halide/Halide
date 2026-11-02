@@ -32,7 +32,7 @@ if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
     # this avoids an incompatible scenario that is checked below. So
     # if we didn't do this, the package would fail to be found and
     # the user would have to either rebuild LLVM or flip this value.
-    if (LLVM_FOUND AND "WebAssembly" IN_LIST LLVM_TARGETS_TO_BUILD AND LLVM_LINK_LLVM_DYLIB)
+    if (LLVM_FOUND AND "LLD" IN_LIST Halide_LLVM_FIND_COMPONENTS AND LLVM_LINK_LLVM_DYLIB)
         set(Halide_LLVM_SHARED_LIBS YES)
     else ()
         set(Halide_LLVM_SHARED_LIBS NO)
@@ -57,44 +57,44 @@ if (LLVM_FOUND)
     )
 
     foreach (comp IN LISTS LLVM_TARGETS_TO_BUILD)
-        if (comp STREQUAL "WebAssembly")
-            set(Halide_LLVM_${comp}_FOUND 0)
+        set(Halide_LLVM_${comp}_FOUND 1)
+    endforeach ()
 
-            find_package(
-                LLD "${Halide_LLVM_VERSION}" EXACT
-                HINTS
-                "${LLVM_INSTALL_PREFIX}"
-                # Homebrew split the LLVM and LLD packages as of version 19, so
-                # having multiple LLVM versions installed leads to the newest
-                # LLD being found without this hint.
-                "${LLVM_DIR}/../../../../lld@${LLVM_VERSION_MAJOR}"
-                "${LLVM_DIR}/../lld"
-                "${LLVM_DIR}/../lib/cmake/lld"
+    # The LLD component provides the WebAssembly linker as a library.
+    if ("LLD" IN_LIST Halide_LLVM_FIND_COMPONENTS)
+        set(Halide_LLVM_LLD_FOUND 0)
+
+        find_package(
+            LLD "${Halide_LLVM_VERSION}" EXACT
+            HINTS
+            "${LLVM_INSTALL_PREFIX}"
+            # Homebrew split the LLVM and LLD packages as of version 19, so
+            # having multiple LLVM versions installed leads to the newest
+            # LLD being found without this hint.
+            "${LLVM_DIR}/../../../../lld@${LLVM_VERSION_MAJOR}"
+            "${LLVM_DIR}/../lld"
+            "${LLVM_DIR}/../lib/cmake/lld"
+        )
+
+        if (NOT LLD_FOUND)
+            string(APPEND REASON_FAILURE_MESSAGE
+                "LLD was not found because liblld is missing. "
+                "Did you `apt install liblld-dev` or `brew install lld`?\n"
             )
-            if (NOT LLD_FOUND)
-                string(APPEND REASON_FAILURE_MESSAGE
-                    "WebAssembly was not found because liblld is missing. "
-                    "Did you `apt install liblld-dev` or `brew install lld`?\n"
-                )
-                continue()
-            endif ()
-
+        elseif (LLVM_LINK_LLVM_DYLIB AND NOT Halide_LLVM_SHARED_LIBS)
             # LLVM has a mis-feature that allows it to build and export both static and shared libraries at the same
             # time, while inconsistently linking its own static libraries (for lldWasm and others) to the shared
             # library. Ignoring this causes Halide to link to both the static AND the shared LLVM libs and it breaks at
             # runtime. See: https://github.com/halide/Halide/issues/5471
-            if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_LLVM_SHARED_LIBS)
-                string(APPEND REASON_FAILURE_MESSAGE
-                    "WebAssembly was not found because LLD required by was linked to shared LLVM "
-                    "(LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}) but static LLVM was requested "
-                    "(Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS}).\n"
-                )
-                continue()
-            endif ()
+            string(APPEND REASON_FAILURE_MESSAGE
+                "LLD was not found because it was linked to shared LLVM "
+                "(LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}) but static LLVM was requested "
+                "(Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS}).\n"
+            )
+        else ()
+            set(Halide_LLVM_LLD_FOUND 1)
         endif ()
-
-        set(Halide_LLVM_${comp}_FOUND 1)
-    endforeach ()
+    endif ()
 
     set(Halide_LLVM_SHARED_LIBRARY "LLVM")
     if (Halide_LLVM_SHARED_LIBS AND NOT TARGET "${Halide_LLVM_SHARED_LIBRARY}")
@@ -167,13 +167,11 @@ if (Halide_LLVM_FOUND)
             add_library(Halide_LLVM::${comp} INTERFACE IMPORTED)
             target_link_libraries(Halide_LLVM::${comp} INTERFACE Halide_LLVM::Core)
 
-            if (NOT Halide_LLVM_SHARED_LIBS)
+            if (comp STREQUAL "LLD")
+                target_include_directories(Halide_LLVM::LLD INTERFACE ${LLD_INCLUDE_DIRS})
+                target_link_libraries(Halide_LLVM::LLD INTERFACE lldWasm lldCommon)
+            elseif (NOT Halide_LLVM_SHARED_LIBS)
                 _Halide_LLVM_link(Halide_LLVM::${comp} ${comp})
-            endif ()
-
-            if (comp STREQUAL "WebAssembly")
-                target_include_directories(Halide_LLVM::WebAssembly INTERFACE ${LLD_INCLUDE_DIRS})
-                target_link_libraries(Halide_LLVM::WebAssembly INTERFACE lldWasm lldCommon)
             endif ()
         endif ()
     endforeach ()

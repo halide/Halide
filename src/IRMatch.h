@@ -2334,10 +2334,10 @@ struct TransposeOp {
             return false;
         }
         const Shuffle &v = (const Shuffle &)e;
-        return v.vectors.size() == 1 &&
-               v.is_transpose() &&
+        auto transpose_factor = v.is_transpose();
+        return transpose_factor &&
                vec.template match<bound>(*v.vectors[0].get(), state) &&
-               factor.template match<(bound | bindings<Vec>::mask)>(v.transpose_factor(), state);
+               factor.template match<(bound | bindings<Vec>::mask)>(*transpose_factor, state);
     }
 
     HALIDE_ALWAYS_INLINE

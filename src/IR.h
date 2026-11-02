@@ -1253,24 +1253,22 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle is an in-place transpose of a single vector. The
-     * factor is the number of columns of the source matrix, or equivalently,
-     * the number of rows of the destination matrix, interpreting a vector as a
-     * matrix stored row-major. */
-    bool is_transpose() const;
-    int transpose_factor() const;
+    /** If this shuffle is an in-place transpose of a single vector, returns the
+     * number of columns of the source matrix, or equivalently the number of rows
+     * of the destination matrix, interpreting a vector as a matrix stored
+     * row-major. Otherwise returns nullopt. */
+    std::optional<int> is_transpose() const;
 
-    /** Check if this shuffle repeats an entire single vector of at least two
-     * lanes some number of times (at least two). For example: 0, 1, 2, 0, 1,
-     * 2, 0, 1, 2. The factor is the number of repeats. */
-    bool is_broadcast() const;
-    int broadcast_factor() const;
+    /** If this shuffle repeats an entire single vector of at least two lanes
+     * some number of times (at least two), returns the number of repeats.
+     * Otherwise returns nullopt. For example: 0, 1, 2, 0, 1, 2, 0, 1, 2. */
+    std::optional<int> is_broadcast() const;
 
-    /** Check if this shuffle repeats each lane of a single vector of at least
-     * two lanes some number of times (at least two). For example: 0, 0, 0, 1,
-     * 1, 1, 2, 2, 2. The factor is the number of repeats. */
-    bool is_repeat_each_lane() const;
-    int repeat_each_lane_factor() const;
+    /** If this shuffle repeats each lane of a single vector of at least two
+     * lanes some number of times (at least two), returns the number of
+     * repeats. Otherwise returns nullopt. For example: 0, 0, 0, 1, 1, 1, 2, 2,
+     * 2. */
+    std::optional<int> is_repeat_each_lane() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */

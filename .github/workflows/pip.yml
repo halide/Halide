@@ -25,6 +25,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -61,7 +63,7 @@ jobs:
           echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
 
       - name: Install LLVM
-        if: matrix.os != 'ubuntu-latest'
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           uv sync --frozen --group ci-llvm-${{ steps.halide-version.outputs.major }} \
@@ -122,6 +124,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -164,7 +168,7 @@ jobs:
           path: dist-runtime
 
       - name: Unpack halide-bin for wheel repair
-        if: matrix.os != 'ubuntu-latest'
+        if: runner.os != 'Linux'
         shell: bash
         run: python -m zipfile -e dist-bin/*.whl opt/halide-bin
 
@@ -182,15 +186,15 @@ jobs:
           CIBW_BUILD: "cp312-${{ matrix.platform_tag }}"
           CIBW_SKIP: "cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
-            PIP_FIND_LINKS=/project/dist-bin
+            PIP_FIND_LINKS='/project/dist-bin /project/dist-runtime'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_MACOS: >
-            PIP_FIND_LINKS='${{ github.workspace }}/dist-bin'
+            PIP_FIND_LINKS='${{ github.workspace }}/dist-bin ${{ github.workspace }}/dist-runtime'
             Python_ROOT_DIR=''
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_WINDOWS: >
             CMAKE_GENERATOR=Ninja
-            PIP_FIND_LINKS='${{ github.workspace }}\dist-bin'
+            PIP_FIND_LINKS='${{ github.workspace }}\dist-bin ${{ github.workspace }}\dist-runtime'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           # halide_.pyd/.so depends on Halide.dll/libHalide supplied by the
           # separately installed halide-bin package. Tell each platform's wheel
@@ -210,15 +214,15 @@ jobs:
             delvewheel repair --ignore-existing --exclude Halide.dll
             --add-path ${{ github.workspace }}\opt\halide-bin\halide\bin
             -w {dest_dir} {wheel}
-          # halide-bin isn't published yet during this CI run, so resolve it
-          # from the wheel we just downloaded instead of the package index.
+          # The halide wheel pins halide-bin and halide-runtime to its exact
+          # version. Neither is published yet during this CI run, so the
+          # PIP_FIND_LINKS above resolve them from the wheels we just
+          # downloaded. (Installing them by name instead would pick the latest
+          # stable release from PyPI over a local .devN pre-release.)
           # Linux additionally needs cmake/ninja installed into the (otherwise
           # bare) per-wheel manylinux test container -- macOS/Windows already
           # have them on PATH via the get-cmake action above.
-          CIBW_BEFORE_TEST_LINUX: >
-            pip install cmake "ninja!=1.13.0" &&
-            pip install --find-links {project}/dist-bin --find-links {project}/dist-runtime halide-bin halide-runtime
-          CIBW_BEFORE_TEST: pip install --find-links {project}/dist-bin --find-links {project}/dist-runtime halide-bin halide-runtime
+          CIBW_BEFORE_TEST_LINUX: pip install cmake "ninja!=1.13.0"
           CIBW_TEST_COMMAND: >
             cmake -G Ninja -S {project}/python_bindings/halide/apps -B build -DCMAKE_BUILD_TYPE=Release &&
             cmake --build build &&
@@ -245,6 +249,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -328,6 +334,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform_tag: manylinux_x86_64
+          - os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
           - os: windows-latest
             platform_tag: win_amd64
           - os: macos-15-intel
@@ -381,11 +389,15 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.12", "3.13", "3.14", "3.15"]
-        platform: [linux, windows, macos-intel, macos-arm]
+        platform: [linux, linux-arm, windows, macos-intel, macos-arm]
         include:
           - platform: linux
             os: ubuntu-latest
             platform_tag: manylinux_x86_64
+            runtime_suffix: .so
+          - platform: linux-arm
+            os: ubuntu-24.04-arm
+            platform_tag: manylinux_aarch64
             runtime_suffix: .so
           - platform: windows
             os: windows-latest

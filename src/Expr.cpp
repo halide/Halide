@@ -8,16 +8,20 @@ namespace Internal {
 
 const char *IRNodeType_string(IRNodeType type) {
     switch (type) {
-#define PROFILE_NODE_CASE(T)              \
+#define HALIDE_NODE_NAME_CASE(T)          \
     case Halide::Internal::IRNodeType::T: \
         return #T;
 
-        HALIDE_FOR_EACH_IR_NODE(PROFILE_NODE_CASE)
-#undef PROFILE_NODE_CASE
+        HALIDE_FOR_EACH_IR_NODE(HALIDE_NODE_NAME_CASE)
+#undef HALIDE_NODE_NAME_CASE
 
     default:
-        internal_error << "Unknown Node Tag";
+        unknown_node_type_error(type);
     }
+}
+
+void unknown_node_type_error(IRNodeType type) {
+    internal_error << "Unknown IRNodeType: " << (int)type << "\n";
 }
 
 const IntImm *IntImm::make(Type t, int64_t value) {

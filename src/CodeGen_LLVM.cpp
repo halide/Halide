@@ -4712,8 +4712,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
         // A single shufflevector is the simplest thing, and LLVM backends
         // generally lower it well (better than an interleave tree).
         value = shuffle_vectors(vecs[0], op->indices);
-    } else if (op->is_transpose()) {
-        int cols = op->transpose_factor();
+    } else if (auto transpose_cols = op->is_transpose()) {
+        int cols = *transpose_cols;
         int rows = op->vectors[0].type().lanes() / cols;
         if (is_power_of_two(cols) &&
             !is_power_of_two(rows)) {

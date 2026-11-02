@@ -236,6 +236,9 @@ Target calculate_host_target() {
 #ifdef __APPLE__
     os = Target::MacOS;
 #endif
+#ifdef __FreeBSD__
+    os = Target::FreeBSD;
+#endif
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
@@ -466,7 +469,8 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
     {"fuchsia", Target::Fuchsia},
-    {"wasmrt", Target::WebAssemblyRuntime}};
+    {"wasmrt", Target::WebAssemblyRuntime},
+    {"freebsd", Target::FreeBSD}};
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
     auto os_iter = os_name_map.find(tok);

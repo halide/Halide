@@ -114,7 +114,8 @@ void define_enums(py::module_ &m) {
             .value("IOS", Target::OS::IOS)
             .value("QuRT", Target::OS::QuRT)
             .value("NoOS", Target::OS::NoOS)
-            .value("wasmrt", Target::OS::WebAssemblyRuntime);
+            .value("wasmrt", Target::OS::WebAssemblyRuntime)
+            .value("FreeBSD", Target::OS::FreeBSD);
 
     // The deprecated OSX alias is provided by the Python package initializer.
 

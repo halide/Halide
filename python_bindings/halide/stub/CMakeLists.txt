@@ -14,4 +14,8 @@ set_target_properties(Halide_PyStubs
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN TRUE
     POSITION_INDEPENDENT_CODE ON
+    # This static library is installed, so it must contain object code rather
+    # than LTO bitcode. -fno-lto overrides LTO flags injected through CXXFLAGS.
+    INTERPROCEDURAL_OPTIMIZATION OFF
 )
+target_compile_options(Halide_PyStubs PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fno-lto>)

@@ -2191,11 +2191,11 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
 }
 
 void CodeGen_Hexagon::visit(const Shuffle *op) {
-    if (op->is_repeat_each_lane()) {
+    if (auto factor = op->is_repeat_each_lane()) {
         // Hexagon's interleave_vectors uses vshuff, which is better than
         // the generic lowering of a single shufflevector.
         Value *v = codegen(op->vectors[0]);
-        value = interleave_vectors(std::vector<Value *>(op->repeat_each_lane_factor(), v));
+        value = interleave_vectors(std::vector<Value *>(*factor, v));
         return;
     }
     CodeGen_CPU::visit(op);

@@ -1463,18 +1463,18 @@ void IRPrinter::visit(const Shuffle *op) {
         stream << paren(", ") << imm_int(op->slice_begin())
                << paren(", ") << imm_int(op->slice_stride())
                << paren(", ") << imm_int(op->indices.size());
-    } else if (op->is_transpose()) {
+    } else if (auto cols = op->is_transpose()) {
         openf("transpose_vector");
         print_list(op->vectors);
-        stream << paren(", ") << imm_int(op->transpose_factor());
-    } else if (op->is_repeat_each_lane()) {
+        stream << paren(", ") << imm_int(*cols);
+    } else if (auto factor = op->is_repeat_each_lane()) {
         openf("repeat_each_lane");
         print_list(op->vectors);
-        stream << paren(", ") << imm_int(op->repeat_each_lane_factor());
-    } else if (op->is_broadcast()) {
+        stream << paren(", ") << imm_int(*factor);
+    } else if (auto factor = op->is_broadcast()) {
         openf("broadcast");
         print_list(op->vectors);
-        stream << paren(", ") << imm_int(op->broadcast_factor());
+        stream << paren(", ") << imm_int(*factor);
     } else {
         openf("shuffle");
         print_list(op->vectors);

@@ -106,7 +106,7 @@ if (NOT MSVC)
     add_test(
         NAME test_export_single_symbol
         COMMAND
-            $ENV{SHELL}
+            sh
             -c "[ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | wc -l) -eq 1 ] && \
                                      [ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | grep PyInit_multi_method_module | wc -l) -eq 1 ]"
         VERBATIM

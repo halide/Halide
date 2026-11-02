@@ -31,7 +31,8 @@ struct Target {
         QuRT,
         NoOS,
         Fuchsia,
-        WebAssemblyRuntime
+        WebAssemblyRuntime,
+        FreeBSD
     } os = OSUnknown;
 
     /** The architecture used by the target. Determines the

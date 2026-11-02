@@ -128,17 +128,17 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
         }
     }
 
-    if (op->is_transpose()) {
-        const int cols = op->transpose_factor();
+    if (auto transpose_cols = op->is_transpose()) {
+        const int cols = *transpose_cols;
         const Shuffle *inner = new_vectors[0].as<Shuffle>();
         if (inner && inner->vectors.size() == 1) {
             const Expr &v = inner->vectors[0];
             // Transposing k copies of a vector gives k copies of each lane.
-            if (inner->is_broadcast() && cols == v.type().lanes()) {
-                return Shuffle::make_repeat_each_lane(v, inner->broadcast_factor());
+            if (auto factor = inner->is_broadcast(); factor && cols == v.type().lanes()) {
+                return Shuffle::make_repeat_each_lane(v, *factor);
             }
             // Transposing k copies of each lane gives k copies of the vector.
-            if (inner->is_repeat_each_lane() && cols == inner->repeat_each_lane_factor()) {
+            if (inner->is_repeat_each_lane() == cols) {
                 return Shuffle::make_broadcast(v, cols);
             }
         } else if (const Broadcast *b = new_vectors[0].as<Broadcast>();
