@@ -299,13 +299,6 @@ struct Loop {
 // A loop nest
 using LoopNest = std::vector<Loop>;
 
-std::ostream &operator<<(std::ostream &s, const LoopNest &l) {
-    for (const auto &loop : l) {
-        s << "(" << loop.func << ", " << loop.var << ")";
-    }
-    return s;
-}
-
 LoopNest common_prefix(const LoopNest &a, const LoopNest &b) {
     LoopNest l;
     for (size_t i = 0; i < std::min(a.size(), b.size()); i++) {

@@ -599,7 +599,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // met, so check its answer.
         bool solved = (solve_result.has_upper_bound() &&
                        can_prove(substitute(new_loop_min_name, solve_result.max,
-                                            new_loop_min_eq)));
+                                            new_loop_min_eq),
+                                 bounds_scope));
         if (solved &&
             !expr_uses_vars(solve_result.max, enclosing_loops)) {
             result.warmup_start = simplify(solve_result.max);
@@ -946,6 +947,24 @@ class InjectWarmupGuards : public IRMutator {
         return start;
     }
 
+    // The func a profiler box declaration describes, if e is one. It runs when
+    // that func's producer does.
+    static const Call *declared_box(const Expr &e) {
+        return Call::as_intrinsic(e, {Call::declare_box_required_at_production,
+                                      Call::declare_box_required_at_realization,
+                                      Call::declare_box_required_inwards,
+                                      Call::declare_box_touched});
+    }
+
+    static string box_func(const Call *c) {
+        if (const StringImm *s = c->args[0].as<StringImm>()) {
+            return s->value;
+        }
+        const Variable *v = c->args[0].as<Variable>();
+        internal_assert(v) << Expr(c) << "\n";
+        return v->name;
+    }
+
     // The iteration at which the statements we're currently looking at run,
     // if nothing inside them says otherwise. Undefined means no guard, which
     // is the case inside a producer that's warming up.
@@ -955,15 +974,25 @@ class InjectWarmupGuards : public IRMutator {
     // need to descend and guard them separately.
     bool has_common_start(const Stmt &s) {
         Expr start = current_start;
-        visit_with(s, [&](auto *self, const ProducerConsumer *op) {
-            if (op->is_producer) {
-                Expr f_start = start_of(op->name);
-                if (!f_start.defined() || !start.defined() || !equal(f_start, start)) {
-                    start = Expr();
-                }
+        auto check = [&](const string &func) {
+            Expr f_start = start_of(func);
+            if (!f_start.defined() || !start.defined() || !equal(f_start, start)) {
+                start = Expr();
             }
-            self->visit_base(op);
-        });
+        };
+        visit_with(
+            s,
+            [&](auto *self, const ProducerConsumer *op) {
+                if (op->is_producer) {
+                    check(op->name);
+                }
+                self->visit_base(op);
+            },
+            [&](auto *self, const Evaluate *op) {
+                if (const Call *c = declared_box(op->value)) {
+                    check(box_func(c));
+                }
+            });
         return start.defined();
     }
 
@@ -1008,6 +1037,10 @@ class InjectWarmupGuards : public IRMutator {
     }
 
     Stmt visit(const Evaluate *op) override {
+        if (const Call *c = declared_box(op->value)) {
+            ScopedValue<Expr> bind(current_start, start_of(box_func(c)));
+            return wrap(op);
+        }
         // Sliding window markers are notes to storage folding, not work. An
         // end trace event runs whenever its begin event, which is in the
         // value of an enclosing let, does.
@@ -1230,8 +1263,13 @@ class SlidingWindow : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Interval> bind(bounds_scope, op->name,
-                                     bounds_of_expr_in_scope(op->value, bounds_scope));
+        // Loop extents of splits arrive as constant arithmetic like 2 - 1,
+        // which the simplifier only uses as a bound once it's folded.
+        bool is_constant = is_pure(op->value);
+        visit_with(op->value, [&](auto *, const Variable *) { is_constant = false; });
+        Interval b = is_constant ? Interval::single_point(simplify(op->value)) :
+                                   bounds_of_expr_in_scope(op->value, bounds_scope);
+        ScopedBinding<Interval> bind(bounds_scope, op->name, b);
         ScopedBinding<set<string>> bind_loops(let_loops, op->name, loops_used(op->value));
         return IRMutator::visit(op);
     }
@@ -1285,6 +1323,7 @@ class SlidingWindow : public IRMutator {
         std::stable_sort(keyed.begin(), keyed.end(),
                          [](const auto &a, const auto &b) { return a.first > b.first; });
         vector<Function> result;
+        result.reserve(keyed.size());
         for (const auto &k : keyed) {
             result.push_back(k.second);
         }
