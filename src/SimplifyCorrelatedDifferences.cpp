@@ -88,16 +88,9 @@ protected:
     };
     vector<OuterLet> lets;
 
-    // Tracks constant bounds implied by enclosing lets and dominating
-    // asserts. This is a whole-tree lowering pass (see
-    // simplify_correlated_differences() below), not just a helper called
-    // from find_constant_bounds() on one Expr at a time, so it's worth
-    // gathering this context as we descend: it lets the final simplify()
-    // in cancel_correlated_subexpression() resolve free variables that
-    // `lets` above doesn't bother tracking (lets that are pure and
-    // constant w.r.t. loop_var are deliberately excluded from `lets`,
-    // since the monotonicity analysis doesn't need them) and lets it use
-    // dominating assert conditions it otherwise never sees.
+    // Enclosing lets, loops and dominating asserts, for the final simplify()
+    // in cancel_correlated_subexpression(). `lets` above leaves out the lets
+    // that are constant in loop_var.
     BoundsTracker tracker;
 
     template<typename LetStmtOrLet>
@@ -200,10 +193,7 @@ protected:
         return s;
     }
 
-    // A leading assert in a Block holds for everything after it (Halide
-    // blocks are left-leaning, so a chain of asserts shows up as nested
-    // Blocks, each with an AssertStmt as `first`; recursing into `rest`
-    // naturally walks the whole chain).
+    // A leading assert holds for the rest of the Block.
     Stmt visit(const Block *op) override {
         if (const AssertStmt *a = op->first.as<AssertStmt>()) {
             Stmt first = mutate(op->first);
@@ -271,12 +261,8 @@ protected:
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
             e = PartiallyCancelDifferences()(e);
-            // Cheaper than BoundsTracker::find_constant_bounds()'s
-            // wrap-every-pending-let-and-resimplify path (this pass is
-            // already quadratic in loop nesting depth and runs across the
-            // whole tree several times, so that would be too expensive
-            // here): just hand the already-computed constant scope and
-            // dominating facts to the simplifier directly.
+            // Not simplify_with_context(): wrapping in lets is too costly in
+            // a pass that runs over the whole tree several times.
             e = simplify(e, tracker.interval_scope(), Scope<ModulusRemainder>::empty_scope(), tracker.relevant_facts(e));
 
             debug(1, "non-monotonic") << [&]() -> std::string {

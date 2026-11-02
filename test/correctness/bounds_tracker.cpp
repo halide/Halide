@@ -26,7 +26,7 @@ Expr var(const char *name) {
     return Variable::make(Int(32), name);
 }
 
-// The constant bounds of a let value reach every use of the let.
+// A let's constant value bounds its uses.
 bool test_let_bounds() {
     BoundsTracker tracker;
     auto a = tracker.push_let("a", 3);
@@ -34,9 +34,8 @@ bool test_let_bounds() {
                  "a let with a constant value bounds its uses");
 }
 
-// Interval arithmetic sees a let only through its bounds, so it can't cancel
-// a variable against itself across a let boundary. Wrapping the expression in
-// the lets it uses lets the simplifier do it.
+// Substituting the lets lets the simplifier cancel a against itself, which
+// interval arithmetic over the scope can't.
 bool test_let_substitution() {
     BoundsTracker tracker;
     auto x = tracker.push_for("x", 0, 10);
@@ -52,9 +51,8 @@ bool test_let_substitution() {
     return ok;
 }
 
-// A loop whose range mentions a symbol: the scope can only hold constants, so
-// it learns nothing about y. But y - m is monotonic in y, so its extremes are
-// at the ends of the loop, where substituting the endpoints cancels m.
+// The scope can't bound a loop variable with a symbolic range, but
+// substituting the loop's ends into y - m, which is monotonic in y, can.
 bool test_loop_monotonicity() {
     BoundsTracker tracker;
     Expr m = var("m");
@@ -69,8 +67,7 @@ bool test_loop_monotonicity() {
     return ok;
 }
 
-// A dominating condition tells the simplifier which way a select goes, whether
-// or not the scope alone can bound the select.
+// A dominating fact picks the side of a select.
 bool test_fact() {
     BoundsTracker tracker;
     auto x = tracker.push_for("x", 0, 100);
@@ -95,10 +92,8 @@ bool test_fact() {
     return ok;
 }
 
-// A result the scope bounds can still be loose, so the later steps run anyway.
-// This is test_loop_monotonicity with m bounded by an enclosing loop: the
-// scope now bounds y to [0, 107], so it bounds y - m to [-100, 107], and only
-// the monotonicity step tightens that to [0, 7].
+// As test_loop_monotonicity, but with m bounded, so the scope gives a loose
+// [-100, 107] that the monotonicity step tightens to [0, 7].
 bool test_tighten_bounded_result() {
     BoundsTracker tracker;
     Expr m = var("m");
@@ -114,8 +109,7 @@ bool test_tighten_bounded_result() {
     return ok;
 }
 
-// A caller that has proven a tighter range for a variable can push it, and the
-// refinement lasts as long as the binding.
+// A pushed interval narrows a variable until it is popped.
 bool test_interval() {
     BoundsTracker tracker;
     auto x = tracker.push_for("x", 0, 100);
@@ -131,10 +125,8 @@ bool test_interval() {
     return ok;
 }
 
-// relevant_facts() keeps the facts that share a variable with the expression,
-// directly or through another kept fact, and drops the rest. Here q < 3 only
-// becomes relevant once p == q has been taken, which happens after q < 3 was
-// first looked at.
+// relevant_facts() follows shared variables through other facts: q < 3 is
+// only reached through p == q, which comes later in the list.
 bool test_relevant_facts() {
     BoundsTracker tracker;
     Expr p = var("p"), q = var("q"), r = var("r");

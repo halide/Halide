@@ -55,9 +55,7 @@ protected:
             std::optional<int64_t> e = as_const_int(extent);
 
             if (!e) {
-                // We're about to hard fail. Get really aggressive with the
-                // simplifier: inline every enclosing let and simplify under
-                // every dominating condition.
+                // Last resort before failing: use all the tracked context.
                 debug(4) << "Trying to find a constant bound for loop " << op->name << "\n"
                          << "Extent: " << extent << "\n";
                 ConstantInterval bounds = tracker.find_constant_bounds(extent);
@@ -66,8 +64,7 @@ protected:
                     // The bound is exact: no guard needed.
                     e = bounds.min;
                 } else if (bounds.max_defined) {
-                    // Still no luck getting an exact extent. Take the upper
-                    // bound instead and guard the body with an if statement.
+                    // Use the upper bound, and guard the body.
                     debug(4) << "Found an upper bound instead: " << bounds.max << "\n";
                     e = bounds.max;
                     body =

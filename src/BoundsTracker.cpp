@@ -67,8 +67,8 @@ std::optional<int64_t> as_int64(const Expr &e) {
     return std::nullopt;
 }
 
-/** The constant endpoints of an Interval, as returned by
- * find_constant_bounds() in Bounds.h. */
+/** The constant endpoints of an Interval from find_constant_bounds() in
+ * Bounds.h. */
 ConstantInterval to_constant_interval(const Interval &interval) {
     ConstantInterval result;
     if (auto lo = interval.has_lower_bound() ? as_int64(interval.min) : std::nullopt) {
@@ -177,11 +177,8 @@ bool BoundsTracker::entry_is_pure(const Entry &entry) const {
 Interval BoundsTracker::bounds_of(const Entry &entry) const {
     switch (entry.kind) {
     case Kind::Let:
-        // A pure let gets inlined by wrap_in_used_lets before anything asks
-        // for a bound, and bounding the expression that results is both
-        // cheaper and sharper than bounding the value here and looking it up
-        // through an opaque variable. An impure let is never inlined, so it
-        // needs a real bound.
+        // A pure let is substituted by wrap_in_used_lets instead, which
+        // gives sharper bounds. An impure let is not, so it needs a bound.
         if (entry_is_pure(entry)) {
             return Interval::everything();
         }
@@ -200,17 +197,13 @@ Interval BoundsTracker::bounds_of(const Entry &entry) const {
 }
 
 void BoundsTracker::realize_all() const {
-    // Outermost first: each entry's bounds may depend on the ones enclosing
+    // Outermost first, since an entry's bounds depend on the ones enclosing
     // it.
     for (; realized < entries.size(); realized++) {
         Entry &entry = entries[realized];
         entry.bounds = bounds_of(entry);
-        // A binding that bounds nothing reads the same as no binding at all:
-        // a lookup that misses falls back to the bounds of the type, which
-        // is what an unbounded interval would have narrowed it to anyway. So
-        // it only takes a slot when it replaces an enclosing binding of the
-        // same name, as push_interval() does. This keeps the scope down to
-        // the bindings that say something.
+        // An unbounded binding reads the same as no binding, so it only
+        // needs a slot to hide an enclosing one of the same name.
         entry.in_scope = !entry.bounds.is_everything() || scope.contains(entry.name);
         if (entry.in_scope) {
             scope.push(entry.name, entry.bounds);
@@ -228,9 +221,7 @@ Expr BoundsTracker::wrap_in_used_lets(const Expr &e) const {
     CollectUsedNames collect(&used);
     e.accept(&collect);
     Expr result = e;
-    // Innermost first, so that a let picked up along the way can still pull in
-    // the outer lets its value refers to. Relies on let names being unique
-    // (see the class comment).
+    // Innermost first, so a let's value can pull in the outer lets it uses.
     for (const Entry &entry : reverse_view(entries)) {
         if (entry.kind == Kind::Let && used.count(entry.name) && entry_is_pure(entry)) {
             entry.lo.accept(&collect);
@@ -270,16 +261,10 @@ const std::vector<BoundsTracker::Candidate> &BoundsTracker::candidates() const {
             continue;
         }
         if (!entry.facts_built) {
-            // The scope can only hold constants, so it drops any
-            // relationship between a loop variable and a symbol appearing in
-            // its min or max (e.g. the tile index of a split being bounded
-            // by a ceiling-divide of the extent being split). Record the
-            // range symbolically too. One variable summary covers both ends:
-            // over-estimating what a condition mentions only costs an extra
-            // condition handed to the simplifier.
+            // The scope only holds constants, so also keep the range
+            // symbolically, for when min or max mention other variables.
             Expr loop_var = Variable::make(Int(32), entry.name);
-            // In the simplifier's canonical form, which it requires of facts
-            // and only learns bounds from: LT and LE, never GT or GE.
+            // The simplifier only accepts facts as LT/LE, not GT/GE.
             entry.fact_lo = entry.lo <= loop_var;
             entry.fact_hi = loop_var <= entry.hi;
             entry.fact_vars = vars_of(entry.fact_lo);
@@ -301,14 +286,8 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
 
     VarSet used = vars_of(e);
 
-    // A condition sharing no variable with what we're asking about can't say
-    // anything about it, but one that does can bring in variables that make
-    // a third condition relevant, so keep sweeping until nothing new is
-    // picked up. After the first sweep only the variables picked up by the
-    // one before can make a condition relevant, so later sweeps skip
-    // anything sharing no Bloom bit with the conditions that sweep took.
-    // All bits of a newly taken condition count, including ones `used`
-    // already had: a new variable may share its bit with an old one.
+    // Sweep until no new fact is taken. After the first sweep, only a fact
+    // sharing a Bloom bit with one taken in the previous sweep can be new.
     std::vector<bool> taken_fact(facts.size(), false);
     std::vector<bool> taken(cands.size(), false);
     uint64_t fresh = (uint64_t)-1;
@@ -361,19 +340,11 @@ ConstantInterval BoundsTracker::find_constant_bounds_in_scope(const Expr &e) con
 Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     Expr wrapped = wrap_in_used_lets(e);
     wrapped = remove_likelies(wrapped);
-    // Leave the lets standing and let simplify() pick the ones worth
-    // inlining. Inlining them all up front repeats each value at every use,
-    // which costs nothing in the resulting graph but a great deal in the tree
-    // the simplifier actually walks, since it does not memoize on the shared
-    // nodes -- a few hundred nodes of graph can become tens of thousands of
-    // nodes of walk.
+    // Leave the lets for simplify() to inline: inlining them all up front
+    // can blow up the tree it walks.
     std::vector<Expr> relevant = relevant_facts(e);
-    // Deliberately pass an empty bounds scope here, not `scope`: mixing a
-    // bounds scope with equality facts can make the simplifier represent a
-    // variable by its (wide) interval instead of substituting the exact
-    // value an equality fact implies, which weakens the very reasoning this
-    // call exists to do. Any tightening from `scope` happens afterward, once
-    // this expression is no longer being asked to prove an equality.
+    // No bounds scope here: with one, the simplifier can use a variable's
+    // interval where an equality fact gives its exact value.
     debug(4) << "Simplify with context: " << wrapped << "\n";
     for (const Expr &fact : relevant) {
         debug(4) << " [fact] " << fact << "\n";
@@ -381,12 +352,8 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     wrapped = Halide::Internal::simplify(wrapped, Scope<Interval>::empty_scope(),
                                          Scope<ModulusRemainder>::empty_scope(), relevant);
 
-    // A dependence on an enclosing loop variable may now appear on both sides
-    // of a subtraction. Cancel those out and simplify again -- the facts
-    // recorded by push_for can only relate the loop variable to the rest of
-    // the expression once the expression mentions it directly. This can grow
-    // the expression, so only keep the result if it actually bought us
-    // something.
+    // Cancel correlated differences, which can expose loop variables to the
+    // loop facts. This can grow the expression, so keep it only if it helps.
     Expr cancelled = bound_correlated_differences(wrapped);
     if (!cancelled.same_as(wrapped)) {
         cancelled = Halide::Internal::simplify(cancelled, Scope<Interval>::empty_scope(),
@@ -402,8 +369,7 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
     if (e.type() != Int(32)) {
         return interval;
     }
-    // Innermost first: the tightest correlation is usually with the nearest
-    // enclosing loop.
+    // Innermost first: the nearest loop usually correlates best.
     for (const Entry &entry : reverse_view(entries)) {
         if (interval.is_single_point()) {
             break;
@@ -447,10 +413,7 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
 
 ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
     ConstantInterval interval = find_constant_bounds_in_scope(e);
-    // A bounded result can still be loose, so keep going until it is exact
-    // and intersect what each step finds. The later steps cost little in
-    // practice: most queries are either exact from the scope alone or not
-    // bounded by it at all.
+    // A bounded result can still be loose, so keep going until it is exact.
     if (interval.is_single_point()) {
         return interval;
     }
