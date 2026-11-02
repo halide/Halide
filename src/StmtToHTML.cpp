@@ -2164,14 +2164,22 @@ private:
             print_function_call("interleave_vectors", op->vectors, type_str);
         } else if (op->is_extract_element()) {
             std::vector<Expr> args = op->vectors;
-            args.emplace_back(op->slice_begin());
+            args.emplace_back(op->indices[0]);
             print_function_call("extract_element", args, type_str);
-        } else if (op->is_slice()) {
+        } else if (auto slice = op->is_slice()) {
             std::vector<Expr> args = op->vectors;
-            args.emplace_back(op->slice_begin());
-            args.emplace_back(op->slice_stride());
+            args.emplace_back(slice->begin);
+            args.emplace_back(slice->stride);
             args.emplace_back(static_cast<int>(op->indices.size()));
             print_function_call("slice_vectors", args, type_str);
+        } else if (auto factor = op->is_repeat_each_lane()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(*factor);
+            print_function_call("repeat_each_lane", args, type_str);
+        } else if (auto factor = op->is_broadcast()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(*factor);
+            print_function_call("broadcast", args, type_str);
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {

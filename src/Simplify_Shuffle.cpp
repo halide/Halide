@@ -115,6 +115,39 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
         }
     }
 
+    // An interleave of a vector with itself repeats each lane.
+    if (op->is_interleave() &&
+        new_vectors.size() > 1 &&
+        new_vectors[0].type().lanes() > 1) {
+        bool self_interleave = true;
+        for (size_t i = 1; i < new_vectors.size() && self_interleave; i++) {
+            self_interleave = equal(new_vectors[i], new_vectors[0]);
+        }
+        if (self_interleave) {
+            return Shuffle::make_repeat_each_lane(new_vectors[0], (int)new_vectors.size());
+        }
+    }
+
+    if (auto transpose_cols = op->is_transpose()) {
+        const int cols = *transpose_cols;
+        const Shuffle *inner = new_vectors[0].as<Shuffle>();
+        if (inner && inner->vectors.size() == 1) {
+            const Expr &v = inner->vectors[0];
+            // Transposing k copies of a vector gives k copies of each lane.
+            if (auto factor = inner->is_broadcast(); factor && cols == v.type().lanes()) {
+                return Shuffle::make_repeat_each_lane(v, *factor);
+            }
+            // Transposing k copies of each lane gives k copies of the vector.
+            if (inner->is_repeat_each_lane() == cols) {
+                return Shuffle::make_broadcast(v, cols);
+            }
+        } else if (const Broadcast *b = new_vectors[0].as<Broadcast>();
+                   b && b->value.type().is_vector() && cols == b->value.type().lanes()) {
+            // A Broadcast node of a vector is equivalent to a broadcast shuffle.
+            return Shuffle::make_repeat_each_lane(b->value, b->lanes);
+        }
+    }
+
     // A shuffle of a single vector that is itself a shuffle of a single
     // vector, where the two compose to the identity (e.g. two transposes
     // that undo each other), is just that vector.
@@ -134,12 +167,12 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
 
     // Simplify a slice of a broadcast, where the slice lies within a single
     // copy of the value being broadcast, into a slice of that value.
-    if (op->is_slice() && new_vectors.size() == 1) {
+    if (auto slice = op->is_slice(); slice && new_vectors.size() == 1) {
         if (const Broadcast *b = new_vectors[0].as<Broadcast>()) {
             int lanes = b->value.type().lanes();
             int first = op->indices.front(), last = op->indices.back();
             if (first / lanes == last / lanes) {
-                return mutate(Shuffle::make_slice(b->value, first % lanes, op->slice_stride(),
+                return mutate(Shuffle::make_slice(b->value, first % lanes, slice->stride,
                                                   (int)op->indices.size()),
                               info);
             }
@@ -183,15 +216,16 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                     const Shuffle *i_shuffle = new_vectors[i].as<Shuffle>();
 
                     // Check that the current shuffle is a slice...
-                    if (!i_shuffle || !i_shuffle->is_slice()) {
+                    auto i_slice = i_shuffle ? i_shuffle->is_slice() : std::nullopt;
+                    if (!i_slice) {
                         can_collapse = false;
                         break;
                     }
 
                     // ... and that it is a slice in the right place...
                     // If the shuffle is a single element, we don't care what the stride is.
-                    if (i_shuffle->slice_begin() != (int)i ||
-                        (i_shuffle->indices.size() != 1 && i_shuffle->slice_stride() != terms)) {
+                    if (i_slice->begin != (int)i ||
+                        (i_shuffle->indices.size() != 1 && i_slice->stride != terms)) {
                         can_collapse = false;
                         break;
                     }
@@ -306,15 +340,16 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
         }
     }
 
-    if (op->is_slice() && (new_vectors.size() == 1)) {
+    if (auto slice = op->is_slice(); slice && new_vectors.size() == 1) {
         if (const Shuffle *inner_shuffle = new_vectors[0].as<Shuffle>()) {
             // Try to collapse a slice of slice.
-            if (inner_shuffle->is_slice() && (inner_shuffle->vectors.size() == 1)) {
+            if (auto inner_slice = inner_shuffle->is_slice();
+                inner_slice && inner_shuffle->vectors.size() == 1) {
                 // Indices of the slice are ramp, so nested slice is a1 * (a2 * x + b2) + b1 =
                 // = a1 * a2 * x + a1 * b2 + b1.
                 return Shuffle::make_slice(inner_shuffle->vectors[0],
-                                           op->slice_begin() * inner_shuffle->slice_stride() + inner_shuffle->slice_begin(),
-                                           op->slice_stride() * inner_shuffle->slice_stride(),
+                                           slice->begin * inner_slice->stride + inner_slice->begin,
+                                           slice->stride * inner_slice->stride,
                                            op->indices.size());
             }
             // Check if we really need to concat all vectors before slicing.
@@ -340,7 +375,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                     concat_index += v.type().lanes();
                 }
                 if (new_concat_vectors.size() < inner_shuffle->vectors.size()) {
-                    return Shuffle::make_slice(Shuffle::make_concat(new_concat_vectors), op->slice_begin() - new_slice_start, op->slice_stride(), op->indices.size());
+                    return Shuffle::make_slice(Shuffle::make_concat(new_concat_vectors), slice->begin - new_slice_start, slice->stride, op->indices.size());
                 }
             }
         }
