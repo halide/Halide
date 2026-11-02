@@ -119,9 +119,9 @@ endif ()
 # converts native separators to forward slashes, sidestepping the issue on all
 # CMake versions.
 file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
-find_package(nanobind 2.11...<2.12 CONFIG HINTS "${Python_SITEARCH}/nanobind/cmake")
-if (NOT nanobind_FOUND)
-    message(WARNING "Could NOT find nanobind")
+find_package(nanobind CONFIG HINTS "${Python_SITEARCH}/nanobind/cmake")
+if (NOT nanobind_FOUND OR nanobind_VERSION VERSION_LESS 2.11)
+    message(WARNING "Could NOT find nanobind 2.11 or newer")
     return()
 endif ()
 

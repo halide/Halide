@@ -251,7 +251,6 @@ struct LoopNest {
     void get_allocs_that_can_be_promoted_to_registers(const Target &target,
                                                       StageMap<Sites> &sites,
                                                       NodeMap<bool> &can_be_promoted_to_registers,
-                                                      const LoopNest *grandparent,
                                                       const LoopNest *parent) const;
 
     bool promote_allocs_to_registers(const Target &target,

@@ -230,7 +230,7 @@ void ConstantInterval::cast_to(const Type &t) {
         if (t.is_int()) {
             if (t.bits() <= 64) {
                 type_bounds.min_defined = type_bounds.max_defined = true;
-                type_bounds.min = ((int64_t)(-1)) << (t.bits() - 1);
+                type_bounds.min = (int64_t)((uint64_t)(-1) << (t.bits() - 1));
                 type_bounds.max = ~type_bounds.min;
             }
         } else if (t.is_uint()) {

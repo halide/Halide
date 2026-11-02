@@ -727,7 +727,19 @@ function(add_halide_library TARGET)
     set(features_args FEATURES)
     foreach (arch IN ITEMS x86 arm powerpc hexagon wasm riscv)
         foreach (bits IN ITEMS 32 64)
-            foreach (os IN ITEMS linux windows macos osx android ios qurt noos fuchsia wasmrt)
+            foreach (os IN ITEMS
+                linux
+                windows
+                macos
+                osx
+                android
+                ios
+                qurt
+                noos
+                fuchsia
+                wasmrt
+                freebsd
+            )
                 list(APPEND features_args "FEATURES[${arch}-${bits}-${os}]")
             endforeach ()
         endforeach ()

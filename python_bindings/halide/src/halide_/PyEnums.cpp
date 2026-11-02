@@ -60,8 +60,10 @@ void define_enums(py::module_ &m) {
         .value("GPUTexture", MemoryType::GPUTexture)
         .value("LockedCache", MemoryType::LockedCache)
         .value("VTCM", MemoryType::VTCM)
-        .value("AMXTile", MemoryType::AMXTile)
-        .value("GPUSharedAsync", MemoryType::GPUSharedAsync);
+        .value("Tile", MemoryType::Tile)
+        .value("GPUSharedAsync", MemoryType::GPUSharedAsync)
+        // Deprecated alias for Tile.
+        .value("AMXTile", MemoryType::Tile);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
@@ -114,7 +116,8 @@ void define_enums(py::module_ &m) {
             .value("IOS", Target::OS::IOS)
             .value("QuRT", Target::OS::QuRT)
             .value("NoOS", Target::OS::NoOS)
-            .value("wasmrt", Target::OS::WebAssemblyRuntime);
+            .value("wasmrt", Target::OS::WebAssemblyRuntime)
+            .value("FreeBSD", Target::OS::FreeBSD);
 
     // The deprecated OSX alias is provided by the Python package initializer.
 
