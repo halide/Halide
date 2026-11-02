@@ -7,7 +7,7 @@ namespace {
 
 void halide_python_print(JITUserContext *, const char *msg) {
     py::gil_scoped_acquire acquire;
-    py::print(msg, py::arg("end") = "");
+    py::print(msg, py::str(""));
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
@@ -40,23 +40,18 @@ PyJITUserContext::PyJITUserContext()
     // handlers.custom_error = halide_python_error;
 }
 
-void define_error(py::module &m) {
+void define_error(py::module_ &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
     static py::exception<Error> halide_error(m, "HalideError");
-    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
+    py::register_exception_translator([](const std::exception_ptr &p, void *) {  // NOLINT
         try {
             if (p) {
                 std::rethrow_exception(p);
             }
         } catch (const Error &e) {
-#if PYBIND11_VERSION_HEX >= 0x020C0000  // 2.12
-            set_error(halide_error, e.what());
-#else
-            // TODO: remove this branch when upgrading pybind11 past 2.12.0
             PyErr_SetString(halide_error.ptr(), e.what());
-#endif
         }
     });
 }

@@ -433,9 +433,18 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
     // two dimension. Other architectures generate one prefetch per cache line.
     if (t.has_feature(Target::HVX)) {
         max_dim = 2;
+    } else if (t.arch == Target::ARM && t.bits == 64 &&
+               (t.os == Target::MacOS || t.os == Target::IOS)) {
+        // Apple's 64-bit ARM cores have 128-byte cache lines.
+        max_dim = 1;
+        max_byte_size = 128;
+    } else if (t.arch == Target::ARM && t.bits == 64) {
+        // 64-bit ARM cores have cache lines of at least 64 bytes.
+        max_dim = 1;
+        max_byte_size = 64;
     } else if (t.arch == Target::ARM) {
-        // ARM's cache line size can be 32 or 64 bytes and it can switch the
-        // size at runtime. To be safe, we just use 32 bytes.
+        // 32-bit ARM's cache line size can be 32 or 64 bytes and it can
+        // switch the size at runtime. To be safe, we just use 32 bytes.
         max_dim = 1;
         max_byte_size = 32;
     } else {

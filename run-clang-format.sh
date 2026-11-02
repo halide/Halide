@@ -12,16 +12,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # installed, you can usually install what you need easily via:
 #
 #   sudo apt-get install llvm-X clang-X libclang-X-dev clang-tidy-X
-#   export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-X
+#   export CLANG_FORMAT_LLVM_INSTALL_DIR=/usr/lib/llvm-X
 #
 # On macOS:
 #
 #   brew install llvm@X
-#   export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
+#   export CLANG_FORMAT_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
 #
 # Where X matches the EXPECTED_VERSION below.
 
-EXPECTED_VERSION=21
+EXPECTED_VERSION=22
 
 ##
 

@@ -401,6 +401,28 @@ void test_negative_extents() {
     expect_load_fails(pgm_name.str(), "a .pgm with a negative extent");
 }
 
+// Buffer strides are ints. A 65536x65535 RGB image has a channel stride of
+// 65536 * 65535, which doesn't fit, so the loader must reject the header
+// rather than build a buffer whose channel planes land outside its allocation.
+// The ~4GB allocation such a buffer would need is refused here, so a loader
+// that gets that far fails the test before it writes any pixels.
+void *refuse_huge_allocation(size_t size) {
+    if (size > ((size_t)1 << 31)) {
+        std::cout << "Loader tried to allocate " << size << " bytes for an image it should reject\n";
+        exit(1);
+    }
+    return malloc(size);
+}
+
+void test_overflowing_strides() {
+    std::ostringstream ppm_name;
+    ppm_name << Internal::get_test_tmp_dir() << "test_overflowing_strides.ppm";
+    write_file(ppm_name.str(), "P6\n65536 65535\n255\n" + std::string(65536 * 3, '\xab'));
+    Halide::Runtime::Buffer<>::set_default_allocate_fn(refuse_huge_allocation);
+    expect_load_fails(ppm_name.str(), "a .ppm whose channel stride overflows int");
+    Halide::Runtime::Buffer<>::set_default_allocate_fn(nullptr);
+}
+
 #ifndef HALIDE_NO_PNG
 void test_png_unsupported_bit_depth() {
     // A 1-bit grayscale PNG is a valid file, but load_png only supports 8- and
@@ -464,6 +486,7 @@ int main(int argc, char **argv) {
     test_png_unsupported_bit_depth();
 #endif
     test_negative_extents();
+    test_overflowing_strides();
     printf("Success!\n");
     return 0;
 }

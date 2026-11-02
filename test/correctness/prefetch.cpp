@@ -59,6 +59,11 @@ Expr get_max_byte_size(const Target &t) {
     Expr max_byte_size;
     if (t.has_feature(Target::HVX)) {
         max_byte_size = Expr();
+    } else if (t.arch == Target::ARM && t.bits == 64 &&
+               (t.os == Target::MacOS || t.os == Target::IOS)) {
+        max_byte_size = 128;
+    } else if (t.arch == Target::ARM && t.bits == 64) {
+        max_byte_size = 64;
     } else if (t.arch == Target::ARM) {
         max_byte_size = 32;
     } else {
@@ -472,18 +477,29 @@ int test12(const Target &t) {
 }  // anonymous namespace
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    std::cout << "Testing target: " << t << "\n";
+    // These tests only lower, so we can also check the prefetch splitting of
+    // targets other than the host.
+    std::vector<Target> targets = {
+        get_jit_target_from_environment(),
+        Target("x86-64-linux"),
+        Target("arm-32-linux"),
+        Target("arm-64-linux"),
+        Target("arm-64-macos"),
+        Target("arm-64-ios"),
+    };
 
     using Fn = int (*)(const Target &t);
     std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11, test12};
 
-    for (size_t i = 0; i < tests.size(); i++) {
-        printf("Running prefetch test %d\n", (int)i + 1);
-        int result = tests[i](t);
-        if (result != 0) {
-            printf("   prefetch test %d failed!\n", (int)i + 1);
-            return result;
+    for (const Target &t : targets) {
+        std::cout << "Testing target: " << t << "\n";
+        for (size_t i = 0; i < tests.size(); i++) {
+            printf("Running prefetch test %d\n", (int)i + 1);
+            int result = tests[i](t);
+            if (result != 0) {
+                printf("   prefetch test %d failed!\n", (int)i + 1);
+                return result;
+            }
         }
     }
 

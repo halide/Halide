@@ -107,7 +107,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
           // Fold repeated division
           (rewrite((x / c0) / c2, x / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2)) ||
            rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2) && !overflows(c0 * c1)) ||
-           rewrite((x * c0) / c1, x / fold(c1 / c0), c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
+           rewrite((x * c0) / c1, x / fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
            // Pull out terms that are a multiple of the denominator
            rewrite((x * c0) / c1, x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite(min((x * c0), c1) / c2, min(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
@@ -118,6 +118,10 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((x * c1 - y) / c0, (0 - y) / c0 - x, c0 + c1 == 0) ||
            rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+
+           (!op->type.is_float() &&
+            (rewrite((x * c0 + y) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)) ||
+             rewrite((y + x * c0) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)))) ||
 
            rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 project(hexagon_dma)
+add_custom_target(hexagon_dma)
 
 enable_testing()
 
@@ -117,6 +118,8 @@ foreach (label IN LISTS ro_schedules)
     list(APPEND raw_libs pipeline_raw_linear_interleaved_ro_${label})
 endforeach ()
 
+add_dependencies(hexagon_dma ${yuv_libs} ${raw_libs})
+
 ##
 # Processing executables (run on the host against the mock DMA driver)
 ##
@@ -139,6 +142,7 @@ if (NOT MSVC)
         mock_dma_implementation.cpp
     )
     target_link_libraries(process_raw_linear_interleaved_basic PRIVATE Halide::Tools ${raw_libs})
+    add_dependencies(hexagon_dma process_yuv_linear_basic process_raw_linear_interleaved_basic)
 
     if (HEXAGON_DMA_SCHEDULE_ALL)
         target_compile_definitions(process_yuv_linear_basic PRIVATE SCHEDULE_ALL)

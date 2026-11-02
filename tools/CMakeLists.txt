@@ -63,6 +63,12 @@ set_target_properties(Halide_GenGen PROPERTIES EXPORT_NAME GenGen)
 
 target_link_libraries(Halide_GenGen PUBLIC Halide::Halide ${CMAKE_DL_LIBS})
 
+# This static library is installed, so it must contain object code rather than
+# LTO bitcode, which only the compiler that produced it can read. -fno-lto
+# overrides LTO flags injected through CXXFLAGS (as distribution builds do).
+set_target_properties(Halide_GenGen PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+target_compile_options(Halide_GenGen PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fno-lto>)
+
 add_library(Halide_Generator INTERFACE)
 add_library(Halide::Generator ALIAS Halide_Generator)
 set_target_properties(Halide_Generator PROPERTIES EXPORT_NAME Generator)

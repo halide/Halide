@@ -58,36 +58,26 @@ std::string halide_type_to_string(const Type &type) {
     return stream.str();
 }
 
-void define_type(py::module &m) {
+void define_type(py::module_ &m) {
     py::class_<StructField>(m, "StructField")
-        .def(py::init([](const std::string &name, const Type &type, const py::object &array_extent) -> StructField {
+        .def("__init__", [](StructField *self, const std::string &name, const Type &type, const py::object &array_extent) {
                  std::optional<int> extent;
                  if (!array_extent.is_none()) {
-                     extent = array_extent.cast<int>();
+                     extent = py::cast<int>(array_extent);
                  }
-                 return StructField{name, type, extent};
-             }),
-             py::arg("name"), py::arg("type"), py::arg("array_extent") = py::none())
-        .def(py::init([](const py::tuple &t) -> StructField {
+                 new (self) StructField(StructField{name, type, extent}); }, py::arg("name"), py::arg("type"), py::arg("array_extent") = py::none())
+        .def("__init__", [](StructField *self, const py::tuple &t) {
             if (t.size() < 2 || t.size() > 3) {
                 throw py::value_error("StructField requires (name, type) or (name, type, array_extent)");
             }
             std::optional<int> extent;
             if (t.size() == 3 && !t[2].is_none()) {
-                extent = t[2].cast<int>();
+                extent = py::cast<int>(t[2]);
             }
-            return StructField{t[0].cast<std::string>(), t[1].cast<Type>(), extent};
-        }))
-        .def_readwrite("name", &StructField::name)
-        .def_readwrite("type", &StructField::type)
-        .def_property(
-            "array_extent",
-            [](const StructField &f) -> py::object {
-                return f.array_extent ? py::cast(*f.array_extent) : py::none();
-            },
-            [](StructField &f, const py::object &v) {
-                f.array_extent = v.is_none() ? std::nullopt : std::make_optional(v.cast<int>());
-            })
+            new (self) StructField(StructField{py::cast<std::string>(t[0]), py::cast<Type>(t[1]), extent}); })
+        .def_rw("name", &StructField::name)
+        .def_rw("type", &StructField::type)
+        .def_prop_rw("array_extent", [](const StructField &f) -> py::object { return f.array_extent ? py::cast(*f.array_extent) : py::none(); }, [](StructField &f, const py::object &v) { f.array_extent = v.is_none() ? std::nullopt : std::make_optional(py::cast<int>(v)); }, py::for_setter(py::arg("value").none()))
         .def("__eq__", [](const StructField &a, const StructField &b) -> bool { return a == b; })
         .def("__ne__", [](const StructField &a, const StructField &b) -> bool { return !(a == b); });
 
@@ -96,9 +86,9 @@ void define_type(py::module &m) {
     py::implicitly_convertible<py::tuple, StructField>();
 
     py::class_<StructTypeInfo>(m, "StructTypeInfo")
-        .def_readonly("fields", &StructTypeInfo::fields)
-        .def_readonly("offsets", &StructTypeInfo::offsets)
-        .def_readonly("total_bytes", &StructTypeInfo::total_bytes)
+        .def_ro("fields", &StructTypeInfo::fields)
+        .def_ro("offsets", &StructTypeInfo::offsets)
+        .def_ro("total_bytes", &StructTypeInfo::total_bytes)
         .def("find_field", &StructTypeInfo::find_field, py::arg("name"));
 
     py::class_<Type>(m, "Type")
@@ -126,7 +116,7 @@ void define_type(py::module &m) {
         .def_static("Struct", &Type::Struct, py::arg("fields"))
         .def("is_struct", &Type::is_struct)
         .def("same_struct_type", &Type::same_struct_type, py::arg("other"))
-        .def_property_readonly("struct_type", [](const Type &t) -> py::object {
+        .def_prop_ro("struct_type", [](const Type &t) -> py::object {
             return t.struct_type() ? py::cast(StructTypeInfo(*t.struct_type())) : py::none();
         })
 

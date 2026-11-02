@@ -1,4 +1,5 @@
 import re
+import struct
 from contextlib import contextmanager
 
 import halide as hl
@@ -33,6 +34,44 @@ def test_compiletime_error():
         "Error: Output buffer f has type uint16 but type of the buffer passed in is uint8",
     ):
         f.realize(buf)
+
+
+def test_float32_param_rounding():
+    def f32(value):
+        return struct.unpack("f", struct.pack("f", value))[0]
+
+    param = hl.Param(hl.Float(32), "rounded", 0.1)
+    assert hl.evaluate(param) == f32(0.1)
+    param.set(0.2)
+    assert hl.evaluate(param) == f32(0.2)
+    param.set_estimate(0.3)
+    assert hl.evaluate(param.parameter().estimate()) == f32(0.3)
+
+
+def test_extern_scalar_param():
+    for type in (hl.Int(32), hl.Float(32)):
+        param = hl.Param(type, "extern_scalar")
+        for arg in (param, hl.ExternFuncArgument(param)):
+            f = hl.Func()
+            f.define_extern("extern_scalar_identity", [arg], type, 0)
+            inferred = f.infer_arguments()
+            assert len(inferred) == 1
+            assert inferred[0].name == param.name()
+            assert inferred[0].type == type
+
+
+def test_gpu_tile_overloads():
+    for dimensions in (1, 2, 3):
+        variables = hl.vars("x y z")[:dimensions]
+        threads = hl.vars("tx ty tz")[:dimensions]
+        for explicit_blocks in (False, True):
+            blocks = hl.vars("bx by bz")[:dimensions] if explicit_blocks else []
+            f = hl.Func()
+            f[variables] = sum(variables)
+            f[variables] += 1
+            args = [*variables, *blocks, *threads, *([2] * dimensions)]
+            f.gpu_tile(*args)
+            f.update().gpu_tile(*args)
 
 
 def test_runtime_error():
@@ -658,6 +697,9 @@ def test_split_storage():
 
 
 if __name__ == "__main__":
+    test_float32_param_rounding()
+    test_extern_scalar_param()
+    test_gpu_tile_overloads()
     test_compiletime_error()
     test_runtime_error()
     test_misused_and()

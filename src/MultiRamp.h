@@ -7,6 +7,7 @@
  */
 
 #include "Expr.h"
+#include "ModulusRemainder.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -85,14 +86,15 @@ struct MultiRamp {
      * dim than the input (a single split may be introduced per input dim,
      * e.g. ramp(0,2,6)/4 requires splitting a dim of extent 6 into 2x3
      * because the quotient changes mid-dim). See div_or_mod_impl in
-     * MultiRamp.cpp for the derivation. O(d). */
-    bool div(const Expr &k);
+     * MultiRamp.cpp for the derivation. O(d). The optional callback gives
+     * the alignment of free variables in the base and strides. */
+    bool div(const Expr &k, const AlignmentLookup &alignment_of = nullptr);
 
     /** Euclidean mod by a scalar. Returns false if the denominator isn't a
      * positive integer constant, or if the remainder isn't a multiramp.
      * Same shape transformations as div. Rare cases where the remainder is
      * a multiramp but the quotient isn't are not recognized here. O(d). */
-    bool mod(const Expr &k);
+    bool mod(const Expr &k, const AlignmentLookup &alignment_of = nullptr);
 
     /** Construct an Expr which gives whether one multiramp is equal to
      * another in every lane. Assumes the total lane count matches. Returns
@@ -243,8 +245,11 @@ int get_subtile(const Expr &index, const std::string &description,
                 std::vector<MultiRamp> *subtiles);
 
 /** Check if a vector Expr is a multiramp, and assign to result if so.
- * Returns false and leaves *result untouched if not. */
-bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result);
+ * Returns false and leaves *result untouched if not. The optional callback
+ * gives the alignment of free scalar variables, which can let a div or mod
+ * of a ramp with a symbolic base be recognized. */
+bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result,
+                  const AlignmentLookup &alignment_of = nullptr);
 
 /** Check if an Expr is a load of a multiramp, possibly wrapped in a cast, in
  * broadcasts over dimensions the load doesn't depend on, and in the lane

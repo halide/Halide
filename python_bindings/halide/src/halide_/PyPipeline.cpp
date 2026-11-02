@@ -92,7 +92,7 @@ struct PyThreadPoolKeepAwake {
 
 }  // namespace
 
-void define_pipeline(py::module &m) {
+void define_pipeline(py::module_ &m) {
 
     // Deliberately not supported, because they don't seem to make sense for Python:
     // - set_custom_allocator()
@@ -115,31 +115,27 @@ void define_pipeline(py::module &m) {
     py::class_<AutoschedulerParams>(m, "AutoschedulerParams")
         .def(py::init<>())
         .def(py::init<std::string>(), py::arg("name"))
-        .def(py::init([](const std::string &name, const py::dict &extra) -> AutoschedulerParams {
+        .def("__init__", [](AutoschedulerParams *self, const std::string &name, const py::dict &extra) {
                  // Manually convert the dict:
                  // we want to allow Python to pass in dicts that have non-string values for some keys;
                  // PyBind will reject these as a type failure. We'll stringify them here explicitly.
                  AutoschedulerParams asp(name);
                  for (auto item : extra) {
-                     const std::string name = py::str(item.first).cast<std::string>();
-                     const std::string value = py::str(item.second).cast<std::string>();
+                     const std::string name = py::cast<std::string>(py::str(item.first));
+                     const std::string value = py::cast<std::string>(py::str(item.second));
                      asp.extra[name] = value;
                  }
-                 return asp;
-             }),
-             py::arg("target"), py::arg("autoscheduler_params"))
-        .def_readwrite("name", &AutoschedulerParams::name)
-        .def_readwrite("extra", &AutoschedulerParams::extra)
-        .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
-            return "<halide.AutoschedulerParams>";
-        });
+                 new (self) AutoschedulerParams(asp); }, py::arg("target"), py::arg("autoscheduler_params"))
+        .def_rw("name", &AutoschedulerParams::name)
+        .def_rw("extra", &AutoschedulerParams::extra)
+        .def("__repr__", [](const AutoSchedulerResults &o) -> std::string { return "<halide.AutoschedulerParams>"; });
 
     py::class_<HalidoscopeOptions>(m, "HalidoscopeOptions")
         .def(py::init<>())
-        .def_readwrite("path", &HalidoscopeOptions::path)
-        .def_readwrite("output_dir", &HalidoscopeOptions::output_dir)
-        .def_readwrite("profile_runs", &HalidoscopeOptions::profile_runs)
-        .def_readwrite("trace_file_size_limit", &HalidoscopeOptions::trace_file_size_limit)
+        .def_rw("path", &HalidoscopeOptions::path)
+        .def_rw("output_dir", &HalidoscopeOptions::output_dir)
+        .def_rw("profile_runs", &HalidoscopeOptions::profile_runs)
+        .def_rw("trace_file_size_limit", &HalidoscopeOptions::trace_file_size_limit)
         .def("__repr__", [](const HalidoscopeOptions &o) -> std::string {
             return "<halide.HalidoscopeOptions path='" + o.path.value_or("halidoscope") +
                    "' output_dir='" + o.output_dir.value_or("") +
@@ -343,7 +339,7 @@ void define_pipeline(py::module &m) {
 
                      // dst could be Buffer<>, vector<Buffer>, or vector<int>
                      try {
-                         Buffer<> b = dst.cast<Buffer<>>();
+                         Buffer<> b = py::cast<Buffer<>>(dst);
                          p.infer_input_bounds(&juc, b, t);
                          return;
                      } catch (const py::cast_error &) {
@@ -351,7 +347,7 @@ void define_pipeline(py::module &m) {
                      }
 
                      try {
-                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                         std::vector<Buffer<>> v = py::cast<std::vector<Buffer<>>>(dst);
                          p.infer_input_bounds(&juc, Realization(std::move(v)), t);
                          return;
                      } catch (const py::cast_error &) {
@@ -359,7 +355,7 @@ void define_pipeline(py::module &m) {
                      }
 
                      try {
-                         std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                         std::vector<int32_t> v = py::cast<std::vector<int32_t>>(dst);
                          p.infer_input_bounds(&juc, v, t);
                          return;
                      } catch (const py::cast_error &) {
@@ -382,7 +378,7 @@ void define_pipeline(py::module &m) {
                      auto v = collect_print_args(error_args);
                      p.add_requirement(condition, v);  //
                  },
-                 py::arg("condition"))
+                 py::arg("condition"), py::arg("error_args"))
 
             .def("__repr__", [](const Pipeline &p) -> std::string {
                 std::ostringstream o;
@@ -416,13 +412,13 @@ void define_pipeline(py::module &m) {
         py::arg("target"), py::arg("name"), py::arg("generator_params") = std::map<std::string, std::string>{});
 
     auto func_stats_class = py::class_<ProfilerFuncStats>(m, "ProfilerFuncStats")
-                                .def_readonly("name", &ProfilerFuncStats::name)
-                                .def_readonly("ir_name", &ProfilerFuncStats::ir_name)
+                                .def_ro("name", &ProfilerFuncStats::name)
+                                .def_ro("ir_name", &ProfilerFuncStats::ir_name)
                                 .def("__repr__", [](const ProfilerFuncStats &s) -> std::string {
                                     return "<halide.ProfilerFuncStats " + s.name + ">";
                                 });
 #define HALIDE_PROFILER_FUNC_FIELD(field) \
-    func_stats_class.def_property_readonly(#field, [](const ProfilerFuncStats &s) { return s.stats.field; })
+    func_stats_class.def_prop_ro(#field, [](const ProfilerFuncStats &s) { return s.stats.field; })
     HALIDE_PROFILER_FUNC_FIELD(parent);
     HALIDE_PROFILER_FUNC_FIELD(canonical_id);
     HALIDE_PROFILER_FUNC_FIELD(kind);
@@ -457,13 +453,13 @@ void define_pipeline(py::module &m) {
 #undef HALIDE_PROFILER_FUNC_FIELD
 
     auto pipeline_stats_class = py::class_<ProfilerPipelineStats>(m, "ProfilerPipelineStats")
-                                    .def_readonly("name", &ProfilerPipelineStats::name)
-                                    .def_readonly("funcs", &ProfilerPipelineStats::funcs)
+                                    .def_ro("name", &ProfilerPipelineStats::name)
+                                    .def_ro("funcs", &ProfilerPipelineStats::funcs)
                                     .def("__repr__", [](const ProfilerPipelineStats &s) -> std::string {
                                         return "<halide.ProfilerPipelineStats " + s.name + ">";
                                     });
 #define HALIDE_PROFILER_PIPELINE_FIELD(field) \
-    pipeline_stats_class.def_property_readonly(#field, [](const ProfilerPipelineStats &s) { return s.stats.field; })
+    pipeline_stats_class.def_prop_ro(#field, [](const ProfilerPipelineStats &s) { return s.stats.field; })
     HALIDE_PROFILER_PIPELINE_FIELD(time);
     HALIDE_PROFILER_PIPELINE_FIELD(memory_current);
     HALIDE_PROFILER_PIPELINE_FIELD(memory_peak);
@@ -480,26 +476,22 @@ void define_pipeline(py::module &m) {
     py::class_<PyProfilerScope>(m, "ProfilerScope")
         .def(py::init<Pipeline>(), py::arg("pipeline"))
         .def(py::init<Func &>(), py::arg("func"))
-        .def("__enter__", [](PyProfilerScope &s) -> PyProfilerScope & { return s; })
+        .def("__enter__", [](PyProfilerScope &s) -> PyProfilerScope & { return s; }, py::rv_policy::reference)
         .def("__exit__", [](PyProfilerScope &s, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
             s.exit();
-            return false;
-        })
+            return false; }, py::arg("exc_type").none(), py::arg("exc_value").none(), py::arg("exc_traceback").none())
         .def("exit", &PyProfilerScope::exit)
-        .def("pipeline_stats", [](const PyProfilerScope &s) {
-            return snapshot(s.get().pipeline_stats());
-        })
+        .def("pipeline_stats", [](const PyProfilerScope &s) { return snapshot(s.get().pipeline_stats()); })
         .def("func_stats", [](const PyProfilerScope &s, const Func &f) { return snapshot(s.get().func_stats(f)); }, py::arg("func"))
         .def("func_stats", [](const PyProfilerScope &s, const std::string &name) { return snapshot(s.get().func_stats(name)); }, py::arg("name"))
         .def("__repr__", [](const PyProfilerScope &s) -> std::string { return "<halide.ProfilerScope>"; });
 
     py::class_<PyThreadPoolKeepAwake>(m, "ThreadPoolKeepAwake")
         .def(py::init<>())
-        .def("__enter__", [](PyThreadPoolKeepAwake &k) -> PyThreadPoolKeepAwake & { return k; })
+        .def("__enter__", [](PyThreadPoolKeepAwake &k) -> PyThreadPoolKeepAwake & { return k; }, py::rv_policy::reference)
         .def("__exit__", [](PyThreadPoolKeepAwake &k, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
             k.exit();
-            return false;
-        })
+            return false; }, py::arg("exc_type").none(), py::arg("exc_value").none(), py::arg("exc_traceback").none())
         .def("exit", &PyThreadPoolKeepAwake::exit)
         .def("__repr__", [](const PyThreadPoolKeepAwake &k) -> std::string { return "<halide.ThreadPoolKeepAwake>"; });
 }

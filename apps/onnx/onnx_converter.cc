@@ -1907,7 +1907,10 @@ Node convert_split_node(
             for (int split_size : attr.ints()) {
                 user_splits.push_back(split_size);
             }
-            assert(num_outputs == user_splits.size());
+            if (num_outputs != (int)user_splits.size()) {
+                throw std::invalid_argument(
+                    "Unexpected number of splits for node " + node.name());
+            }
         }
         if (attr.name() == "axis") {
             axis = attr.i();
@@ -2297,7 +2300,7 @@ Node convert_transpose_node(
         if (attr.name() == "perm") {
             permutation.clear();
             for (int index : attr.ints()) {
-                if (index >= rank) {
+                if (index < 0 || index >= rank) {
                     throw std::invalid_argument(
                         "invalid perm attribute for node " + node.name());
                 }
@@ -3223,6 +3226,10 @@ Node convert_one_hot_node(
                 axis = rank;
             }
         }
+    }
+    if (axis > rank) {
+        throw std::invalid_argument(
+            "Invalid axis for OneHot node " + node.name());
     }
 
     const Tensor &indices = inputs[0];

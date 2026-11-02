@@ -33,7 +33,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 #
 #   export wabt_ROOT=/path/to/wabt/install
 
-EXPECTED_VERSION=21
+EXPECTED_VERSION=22
 
 ##
 
@@ -145,11 +145,15 @@ echo "Running clang-tidy..."
 export PYTHONUNBUFFERED=1
 export CLANG_TIDY_REAL_BINARY="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy"
 export CLANG_TIDY_ROOT_DIR="${ROOT_DIR}"
+# Skip third-party sources in the compilation database (e.g. nanobind's). As of
+# clang-tidy 22, files with no .clang-tidy have no checks enabled, which is an error.
+SOURCE_FILTER="^$(printf '%s' "${ROOT_DIR}" | sed 's/[][\.*^$+?(){}|]/\\&/g')/"
 "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
     ${FIX} \
     -j "${J}" \
     -quiet \
     -p "${CLANG_TIDY_BUILD_DIR}" \
+    -source-filter "${SOURCE_FILTER}" \
     -clang-tidy-binary "${ROOT_DIR}/tools/clang-tidy-filter.sh" \
     -clang-apply-replacements-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-apply-replacements" \
     "$@"

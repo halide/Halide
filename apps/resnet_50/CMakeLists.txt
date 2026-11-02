@@ -18,8 +18,8 @@ add_halide_generator(resnet50.generator SOURCES Resnet50Generator.cpp)
 add_halide_library(resnet50 FROM resnet50.generator)
 
 # Main executable
-add_executable(resnet_50_process process.cpp)
-target_link_libraries(resnet_50_process PRIVATE Halide::ImageIO Halide::Tools resnet50)
+add_executable(resnet_50 process.cpp)
+target_link_libraries(resnet_50 PRIVATE Halide::ImageIO Halide::Tools resnet50)
 
 # NOTE: Like the Makefile, we only test that resnet_50 builds. Actually running
 # process requires the PyTorch/torchvision weights produced by load_weights.py,

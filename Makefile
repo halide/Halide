@@ -509,6 +509,7 @@ SOURCE_FILES = \
   Error.cpp \
   Expr.cpp \
   ExtractTileOperations.cpp \
+  ExtractWMMAOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
@@ -717,6 +718,7 @@ HEADER_FILES = \
   Extern.h \
   ExternFuncArgument.h \
   ExtractTileOperations.h \
+  ExtractWMMAOperations.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
@@ -854,6 +856,8 @@ RUNTIME_CPP_COMPONENTS = \
   fopen \
   fopen_lfs \
   force_include_types \
+  freebsd_host_cpu_count \
+  freebsd_thread_id \
   fuchsia_clock \
   fuchsia_host_cpu_count \
   fuchsia_thread_id \
@@ -2597,7 +2601,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: format
 format:
@@ -2605,7 +2609,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: clang-tidy
 clang-tidy:

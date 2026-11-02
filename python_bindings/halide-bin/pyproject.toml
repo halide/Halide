@@ -15,7 +15,7 @@ authors = [
 maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Python-independent binary components for Halide (libHalide, autoschedulers, generator tools, headers, CMake package files)."
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dynamic = ['version']
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -49,6 +49,7 @@ wheel.install-dir = "halide"
 # No Python extension modules in this package -- python-version-agnostic tag.
 wheel.py-api = "py3"
 sdist.inclusion-mode = "explicit"
+sdist.exclude = ["tools/halidoscope/**"]
 sdist.include = [
   "pyproject.toml",
   "src/halide/bin/__init__.py",

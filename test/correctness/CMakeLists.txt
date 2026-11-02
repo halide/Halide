@@ -14,6 +14,7 @@ tests(
     aligned_split_partition.cpp
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
+    amx_matmul.cpp
     argmax.cpp
     arm_cpu_detect.cpp
     arm_dot_product_by_element.cpp
@@ -285,6 +286,7 @@ tests(
     gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
+    gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp
     growing_stack.cpp
     half_native_interleave.cpp
@@ -457,6 +459,7 @@ tests(
     reused_args.cpp
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
+    rfactor_guarded_merge.cpp
     rfactor_inner_dim_non_commutative.cpp
     rfactor_specialize_rvar_bounds.cpp
     round.cpp
@@ -533,12 +536,12 @@ tests(
     struct_nested_field_store.cpp
     struct_type.cpp
     struct_type_dot_product.cpp
+    struct_type_record_field_reads.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     target.cpp
     target_query.cpp
     thread_id_outside_block_id.cpp
-    tiled_matmul.cpp
     tiled_matmul_errors.cpp
     too_many_args.cpp
     tracing.cpp
@@ -614,6 +617,8 @@ tests(
     vulkan_bool_scalar_abi.cpp
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
+    wmma_matmul.cpp
+    wmma_row_max.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
     wrapper_never_used.cpp

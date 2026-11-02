@@ -26,7 +26,7 @@ RUN apt-get update && \
         zlib1g-dev && \
     wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
-    ./llvm.sh 21 all && \
-    apt-get install -y liblld-21-dev && \
+    ./llvm.sh 22 all && \
+    apt-get install -y liblld-22-dev && \
     apt-get clean && \
     rm -rf llvm.sh /var/lib/apt/lists/* \

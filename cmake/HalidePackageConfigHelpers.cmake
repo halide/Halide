@@ -91,8 +91,19 @@ function(_Halide_install_pkgdeps)
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/${ARG_FILE_NAME}")
     set(installPrefix "$<$<PATH:IS_RELATIVE,${ARG_DESTINATION}>:\${CMAKE_INSTALL_PREFIX}/>")
 
+    # Private dependencies on shared libraries are recorded in the
+    # per-configuration file (as IMPORTED_LINK_DEPENDENT_LIBRARIES), so read
+    # it along with the main export file.
+    cmake_path(GET ARG_EXPORT_FILE STEM LAST_ONLY exportStem)
+    set(exportDir "\$ENV{DESTDIR}${installPrefix}${ARG_DESTINATION}")
     _Halide_install_code(
-        "file(READ \"\$ENV{DESTDIR}${installPrefix}${ARG_DESTINATION}/${ARG_EXPORT_FILE}\" target_cmake)"
+        "file(READ \"${exportDir}/${ARG_EXPORT_FILE}\" target_cmake)"
+        "string(TOLOWER \"\${CMAKE_INSTALL_CONFIG_NAME}\" export_config)"
+        "set(config_file \"${exportDir}/${exportStem}-\${export_config}.cmake\")"
+        "if (EXISTS \"\${config_file}\")"
+        "  file(READ \"\${config_file}\" config_contents)"
+        "  string(APPEND target_cmake \"\${config_contents}\")"
+        "endif ()"
         "file(WRITE \"${depFile}.in\" \"\")"
     )
 

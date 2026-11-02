@@ -96,7 +96,7 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
     // loads. But if you go too big you'll run out of tile registers and
     // compilation will fail (The LLVM AMX register allocator will spill, but it
     // seems to be fussy about it). Doing this also tests the case of more than
-    // one matrix multiply operation applied to a single AMXTile allocation.
+    // one matrix multiply operation applied to a single tile allocation.
     int outer_tile_x = col > tile_x ? 2 : 1, outer_tile_y = row > tile_y ? 2 : 1;
 
     // Process the output in panels of columns, with the panel loop outermost
@@ -106,7 +106,7 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
     Var xp("xp"), xt("xt");
 
     mm.compute_at(mm.in(), xt)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r, rro, rri, tile_r)
@@ -163,8 +163,11 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
         result.realize(out);
     } else {
         // Just compile it to see if anything crashes
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s",
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s",
                                    {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids-no_asserts-no_runtime-no_bounds_query"});
+        // Tile memory on the host is still AMX when the target also has a GPU.
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul_cuda.s",
+                                   {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids-cuda-no_asserts-no_runtime-no_bounds_query"});
         return true;
     }
 
@@ -222,7 +225,7 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
     Var xp("xp"), xt("xt");
 
     mm.compute_at(mm.in(), xt)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r.x, rro, rri, tile_r)
@@ -267,15 +270,16 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
     Buffer<float> out(col, row);
 
     // Uncomment to check the asm
-    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "amx_matmul_bf16.ll", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s", {A, B}, target);
 
     Target target = get_jit_target_from_environment();
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         result.realize(out);
     } else {
         // Just compile it to see if anything crashes
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul_cuda.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids-cuda"});
         return true;
     }
 

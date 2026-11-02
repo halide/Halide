@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_loop_level(py::module &m) {
+void define_loop_level(py::module_ &m) {
     // Note that the public-but-only-intended-for-internal-use methods
     // are deliberately omitted.
     auto looplevel_class =

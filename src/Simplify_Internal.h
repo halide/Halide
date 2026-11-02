@@ -235,13 +235,13 @@ public:
         // infer everything there is to infer about a constant. The best we can
         // do at this point is just wrap to the right number of bits.
         int dropped_bits = 64 - t.bits();
+        // Shift left as unsigned, since left-shifting a negative value is UB.
         if (t.is_int()) {
-            c <<= dropped_bits;
+            c = (int64_t)((uint64_t)c << dropped_bits);
             c >>= dropped_bits;  // sign-extend
         } else if (t.is_uint()) {
             // For uints, normalization is considerably less problematic
-            c <<= dropped_bits;
-            c = (int64_t)(((uint64_t)c >> dropped_bits));  // zero-extend
+            c = (int64_t)(((uint64_t)c << dropped_bits) >> dropped_bits);  // zero-extend
         }
         return c;
     }
@@ -406,6 +406,24 @@ public:
         }
         return find_outer_bounds_and_alignment_info(name);
     }
+
+    /** Looks up the alignment of let and free vars (see
+     * find_bounds_and_alignment_info), for analyses that take an
+     * AlignmentLookup. */
+    AlignmentLookup let_var_alignment() {
+        return [this](const std::string &name) {
+            const ExprInfo *info = find_bounds_and_alignment_info(name);
+            return info ? info->alignment : ModulusRemainder{};
+        };
+    }
+
+    /** Whether e is known to lie in [lo, hi): an integer constant, or a
+     * variable with known constant bounds (see
+     * find_bounds_and_alignment_info), or a broadcast of either. Doesn't
+     * simplify or build any IR, so it is safe to call with the raw node a
+     * rewrite rule has bound to a wildcard (see IRMatcher::in_range). Returns
+     * false when nothing is known. */
+    bool known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi);
 
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;

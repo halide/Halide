@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 210
+#if LLVM_VERSION >= 220
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 21.0 or newer"
+#error "Compiling Halide requires LLVM 22.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -31,6 +31,7 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/Analysis/AliasAnalysis.h>
+#include <llvm/Analysis/RuntimeLibcallInfo.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -95,9 +96,6 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/RelLookupTableConverter.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
-#if LLVM_VERSION >= 220
-#include "llvm/Analysis/RuntimeLibcallInfo.h"
-#endif
 
 // IWYU pragma: end_exports
 

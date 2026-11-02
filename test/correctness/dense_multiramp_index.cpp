@@ -89,6 +89,52 @@ int fused_dims() {
     return 0;
 }
 
+int aligned_tiles() {
+    // Rows of 4 contiguous values, 32 apart, read in 2x2 tiles. With the
+    // output width a multiple of 4 but not 8, the 8-wide tiles shift inwards,
+    // so each tile starts at a let var known only to be a multiple of 4, and
+    // the unrolled 2-wide subtiles start at offsets 0, 2, 4 and 6 from it.
+    // The index of the ones at 2 and 6 is (ramp(4k + 2, 1, 2) % 4) + ..., which
+    // is dense, but only given the alignment of the let var.
+    ImageParam in(UInt(8), 2);
+    Param<int> n;
+    Func f;
+    Var x, y, xo, xi, xio, xii, yo, yi;
+    f(x, y) = in((x / 4) * 32 + x % 4, y) + 1;
+
+    OutputImageParam out = f.output_buffer();
+    out.dim(0).set_bounds(0, n * 4).dim(1).set_min(0);
+    in.dim(0).set_min(0).dim(1).set_min(0);
+    f.split(x, xo, xi, 8)
+        .split(xi, xio, xii, 2)
+        .split(y, yo, yi, 2)
+        .reorder(xii, yi, xio, xo, yo)
+        .vectorize(xii)
+        .vectorize(yi)
+        .unroll(xio);
+
+    if (!check_dense(f, "aligned_tiles")) {
+        return 1;
+    }
+
+    const int w = 12, h = 4;
+    Buffer<uint8_t> input((w / 4) * 32, h), output(w, h);
+    input.fill([](int x, int y) { return (uint8_t)(x * 7 + y * 13); });
+    in.set(input);
+    n.set(w / 4);
+    f.realize(output);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            uint8_t correct = input((x / 4) * 32 + x % 4, y) + 1;
+            if (output(x, y) != correct) {
+                printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 bool is_dense_ramp(const Expr &index) {
     const Ramp *r = index.as<Ramp>();
     return r && r->base.type().is_scalar() && is_const_one(r->stride);
@@ -151,7 +197,7 @@ int one_dim() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (fused_dims() || one_dim()) {
+    if (fused_dims() || aligned_tiles() || one_dim()) {
         return 1;
     }
     printf("Success!\n");

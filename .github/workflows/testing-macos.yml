@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install coverage dependencies
-        run: brew install llvm@21 lld@21 emscripten flatbuffers wabt
+        run: brew install llvm@22 lld@22 emscripten flatbuffers wabt
 
       - name: Run coverage suite
         run: tools/run-coverage.sh
@@ -71,11 +71,11 @@ jobs:
         include:
           - runner: macos-26
             arch: arm-64
-            python: cpython-3.10.20-macos-aarch64-none
+            python: cpython-3.12-macos-aarch64-none
           - runner: macos-26-intel
             arch: x86-64
             # uv doesn't provide macos-x86_64 builds; use a preinstalled one.
-            python: "3.10"
+            python: "3.12"
 
     steps:
       - uses: actions/checkout@v7

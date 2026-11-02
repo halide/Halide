@@ -36,11 +36,11 @@ jobs:
       fail-fast: false
       matrix:
         bits: [ "64", "32" ]
-        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
+        uv_group: [ "ci-llvm-main", "ci-llvm-23", "ci-llvm-22" ]
         include:
           - bits: 32
             arch: armv7l
-            python: 3.11-armv7-gnueabihf  # needed for piwheels
+            python: 3.13-armv7-gnueabihf  # needed for piwheels
           - bits: 64
             arch: aarch64
             python: linux-aarch64-gnu

@@ -1,10 +1,4 @@
-; The two forward declared intrinsics below refer to the same thing.
-; LLVM 20.1.6 introduced a new naming scheme for these intrinsics
-; We have to declare both, such that we can access them from the Module's
-; getFunction(), but one of those will map to an intrinsic, which we
-; will use to determine which intrinsic is supported by LLVM.
-declare void @llvm.nvvm.barrier0() ; LLVM <=20.1.5
-declare void @llvm.nvvm.barrier.cta.sync.aligned.all(i32) ; LLVM >=20.1.6
+declare void @llvm.nvvm.barrier.cta.sync.aligned.all(i32)
 
 declare  i32 @llvm.nvvm.read.ptx.sreg.tid.x()
 declare  i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
@@ -23,10 +17,6 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.ctaid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.ntid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.nctaid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
-
-; Remove these two once the minimum required llvm version is 9.0
-declare float @llvm.nvvm.atomic.load.add.f32.p0f32(float*, float)
-declare double @llvm.nvvm.atomic.load.add.f64.p0f64(double *, double)
 
 ; Legacy - to replace
 ;declare void @llvm.ptx.red.global.add.s32(i32*, i32)
