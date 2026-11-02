@@ -45,8 +45,10 @@ CHAR_WIDTH, CHAR_HEIGHT = 12, 32
 
 
 def load_font():
-    for path in ["/usr/share/fonts/truetype/inconsolata/Inconsolata.otf",
-                 "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"]:
+    for path in [
+        "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    ]:
         if os.path.exists(path):
             return ImageFont.truetype(path, 21)
     return ImageFont.load_default(21)
@@ -58,6 +60,7 @@ FONT = load_font()
 @dataclass
 class FuncLayout:
     """Where and how to draw one Func."""
+
     pos: tuple
     zoom: float = 1
     min: float = 0
@@ -149,8 +152,11 @@ class Figure:
         for d in range(len(coords) // 2):
             mn, extent = coords[2 * d], coords[2 * d + 1]
             sx, sy = cfg.strides[d] if d < len(cfg.strides) else (0, 0)
-            offsets = [(ox + sx * c, oy + sy * c)
-                       for ox, oy in offsets for c in range(mn, mn + extent)]
+            offsets = [
+                (ox + sx * c, oy + sy * c)
+                for ox, oy in offsets
+                for c in range(mn, mn + extent)
+            ]
         for ox, oy in set(offsets):
             x, y = self.screen_box(cfg, ox, oy)
             self.fill(self.image, x, y, cfg.zoom, color)
@@ -160,7 +166,9 @@ class Figure:
         cell = Image.new("L", (w, CHAR_HEIGHT), 0)
         draw = ImageDraw.Draw(cell)
         for c, ch in enumerate(text):
-            draw.text((CHAR_WIDTH * c, CHAR_HEIGHT - 8), ch, fill=255, font=FONT, anchor="ls")
+            draw.text(
+                (CHAR_WIDTH * c, CHAR_HEIGHT - 8), ch, fill=255, font=FONT, anchor="ls"
+            )
         alpha = np.asarray(cell)
         x, y = pos[0], pos[1] - CHAR_HEIGHT + 1
         x0, y0 = max(x, 0), max(y, 0)
@@ -169,7 +177,7 @@ class Figure:
             return
         region = self.text[y0:y1, x0:x1]
         region[..., :3] = gray
-        region[..., 3] = alpha[y0 - y:y1 - y, x0 - x:x1 - x]
+        region[..., 3] = alpha[y0 - y : y1 - y, x0 - x : x1 - x]
 
     @staticmethod
     def composite(under, over):
@@ -219,7 +227,9 @@ class Figure:
         cfg = self.bound[qualified]
         self.emit_frames()
 
-        visible = event in (LOAD, STORE) or (event == BEGIN_REALIZATION and cfg.uninit is not None)
+        visible = event in (LOAD, STORE) or (
+            event == BEGIN_REALIZATION and cfg.uninit is not None
+        )
         if visible and qualified not in self.first_draw:
             self.first_draw.add(qualified)
             for text, pos, fade_in in cfg.labels:
@@ -242,7 +252,12 @@ class Figure:
                     sx, sy = cfg.strides[d]
                     x = int(x + z * sx * c)
                     y = int(y + z * sy * c)
-                if (x < 0 or y < 0 or x + z - 1 >= self.width or y + z - 1 >= self.height):
+                if (
+                    x < 0
+                    or y < 0
+                    or x + z - 1 >= self.width
+                    or y + z - 1 >= self.height
+                ):
                     continue
                 if draw_value:
                     v = 255.0 * (values[lane] - cfg.min) / (cfg.max - cfg.min)
@@ -250,7 +265,9 @@ class Figure:
                     self.fill(self.image, x, y, z, (gray, gray, gray))
                 self.fill(self.anim, x, y, z, anim_color + (255,))
         elif event == BEGIN_REALIZATION:
-            self.num_realizations[qualified] = self.num_realizations.get(qualified, 0) + 1
+            self.num_realizations[qualified] = (
+                self.num_realizations.get(qualified, 0) + 1
+            )
             if cfg.uninit is not None:
                 self.fill_realization(cfg, coords, cfg.uninit)
         elif event == END_REALIZATION and cfg.blank:
@@ -262,7 +279,10 @@ class Figure:
             self.halide_clock += self.timestep
             self.emit_frames()
         for name in self.funcs:
-            print(f"warning: {self.output}: Func {name} not found in trace", file=sys.stderr)
+            print(
+                f"warning: {self.output}: Func {name} not found in trace",
+                file=sys.stderr,
+            )
 
     def save(self, output_dir):
         path = os.path.join(output_dir, self.output)
@@ -271,13 +291,36 @@ class Figure:
             return
         if path.endswith(".gif"):
             images = [Image.fromarray(f).quantize(256) for f in self.frames]
-            images[0].save(path, save_all=True, append_images=images[1:],
-                           duration=self.gif_delay * 10, loop=0, optimize=True)
+            images[0].save(
+                path,
+                save_all=True,
+                append_images=images[1:],
+                duration=self.gif_delay * 10,
+                loop=0,
+                optimize=True,
+            )
         else:
-            cmd = ["ffmpeg", "-loglevel", "error", "-y",
-                   "-f", "rawvideo", "-pix_fmt", "rgb24",
-                   "-s", f"{self.width}x{self.height}", "-r", "25", "-i", "-",
-                   "-c:v", "libx264", "-pix_fmt", "yuv420p", path]
+            cmd = [
+                "ffmpeg",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-s",
+                f"{self.width}x{self.height}",
+                "-r",
+                "25",
+                "-i",
+                "-",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                path,
+            ]
             proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
             for f in self.frames:
                 proc.stdin.write(f.tobytes())
@@ -288,9 +331,18 @@ class Figure:
 
 
 VALUE_FORMATS = {
-    (0, 8): "b", (0, 16): "h", (0, 32): "i", (0, 64): "q",
-    (1, 1): "B", (1, 8): "B", (1, 16): "H", (1, 32): "I", (1, 64): "Q",
-    (2, 16): "e", (2, 32): "f", (2, 64): "d",
+    (0, 8): "b",
+    (0, 16): "h",
+    (0, 32): "i",
+    (0, 64): "q",
+    (1, 1): "B",
+    (1, 8): "B",
+    (1, 16): "H",
+    (1, 32): "I",
+    (1, 64): "Q",
+    (2, 16): "e",
+    (2, 32): "f",
+    (2, 64): "d",
 }
 
 
@@ -314,12 +366,17 @@ def render_trace(trace_path, figures):
     no figure draws from are skipped without decoding their packets."""
     header = struct.Struct("<IiiiBBHi")
     size_and_event = struct.Struct("<Ii")
-    with open(trace_path, "rb") as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+    with (
+        open(trace_path, "rb") as f,
+        mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm,
+    ):
         n = len(mm)
         off = 0
         pipelines = []  # stack of (id, name, interested figures)
         while off < n:
-            size, event, parent_id, pid, type_code, bits, lanes, dims = header.unpack_from(mm, off)
+            size, event, parent_id, pid, type_code, bits, lanes, dims = (
+                header.unpack_from(mm, off)
+            )
             name_off = off + 24 + 4 * dims
             if event in (LOAD, STORE):
                 name_off += lanes * ((bits + 7) // 8)
@@ -336,7 +393,9 @@ def render_trace(trace_path, figures):
                     tag_dims = struct.unpack_from("<i", mm, tag_off + 20)[0]
                     funcs.append(read_name(mm, tag_off + 24 + 4 * tag_dims)[0])
                     tag_off += tag_size
-                interested = [fig for fig in figures if fig.bind_pipeline(pipeline, funcs)]
+                interested = [
+                    fig for fig in figures if fig.bind_pipeline(pipeline, funcs)
+                ]
                 if interested:
                     pipelines.append((pid, pipeline, interested))
                 else:
@@ -345,13 +404,25 @@ def render_trace(trace_path, figures):
                     while off < n:
                         size, event = size_and_event.unpack_from(mm, off)
                         off += size
-                        if event == END_PIPELINE and struct.unpack_from("<i", mm, off - size + 8)[0] == pid:
+                        if (
+                            event == END_PIPELINE
+                            and struct.unpack_from("<i", mm, off - size + 8)[0] == pid
+                        ):
                             break
                     continue
             elif event == END_PIPELINE:
                 if pipelines and pipelines[-1][0] == parent_id:
                     pipelines.pop()
-            elif pipelines and event in (LOAD, STORE, BEGIN_REALIZATION, END_REALIZATION, 4, 5, 6, 7):
+            elif pipelines and event in (
+                LOAD,
+                STORE,
+                BEGIN_REALIZATION,
+                END_REALIZATION,
+                4,
+                5,
+                6,
+                7,
+            ):
                 func, _ = read_name(mm, name_off)
                 qualified = f"{pipelines[-1][1]}:{func}"
                 targets = [fig for fig in pipelines[-1][2] if qualified in fig.bound]
@@ -359,7 +430,9 @@ def render_trace(trace_path, figures):
                     coords = struct.unpack_from(f"<{dims}i", mm, off + 24)
                     values = None
                     if event in (LOAD, STORE):
-                        values = decode_values(mm, off + 24 + 4 * dims, type_code, bits, lanes)
+                        values = decode_values(
+                            mm, off + 24 + 4 * dims, type_code, bits, lanes
+                        )
                     for fig in targets:
                         fig.handle(qualified, event, coords, lanes, values)
             off += size
@@ -382,13 +455,25 @@ def lesson_05_scheduling_1():
         ("lesson_05_vectors.gif", "gradient_in_vectors", (320, 192), 11, 1, 4, 10),
         ("lesson_05_split_7_by_3.gif", "gradient_split_7x2", (288, 128), 9, 2, 4, 10),
         ("lesson_05_tiled.gif", "gradient_tiled", (320, 320), 14, 1, 10, 8),
-        ("lesson_05_parallel_tiles.gif", "gradient_fused_tiles", (320, 320), 14, 1, 4, 8),
+        (
+            "lesson_05_parallel_tiles.gif",
+            "gradient_fused_tiles",
+            (320, 320),
+            14,
+            1,
+            4,
+            8,
+        ),
     ]:
         fig = Figure(output, size, decay=(256, 256), hold=hold, gif_delay=delay)
-        fig.func(func, (32, 32), zoom=32, max=max_value, store_cost=store_cost, **OLD_STYLE)
+        fig.func(
+            func, (32, 32), zoom=32, max=max_value, store_cost=store_cost, **OLD_STYLE
+        )
         figures.append(fig)
 
-    fig = Figure("lesson_05_fast.mp4", (700, 500), timestep=1000, decay=(256, 2), hold=30)
+    fig = Figure(
+        "lesson_05_fast.mp4", (700, 500), timestep=1000, decay=(256, 2), hold=30
+    )
     fig.func("gradient_fast", (1, 1), zoom=2, max=600, **OLD_STYLE)
     figures.append(fig)
     return figures
@@ -403,15 +488,29 @@ def lesson_08_scheduling_2():
         ("store_root_compute_x", "root_x", 32, False, 4, 20),
         ("tile", "tile", 16, True, 10, 10),
     ]:
-        fig = Figure(f"lesson_08_{name}.gif", (400, 236), decay=(256, 256), hold=hold,
-                     gif_delay=delay)
+        fig = Figure(
+            f"lesson_08_{name}.gif",
+            (400, 236),
+            decay=(256, 256),
+            hold=hold,
+            gif_delay=delay,
+        )
         common = dict(zoom=zoom, min=-1, max=1, **OLD_STYLE)
-        fig.func(f"producer_{suffix}", (32, 48), label="producer", blank=blank, **common)
-        fig.func(f"consumer_{suffix}", (240, 64), label="consumer", label_pos=(240, 40),
-                 **common)
+        fig.func(
+            f"producer_{suffix}", (32, 48), label="producer", blank=blank, **common
+        )
+        fig.func(
+            f"consumer_{suffix}",
+            (240, 64),
+            label="consumer",
+            label_pos=(240, 40),
+            **common,
+        )
         figures.append(fig)
 
-    fig = Figure("lesson_08_mixed.mp4", (800, 400), timestep=200, decay=(256, 3), hold=30)
+    fig = Figure(
+        "lesson_08_mixed.mp4", (800, 400), timestep=200, decay=(256, 3), hold=30
+    )
     common = dict(zoom=2, min=-1.5, max=1.5, **OLD_STYLE)
     fig.func("producer_mixed", (40, 48), label="producer", blank=True, **common)
     fig.func("consumer_mixed", (440, 48), label="consumer", **common)
@@ -423,11 +522,15 @@ def lesson_09_update_definitions():
     # Most Funcs in this lesson are unnamed, so they are referred to by the
     # names Halide generates for them, in order of construction.
     figures = []
-    fig = Figure("lesson_09_update.gif", (192, 192), decay=(256, 256), hold=10, gif_delay=15)
+    fig = Figure(
+        "lesson_09_update.gif", (192, 192), decay=(256, 256), hold=10, gif_delay=15
+    )
     fig.func("g", (32, 32), zoom=32, max=10, store_cost=2, **OLD_STYLE)
     figures.append(fig)
 
-    fig = Figure("lesson_09_update_rdom.mp4", (364, 364), timestep=100, decay=(256, 2), hold=40)
+    fig = Figure(
+        "lesson_09_update_rdom.mp4", (364, 364), timestep=100, decay=(256, 2), hold=40
+    )
     fig.func("f1", (32, 32), zoom=3, max=2, **OLD_STYLE)
     figures.append(fig)
 
@@ -436,24 +539,55 @@ def lesson_09_update_definitions():
     figures.append(fig)
 
     # Producer above consumer, both one-dimensional.
-    for name, producer, consumer, producer_max, consumer_max, store_cost, width, delay in [
+    for (
+        name,
+        producer,
+        consumer,
+        producer_max,
+        consumer_max,
+        store_cost,
+        width,
+        delay,
+    ) in [
         ("inline_reduction", "f3", "f4", 60, 60, 2, 384, 15),
         ("compute_at_pure", "f5", "f6", 340, 340, 1, 384, 15),
         ("compute_at_update", "f7", "f8", 200, 200, 1, 384, 15),
         ("compute_at_pure_and_update", "f9", "f10", 150, 170, 1, 384, 15),
         ("compute_at_rvar", "f16", "f17", 16, 50, 1, 544, 10),
     ]:
-        fig = Figure(f"lesson_09_{name}.gif", (width, 144), decay=(256, 256), hold=5,
-                     gif_delay=delay)
+        fig = Figure(
+            f"lesson_09_{name}.gif",
+            (width, 144),
+            decay=(256, 256),
+            hold=5,
+            gif_delay=delay,
+        )
         common = dict(zoom=32, strides=((1, 0),), **OLD_STYLE)
-        fig.func(producer, (32, 32), max=producer_max, store_cost=store_cost,
-                 label="producer", label_pos=(32, 32), **common)
-        fig.func(consumer, (32, 96), max=consumer_max,
-                 label="consumer", label_pos=(32, 96), **common)
+        fig.func(
+            producer,
+            (32, 32),
+            max=producer_max,
+            store_cost=store_cost,
+            label="producer",
+            label_pos=(32, 32),
+            **common,
+        )
+        fig.func(
+            consumer,
+            (32, 96),
+            max=consumer_max,
+            label="consumer",
+            label_pos=(32, 96),
+            **common,
+        )
         figures.append(fig)
 
-    fig = Figure("lesson_09_compute_at_multiple_updates.mp4", (576, 304),
-                 decay=(256, 256), hold=40)
+    fig = Figure(
+        "lesson_09_compute_at_multiple_updates.mp4",
+        (576, 304),
+        decay=(256, 256),
+        hold=40,
+    )
     common = dict(zoom=24, **OLD_STYLE)
     # producer_1, producer_2, and consumer_2
     fig.func("f13", (32, 32), max=15, label="producer", label_pos=(32, 32), **common)
@@ -473,7 +607,9 @@ def lesson_17_predicated_rdom():
     fig.func("triangle", (18, 18), zoom=20, max=32, store_cost=2)
     figures.append(fig)
 
-    fig = Figure("lesson_17_rdom_calls_in_predicate.mp4", (400, 236), decay=(1, 256), hold=60)
+    fig = Figure(
+        "lesson_17_rdom_calls_in_predicate.mp4", (400, 236), decay=(1, 256), hold=60
+    )
     common = dict(zoom=32, min=-1, max=13, store_cost=3, load_cost=2)
     fig.func("f", (20, 48), label="f", label_pos=(32, 40), **common)
     fig.func("g", (228, 48), label="g", label_pos=(240, 40), **common)
@@ -486,24 +622,58 @@ def lesson_18_parallel_associative_reductions():
     figures = []
     fig = Figure("lesson_18_hist_serial.mp4", (230, 280), decay=(2, 4), hold=10)
     fig.func("hist_serial:input", (10, 40), max=256, label="Input", **common)
-    fig.func("hist_serial", (10, 246), max=25, strides=((1, 0),), label="Histogram", **common)
+    fig.func(
+        "hist_serial", (10, 246), max=25, strides=((1, 0),), label="Histogram", **common
+    )
     figures.append(fig)
 
     for name, final, intm, size, intm_strides, hist_y in [
-        ("hist_manual_par", "merge_par_manual", "intm_par_manual", (460, 300),
-         ((1, 0), (0, 1)), 246),
-        ("hist_rfactor_par", "hist_rfactor_par", "hist_rfactor_par_intm", (460, 300),
-         ((1, 0), (0, 1)), 246),
-        ("hist_rfactor_vec", "hist_rfactor_vec", "hist_rfactor_vec_intm", (460, 300),
-         ((1, 0), (0, 1)), 246),
-        ("hist_rfactor_tile", "hist_rfactor_tile", "hist_rfactor_tile_intm", (650, 200),
-         ((1, 0), (11, 0), (0, 2)), 158),
+        (
+            "hist_manual_par",
+            "merge_par_manual",
+            "intm_par_manual",
+            (460, 300),
+            ((1, 0), (0, 1)),
+            246,
+        ),
+        (
+            "hist_rfactor_par",
+            "hist_rfactor_par",
+            "hist_rfactor_par_intm",
+            (460, 300),
+            ((1, 0), (0, 1)),
+            246,
+        ),
+        (
+            "hist_rfactor_vec",
+            "hist_rfactor_vec",
+            "hist_rfactor_vec_intm",
+            (460, 300),
+            ((1, 0), (0, 1)),
+            246,
+        ),
+        (
+            "hist_rfactor_tile",
+            "hist_rfactor_tile",
+            "hist_rfactor_tile_intm",
+            (650, 200),
+            ((1, 0), (11, 0), (0, 2)),
+            158,
+        ),
     ]:
         fig = Figure(f"lesson_18_{name}.mp4", size, decay=(2, 4), hold=10)
         fig.func(f"{final}:input", (20, 40), max=256, label="Input", **common)
-        fig.func(intm, (230, 40), max=4, strides=intm_strides, label="Partial Histograms",
-                 **common)
-        fig.func(final, (230, hist_y), max=10, strides=((1, 0),), label="Histogram", **common)
+        fig.func(
+            intm,
+            (230, 40),
+            max=4,
+            strides=intm_strides,
+            label="Partial Histograms",
+            **common,
+        )
+        fig.func(
+            final, (230, hist_y), max=10, strides=((1, 0),), label="Histogram", **common
+        )
         figures.append(fig)
     return figures
 
@@ -513,14 +683,21 @@ def lesson_19_wrapper_funcs():
     fig = Figure("lesson_19_wrapper_local.mp4", (412, 172), decay=(1, 256), hold=20)
     common = dict(zoom=20, max=16, store_cost=2)
     fig.func("g_local:f_local", (24, 48), label="f", **common)
-    fig.func("g_local:f_local_in_g_local$0", (156, 48), label="f.in(g)", label_fade=5, **common)
+    fig.func(
+        "g_local:f_local_in_g_local$0",
+        (156, 48),
+        label="f.in(g)",
+        label_fade=5,
+        **common,
+    )
     fig.func("g_local", (288, 48), label="g", **common)
     figures.append(fig)
 
     fig = Figure("lesson_19_wrapper_global.mp4", (544, 172), decay=(1, 256), hold=20)
     fig.func("h_global:f_global", (24, 48), label="f", **common)
-    fig.func("h_global:f_global_in$0", (156, 48), label="f.in()", label_fade=5,
-             **common)
+    fig.func(
+        "h_global:f_global_in$0", (156, 48), label="f.in()", label_fade=5, **common
+    )
     fig.func("h_global:g_global", (288, 48), label="g", **common)
     fig.func("h_global", (420, 48), label="h", **common)
     figures.append(fig)
@@ -528,20 +705,38 @@ def lesson_19_wrapper_funcs():
     fig = Figure("lesson_19_wrapper_unique.mp4", (412, 312), decay=(1, 256), hold=20)
     common = dict(zoom=20, max=20, store_cost=2)
     fig.func("h_unique:f_unique", (24, 114), label="f", **common)
-    fig.func("h_unique:f_unique_in_g_unique$0", (156, 48), label="f.in(g)", label_fade=5,
-             **common)
-    fig.func("h_unique:f_unique_in_h_unique$1", (288, 48), label="f.in(h)", label_fade=5,
-             **common)
+    fig.func(
+        "h_unique:f_unique_in_g_unique$0",
+        (156, 48),
+        label="f.in(g)",
+        label_fade=5,
+        **common,
+    )
+    fig.func(
+        "h_unique:f_unique_in_h_unique$1",
+        (288, 48),
+        label="f.in(h)",
+        label_fade=5,
+        **common,
+    )
     fig.func("h_unique:g_unique", (156, 188), label="g", **common)
     fig.func("h_unique", (288, 188), label="h", **common)
     figures.append(fig)
 
-    fig = Figure("lesson_19_wrapper_vary_schedule.mp4", (336, 368), decay=(2, 256), hold=20)
+    fig = Figure(
+        "lesson_19_wrapper_vary_schedule.mp4", (336, 368), decay=(2, 256), hold=20
+    )
     common = dict(zoom=16, max=20, store_cost=2)
     fig.func("h_sched:f_sched_in_g_sched$0", (24, 48), label="f.in(g)", **common)
     # This wrapper's coordinates are offset, so shift it back on screen.
-    fig.func("h_sched:f_sched_in_h_sched$1", (184 - 1488, 48 + 1392), label="f.in(h)",
-             label_pos=(184, 40), label_fade=5, **common)
+    fig.func(
+        "h_sched:f_sched_in_h_sched$1",
+        (184 - 1488, 48 + 1392),
+        label="f.in(h)",
+        label_pos=(184, 40),
+        label_fade=5,
+        **common,
+    )
     fig.func("h_sched:g_sched", (24, 216), label="g", **common)
     fig.func("h_sched:h_sched", (184, 216), label="h", **common)
     figures.append(fig)
@@ -549,8 +744,14 @@ def lesson_19_wrapper_funcs():
     fig = Figure("lesson_19_transpose.mp4", (592, 232), decay=(1, 256), hold=20)
     common = dict(zoom=10, min=-1.1, max=1.1)
     fig.func("g_transpose:f_transpose", (24, 48), label="f", store_cost=0, **common)
-    fig.func("g_transpose:f_transpose_in_g_transpose$0", (216, 48), label="f.in(g)",
-             label_fade=5, blank=True, **common)
+    fig.func(
+        "g_transpose:f_transpose_in_g_transpose$0",
+        (216, 48),
+        label="f.in(g)",
+        label_fade=5,
+        blank=True,
+        **common,
+    )
     fig.func("g_transpose", (408, 48), label="g", **common)
     figures.append(fig)
 
@@ -576,19 +777,28 @@ LESSONS = [
 def record_trace(lesson, trace_path):
     env = dict(os.environ, HL_JIT_TARGET="host-trace_all", HL_TRACE_FILE=trace_path)
     print(f"Tracing {lesson} into {trace_path}")
-    subprocess.run(["make", "-C", ROOT_DIR, f"tutorial_{lesson}"], env=env, check=True,
-                   stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["make", "-C", ROOT_DIR, f"tutorial_{lesson}"],
+        env=env,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--trace-dir",
-                        help="Directory in which to keep lesson traces. Existing traces are "
-                             "reused. By default, traces go in a temporary directory.")
+    parser.add_argument(
+        "--trace-dir",
+        help="Directory in which to keep lesson traces. Existing traces are "
+        "reused. By default, traces go in a temporary directory.",
+    )
     parser.add_argument("--output-dir", default=FIGURES_DIR)
-    parser.add_argument("only", nargs="*",
-                        help="Lessons (e.g. lesson_05_scheduling_1) or figures "
-                             "(e.g. lesson_05_tiled.gif) to generate. Defaults to all.")
+    parser.add_argument(
+        "only",
+        nargs="*",
+        help="Lessons (e.g. lesson_05_scheduling_1) or figures "
+        "(e.g. lesson_05_tiled.gif) to generate. Defaults to all.",
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -596,8 +806,11 @@ def main():
         os.makedirs(trace_dir, exist_ok=True)
         for lesson_figures in LESSONS:
             lesson = lesson_figures.__name__
-            figures = [f for f in lesson_figures()
-                       if not args.only or lesson in args.only or f.output in args.only]
+            figures = [
+                f
+                for f in lesson_figures()
+                if not args.only or lesson in args.only or f.output in args.only
+            ]
             if not figures:
                 continue
             trace_path = os.path.join(trace_dir, f"{lesson}.bin")
