@@ -24,6 +24,19 @@ const Layer layers[] = {
     {"qwen2.5-7b", "ffn_down", 18944, 3584},
 };
 
+// The linear layers of a 2B-parameter diffusion transformer, at the token
+// counts of one denoising step (M = 1159 at 512px, 4231 at 1024px). Its AdaLN
+// projection runs on ~20 deduplicated rows instead.
+const Shape denoiser[] = {
+    {"denoiser", "attn_qkvo", 2048, 2048, 1159},
+    {"denoiser", "ffn_up", 2048, 7168, 1159},
+    {"denoiser", "ffn_down", 7168, 2048, 1159},
+    {"denoiser", "adaln", 2048, 12288, 20},
+    {"denoiser", "attn_qkvo", 2048, 2048, 4231},
+    {"denoiser", "ffn_up", 2048, 7168, 4231},
+    {"denoiser", "ffn_down", 7168, 2048, 4231},
+};
+
 }  // namespace
 
 // Presets:
@@ -31,6 +44,7 @@ const Layer layers[] = {
 //   gemv:  every layer at M = 1 (token generation)
 //   full:  every layer at M in {1, 8, 32, 512} (decode, small batch, prefill)
 //   llama3-8b-gemv / -full: just that model
+//   denoiser: a diffusion transformer's layers at its own M (not in gemv/full)
 //   KxNxM: one explicit shape
 // vec_dot: n in {256, 4096, 14336} (smoke: 256, 4096) or an explicit K.
 std::vector<Shape> shapes(const std::string &preset, int op) {
@@ -45,6 +59,7 @@ std::vector<Shape> shapes(const std::string &preset, int op) {
     if (preset == "smoke") return {{"", "", 256, 64, 1}, {"", "", 512, 96, 5}, {"", "", 1024, 256, 40}};
     long long K, N, M;
     if (sscanf(preset.c_str(), "%lldx%lldx%lld", &K, &N, &M) == 3) return {{"", "", K, N, M}};
+    if (preset == "denoiser") return {std::begin(denoiser), std::end(denoiser)};
     std::string model = preset.substr(0, preset.rfind('-'));
     bool full = preset.size() >= 4 && preset.substr(preset.size() - 4) == "full";
     for (const Layer &l : layers) {

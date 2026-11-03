@@ -57,7 +57,7 @@ const char *usage =
     "  --op vec_dot|mul_mat|codec  (default: all)\n"
     "  --types q4_0,q8_0,...    weight types (default: all GGML can mul_mat)\n"
     "  --acts dot,f16,f32       activation types; dot = the weight's vec_dot_type\n"
-    "  --shapes PRESET          smoke|gemv|full|<model>-gemv|<model>-full|KxNxM|<n> (default smoke)\n"
+    "  --shapes PRESET          smoke|gemv|full|<model>-gemv|<model>-full|denoiser|KxNxM|<n> (default smoke)\n"
     "  --providers a,b          only providers whose name contains one of these\n"
     "  --threads N              (default: performance cores)\n"
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
