@@ -311,11 +311,12 @@ struct Formats {
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
 // weight row and act column (edge tiles shift inwards; M tails in out's
 // updates are guarded); `interleave` blocks per iteration; parallel tasks of
-// `rows` x `cols` outputs (rows 0: serial; cols 0: all of M), with `tasks`:
+// `rows` x `cols` outputs (rows 0: serial; cols 0: all of M), with `balance`:
 // fewer rows where that balances the threads; with `busy`: parallel only
 // where it holds.
 struct Tiles {
-    int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0, tasks = 0;
+    int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0;
+    bool balance = false;
     Expr busy;
 };
 // Tiles under their conditions, in order (the last undefined: the rest),
@@ -353,7 +354,7 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     }
     if (ts.rows) {
         Expr per = ts.rows / ts.nt;
-        if (ts.tasks) {
+        if (ts.balance) {
             // The tasks' tiles in n: up to rows / nt (on ties, the largest); work
             // in multiply-adds
             Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -1729,7 +1730,7 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // times its scale. The lanes reduce across the simdgroup (simd shuffles).
 // M > 1: rows x cols per simdgroup, a lane per value of every 32 (coalesced;
 // the gemv lanes there 0.5-1.4x), behind dot's specialization.
-inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int sub = 0, int nr = 4, int sg = 2) {
+inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int sub = 0) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -1739,7 +1740,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
         bits++;
     if (!bx || *bx != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
     const int run = 3, vals = std::min(5, bits - 1);
-    nr = std::max(1, nr >> (vals - 4));
+    const int nr = std::max(1, 4 >> (vals - 4)), sg = 2;
     // the bits each kind: run, shared, the lane's
     enum Kind { Run,
                 Shared,
@@ -1901,7 +1902,8 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
 // values of every 32 * c (coalesced; merged into half4/float4 loads), each
 // output a scalar accumulator (float4 ones spill for M > 1). Staged acts get
 // a kernel of their own (inlined, every tile would encode its columns).
-inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged, int nr = 2, int sg = 2, int c = 16) {
+inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged) {
+    const int nr = 2, sg = 2, c = 16;
     Var n = out.args()[0], m = out.args()[1], ns("ns"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), rl("rl"), ryi("ryi");
     metal_tiles(out, dot, nr, sg, [](int) { return 4; });
@@ -2193,7 +2195,7 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
         rowwise_encoder(e, out, rs, M, t.has_feature(Target::ARMI8MM));
     }
     Func dot = dots[0];
-    Tiles mmla8x8{8, 8, 1, 32, 32, 2}, mmla4x8{4, 8, 1, 32, 32, 2}, mmla4x2{4, 2, 1, 32, 32, 2}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
+    Tiles mmla8x8{8, 8, 1, 32, 32, true}, mmla4x8{4, 8, 1, 32, 32, true}, mmla4x2{4, 2, 1, 32, 32, true}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
     auto fits = [&](const Tiles &ts) { return N >= ts.nt && M >= ts.mt; };
     if (t.has_feature(Target::ARMI8MM)) {
         // records of 4 rows: whole 8-row tiles only where N allows. Acts
@@ -2288,15 +2290,15 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // Float weights: 4 x 2 tiles, row pairs, single rows; gemv in single
         // rows (row pairs: 0.65x GGML at K = 14336).
         if (whole || fmt.rows > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
-        Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 8, 16};
+        Tiles fg{4, 2, 1, 32, 32, true}, fp{2, 1, 2, 16}, fr{1, 1, 8, 16};
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
-        if (acc.defined()) fg = {2, 2, 1, 32, 32, 2};
+        if (acc.defined()) fg = {2, 2, 1, 32, 32, true};
         for (auto [c, ts] : Chain{{N >= fg.nt && M >= fg.mt, fg}, {N >= fp.nt && M > 1, fp}, {Expr(), fr}}) {
             acc.defined() ? flat_tree(out, 0, dots[0], c, ts, r, acc, staged) : flat(out, 0, dots[0], c, ts, r, t);
         }
         return;
     }
-    Tiles mmla8{4, 8, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
+    Tiles mmla8{4, 8, 1, 32, 32, true}, gemm{4, 4, 1, 32, 32, true}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
@@ -2304,7 +2306,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // Two-level records of several rows (q4_K_8x8): the rest on their gemv;
     // with i8mm, on whole act records too (q8_K.4x8), one record per tile
     bool recs = integer && fmt.rows > 1 && fmt.sub, rmmla = mmla_ok && recs;
-    Tiles rm{fmt.rows, 4, 1, 32, whole ? 128 : 32, 2};
+    Tiles rm{fmt.rows, 4, 1, 32, whole ? 128 : 32, true};
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
@@ -2312,14 +2314,14 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // Whole records' row tiles: 12, 16 or 20 rows, whichever pads Mr least
     // (ties: 16, then 20); one record 16 x 4, two 8 rows. A chain, so the
     // later branches learn each condition false (dr's bound).
-    Tiles t16{4, 16, 1, 32, 128, 2}, t20{4, 20, 1, 32, 120, 2}, t12{4, 12, 1, 32, 120, 2}, t8{4, 8, 1, 32, 128, 2}, wide{16, 4, 1, 32, 128, 2};
+    Tiles t16{4, 16, 1, 32, 128, true}, t20{4, 20, 1, 32, 120, true}, t12{4, 12, 1, 32, 120, true}, t8{4, 8, 1, 32, 128, true}, wide{16, 4, 1, 32, 128, true};
     auto padded = [&](const Tiles &ts) { return (Mr + ts.mt - 1) / ts.mt * ts.mt; };
     Expr fewest = min(padded(t12), padded(t16), padded(t20)), odd_n = !fits(gemm, Mr);
     Chain tiles{{Mr <= wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
     if (whole && rmmla) {  // N a multiple of the records' rows
         dr.bound_extent(dr.args()[1], rm.mt);
     } else if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
-        blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, 2}, r, integer, rs, t);
+        blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, true}, r, integer, rs, t);
         Expr mt = t12.mt;
         for (size_t i = tiles.size() - 1; i-- > 0;) {
             mt = select(tiles[i].first, tiles[i].second.mt, mt);
@@ -2344,7 +2346,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // The rows past Mr (with whole records, M = 1's): no tasks when there are none.
     Expr rest = whole ? M == 1 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
-        Tiles rt{fmt.rows, 1, 2, 16, 0, 0, rest};
+        Tiles rt{fmt.rows, 1, 2, 16, 0, false, rest};
         // (a two-level record, 8 rows of q4_K: 1152 bytes, one per iteration)
         if (fmt.sub) {
             rt.interleave = 1;
