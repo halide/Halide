@@ -1920,8 +1920,9 @@ inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, c
 // simdgroup_matrix unit, for `o` (out's specialization). A threadgroup takes
 // a bn x bm tile, its simdgroups wn x 1 sub-tiles of 8 * tn x 8 * tm, each
 // 8 x 8 an accumulator in Tile memory. Per step of K the operands are staged
-// in threadgroup memory, then loaded as 8 x 8 fragments. Tiles by M: 64 x 32
-// (M >= 256, N >= 64), 32 x 32, 16 x 16, 16 x 8; steps of 64 values.
+// in threadgroup memory, then loaded as 8 x 8 fragments. Tiles by M: 64 x 64
+// on f16 operands, else 64 x 32 (M >= 256, N >= 64), 32 x 32, 32 x 16 on f16
+// operands at M > 16, 16 x 16, 16 x 8; steps of 64 values.
 inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
     if (fmt.block % 8) throw std::invalid_argument("metal_mm: blocks of a multiple of 8 values");
     const int t = 8;
@@ -1934,7 +1935,8 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
         Expr cond;
         int tn, tm, wn;
     };
-    std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    const bool h = wh.type() == Float(16);
+    std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, h ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M > 16 && h, 2, 2, 2}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
     inline_callees(dot, {wh, xh});
