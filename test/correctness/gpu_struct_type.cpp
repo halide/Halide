@@ -1,7 +1,6 @@
 #include "Halide.h"
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 
 using namespace Halide;
 
@@ -22,9 +21,7 @@ using namespace Halide;
 // in CodeGen_Metal_Dev.cpp / FindIntrinsics.cpp. Run with
 // HL_JIT_TARGET=host-metal or HL_JIT_TARGET=host-opencl (etc.) to select a
 // backend; skipped if the environment doesn't select a GPU target at all.
-// Vulkan requires host-vulkan-vk_int8-vk_int64. Pass --compile-only to
-// cross-compile every variant without requiring a device.
-void run_variant(const char *name, float d_offset, int code_mul, MemoryType producer_storage, bool compile_only, int tile_size = 1) {
+void run_variant(const char *name, float d_offset, int code_mul, MemoryType producer_storage, int tile_size = 1) {
     Type block_t = Type::Struct({{"d", Float(32)}, {"qs", Int(8), 8}});
     const int num_blocks = 8;
 
@@ -52,11 +49,6 @@ void run_variant(const char *name, float d_offset, int code_mul, MemoryType prod
         producer.compute_at(result, bi);
     }
 
-    if (compile_only) {
-        result.compile_to_module(result.infer_arguments(), result.name(), get_jit_target_from_environment());
-        return;
-    }
-
     Buffer<float> out = result.realize({8, num_blocks});
     out.copy_to_host();
 
@@ -73,7 +65,7 @@ void run_variant(const char *name, float d_offset, int code_mul, MemoryType prod
     }
 }
 
-void run_bool_variant(MemoryType producer_storage, bool vectorize, bool compile_only) {
+void run_bool_variant(MemoryType producer_storage, bool vectorize) {
     Type block_t = Type::Struct({{"flags", Bool(), 8}});
     Var i("i"), blk("blk"), bo("bo"), bi("bi");
     Func producer("bool_producer"), result("bool_result");
@@ -94,11 +86,6 @@ void run_bool_variant(MemoryType producer_storage, bool vectorize, bool compile_
         producer.gpu_threads(blk);
     }
 
-    if (compile_only) {
-        result.compile_to_module(result.infer_arguments(), "bool_result", get_jit_target_from_environment());
-        return;
-    }
-
     Buffer<int> out = result.realize({8, 8});
     out.copy_to_host();
     for (int b = 0; b < 8; b++) {
@@ -113,8 +100,7 @@ void run_bool_variant(MemoryType producer_storage, bool vectorize, bool compile_
     }
 }
 
-int main(int argc, char **argv) {
-    bool compile_only = argc == 2 && strcmp(argv[1], "--compile-only") == 0;
+int main() {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
@@ -130,14 +116,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    run_variant("gpu_threads compute_at", 0.5f, -3, MemoryType::Register, compile_only);
-    run_variant("gpu shared compute_at", 1.5f, -5, MemoryType::GPUShared, compile_only);
+    run_variant("gpu_threads compute_at", 0.5f, -3, MemoryType::Register);
+    run_variant("gpu shared compute_at", 1.5f, -5, MemoryType::GPUShared);
     if (target.has_feature(Target::Vulkan)) {
-        run_variant("gpu shared multiple records", 1.5f, -5, MemoryType::GPUShared, compile_only, 4);
+        run_variant("gpu shared multiple records", 1.5f, -5, MemoryType::GPUShared, 4);
     }
     for (MemoryType storage : {MemoryType::Register, MemoryType::GPUShared}) {
-        run_bool_variant(storage, false, compile_only);
-        run_bool_variant(storage, true, compile_only);
+        run_bool_variant(storage, false);
+        run_bool_variant(storage, true);
     }
 
     printf("Success!\n");
