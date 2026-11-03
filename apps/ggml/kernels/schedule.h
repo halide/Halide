@@ -15,10 +15,8 @@ namespace ggml {
 
 using namespace Halide;
 
-// Whether f is a constant: a definition of its arguments alone, reading no
-// Funcs or Params, but maybe Buffers it embeds (a Tabulate's lut: a
-// codebook's mux, a bit field's decode, or a grid's points, read from the
-// Lattice's list).
+// Whether f is a function of its arguments alone: it reads no Funcs or
+// Params, but maybe Buffers it embeds (a Tabulate's lut).
 inline bool constant(Func f) {
     const Internal::Function &fn = f.function();
     if (!fn.has_pure_definition() || fn.has_update_definition() || fn.has_extern_definition()) return false;
@@ -69,8 +67,7 @@ inline std::vector<const Internal::Call *> calls_to(Func f, const Func &g) {
 }
 
 // The extent of a call's argument a over all values of the caller's
-// arguments (a lut's element j % per: per; its index, a byte or clamped to
-// the table: its entries); 0 if unbounded.
+// arguments; 0 if unbounded.
 inline int extent_of(const Expr &a) {
     Internal::Scope<Internal::Interval> any;
     Internal::visit_with(a, [&](auto *, const Internal::Variable *x) {
@@ -82,8 +79,7 @@ inline int extent_of(const Expr &a) {
     return lo && hi ? (int)(*hi - *lo + 1) : 0;
 }
 
-// A decode Func's table: a precomputed lut (Func::precompute(), a constant
-// Buffer once lowered) it reads, if any.
+// The precomputed lut (Func::precompute()) a decode Func reads, if any.
 inline Func table_of(Func f) {
     for (Func g : callees(f)) {
         if (g.function().schedule().precomputed()) return g;
@@ -120,11 +116,8 @@ inline Pick all_but(ApproximationTags t) {
     return {std::move(t), true};
 }
 
-// The decode Funcs eager_inline can fold into a consumer, of rs[first, last),
-// of the components `pick` (e.g. the codes' decode, or all but the codes':
-// the scales, offsets and the values decoded from them); with `tables`, the
-// ones reading a table (a precomputed lut: see luts()) instead, which a
-// vectorized inline would gather from: see tables().
+// The decode Funcs of rs[first, last) of the components `pick` selects; with
+// `tables`, those reading a precomputed lut (luts()) instead.
 inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, const Pick &pick = all_but({}), size_t first = 0, size_t last = SIZE_MAX, bool tables = false) {
     std::vector<Func> fs;
     for (size_t i = first; i < std::min(last, rs.size()); i++) {
@@ -145,11 +138,9 @@ inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
     return found;
 }
 
-// Whether f's update reads a bit field at a position that varies with v
-// other than with v mod `period` (q5_K's high bits: sub-block s's in bit s
-// of its bytes; not q4_K's nibbles, by sub-block parity, for period 2): a
-// loop over v in steps of `period` would shift by a variable amount, which
-// Halide widens.
+// Whether e reads a bit field at a position that varies with v other than
+// with v mod `period` (q5_K's high bits; not q4_K's nibbles at period 2): a
+// loop over v in steps of `period` would shift by a variable amount.
 inline bool bit_position_varies(const Expr &e, Var v, int period) {
     using namespace Internal;
     bool varies = false;
@@ -167,13 +158,10 @@ inline bool bit_position_varies(Func f, Var v, int period) {
     return bit_position_varies(Internal::remove_promises(Internal::remove_likelies(Internal::substitute_in_all_lets(f.update_value()))), v, period);
 }
 
-// The bits of v below `group` (a power of 2), innermost first: those more of
-// f's bit fields' positions vary with first (ties: the lower). Sub-blocks
-// differing in such a bit read the same bytes (q6_K's 128 values: bit 2, a
-// byte's low and high nibbles, then bit 1, the high bits' pairs; q5_K's:
-// bit 0, then 1 and 2), so iterated innermost, their loads are reused while
-// live.
-// (counts: per bit, how many of the bit fields' positions vary with it.)
+// The bits of v below `group` (a power of 2), innermost first: those more
+// bit fields' positions vary with first (ties: the lower). Sub-blocks
+// differing in such a bit read the same bytes, so iterated innermost their
+// loads are reused. (counts: per bit, how many positions vary with it.)
 using Points = std::vector<std::map<std::string, Expr>>;
 inline std::vector<int> sharing_order(const Expr &e, const Points &points, Var v, int group, std::vector<int> *counts = nullptr) {
     using namespace Internal;
@@ -238,8 +226,7 @@ inline bool bit_beneath(const std::vector<int> &counts) {
 
 // The values of x (in sub-blocks of `sub`, `subs` of them) over which f's
 // update's bit fields' positions (fs inlined) repeat, if within them
-// bit_beneath (q6_K's 128: bit 0, the 16-value halves of 32 a byte's codes
-// span, below the nibbles' and high bits' pairs, 2 and 1); else 0.
+// bit_beneath (q6_K's 128); else 0.
 inline int bit_period(Func f, const RVar &x, int sub, int subs, const std::vector<Func> &fs) {
     using namespace Internal;
     Expr e = f.update_value();
@@ -293,8 +280,8 @@ inline Expr threads() {
 }
 
 // Of the candidate splits ps (each `tasks` tasks of `size` work, plus
-// `overhead`: a task's dispatch, ~0.25-1 us on M3), the one whose busiest thread
-// does the least, ceil(tasks / threads) * (size + overhead); on ties, the earliest.
+// `overhead` per task), the one whose busiest thread does the least; on
+// ties, the earliest.
 inline Expr balanced(const std::vector<int> &ps, float overhead, const std::function<std::pair<Expr, Expr>(int)> &split) {
     Expr T = threads(), best, least;
     for (int p : ps) {
@@ -307,27 +294,26 @@ inline Expr balanced(const std::vector<int> &ps, float overhead, const std::func
 }
 
 // The operands' formats, as the schedules see them (matmul.cpp's): the
-// weight's values per block (1: floats, no blocks), rows per record
-// (interleaved in pieces of `chunk` codes) and whether it is rowwise; the act
-// codes' values per block (the weight's: an integer dot; 1: values) and rows
-// per record; two-level formats' values per sub-block (0: one level), the
-// weight's each with its own scale, the act's each with its own derived sum.
+// weight's values per block (1: floats), rows per record (interleaved in
+// pieces of `chunk` codes) and whether it is rowwise; the act codes' values
+// per block (the weight's: an integer dot) and rows per record; two-level
+// formats' values per sub-block (0: one level).
 struct Formats {
     int block = 1, rows = 1, chunk = 0, act_block = 1, act_rows = 1;
     bool rowwise = false;
     int sub = 0, act_sub = 0;
     int per = 1;  // blocks per weight block (q1_0's 128 values on q8_0 acts: 4)
     // the weight's decoded values approximated again (a compute format, e.g.
-    // q4_0:f16): by rs.back() (kernels/matmul.cpp)
+    // q4_0:f16): by rs.back()
     bool wcompute = false;
 };
 
-// The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
-// edge tiles shift inwards; in out's updates, M tails are guarded) share each decoded weight row and activation
-// column; `interleave` blocks per iteration into independent accumulators;
-// parallel tasks of `rows` x `cols` outputs (rows 0: serial; cols 0: all of M),
-// with `tasks`: fewer rows where that balances the threads; with `busy`:
-// parallel only where it holds (else a serial loop, cheap when it has no work).
+// The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
+// weight row and act column (edge tiles shift inwards; M tails in out's
+// updates are guarded); `interleave` blocks per iteration; parallel tasks of
+// `rows` x `cols` outputs (rows 0: serial; cols 0: all of M), with `tasks`:
+// fewer rows where that balances the threads; with `busy`: parallel only
+// where it holds.
 struct Tiles {
     int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0, tasks = 0;
     Expr busy;
@@ -368,8 +354,8 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     if (ts.rows) {
         Expr per = ts.rows / ts.nt;
         if (ts.tasks) {
-            // tasks of `p` tiles in n, up to rows / nt (on ties, the largest);
-            // work in multiply-adds
+            // The tasks' tiles in n: up to rows / nt (on ties, the largest); work
+            // in multiply-adds
             Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
             Expr cs = ts.cols ? (M + ts.cols - 1) / ts.cols : 1, tn = (N + ts.nt - 1) / ts.nt;
             Expr tile = cast<float>(ts.nt * (ts.cols ? min(M, ts.cols) : M)) * cast<float>(r.x.extent() * r.y.extent());
@@ -386,21 +372,13 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     return cond.defined() ? dot.update().specialize(cond) : dot.update();
 }
 
-// How a kernel reads its luts (Tabulate's: a value per element and index,
-// see is_lut()), by what they cost inlined: a lut whose definition reads a
-// Buffer (a grid's points: the Lattice's list) is precomputed on every target
-// (Func::precompute(): a constant table of its values), as inlined its decode
-// would be that read and more; one of 16 bytes or fewer (a codebook's 16
-// int8 values) is inlined on CPUs, a register table lookup (NEON's tbl,
-// x86's pshufb), and on GPUs staged in threadgroup memory (metal_luts()); the
-// rest, arithmetic on their index (bit fields' decodes: q5's high bits, even
-// signs, nvfp4's ue4m3 scales), are precomputed with `tables`, else inlined
-// as the arithmetic. `tables` on CPUs: a table moves the decode off the SIMD
-// units, which bound the dot (Apple M3 Max, q5_0, one thread, medians over
-// link layouts: vec_dot from 0.80x GGML's speed to 1.01x, gemv on single
-// rows from 0.86x to 1.0x, gemm M = 32 from 2.2x to 2.7x). Call before any
-// other directive on rs's decode: the precomputed luts then leave its
-// decode_funcs(), and their readers read a table (table_of()).
+// How a kernel reads its luts (Tabulate's): one that reads a Buffer (a
+// grid's points) is precomputed on every target; one of 16 bytes or fewer
+// (a codebook) is inlined on CPUs (a register table lookup: tbl, pshufb) and
+// staged in threadgroup memory on GPUs (metal_luts()); the rest (bit fields'
+// decodes) are precomputed with `tables` (CPUs: the decode leaves the SIMD
+// units; q5_0 vec_dot 0.80x -> 1.01x GGML), else inlined. Call before any
+// other directive on rs's decode.
 inline bool register_lut(const std::vector<ApproximationResult> &rs, const Func &lut) {
     int per = 0, entries = 0;
     for (const ApproximationResult &r : rs) {
@@ -431,9 +409,8 @@ inline void luts(const std::vector<ApproximationResult> &rs, bool tables) {
     }
 }
 
-// The table decoders that tables() stages: all but tables of one value per
-// index (nvfp4's scales), which stay inline: each read a scalar load where
-// it is used.
+// The table decoders that tables() stages: not tables of one value per index
+// (nvfp4's scales), each a scalar load where it is used.
 inline std::vector<Func> staged_tables(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> fs;
     for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
@@ -466,16 +443,10 @@ inline int array_extent(Func f) {
     return s && i ? s->fields[*i].array_extent.value_or(0) : 0;
 }
 
-// A table decode g's indices, if read as is (iq3_xxs's grid index bytes;
-// not its sign indices, 7-bit fields), else, if `nested` (a per-format
-// parameter, mul_mat's gemm tiles), the bytes read as is that they are
-// computed from (iq3_s's, iq2_s's and iq1_s/m's grid indices' low bytes, qs;
-// their high bits are bit fields): staged at `at` (per block group), a word of them per load, in general-purpose registers
-// (MemoryType::GPR), where g's row reads extract each with a shift and a
-// mask. Read in place instead, each index is a load of its own (the dot is
-// bound by its loads; M3 Max, iq3_xxs, gemv 1.16-1.27x, gemm 1.3-1.38x,
-// vec_dot 1.16-1.2x); staged in a SIMD register, each is a lane move (half
-// the gain).
+// A table decode g's indices, if read as is (iq3_xxs's grid index bytes),
+// else, if `nested`, the bytes read as is that they are computed from (iq3_s's
+// qs): staged at `at`, a word per load, in GPRs (MemoryType::GPR), each index
+// a shift and a mask; in place, each is a load (iq3_xxs gemv 1.16-1.27x).
 inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
     std::vector<Func> idx;
     for (Func f : callees(g)) {
@@ -502,15 +473,9 @@ inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
         }
     }
     for (auto [f, caller] : staged) {
-        // a struct field array narrower than a GPR (q5's qh, 4 bytes) a word
-        // of its own, loaded at its offset (ldr w, as GGML's memcpy to a
-        // uint32_t). A GPR-wide word would be shifted inwards over the
-        // struct's other fields (q5_0's: from 2 bytes before the block, past
-        // the buffer's start for the first), each index byte then a shift
-        // and a mask (not ubfiz), and LLVM would take d from it (shift,
-        // fmov) instead of loading it (M3 Max, q5_0 q8_0 vec_dot: 67
-        // instructions per 2 blocks to 63, K = 4096 0.86x the time, gemv
-        // 0.96-0.99x)
+        // A struct field array narrower than a GPR (q5's qh) is a word of its
+        // own, loaded at its offset: a GPR-wide word would shift inwards past
+        // the buffer's start for the first block.
         int lanes = t.bits / f.type().bits();
         if (int n = array_extent(f); n > 0 && n < lanes) {
             lanes = 1;
@@ -527,10 +492,8 @@ inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
     }
 }
 
-// The table decodes at `at` (per block group), each a copy for its calls from
-// `consumers` (a pipeline computes them per kernel): unrolled over all but
-// their first dimension, split by the table's rows, so each read of a row is
-// a dense load. `nested`: see staged_indices().
+// The table decodes at `at` (per block group), a copy for each's calls from
+// `consumers`, split by the table's rows (a row read is a dense load).
 inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at, const Target &t, bool nested = false) {
     for (Func f : staged_tables(rs)) {
         std::vector<Func> cs;
@@ -559,12 +522,10 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
     }
 }
 
-// Then a term of the rest (e.g. its block sum) reads the first of `ports`
-// whose definition it matches (Func::approximate_by(DerivedPort, ...)) in
-// `consumer`: false if none does. A port whose type does not widen exactly
-// to the term's (e.g. q8_K's int16 bsums, of an int32 sum) replaces the term
-// retyped to it (change_type proves the narrower sum exact), which the term
-// then casts.
+// A term of the rest (e.g. its block sum) reads the first of `ports` whose
+// definition it matches (approximate_by(DerivedPort)) in `consumer`: false if
+// none does. A narrower port (q8_K's int16 bsums) replaces the term retyped
+// to it (change_type proves the narrower sum exact).
 inline bool read_port(Func term, const std::vector<DerivedPort> &ports, Func consumer) {
     for (const DerivedPort &p : ports) {
         if (match_derived_port(term, p)) {
@@ -621,12 +582,9 @@ inline std::vector<Func> offset_decoders(const std::vector<ApproximationResult> 
 }
 
 // The offset decoders and the weight's code decoders that add their values
-// (q6_K's codes: the offset decoder's high bits - 32 plus the low bits), if
-// the codes the dot reads are among them (not iq2_s's: its grid value times
-// an offset decoder's sign, 1 - 2*bit), else none. Eager-inlined, each
-// constant offset reaches the widening cast of the codes' sum
-// (cast<float>(int8(field) + -1)), which hoist_invariants() then splits where
-// the fields' bounds prove the sum cannot wrap.
+// (q6_K's codes), if the codes the dot reads are among them (not iq2_s's),
+// else none. Eager-inlined, each constant offset reaches the widening cast of
+// the codes' sum, which hoist_invariants() then splits where it is exact.
 inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> codes = decoders(rs, only({tag::codes}), 0, 1), path = offset_decoders(rs);
     auto in = [](const std::vector<Func> &fs, const std::string &name) {
@@ -682,9 +640,7 @@ inline bool invariant_factor(Func f) {
     return false;
 }
 
-// Has the weight a float scale per sub-block (a decoded scale port with
-// the values' dimensions: (sub-block, block, row); decoded or read from a
-// table)?
+// Has the weight a float scale per sub-block (nvfp4's)?
 inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
     for (bool tables : {false, true}) {
         for (Func f : decoders(rs, only({tag::scale}), 0, 1, tables)) {
@@ -710,13 +666,9 @@ inline std::vector<Func> scale_decoders(const std::vector<ApproximationResult> &
 
 // blk's per-block dot (r.y rfactored to a pure var) with the decoders inlined
 // and the scales hoisted: returns the dot of the codes (int32 if `integer`).
-// Affine weights first split on the weight's codes, the rest returned in
-// `rest` (else undefined): the code-free factor (the min) times the block's
-// act sum, of its codes (int32) if `integer`, else of its values. A factor
-// common to both (the act's scale) hoists first: blk is then it times `mid`
-// (else undefined), the sum split, so one product per block reaches blk.
-// `aff`: blk has the affine weight's code-free terms (affine(rs), unless
-// derived_sums() took them out).
+// Affine weights (`aff`) also split on the weight's codes: the code-free
+// terms are returned in `rest`, and a factor common to both (the act's
+// scale) hoists first into `mid`.
 inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest, Func &mid, bool aff, const std::vector<Func> &kept = {}) {
     Func codes;
     rest = mid = Func();
@@ -742,27 +694,13 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     return integer ? codes.change_type(Int(32)) : codes;
 }
 
-// An affine weight's code-free terms, read from the act's derived port where
-// one is their act part: the dot's increment (s, out's stage st tile under
-// `cond`) splits on the weight's codes (hoist_invariants) into `with`,
-// computed per tile, s then its update, and the rest, d.sums, the weight's
-// min times the act; per block (r.y rfactored to u, d.blk), the min hoists
-// out of the act's block sum, which then reads the act's derived port
-// (read_port: e.g. q8_1's s; d.sum, if none matches). Acts whose derived
-// port sums sub-blocks of `act_sub` values (q8_K's bsums): the block's sum,
-// int32 (d.sum: the act's codes decoded up to what its ports read), splits
-// per act sub-block (rfactor: d.part), the weight's factor of each (its
-// sub-block's min) hoists out, and the act's sub-block sum reads the port.
-// With `sub` (a multiple of act_sub): the weight's sub-blocks instead, each
-// min times the act's sum over it (d.pair), the sum of its act sub-blocks'
-// port values (as GGML's repacked q4_K gemv pair-sums q8_K's bsums).
-// A weight whose codes decode to a field plus a constant (tq2_0's field - 1,
-// q6_K's - 32: offset_path()) is treated alike, the constant its min: the
-// act's sums are then times the constant (and any per-sub-block factor, q6_K's
-// scales), as GGML subtracts offset * bsums rather than the offset per value.
-// (`fold`: a per-format parameter, as GGML's q3_K subtracts its offset per
-// value.) Returns false (dot untouched) if the weight is neither affine nor
-// offset or the act has no derived port.
+// An affine weight's code-free terms (d.sums: its min times the act), split
+// off the dot's increment s by hoist_invariants, read the act's derived port
+// (read_port: q8_1's s, q8_K's bsums) where one matches; per act sub-block
+// (`act_sub`, d.part) or, with `sub`, per weight sub-block (d.pair: its act
+// sub-blocks' port values summed). A constant code offset (offset_path():
+// tq2_0, q6_K) is treated alike, as GGML subtracts offset * bsums (`fold`).
+// Returns false (dot untouched) if there is nothing to read.
 struct Sums {
     Func sums, blk, sum, part, pair;
     bool sub_sums = false;  // d.sum sums the act's sub-block sums (no part)
@@ -838,15 +776,10 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     return true;
 }
 
-// d's sums alongside acc's update (at ryo), its blocks per ryo. On gemm
-// tiles, the rows' mins vectorized (n), times each act column's port, a chain
-// per column; on gemv tiles, per block, the min times the act's port, one
-// accumulator per interleaved block (as acc: one fused-multiply-add each on
-// the loop-carried chains).
-// `across_rows`: the sub-block sums too vectorized across the rows (n;
-// records of several rows), each act sub-block's (or d.pair's) sum
-// broadcast: by-element multiply-adds. `act_records`: the act too in whole
-// records (its sums interleaved across its rows).
+// d's sums alongside acc's update (at ryo): on gemm tiles vectorized across
+// the rows (n), on gemv tiles one accumulator per interleaved block.
+// `across_rows`: the sub-block sums vectorized across a record's rows too.
+// `act_records`: the act also in whole records.
 inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, const Tiles &ts, const RDom &r, bool gemm, int vec, bool across_rows = false, bool act_records = false) {
     if (!d.sums.defined()) return;
     Var u("u"), v("v");
@@ -877,9 +810,8 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
             // of its port's), each a lane: a by-element multiply-add
             RVar rxh("rxh");
             if (act_records) {
-                // whole act records (q8_K.4x8): each weight sub-block's act
-                // sums dense across the record's rows (h, tl, m), so pairwise
-                // adds of whole bsums vectors (addp), not lane gathers
+                // whole act records (q8_K.4x8): pairwise adds of whole bsums
+                // vectors (addp), not lane gathers
                 Var tg("tg"), tl("tl"), sg("sg"), sl("sl");
                 d.pair.compute_at(blocks).split_storage(t, sg, sl, 2).reorder_storage(sl, m, sg, n, u);
                 d.pair.split(t, tg, tl, 2).reorder(tl, m, tg, n, u).vectorize(tl).vectorize(m).unroll(tg).unroll(n).unroll(u);
@@ -898,9 +830,8 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         Var t = d.part.args().back(), to("to"), ti("ti");
         d.part.compute_at(blocks).reorder_storage(t, u, n, m);
         if (d.offsets) {
-            // an offset's factor (q6_K's int8 scales) times the act's int16
-            // sums, 8 lanes a step: sshll then smull / smull2 (not 16, whose
-            // high half's sign extend LLVM shuffles)
+            // q6_K's int8 scales times the act's int16 sums, 8 lanes a step
+            // (sshll, smull; at 16 LLVM shuffles the sign extend; untimed)
             d.part.split(t, to, ti, 8);
             d.part.update().split(t, to, ti, 8);
             regs(d.part, {ti}, {to, u, n, m});
@@ -920,9 +851,8 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
     }
 }
 
-// Eagerly inline into f's update every pure Func it calls but `kept` (as
-// staged encodes, computed apart), transitively: e.g. a float weight's view
-// and decode, so its products read the stored values.
+// Eagerly inline into f's update every pure Func it calls but `kept`,
+// transitively (e.g. a float weight's view and decode).
 inline void inline_operands(Func f, const std::vector<Func> &kept) {
     for (;;) {
         std::vector<Func> fs;
@@ -947,15 +877,11 @@ inline void inline_operands(Func f, const std::vector<Func> &kept) {
 }
 
 // s's sum as a tree of partial sums (GGML's accumulators): a chain of
-// rfactors, level i keeping the RVars of levels[i] as its Vars, so it sums
-// the others of level i - 1's (level 0: s's other RVars, `outer` outside n
-// and m; s then sums the last level's). The order is the schedule's; with
-// `acc` (an Accumulate), the first `narrow` levels' sums are acc's: each
-// approximated in its consumer (the next level), whose sum then reads it as
-// stored (level 0 its operands as stored, but `kept`). Each level per tile
-// (`at`), in registers: stored its first `fused` Vars, then n, m; vectorized
-// across those (fused into one), unrolled across its others, n, m and the
-// RVars it sums. Returns the levels' Funcs.
+// rfactors, level i keeping levels[i]'s RVars as Vars (`outer` outside n and
+// m). With `acc` (an Accumulate), the first `narrow` levels' sums are acc's,
+// each approximated in the next level (level 0 reads its operands as stored,
+// but `kept`). Each level per tile (`at`) in registers, its first `fused`
+// Vars fused and vectorized. Returns the levels' Funcs.
 using Level = std::vector<std::pair<RVar, Var>>;
 inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, LoopLevel at, Var n, Var m, RVar outer, size_t fused = 1,
                                   const Approximation &acc = Approximation(), int narrow = 0, const std::vector<Func> &kept = {}) {
@@ -992,16 +918,10 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 }
 
 // blocked()'s two-level weights with a float scale per sub-block (nvfp4's)
-// whose blocks (the act's, the reduction's) hold `nsub` sub-blocks, fewer
-// than an sdot's lanes, on tiles of ts.interleave blocks that fill them: as
-// GGML's NEON nvfp4 vec_dot, the lanes are the (sub-block, block) of a block
-// group, each its sub-block's int32 dot of the codes, then its scale (the
-// weight's sub-block scale times the act's block scale) applied as one
-// vector multiply-add per group. A sub-block's dot: its codes in pieces of
-// `ql` quads, each piece of the block's sub-blocks one sdot (lanes: quad,
-// sub-block; the codes of a piece of every sub-block one dense run of the
-// record, as GGML's low and high nibbles), accumulated over the pieces, then
-// its quads summed (pairwise adds across the group's blocks).
+// whose blocks hold `nsub` sub-blocks, fewer than an sdot's lanes, as GGML's
+// NEON nvfp4 vec_dot: the lanes are the (sub-block, block) of a block group,
+// each its sub-block's int32 dot (sdot pieces of `ql` quads), then its scale
+// applied as one vector multiply-add per group (nvfp4 vec_dot 0.56x -> 1.03x).
 inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDom &r, const Tiles &ts, int sub, int nsub, int vec, int per,
                               const std::vector<ApproximationResult> &rs, const Target &t) {
     Var lane("lane"), u("u"), q("q"), bacc("bacc"), lu("lu"), qlv("ql");
@@ -1029,16 +949,11 @@ inline void blocked_sub_lanes(Func out, int st, Stage s, Var n, Var m, const RDo
     tables(rs, {blk, codes, quads}, LoopLevel(acc, ryo), t);
 }
 
-// A block's codes (codes: their dot per lane, chunks rxc of `nchunk`, each
-// `per` values per lane, rxi) whose bit fields (x >> s) & m sit at a position s
-// that varies with the chunk (tq2_0's 2-bit fields: s = 0, 2, 4, 6 by pairs
-// of chunks): the chunks summed per position class (rfactor, c), which makes
-// s invariant over the reduction, so hoist_invariants() hoists the field's
-// shift as a factor where that is exact: each field is read in place,
-// x & (m << s), and the class's sum shifted right once (ssra). Exact where
-// the field read in place fits its int8 code: s = 2, 4; s = 6's, 192,
-// doesn't, so it is shifted as before. A mask per field, not a shift and a
-// mask (tq2_0: 8 fewer SIMD instructions per block). False (codes untouched)
+// A block's codes whose bit fields (x >> s) & m sit at a position s that
+// varies with the chunk rxc (tq2_0's 2-bit fields): the chunks summed per
+// position class (rfactor, c), so hoist_invariants() hoists the shift where
+// exact (the field read in place fits int8): a mask per field, then one
+// shift per class sum (ssra). tq2_0 1.10-1.17x. False (codes untouched)
 // where no field's position varies so.
 inline bool hoisted_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per, LoopLevel at, int interleave, Var n, Var m) {
     using namespace Internal;
@@ -1098,26 +1013,14 @@ inline bool hoisted_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per,
 }
 
 // The weight quantized in blocks: per block (r.y) and output a dot of the
-// codes (when the activation is quantized alike, an int32 sdot: 4 products per
-// lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
-// (GGML's order), on ts tiles of out under `cond`. `derived`: an affine
-// weight's code-free terms read the act's derived port (derived_sums()), a
-// product per block accumulated alongside. Two-level weights (`sub` values
-// per sub-block, each with its own scale): the block's dot splits per
-// sub-block (rfactor), whose scale hoists out of its dot of the codes, so
-// the codes' products stay those of the codes (sdot) and the scales apply
-// once per sub-block; `act_sub`: the act's (derived_sums(); sub-blocks of
-// several act sub-blocks, as q4_K's: their sums paired, d.pair). `sublanes`
-// (two-level weights, a per-format parameter): the lanes are the sub-blocks
-// instead (mod vec / per), as GGML's NEON iq2_xs: per lane its sub-block's
-// dot (sdot, then pairwise adds across the sdot's lanes), and the
-// sub-blocks' scales, decoded once per block as a vector, apply as one
-// vector multiply-add per vec / per sub-blocks. `gpr_scales` (a per-format
-// parameter): the sub-blocks' decoded scales (and mins), per block in
-// general-purpose registers, 4 bytes a word (VectorizeIn::SWAR: GGML's SWAR
-// decode of q4_K's 6-bit scales and mins). `defer` (vec_dot and gemv, no
-// sub-blocks): the codes' bit fields' shifts deferred to their sums
-// (hoisted_shifts()).
+// codes (an int32 sdot when the act is quantized alike, else f32) times the
+// hoisted scales, accumulated per lane in f32 (GGML's order), on ts tiles of
+// out under `cond`. `derived`: derived_sums(). Two-level weights (`sub`
+// values per sub-block): the block's dot splits per sub-block (rfactor),
+// whose scale hoists out of its codes' dot. `sublanes`: the sub-blocks
+// across the lanes instead (GGML's NEON iq2_xs). `gpr_scales`: the
+// sub-block scales decoded in GPRs (SWAR, GGML's q4_K). `defer`: the bit
+// fields' shifts deferred (hoisted_shifts()).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
                     int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false, bool fold_offsets = true,
@@ -1144,8 +1047,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     bool aff = affine(rs);
     Sums d;
-    // scales decoded in GPRs stay their own stage, for the derived sums and
-    // the dot
+    // scales decoded in GPRs stay their own stage
     std::vector<Func> dkept = kept, gpr;
     if (!sl && gpr_scales) {
         gpr = scale_decoders(rs);
@@ -1163,7 +1065,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     Func blk = s.rfactor({{sl ? rxl : rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
     // float sub-block scales (nvfp4's): the codes' dot is integer per
-    // sub-block only, once they hoist
+    // sub-block only
     bool fsub = sub && integer && float_sub_scales(rs);
     std::vector<Func> bkept = kept;
     bkept.insert(bkept.end(), gpr.begin(), gpr.end());
@@ -1181,14 +1083,13 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     RVar rl = sl ? rxl : rxo;
     Func acc = sum_tree(s, {{{rl, lane}, {ryi, bacc}}, {{rl, lane}}}, tile_at(out, st), n, m, ryo)[0];
     s.atomic().vectorize(rl).unroll(n).unroll(m);
-    // rfactor put the lanes last in storage; per block group (ryo), the
-    // blocks' storage also in the K tail: on the stack
+    // rfactor put the lanes last in storage; bound_storage keeps the K
+    // tail's blocks on the stack
     for (Func f : {blk, mid, codes}) {
         if (f.defined()) regs(f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, n, m});
     }
     if (rest.defined()) {
-        // the act's block sum, once per act column: the rows' copies are a
-        // broadcast (n vectorized)
+        // the act's block sum, once per act column (n a broadcast)
         regs(rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, m});
         ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
     }
@@ -1208,8 +1109,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             regs(g.compute_at(f, rxs).reorder_storage(lane, n, m), {lane}, {v, u, n, m});
         }
         if (sl) {
-            // the sub-blocks across the lanes: per lane, its sub-block's
-            // sdots accumulated across its chunks (quads, a vector per lane),
+            // per lane, its sub-block's sdots over its chunks (quads),
             // then summed across their lanes (pairwise adds)
             Var q("q"), ql("ql");
             Func quads = inner.update().rfactor(rxo, q);
@@ -1223,11 +1123,8 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         }
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
-    // ... decoded per block for the derived sums and the sub-blocks' dots,
-    // a word of 4 bytes at a time in a GPR (each word's bytes one shift and
-    // mask, as GGML's q4_K: its dot from 76 SIMD instructions per block to
-    // 72), the mins handed to the derived sums' vectors in registers (fmov,
-    // mov.s), the scales extracted from their words
+    // gpr_scales: the scales and mins decoded per block, 4 bytes a word in a
+    // GPR (q4_K vec_dot +7-12%)
     std::vector<Func> sum_readers;
     if (d.part.defined()) sum_readers.push_back(d.part);
     for (auto [f, part, inner] : subs) {
@@ -1242,16 +1139,14 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         if (callers.empty()) continue;
         Func w = k.in(callers);
         Var kw("kw"), kb("kb");
-        // (all unrolled: a loop here splits the block's code, and LLVM
-        // hoists the block's loads above it and spills them)
+        // (all unrolled: a loop here splits the block, and LLVM spills)
         w.compute_at(acc, ryo).split(w.args()[0], kw, kb, 4).unroll(kw).vectorize(kb, 4, VectorizeIn::SWAR);
         for (size_t i = 1; i < w.args().size(); i++)
             w.unroll(w.args()[i]);
         readers.push_back(w);
     }
     for (auto [f, part, inner] : subs) {
-        // the kept scales part reads (the rest inline into them): per block
-        // group, vectorized across the sub-blocks
+        // the kept scales part reads: per block group, vectorized
         for (const Expr &e : part.function().update(0).values()) {
             Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
                 for (Func k : kept) {
@@ -1267,11 +1162,9 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     tables(rs, readers, LoopLevel(acc, ryo), t, index_words);
 }
 
-// Weights of one value per record (floats: no blocks, r.x is a single value):
-// per output, the products accumulated in f32 in vectors of `vec` values of
-// r.y (2 f32 vectors: one of 16-bit floats), ts.interleave independent ones
-// (the K tail guarded), then summed across them, on ts tiles of out under
-// `cond`. The decoders (conversions to f32) are inlined.
+// Float weights (one value per record): per output, f32 products in vectors
+// of `vec` values of r.y, ts.interleave independent accumulators (the K tail
+// guarded), then summed across them.
 inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Target &t) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), bacc("bacc");
@@ -1282,16 +1175,11 @@ inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
     s.atomic().vectorize(ryl).unroll(n).unroll(m);
 }
 
-// flat()'s dot accumulated by `acc` (an Accumulate, the format's) in the
-// order and roundings of GGML's NEON f16 vec_dot (ggml_vec_dot_f16): with
-// lane l = b0 + 2 b1 + 4 b2 + 8 b3 + 16 b4 of each 32 values of r.y, the
-// products summed per lane over the 32-value steps (GGML's four 8-lane
-// accumulators, fused multiply-adds), then over bit 4 of l (sum[j] +
-// sum[j + 2]) and bit 3 (sum[0] + sum[1]), these three by `acc`; then in
-// f32 over bit 2 (the halves' add) and bits 0 and 1 (vaddvq's pairwise
-// adds): a sum_tree, its first three levels approximated by acc. The K tail
-// (K % 32) is guarded into the last step's lanes (GGML sums it apart, in
-// f64: not matched).
+// flat()'s dot accumulated by `acc` (the format's Accumulate) in the order
+// and roundings of GGML's NEON f16 vec_dot: a sum_tree over the bits of each
+// 32-value step's lane, its first three levels approximated by acc. The K
+// tail is guarded into the last step's lanes (GGML sums it in f64: not
+// matched).
 inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Approximation &acc, const std::vector<Func> &staged) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4");
@@ -1305,15 +1193,10 @@ inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 }
 
 // The integer path for weight records of ts.nt rows interleaved in pieces of
-// `chunk` codes (as GGML's repacked gemv): per block, int32 sums vectorized
-// across the record's rows and each piece's 4-code quads (sdot), so a piece
-// of the record is one dense load and the act's piece is broadcast to its
-// rows (held in registers per block: with 4-code pieces, a by-element sdot);
-// the quads are then merged, and the scales and accumulators are vectorized
-// across the rows. On gemm tiles of more than `group` (the act's rows per
-// record) rows, as KleidiAI's dotprod gemm: the sums per act record, its
-// codes staged in memory order (a 4-code piece of each row per lane), and its
-// scales as one vector.
+// `chunk` codes (GGML's repacked gemv): per block, int32 sdot sums vectorized
+// across the record's rows, the act's piece broadcast (by-element sdot). On
+// gemm tiles of more than `group` rows (KleidiAI's dotprod gemm): per act
+// record, its codes staged in memory order, its scales one vector.
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs, int group = 0) {
     if (affine(rs)) throw std::invalid_argument("blocked_rows: weights decoded as codes times scales");
@@ -1322,9 +1205,8 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
     RVar ry = r.y, rx = r.x, rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
     Func blk = s.rfactor(ry, u);
-    // The act's codes (the decode of rs[1..]'s codes; rs[0] is the weight's)
-    // stay out of the inline: staged per block in registers, below; on gemm
-    // tiles, so do its scales.
+    // the act's codes (and on gemm tiles its scales) stay out of the inline:
+    // staged per block in registers, below
     bool grouped = group && ts.mt > group;
     std::vector<Func> ac = decoders(rs, only({tag::codes}), 1), as = grouped ? decoders(rs, only({tag::scale}), 1) : std::vector<Func>{};
     std::vector<Func> dec = decoders(rs, all_but({}), 0, 1), rest = decoders(rs, grouped ? all_but({tag::codes, tag::scale}) : all_but({tag::codes}), 1);
@@ -1378,15 +1260,10 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m, mi, mo});
 }
 
-// blocked_rows() for two-level weights (q4_K's repacked block_q4_Kx8, as
-// GGML's ggml_gemv_q4_K_8x8_q8_K; q5_K's and q6_K's): per block and sub-block of `sub`
-// values, the int32 dot of the codes vectorized across the record's rows and
-// each piece's quads (sdot, the act's piece broadcast to the rows), the
-// quads merged, times the sub-block's scales (a vector across the rows),
-// summed over the sub-blocks in int32, then times the rows' and act's
-// scales into f32 accumulators across the rows. An affine weight's min term
-// reads the act's sub-block sums (`act_sub`: q8_K's bsums; derived_sums()),
-// times the rows' mins as a vector, alongside.
+// blocked_rows() for two-level weights (GGML's ggml_gemv_q4_K_8x8_q8_K; q5_K,
+// q6_K): per sub-block of `sub` values, the codes' int32 dot across the rows
+// times the sub-block's scales, summed in int32, then times the block scales.
+// An affine weight's min term reads the act's sub-block sums (derived_sums()).
 inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                              const std::vector<ApproximationResult> &rs, int sub, int act_sub) {
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
@@ -1415,14 +1292,10 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
     for (Func f : {blk, codes}) {
         regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
     }
-    // a loop over sub-block pairs (64 values: the same bytes' low and high
-    // nibbles), each pair unrolled, as GGML's (fully unrolled, the codes'
-    // loads are scheduled early and spill)
+    // a loop over groups of sub-blocks, each unrolled (fully unrolled, the
+    // codes' loads are scheduled early and spill); groups larger than pairs
+    // where a bit field's position varies across pairs (constant shifts)
     RVar rxso("rxso"), rxsi("rxsi");
-    // Groups larger than pairs where a bit field's position varies across
-    // pairs, so its shifts are constants: as many as share its bytes (q6_K's
-    // 8 sub-blocks of 16 per 128 values) or all (q5_K's high bits: bit s of
-    // sub-block s).
     auto bx = as_const_int(r.x.extent());
     int subs = bx ? (int)*bx / sub : 2, group = 2;
     while (group < subs && bit_position_varies(quads, v, group))
@@ -1448,11 +1321,9 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, true);
 }
 
-// An i8mm stage's 2 x 2 sub-tiles (smmla's results): n and m split in 2
-// (nio, nii; mio, mii), guarded (this code is also in other tiles' branches,
-// never run there, whose bounds must not grow past their tiles), the loops
-// `order` (innermost first), each sub-tile's 4 lanes vectorized, the
-// sub-tiles unrolled.
+// An i8mm stage's 2 x 2 sub-tiles (smmla's results), the loops `order`
+// (innermost first). Guarded: this code is also in other tiles' branches,
+// never run there, whose bounds must not grow past their tiles.
 inline Stage sub_tiles(Stage s, Var n, Var m, const std::vector<VarOrRVar> &order) {
     Var nio("nio"), nii("nii"), mio("mio"), mii("mii");
     s.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
@@ -1466,16 +1337,11 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
     return f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(outer);
 }
 
-// The integer path on i8mm smmla (2 x 2 x 8 matrix-multiply tiles): nt x mt
-// tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
-// (split_storage), so the tile's accumulators stay in registers.
-// `records`: the weights in records of ts.nt rows (tiles from 0 mod ts.nt,
-// N a multiple), their mins across the rows (as blocked_rows_sub).
-// `act_records`: the act too in whole records (q8_K.4x8).
-// `per` > 1: weight blocks of `per` blocks (scale-only weights, one level):
-// per weight block (w), its scale times the sum of its blocks' (win, each
-// the act's scale times the codes' dot), so the weight's scale multiplies
-// once per weight block, not per block.
+// The integer path on i8mm smmla: nt x mt tiles of 2 x 2 sub-tiles, each 4
+// dense lanes of the intermediates' storage, so the accumulators stay in
+// registers. `records`: the weights in records of ts.nt rows. `act_records`:
+// the act too (q8_K.4x8). `per` > 1: weight blocks of `per` act blocks
+// (scale-only weights), the weight's scale once per weight block.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
                          const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
                          int per = 1, bool fold_offsets = true, bool gpr_scales = false, bool index_words = false) {
@@ -1487,18 +1353,13 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Sums d;
     // records: the sub-blocks' decoded scales (and mins) their own stage
     std::vector<Func> kept = records && sub ? scale_decoders(rs) : std::vector<Func>{};
-    // gpr_scales: the plain weights' sub-block scales too, decoded per block
-    // per row in GPRs (below), not per sub-block per row pair
+    // gpr_scales: the plain weights' sub-block scales too, in GPRs (below)
     bool swar = gpr_scales && sub && !records;
     if (swar) kept = scale_decoders(rs);
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub, records ? sub : 0, kept, fold_offsets)) aff = false;
-    // With the act's records: if, within the period over which the bit
-    // fields' positions repeat (bit_period: q6_K's 128 values), a bit of the
-    // sub-block's index that moves no field (q6_K's bit 0) lies beneath ones
-    // that do, r.x split by that period first, so that bit can be a loop
-    // inside the period's (the others unrolled): x then the period's multiple
-    // plus the loop's, which the simplifier reduces to dense loads (split in
-    // sub-blocks first, ((p * 8 + b) * 16 + c) % 128 stays: gathers).
+    // With the act's records: r.x split first by the period over which the
+    // bit fields' positions repeat (bit_period: q6_K's 128 values), so the
+    // loads stay dense (split in sub-blocks first, the % 128 stays: gathers).
     auto bx = as_const_int(r.x.extent());
     RVar rxp("rxp");
     Var vp("vp");
@@ -1561,16 +1422,9 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         sub_tiles(f.update(), n, m, f.name() == win.name() ? std::vector<VarOrRVar>{nii, mii, nio, mio, ryp, w} : std::vector<VarOrRVar>{nii, mii, nio, mio, w}).unroll(w);
     }
     if (sub) {  // per block and sub-block: the tile's sub-block dots, then their scales
-        // With the act's records, a loop over groups of sub-blocks whose bit
-        // fields' positions repeat (constant shifts), as blocked_rows_sub's
-        // (q4_K's pairs, q6_K's 128 values; fully unrolled, the codes' loads
-        // are scheduled early and spill: 4-7% slower), each unrolled, those
-        // reading the same bytes adjacent (sharing_order: q6_K's 0, 4, 2, 6).
-        // Per period, its bits that move no field loops inside the unrolled
-        // ones (q6_K's: 4 sub-blocks unrolled per loop iteration, pairs
-        // sharing the low bits' bytes, all 4 the high bits'; no stack
-        // round trips of the raw bytes 8 unrolled took, 865 -> 2 x 373
-        // instructions per 128 smmla).
+        // With the act's records, a loop over groups of sub-blocks (fully
+        // unrolled spills: 4-7% slower), those reading the same bytes adjacent
+        // (sharing_order); per period, bits that move no field loop inside.
         Stage cu = codes.update();
         int subs = bx ? (int)*bx / sub : 2;
         if (period) subs = period / sub;
@@ -1624,9 +1478,8 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         }
         part.compute_at(codes, at_sub);
         inner.compute_at(codes, at_sub);
-        // the sub-block's scales, decoded once across the record's rows (per
-        // period, its sub-blocks', the rows innermost: dense in a looped
-        // sub-block, not gathered)
+        // the sub-block's scales, decoded once across the record's rows (the
+        // rows innermost per period: dense, not gathered)
         for (Func k : swar ? std::vector<Func>{} : kept) {
             if (!calls_any(part.function().update(0).values()[0], {k})) continue;
             Func ks = k.in(part);
@@ -1649,9 +1502,8 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, records, act_records);
-    // a tile-local wrapper (k is shared with the other tiles), computed per
-    // block: four scales per word, the rows unrolled (with SIMD across the
-    // rows instead, or SIMD only: 3-4% slower)
+    // a tile-local wrapper (k is shared with the other tiles), per block:
+    // four scales per word, the rows unrolled (SIMD across rows: 3-4% slower)
     for (Func k0 : swar ? kept : std::vector<Func>{}) {
         std::vector<Func> callers;
         for (Func g : {part, inner, codes, blk, mid, rest, d.sums, d.blk, d.sum, d.part, d.pair}) {
@@ -1704,10 +1556,9 @@ inline bool reassociable(const Func &f) {
     return true;
 }
 
-// An encoder computed per record (each block of values), vectorized: the
-// Funcs with an element per value (e.g. the codes, packed bytes) across their
-// elements, and its reductions (e.g. the block's scale) across the block,
-// those Halide can reorder (not a strict_float sum, kept in order: q1_0's).
+// An encoder computed per record, vectorized: its per-value Funcs across
+// their elements, its reassociable reductions across the block (a
+// strict_float sum, q1_0's, stays in order).
 inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
     for (Func f : encoder_funcs(e, rs)) {
         if (f.name() == e.name()) continue;
@@ -1724,19 +1575,16 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 }
 
 // Where a weight's constant code offsets fold into the act's sub-block sums
-// (derived_sums()): vec_dot and every mul_mat tile, vec_dot and the gemv
-// tiles (GGML's repacked i8mm q6_K gemm subtracts its offset per value: the
-// sums' products with its sub-block scales cost the gemm tiles more), or
-// nowhere (a per-format parameter).
+// (derived_sums()): everywhere, vec_dot and gemv only (GGML's i8mm q6_K gemm
+// subtracts per value), or nowhere (a per-format parameter).
 enum class Fold {
     None,
     Gemv,
     All,
 };
 
-// The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
-// pipeline (`staged`) are encoded once, up front. `interleave` blocks per
-// iteration (blocked weights; a per-format parameter, formats.cmake).
+// The N = M = 1 schedule (GGML's vec_dot). Staged activations are encoded
+// once, up front. `interleave` blocks per iteration (formats.cmake).
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
                     bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
@@ -1748,20 +1596,16 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     if (fmt.block == 1) {
-        // (flat()'s 8 interleaved steps: 16 f32 accumulators, so the widening
-        // FMAs (fmlal) issue back to back: on M3, f16 vec_dot 1.2x, its gemv
-        // 1.05-1.1x of 4 steps')
+        // 8 interleaved steps: f16 vec_dot 1.2x, gemv 1.05-1.1x of 4 (M3)
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t);
         return;
     }
     blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true);
 }
 
-// The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
-// (gpu_threads ns), each `rows(cols)` rows (ni, unrolled) of `cols` columns
-// (mi, unrolled), for the widest cols <= 8 that M allows (gemv: nr rows of
-// one column); N < nr * sg, a row per threadgroup. Edge tiles shift inwards.
-// dot is computed per output (ni): warp allocations of one value.
+// The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
+// rows of `cols` columns, the widest cols <= 8 that M allows (gemv: nr rows
+// of one column); N < nr * sg, a row per threadgroup. Edge tiles shift in.
 inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows) {
     Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi");
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -1784,11 +1628,8 @@ inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<
 }
 
 // Of the bits of a block's value index (r.x, in [0, 2^bits)) from `low` up,
-// per bit how many of dot's code loads (its decode inlined: loads of the
-// encoded ports, at an index that varies within the first `low` bits: not
-// a scale's, nor a field of fewer values' bits) it leaves in place: values
-// differing only in it read the same bytes (q4_0's bit 4, a byte's two
-// nibbles; q6_K's 5 and 6, ql's nibbles and qh's pairs).
+// per bit how many of dot's code loads it leaves in place: values differing
+// only in it read the same bytes (q4_0's bit 4: a byte's two nibbles).
 inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) {
     using namespace Internal;
     Expr e = dot.update_value();
@@ -1840,15 +1681,9 @@ inline void metal_lut(Func f, Func out, const Var &at) {
     f.compute_at(out, at).store_in(MemoryType::GPUShared).reorder(i, p).gpu_threads(i);
 }
 
-// Metal: the codebooks' luts (codebook_lut(); register_lut()), each computed per
-// threadgroup (at out's innermost gpu_blocks loop) into threadgroup memory,
-// an entry per thread, as GGML's kernel_mul_mv_iq4_nl_f32 copies
-// kvalues_iq4nl. (M3 Max, iq4_nl, iq4_xs and mxfp4 on f32 and q8 acts: gemv
-// 1.45-1.75x the speed of their mux as a select tree on words of the
-// constants packed, M = 4 1.12-1.18x; read in place from the table's device
-// buffer, or in the constant address space, gemv on N or K of 14336
-// 0.73-1.0x of staged; computed per threadgroup, as here, or copied from a
-// table's device buffer, about even: 0.97-1.03x.)
+// Metal: the codebooks' luts, each per threadgroup in threadgroup memory, as
+// GGML's kernel_mul_mv_iq4_nl_f32 (iq4_nl/iq4_xs/mxfp4 gemv 1.45-1.75x vs a
+// select tree; M3 Max).
 inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
     for (Func f : decoders(rs)) {
         if (is_lut(f) && register_lut(rs, f)) metal_lut(f, out, Var("no"));
@@ -1856,8 +1691,7 @@ inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
 }
 
 // g's private copies (clone_in) of the Funcs on its calls' paths to those
-// `pick` selects, so they can be scheduled for g alone (as a specialization's
-// own luts); returns the copies of the picked.
+// `pick` selects; returns the copies of the picked.
 inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func &)> &pick) {
     using namespace Internal;
     std::map<std::string, bool> memo;
@@ -1887,29 +1721,14 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
     return picked;
 }
 
-// Metal (Apple GPUs), as GGML's kernel_mul_mv_*_f32 (q4_0's, q4_K's, ...):
-// threadgroups of `sg` simdgroups (gpu_threads), each rows of one column of
-// out. A lane takes 2^vals values of a block (16 of 32, 32 of 256: a block's
-// 2 or 8 lanes), of every (32 / its lanes)-th block: runs of 8 (contiguous
-// bytes) times each value sharing their bytes (shared_bits(), the most
-// shared first; to `vals`, the highest bits): q4_0's two halves of a byte's
-// nibbles, q4_K's sub-blocks 2i, 2i + 1 (a byte's nibbles), 2i + 4 and
-// 2i + 5, as GGML's; the rest of the bits, the block's lanes. Its rows: `nr`
-// for 16 values, half for 32 (the same registers; for 256-value blocks, 4
-// rows of 32 values are 0.65-0.9x of 2 on M3 Max, as GGML's N_R0 = 2). It
-// accumulates the rows in registers: for two-level weights (values per
-// sub-block `sub`), per sub-block a lane takes, the codes' dot (inner) times
-// its scale (part); summed per block, then times the block's (an affine
-// weight's min times the act's sum alongside, as block_dot); the lanes' sums
-// then reduce across the simdgroup (an atomic update over the gpu lanes:
-// simd shuffles) and lane 0 writes. For M > 1, each simdgroup takes rows x
-// cols of out (up to 8 columns, fewer rows for more), a lane per value of
-// every 32 of a block (coalesced loads), its products in registers (each
-// decoded weight used cols times, each act value rows times), reduced the
-// same way (the gemv lanes' act loads, 16 values of blocks 16 apart, are
-// strided: far slower for that many columns; for 256-value blocks the gemv
-// lanes on tiles of 2-4 columns were no faster: 0.5-1.4x). Each kernel has
-// both trees, behind uniform flags (dot's specialization, done on the host).
+// Metal, as GGML's kernel_mul_mv_*_f32: threadgroups of `sg` simdgroups, each
+// rows of one column. A lane takes 2^vals values of a block: runs of 8 bytes
+// times the values sharing their bytes (shared_bits()), the rest the block's
+// lanes; `nr` rows for 16 values, half for 32 (256-value blocks: 4 rows
+// 0.65-0.9x of 2, M3 Max). Two-level weights: per sub-block, the codes' dot
+// times its scale. The lanes reduce across the simdgroup (simd shuffles).
+// M > 1: rows x cols per simdgroup, a lane per value of every 32 (coalesced;
+// the gemv lanes there 0.5-1.4x), behind dot's specialization.
 inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int sub = 0, int nr = 4, int sg = 2) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
@@ -2077,15 +1896,11 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     }
 }
 
-// Metal on weights of one value per record (floats: no blocks), as GGML's
-// kernel_mul_mv_f16_f32_4: metal_tiles of 2 rows (gemv) or 4 rows of up to 8
-// columns. A lane takes `c` contiguous values of every 32 * c (the
-// simdgroup's: one coalesced stream per row; the Metal compiler merges the
-// unrolled loads into half4 / float4), accumulating each output in a scalar
-// register (float4 accumulators spill for M > 1); the lanes' sums then reduce
-// across the simdgroup (gpu_lanes) and lane 0 writes. The K tail is guarded.
-// Staged acts (f32 encoded per value) get a kernel of their own: inlined,
-// every tile of rows would encode its columns again.
+// Metal on float weights, as GGML's kernel_mul_mv_f16_f32_4: metal_tiles of
+// 2 rows (gemv) or 4 rows of up to 8 columns. A lane takes `c` contiguous
+// values of every 32 * c (coalesced; merged into half4/float4 loads), each
+// output a scalar accumulator (float4 ones spill for M > 1). Staged acts get
+// a kernel of their own (inlined, every tile would encode its columns).
 inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged, int nr = 2, int sg = 2, int c = 16) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), rl("rl"), ryi("ryi");
@@ -2113,14 +1928,10 @@ inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::
     return wh.type() == Float(16) && xh.defined() && xh.type() == Float(16);
 }
 
-// The f32 operands of a Metal gemm on exact weights: the weights' decoded
-// values (wh: their approximation's replacement) and the acts dot multiplies
-// them by (xh: f32 acts, or f16 ones' decode), both f32, else false. Not
-// two-level formats (K-quants, iq4_xs): out's gemm specialization ahead of the
-// rows puts its negation in every SkipStages flag of the rows' Funcs, so the
-// gemv kernel keeps dot's M >= 2 tree and its sub-block stages' flags: M = 1
-// 1.17-1.28x slower on M3 Max (q4_K, q2_K, iq4_xs), though their gemm is
-// 1.1-2.4x faster than the rows at M = 16..64.
+// The f32 operands of a Metal gemm on exact weights (wh: the weights' decoded
+// values; xh: the acts dot multiplies them by), else false. Not two-level
+// formats: the gemm specialization's negation in the rows' SkipStages flags
+// makes M = 1 1.17-1.28x slower (q4_K, q2_K, iq4_xs; M3 Max).
 inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
     using namespace Internal;
     if (fmt.wcompute || !staged.empty() || rs.empty() || fmt.block % 8 || fmt.sub) return false;
@@ -2157,23 +1968,12 @@ inline void inline_until(Func f, const std::vector<Func> &to) {
     }
 }
 
-// Metal gemm on f16 or f32 operands (f16_operands, f32_operands: wh, xh), as
-// GGML's kernel_mul_mm: dot's sum of their products, in f32, on the
-// simdgroup_matrix unit, for `o` (a stage of out: its specialization for the
-// shapes it takes). A threadgroup (gpu_blocks) takes a bn x bm tile of out,
-// its simdgroups (gpu_threads) wn x 1 sub-tiles of 8 * tn x 8 * tm outputs,
-// each 8 x 8 an accumulator in Tile memory (simdgroup_float8x8). Per step of
-// `kstep` values of K, the threadgroup's simdgroups decode the tile's weights
-// (to f16, or f32) in threadgroup memory (each lane 4 values of a row at a
-// time) and stage its acts likewise; each simdgroup then loads the operand
-// fragments (simdgroup_half8x8 or simdgroup_float8x8, one per 8 values of K)
-// of its row of tiles and its column of tiles once, and multiplies them into
-// its accumulators. Tiles by
-// M (the widest it allows): 64 x 32 for M >= 256 and N >= 64 (4 x 1
-// simdgroups of 16 x 32), 32 x 32 for M >= 32 (4 x 1 of 8 x 32), 16 x 16 for
-// M >= 16, 16 x 8 below (2 simdgroups): o needs M >= 8, N >= 32 (edge tiles
-// shift inwards). Steps of 64 values (two 32-value blocks; one where K is an
-// odd number of them).
+// Metal gemm on f16 or f32 operands (wh, xh), as GGML's kernel_mul_mm, on the
+// simdgroup_matrix unit, for `o` (out's specialization). A threadgroup takes
+// a bn x bm tile, its simdgroups wn x 1 sub-tiles of 8 * tn x 8 * tm, each
+// 8 x 8 an accumulator in Tile memory. Per step of K the operands are staged
+// in threadgroup memory, then loaded as 8 x 8 fragments. Tiles by M: 64 x 32
+// (M >= 256, N >= 64), 32 x 32, 16 x 16, 16 x 8; steps of 64 values.
 inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
     if (fmt.block % 8) throw std::invalid_argument("metal_mm: blocks of a multiple of 8 values");
     const int t = 8;
@@ -2191,10 +1991,8 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     // their fragments (wf, xf)
     inline_until(dot, {wh, xh});
     Func ws = wh.in(dot), xs = xh.in(dot), wf = ws.in(dot), xf = xs.in(dot);
-    // the weights' luts (metal_luts) the gemm's own, per threadgroup (M3 Max,
-    // iq4_nl and mxfp4 on f32 acts, vs packed_muxes's select tree on packed
-    // words: M = 16 1.03-1.06x, M = 64..128 0.94-0.98x, M = 512 even; inlined
-    // as a select tree, 0.82-0.92x)
+    // the weights' luts the gemm's own, per threadgroup (iq4_nl/mxfp4 M = 16
+    // 1.03-1.06x, M = 64..128 0.94-0.98x vs packed muxes; M3 Max)
     std::set<std::string> staged;
     for (Func f : decoders(rs)) {
         if (is_lut(f) && register_lut(rs, f)) staged.insert(f.name());
@@ -2266,15 +2064,9 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     }
 }
 
-// Metal on f16 operands (f16_operands: wh, xh) or f32 ones (f32_operands):
-// metal_mm where M >= min_m and N >= 32, else metal_rows, on a clone of dot
-// (each branch computes its own, stored and scheduled apart: one in Tile
-// memory) reading the same operands. On f16 operands min_m is 8 (as GGML's
-// kernel_mul_mm, past its mul_mv's M), and the rows decode per value (the
-// f16-rounded weights' scales no longer factor out of a block); on f32, 16:
-// below it the f32 tiles lose to the rows on some formats (mxfp4, iq4_nl,
-// q4_1 at M = 8 and 12, their decode staged per tile of 8 acts).
-// One kernel: both behind out's specialization (dot's, done on the host).
+// Metal on f16 or f32 operands: metal_mm where M >= min_m and N >= 32, else
+// metal_rows on a clone of dot, one kernel. min_m: 8 on f16 (GGML's), 16 on
+// f32 (below it the f32 tiles lose on mxfp4, iq4_nl, q4_1).
 inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
@@ -2288,14 +2080,10 @@ inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, cons
     metal_rows(out, rows, r, rs, fmt.sub);
 }
 
-// Rowwise formats (schemes/kleidiai.h: weights qsi8cx, acts qai8dx): one
-// scale per row, so the codes' dot accumulates in int32 over the whole of K.
-// dot's increment, the weight's codes times its scale times the act's codes
-// plus its offset times its scale (s, out's stage tile under `cond`), splits
-// on the act's codes (its ports tagged codes and their decode): one Func
-// the codes' dot (int32), the other the weight's code sum, read from its
-// derived port (read_port: the row sums its encoder stored),
-// each times its scales once per output. Returns the codes' dot.
+// Rowwise formats (schemes/kleidiai.h: qsi8cx weights, qai8dx acts): one
+// scale per row, so the codes' dot accumulates in int32 over all of K. dot's
+// increment splits on the act's codes: the codes' dot (returned) and the
+// weight's code sum, read from its derived port (read_port).
 inline Func rowwise_dot(Stage s, const std::vector<ApproximationResult> &rs) {
     std::vector<Func> act = decoders(rs, only({tag::codes}), 1);
     for (size_t i = 1; i < rs.size(); i++) {
@@ -2311,13 +2099,9 @@ inline Func rowwise_dot(Stage s, const std::vector<ApproximationResult> &rs) {
     return codes;
 }
 
-// The rowwise gemv: per tile of ts.nt rows, the codes' dot in int32 lanes
-// over all of K (sdot: 4 products per lane), merged once at the end. Weight
-// records of rows interleaved in `chunk`-code pieces: the lanes across the
-// record's rows and each piece's 4-code quads, so a piece of the record is
-// one dense load and the act's piece is broadcast to its rows (KleidiAI's
-// qsi8cxp4x8 gemv); planar weights (chunk 0): each row's 16-code lanes,
-// the act's shared by the rows.
+// The rowwise gemv: per tile of ts.nt rows, the codes' dot in int32 sdot
+// lanes over all of K. Records of rows in `chunk`-code pieces: lanes across
+// the rows (KleidiAI's qsi8cxp4x8 gemv); planar (chunk 0): 16-code lanes.
 inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs) {
     Stage s = tile_out(out, st, dot, cond, ts, r, chunk > 0);
@@ -2343,10 +2127,7 @@ inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     regs(codes.compute_at(tile), {}, {n, m});
 }
 
-// The rowwise gemm on i8mm smmla (2 x 2 x 8 matrix-multiply tiles), as
-// blocked_mmla but with no per-block work: nt x mt tiles of 2 x 2 sub-tiles,
-// each 4 dense lanes of the codes' dot (split_storage), in registers over
-// all of K.
+// The rowwise gemm on i8mm smmla, as blocked_mmla with no per-block work.
 inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n,
                          const std::vector<ApproximationResult> &rs, bool guard_m = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r, whole_n, guard_m);
@@ -2367,17 +2148,10 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     sub_tiles(cu, n, m, {rxk, nii, mii, nio, mio, rxc, ry}).unroll(rxc).atomic().vectorize(rxk);
 }
 
-// A rowwise act encoded in the pipeline (qai8dx's codes e): its row ranges
-// (min and max, vectorized), then the row's scale and zero point, computed
-// once per row (so the products' scaling reads them too), then the codes
-// (vectorized), each in parallel over the rows when there are several. With
-// `pairs`, the codes are stored in groups of 8 rows (M > 1 rounded up: the
-// rows past M repeat the last one), in 8-code pieces, the group's pieces adjacent
-// and its K contiguous (split_storage, as KleidiAI's qai8dxp packs them for
-// smmla): an smmla operand (8 codes of 2 rows) is one dense load, and a tile
-// of 8 rows from 0 mod 8 one stream. One row (gemv) is dense: groups of 1,
-// computed within out's specializations, whose M > 1 or M = 1 folds the
-// layout (no stride left to the loops).
+// A rowwise act encoded in the pipeline (qai8dx): row ranges, scale and zero
+// point once per row, then the codes, parallel over rows. With `pairs`, the
+// codes stored in groups of 8 rows (M rounded up), 8-code pieces adjacent,
+// as KleidiAI's qai8dxp packs them for smmla; one row (gemv) stays dense.
 inline void rowwise_encoder(Func e, Func out, const std::vector<ApproximationResult> &rs, const Expr &M, bool pairs) {
     for (Func f : encoder_funcs(e, rs)) {
         Var row = f.args().back();
@@ -2407,13 +2181,9 @@ inline void rowwise_encoder(Func e, Func out, const std::vector<ApproximationRes
     }
 }
 
-// mul_mat on rowwise formats: gemm (M > 1, N > 1) on smmla tiles where the
-// target has i8mm, 8 x 8 (16 accumulators: enough independent smmla chains to
-// fill the pipes, as KleidiAI's 16 x 4), else 4 x 8; on acts encoded here,
-// tiles of whole groups of 8 rows (the last guarded), any M > 1; on
-// pre-quantized acts, shifted inwards (4 x 2 for M < 8); gemv
-// tiles of 4 rows (a record of interleaved weights; planar: N >= 4, else
-// single rows), in tasks of 16 rows.
+// mul_mat on rowwise formats: gemm on smmla tiles where the target has i8mm,
+// 8 x 8 (16 accumulators, as KleidiAI's 16 x 4), else 4 x 8; gemv tiles of 4
+// rows, in tasks of 16 rows.
 inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt,
                             const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Target &t) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -2447,21 +2217,13 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
     rowwise_gemv(out, 0, dot, Expr(), single, r, 0, rs);
 }
 
-// mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
-// and both operands are quantized alike; for whole act records, 4 x 12, 16 or
-// 20, whichever pads M least, 16 x 4 for one record, 4 x 8 for two; on weight
-// records in 4-code pieces, those tiles on by-element sdot; else 4 x 4 on
-// sdot), in tasks of up to 32 x 32 outputs (whole records: up to 128 rows),
-// fewer rows where that balances the threads (small N);
-// gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
-// block (single rows for N = 1, for weights decoded through tables, or
-// without `row_pairs`), with its `interleave`, `sublanes` and `gpr_scales`
-// (per-format parameters). Edge
-// tiles shift inwards: any N, M at least the tile's. With act records of
-// r = fmt.act_rows > 1 rows, out's first update is the rows in whole records
-// (dots[1]; for M > 1, all of them, the last record's rows past M
-// unwritten) on gemm tiles starting on a record, its second M = 1's row
-// (dots[0]) on gemv tiles.
+// mul_mat: gemm tiles of the outputs (smmla with i8mm, else sdot; whole act
+// records on 4 x 12/16/20 tiles), in tasks of up to 32 x 32 outputs,
+// balanced over the threads; gemv (M = 1) is vec_dot's recipe on row pairs
+// (single rows for N = 1, staged tables, or without `row_pairs`). Edge tiles
+// shift inwards. With act records of fmt.act_rows > 1 rows, out's first
+// update is the rows in whole records (dots[1]), its second M = 1's
+// (dots[0]).
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
                     bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true,
@@ -2500,10 +2262,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     Expr Mr = select(M > 1, M, 0);  // (as matmul's: whole records' rows)
     const int fv = 4 * t.natural_vector_size<float>();
     for (size_t i = 0; i < staged.size(); i++) {
-        // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks
-        // of their blocks (work in values), so even a few records (small M)
-        // spread over the threads. With whole records, staged[0] is M = 1's
-        // row, one per task (the fused loop would encode a row even for none).
+        // staged[i] encodes dots[i]'s act, in tasks of up to 16 chunks of
+        // blocks; with whole records, staged[0] (M = 1's row) one per task
         Func e = staged[i];
         Var b = e.args()[0], rec = e.args().back(), bo("bo"), t("t");
         Stage s = e.compute_root().specialize(M > 1);
@@ -2525,10 +2285,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
     }
     if (fmt.block == 1) {
-        // Float weights (no blocks): 4 x 2 tiles (each vector of a row's
-        // weights used for both act columns, each act vector for 4 rows), row
-        // pairs, single rows. gemv (M = 1) takes single rows: one weight
-        // stream (row pairs are two, a row apart: 0.65x GGML at K = 14336).
+        // Float weights: 4 x 2 tiles, row pairs, single rows; gemv in single
+        // rows (row pairs: 0.65x GGML at K = 14336).
         if (whole || fmt.rows > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
         Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 8, 16};
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
@@ -2551,11 +2309,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
     auto fits = [&](const Tiles &ts, Expr m) { return whole ? N % ts.nt == 0 && N >= ts.nt : N >= ts.nt && m >= ts.mt; };
-    // Whole records' row tiles: 12, 16 or 20 rows cost about the same per row,
-    // so the one computing the fewest rows past Mr (ties: 16, then 20); one
-    // record, 16 x 4 (16 accumulators); two, 8 rows. Each
-    // task's tiles cover up to 128 rows, so the weights stream once (M <= 128).
-    // A chain, so the later branches learn each condition false (dr's bound).
+    // Whole records' row tiles: 12, 16 or 20 rows, whichever pads Mr least
+    // (ties: 16, then 20); one record 16 x 4, two 8 rows. A chain, so the
+    // later branches learn each condition false (dr's bound).
     Tiles t16{4, 16, 1, 32, 128, 2}, t20{4, 20, 1, 32, 120, 2}, t12{4, 12, 1, 32, 120, 2}, t8{4, 8, 1, 32, 128, 2}, wide{16, 4, 1, 32, 128, 2};
     auto padded = [&](const Tiles &ts) { return (Mr + ts.mt - 1) / ts.mt * ts.mt; };
     Expr fewest = min(padded(t12), padded(t16), padded(t20)), odd_n = !fits(gemm, Mr);
@@ -2595,14 +2351,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             blocked_rows_sub(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, fmt.sub, fmt.act_sub);
             return;
         }
-        // Codes decoded from their field (packed or mapped, not q8_0's bytes):
-        // two records per tile where N allows, each act piece's broadcast
-        // serving both (on M3, the gemv of mxfp4.4x4 1.08-1.1x, q4_0.i4.4x8
-        // 1.04-1.1x, q1_0.4x1 1.02-1.05x; q8_0's, a load per piece, 0.85x at
-        // K = 14336: two weight streams). Records of over 11 KB, as row pairs
-        // below, one per tile up to 4 threads (q4_0.i4.4x4's at K = 14336,
-        // 32 KB: 1.2x on one thread, 1.04x on four; even on six; on ten, two
-        // records 1.1-1.4x).
+        // Codes decoded from a field: two records per tile where N allows
+        // (gemv 1.02-1.1x; q8_0 0.85x), unless records over 11 KB on <= 4
+        // threads.
         std::vector<Func> cd = decoders(rs, only({tag::codes}), 0, 1);
         cd.erase(std::remove_if(cd.begin(), cd.end(), constant), cd.end());  // (not a codebook's lut)
         if (!cd.empty() && cd.front().type() != cd.back().type()) {
@@ -2617,12 +2368,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
-    // A staged table's decode, per row pair, outweighs sharing the act's loads
-    // (`row_pairs`: a per-format parameter). Rows of over 11 KB (q8_0's from
-    // K = 11008) in single rows: on one thread, two weight streams that far
-    // apart are slower than one (on M3, q8_0's gemv at K = 14336 1.15x in
-    // single rows, at 16384 1.55x); on ten, about even (still 1.03-1.06x of
-    // GGML's).
+    // Staged tables: no row pairs. Rows over 11 KB in single rows (q8_0 gemv
+    // at K = 14336 1.15x on one thread).
     Expr paired = fits(pairs, 1);
     if (row_bytes.defined()) paired = paired && row_bytes <= 11 * 1024;
     if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, true);
