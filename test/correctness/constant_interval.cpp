@@ -26,7 +26,49 @@ ConstantInterval random_interval() {
     return result;
 }
 
+void check_constant_integer_bounds(const Expr &e, const ConstantInterval &expected) {
+    ConstantInterval actual = constant_integer_bounds(e);
+    if (!(actual == expected)) {
+        std::cout << "constant_integer_bounds(" << e << ") = " << actual
+                  << ", expected " << expected << "\n";
+        exit(1);
+    }
+}
+
+void test_constant_integer_bounds_of_select() {
+    Expr x = Variable::make(Int(32), "x");
+    Expr u8 = Variable::make(UInt(8), "u8");
+    Expr i8 = Variable::make(Int(8), "i8");
+
+    // A select is bounded by the union of its two values.
+    check_constant_integer_bounds(select(x > 0, cast<int>(u8), -3),
+                                  ConstantInterval(-3, 255));
+
+    // Nested selects.
+    check_constant_integer_bounds(select(x > 0, cast<int>(u8),
+                                         select(x < -5, -300, cast<int>(i8))),
+                                  ConstantInterval(-300, 255));
+
+    // Vector selects.
+    Expr c_vec = Variable::make(Bool(8), "c_vec");
+    Expr u8_vec = Variable::make(UInt(8, 8), "u8_vec");
+    check_constant_integer_bounds(select(c_vec, cast(Int(16, 8), u8_vec), Broadcast::make(cast<int16_t>(-7), 8)),
+                                  ConstantInterval(-7, 255));
+
+    // If either value is unbounded, so is the result (up to the bounds of the type).
+    check_constant_integer_bounds(select(x > 0, x, 0),
+                                  ConstantInterval::bounds_of_type(Int(32)));
+
+    // if_then_else with both values present behaves like a select.
+    check_constant_integer_bounds(Call::make(Int(32), Call::if_then_else,
+                                             {x > 0, cast<int>(u8), 1000},
+                                             Call::PureIntrinsic),
+                                  ConstantInterval(0, 1000));
+}
+
 int main(int argc, char **argv) {
+    test_constant_integer_bounds_of_select();
+
     for (int i = 0; i < 1000; i++) {
         std::vector<std::pair<ConstantInterval, int64_t>> values;
         for (int j = 0; j < 10; j++) {
