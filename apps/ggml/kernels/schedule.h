@@ -152,6 +152,11 @@ inline std::vector<Func> without(const std::vector<Func> &fs, const std::vector<
     return r;
 }
 
+// s specialized to c, or s if c is undefined.
+inline Stage when(Stage s, const Expr &c) {
+    return c.defined() ? s.specialize(c) : s;
+}
+
 // Does a definition of g call f?
 inline bool calls(const Func &g, const Func &f) {
     std::vector<Expr> vals = g.function().definition().values();
@@ -393,7 +398,7 @@ inline LoopLevel tile_at(Func out, int st) {
 inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n = false, bool guard_m = false) {
     VarOrRVar n = out.args()[0], m = row_var(out, st), mo = row_var(out, st, "mo"), mi = row_var(out, st, "mi"), mc = row_var(out, st, "mc"), t = row_var(out, st, "nc");
     Var no("no"), ni("ni"), nc("nc");
-    Stage o = st ? out.update(st - 1) : Stage(out), s = cond.defined() ? o.specialize(cond) : o;
+    Stage o = st ? out.update(st - 1) : Stage(out), s = when(o, cond);
     // Updates: whole tiles in n (cond knows N % nt == 0); m an RVar.
     s.split(n, no, ni, ts.nt, st || whole_n ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
     s.split(m, mo, mi, ts.mt, st || guard_m ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
@@ -419,9 +424,9 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
         }
         s.split(no, nc, no, per, TailStrategy::GuardWithIf);
         if (ts.cols) s.reorder(ni, mi, mo, no, mc, nc).fuse(mc, nc, t);
-        (ts.busy.defined() ? s.specialize(ts.busy) : s).parallel(ts.cols ? t : VarOrRVar(nc));
+        when(s, ts.busy).parallel(ts.cols ? t : VarOrRVar(nc));
     }
-    return cond.defined() ? dot.update().specialize(cond) : dot.update();
+    return when(dot.update(), cond);
 }
 
 // How a kernel reads its luts (Tabulate's): one that reads a Buffer (a
@@ -1970,11 +1975,11 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
         auto tile = [&](Stage st) {
             return st.tile(n, m, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
         };
-        Stage so = sh.cond.defined() ? o.specialize(sh.cond) : o;
+        Stage so = when(o, sh.cond);
         so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t);
         so.gpu_blocks(n, m).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
-        tile(sh.cond.defined() ? sd.specialize(sh.cond) : sd);
-        Stage u = sh.cond.defined() ? su.specialize(sh.cond) : su;
+        tile(when(sd, sh.cond));
+        Stage u = when(su, sh.cond);
         // ks: the steps of K; kb: their blocks (or, for blocks longer than a
         // step, ko: the step's 8-value pieces of its block)
         auto steps = [&](Stage st, int kstep) {
@@ -1993,7 +1998,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
         for (Func f : {ws, xs}) {
             std::vector<Var> a = f.args();
             Var l("l"), ln("ln"), lt("lt"), sw("sw"), jv("jv");
-            Stage s = sh.cond.defined() ? Stage(f).specialize(sh.cond) : Stage(f);
+            Stage s = when(f, sh.cond);
             s.split(a[0], l, jv, 4);
             for (size_t i = 1; i < a.size(); i++) {
                 Var fl("l" + std::to_string(i));
