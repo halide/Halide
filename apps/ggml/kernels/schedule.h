@@ -138,6 +138,38 @@ inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
     return found;
 }
 
+// Is a Func named `name` among fs?
+inline bool has(const std::vector<Func> &fs, const std::string &name) {
+    return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return f.name() == name; });
+}
+
+// fs but those among `minus`.
+inline std::vector<Func> without(const std::vector<Func> &fs, const std::vector<Func> &minus) {
+    std::vector<Func> r;
+    for (const Func &f : fs) {
+        if (!has(minus, f.name())) r.push_back(f);
+    }
+    return r;
+}
+
+// Does a definition of g call f?
+inline bool calls(const Func &g, const Func &f) {
+    std::vector<Expr> vals = g.function().definition().values();
+    for (const Internal::Definition &u : g.function().updates()) {
+        vals.insert(vals.end(), u.values().begin(), u.values().end());
+    }
+    return std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
+}
+
+// The defined Funcs of gs (each once) that call f.
+inline std::vector<Func> callers(const Func &f, const std::vector<Func> &gs) {
+    std::vector<Func> cs;
+    for (const Func &g : gs) {
+        if (g.defined() && !has(cs, g.name()) && calls(g, f)) cs.push_back(g);
+    }
+    return cs;
+}
+
 // Whether e reads a bit field at a position that varies with v other than
 // with v mod `period` (q5_K's high bits; not q4_K's nibbles at period 2): a
 // loop over v in steps of `period` would shift by a variable amount.
@@ -516,21 +548,7 @@ inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
 // `consumers`, split by the table's rows (a row read is a dense load).
 inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at, const Target &t, bool nested = false) {
     for (Func f : staged_tables(rs)) {
-        std::vector<Func> cs;
-        for (Func c : consumers) {
-            if (!c.defined()) continue;
-            bool calls = false;
-            const Internal::Function &fn = c.function();
-            for (const Expr &v : fn.definition().values()) {
-                calls |= calls_any(v, {f});
-            }
-            for (const Internal::Definition &u : fn.updates()) {
-                for (const Expr &v : u.values()) {
-                    calls |= calls_any(v, {f});
-                }
-            }
-            if (calls) cs.push_back(c);
-        }
+        std::vector<Func> cs = callers(f, consumers);
         if (cs.empty()) continue;
         Func g = f.clone_in(cs);
         Var j = g.args()[0], jo("jo"), ji("ji");
@@ -607,13 +625,10 @@ inline std::vector<Func> offset_decoders(const std::vector<ApproximationResult> 
 // the codes' sum, which hoist_invariants() then splits where it is exact.
 inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> codes = decoders(rs, only({tag::codes}), 0, 1), path = offset_decoders(rs);
-    auto in = [](const std::vector<Func> &fs, const std::string &name) {
-        return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return f.name() == name; });
-    };
     for (bool grew = !path.empty(); grew;) {
         grew = false;
         for (Func f : codes) {
-            if (in(path, f.name()) || f.function().has_update_definition()) continue;
+            if (has(path, f.name()) || f.function().has_update_definition()) continue;
             std::vector<std::pair<Expr, int>> terms;
             int64_t c = 0;
             sum_terms(f.function().definition().values()[0], 1, terms, c);
@@ -623,7 +638,7 @@ inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs)
                         e = k->value;
                     }
                     const auto *call = e.as<Internal::Call>();
-                    return call && in(path, call->name);
+                    return call && has(path, call->name);
                 })) {
                 path.push_back(f);
                 grew = true;
@@ -632,11 +647,7 @@ inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs)
     }
     // the codes the dot reads: those no other code decoder reads
     for (Func f : codes) {
-        bool read = std::any_of(codes.begin(), codes.end(), [&](Func g) {
-            const auto &vals = g.function().definition().values();
-            return g.name() != f.name() && std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
-        });
-        if (!read && in(path, f.name())) return path;
+        if (callers(f, without(codes, {f})).empty() && has(path, f.name())) return path;
     }
     return {};
 }
@@ -675,11 +686,7 @@ inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
 inline std::vector<Func> scale_decoders(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> sc = decoders(rs, only({tag::scale}), 0, 1), fs;
     for (Func f : sc) {
-        bool read = std::any_of(sc.begin(), sc.end(), [&](const Func &g) {
-            const auto &vals = g.function().values();
-            return std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
-        });
-        if (f.dimensions() == 3 && !read) fs.push_back(f);
+        if (f.dimensions() == 3 && callers(f, sc).empty()) fs.push_back(f);
     }
     return fs;
 }
@@ -693,11 +700,7 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     Func codes;
     rest = mid = Func();
     if (!aff) {
-        std::vector<Func> dec;
-        for (Func f : decoders(rs)) {
-            if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
-        }
-        blk.update().eager_inline(dec);
+        blk.update().eager_inline(without(decoders(rs), kept));
         // (scales per sub-block alone, as nvfp4's with f32 acts: none hoists)
         codes = invariant_factor(blk) ? blk.update().hoist_invariants()[0] : blk;
     } else {
@@ -729,10 +732,7 @@ struct Sums {
 inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty()) return false;
-    std::vector<Func> dec;
-    for (Func f : decoders(rs, all_but({tag::codes}), 0, 1)) {
-        if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
-    }
+    std::vector<Func> dec = without(decoders(rs, all_but({tag::codes}), 0, 1), kept);
     std::vector<Func> path = fold ? offset_path(rs) : std::vector<Func>{};
     bool offsets = !path.empty();
     if (!offsets && !affine(rs)) return false;
@@ -1153,13 +1153,9 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         sum_readers.push_back(part);
     }
     for (Func k : gpr) {
-        std::vector<Func> callers;
-        for (Func g : sum_readers) {
-            const auto &vals = g.function().update(0).values();
-            if (std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {k}); })) callers.push_back(g);
-        }
-        if (callers.empty()) continue;
-        Func w = k.in(callers);
+        std::vector<Func> cs = callers(k, sum_readers);
+        if (cs.empty()) continue;
+        Func w = k.in(cs);
         Var kw("kw"), kb("kb");
         // (all unrolled: a loop here splits the block, and LLVM spills)
         w.compute_at(acc, ryo).split(w.args()[0], kw, kb, 4).unroll(kw).vectorize(kb, 4, VectorizeIn::SWAR);
@@ -1250,9 +1246,8 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     qu.atomic().vectorize(ri);
     regs(quads.reorder_storage(q, n, m).compute_at(at).bound_storage(u, ts.interleave), {q, n}, {m, mi, mo, rp, u});
     // A piece's act codes then are a lane of a register: by-element sdot
-    auto calls = Internal::find_direct_calls(quads.function());
     for (Func a : ac) {
-        if (calls.count(a.name())) {
+        if (calls(quads, a)) {
             Func ai = a.in(quads);
             Var k = ai.args()[0];
             if (grouped && ai.dimensions() == 3) {  // (code, block, row)
@@ -1268,9 +1263,8 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
     }
     // the record's scales: one load, each row's a lane (fmla by element)
-    auto bcalls = Internal::find_direct_calls(blk.function());
     for (Func a : as) {
-        if (bcalls.count(a.name())) {
+        if (calls(blk, a)) {
             Func ai = a.in(blk);
             // rows innermost: the block's extent is a guarded min(), not 1
             ai.reorder_storage(ai.args()[1], ai.args()[0]).compute_at(at).vectorize(ai.args()[1]);
@@ -1329,9 +1323,8 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
     regs(quads.reorder_storage(q, n, v, u, m).compute_at(per_sub), {q, n}, {v, u, m, rp});
     quads.update().reorder(ri, q, n, rp, v, u, m).atomic().vectorize(ri);
     // the sub-block's act codes, in registers: each piece a lane of them
-    auto calls = Internal::find_direct_calls(quads.function());
     for (Func a : ac) {
-        if (calls.count(a.name())) {
+        if (calls(quads, a)) {
             Func ai = a.in(quads);
             ai.compute_at(per_sub).vectorize(ai.args()[0]);
         }
@@ -1387,11 +1380,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Var vp("vp");
     int period = 0;
     if (sub && act_records && bx) {
-        std::vector<Func> dec;
-        for (Func f : decoders(rs)) {
-            if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
-        }
-        period = bit_period(dot, r.x, sub, (int)*bx / sub, dec);
+        period = bit_period(dot, r.x, sub, (int)*bx / sub, without(decoders(rs), kept));
     }
     if (period) {
         RVar rxx("rxx");
@@ -1527,18 +1516,9 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // a tile-local wrapper (k is shared with the other tiles), per block:
     // four scales per word, the rows unrolled (SIMD across rows: 3-4% slower)
     for (Func k0 : swar ? kept : std::vector<Func>{}) {
-        std::vector<Func> callers;
-        for (Func g : {part, inner, codes, blk, mid, rest, d.sums, d.blk, d.sum, d.part, d.pair}) {
-            if (!g.defined()) continue;
-            bool c = false;
-            for (int i = -1; i < g.num_update_definitions(); i++) {
-                const auto &vals = i < 0 ? g.function().values() : g.function().update(i).values();
-                c = c || std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {k0}); });
-            }
-            if (c && std::none_of(callers.begin(), callers.end(), [&](const Func &h) { return h.name() == g.name(); })) callers.push_back(g);
-        }
-        if (callers.empty()) continue;
-        Func k = k0.in(callers);
+        std::vector<Func> cs = callers(k0, {part, inner, codes, blk, mid, rest, d.sums, d.blk, d.sum, d.part, d.pair});
+        if (cs.empty()) continue;
+        Func k = k0.in(cs);
         Var kw("kw"), kb("kb");
         k.compute_at(acc, ryo)
             .split(k.args()[0], kw, kb, 4)
@@ -1553,17 +1533,15 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // The Funcs of e's encoder: the intermediates of the result that encodes e,
 // minus its decode Funcs.
 inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> dec, fs;
+    std::vector<Func> dec;
     for (const ApproximationResult &res : rs) {
         std::vector<Func> d = res.decode_funcs();
         dec.insert(dec.end(), d.begin(), d.end());
     }
     for (const ApproximationResult &res : rs) {
-        for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
-            if (std::none_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) fs.push_back(f);
-        }
+        if (res.encoded[0].name() == e.name()) return without(res.intermediates, dec);
     }
-    return fs;
+    return {};
 }
 
 // Whether f's update may be computed out of order (atomic()): not if it
