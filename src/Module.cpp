@@ -925,6 +925,7 @@ void compile_multitarget(const std::string &fn_name,
         // Some features must match across all targets.
         static constexpr std::array must_match_features = {
             Target::ARM64e,
+            Target::ARM64eX1,
             Target::ASAN,
             Target::CPlusPlusMangling,
             Target::Debug,
@@ -936,8 +937,14 @@ void compile_multitarget(const std::string &fn_name,
             Target::SanitizerCoverage,
             Target::UserContext,
         };
+        auto has_effective_feature = [](const Target &t, Target::Feature f) {
+            if (f == Target::ARM64e && t.has_feature(Target::ARM64eX1)) {
+                return true;
+            }
+            return t.has_feature(f);
+        };
         for (auto f : must_match_features) {
-            if (target.has_feature(f) != base_target.has_feature(f)) {
+            if (has_effective_feature(target, f) != has_effective_feature(base_target, f)) {
                 user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "' set identically for compile_multitarget.\n";
                 break;
             }

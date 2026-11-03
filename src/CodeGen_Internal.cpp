@@ -645,7 +645,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     // Clone bool metadata
     for (const char *s : {"halide_use_soft_float_abi",
                           "halide_use_pic",
-                          "halide_enable_backtraces"}) {
+                          "halide_enable_backtraces",
+                          "halide_arm64e_x1"}) {
         if (auto md = get_md_bool(from.getModuleFlag(s))) {
             to.addModuleFlag(llvm::Module::Warning, s, *md ? 1 : 0);
         }
@@ -741,11 +742,14 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
         fn.addFnAttr("ptrauth-auth-traps");
         fn.addFnAttr("ptrauth-indirect-gotos");
         fn.addFnAttr("aarch64-jump-table-hardening");
+        if (get_modflag_bool(module, "halide_arm64e_x1")) {
+            fn.addFnAttr("branch-protection-pauth-lr");
+        }
     }
 }
 
 void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &target) {
-    if (!target.has_feature(Target::ARM64e)) {
+    if (!target.has_feature(Target::ARM64e) && !target.has_feature(Target::ARM64eX1)) {
         return;
     }
 
@@ -816,12 +820,30 @@ void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &tar
                 auto *cb = llvm::dyn_cast<llvm::CallBase>(&inst);
                 if (!cb || cb->isInlineAsm() ||
                     cb->getCalledFunction() != nullptr ||
-                    llvm::isa<llvm::Constant>(cb->getCalledOperand()) ||
-                    cb->getOperandBundle(llvm::LLVMContext::OB_ptrauth).has_value()) {
+                    llvm::isa<llvm::Constant>(cb->getCalledOperand())) {
+                    continue;
+                }
+                if (cb->getOperandBundle(llvm::LLVMContext::OB_ptrauth).has_value()) {
+                    // LLVM's AArch64 AUTH_TCRETURN lowering does not yet support
+                    // branch-protection-pauth-lr; clear opportunistic tail markers.
+                    if (target.has_feature(Target::ARM64eX1)) {
+                        if (auto *ci = llvm::dyn_cast<llvm::CallInst>(cb)) {
+                            if (ci->isTailCall() && !ci->isMustTailCall()) {
+                                ci->setTailCall(false);
+                            }
+                        }
+                    }
                     continue;
                 }
                 llvm::CallBase *signed_cb =
                     llvm::CallBase::Create(cb, ptrauth_bundle, cb->getIterator());
+                if (target.has_feature(Target::ARM64eX1)) {
+                    if (auto *ci = llvm::dyn_cast<llvm::CallInst>(signed_cb)) {
+                        if (ci->isTailCall() && !ci->isMustTailCall()) {
+                            ci->setTailCall(false);
+                        }
+                    }
+                }
                 cb->replaceAllUsesWith(signed_cb);
                 cb->eraseFromParent();
             }

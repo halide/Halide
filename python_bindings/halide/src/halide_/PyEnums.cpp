@@ -274,6 +274,7 @@ void define_enums(py::module_ &m) {
         .value("HLSL_SM69", Target::Feature::HLSL_SM69)
         .value("NoMetadata", Target::Feature::NoMetadata)
         .value("ARM64e", Target::Feature::ARM64e)
+        .value("ARM64eX1", Target::Feature::ARM64eX1)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

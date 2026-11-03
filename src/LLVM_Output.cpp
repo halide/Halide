@@ -434,6 +434,32 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
     Internal::run_with_large_stack([&]() {
+        const llvm::Triple &triple = module.getTargetTriple();
+        if (triple.isArm64e() && triple.isOSDarwin()) {
+            const auto *cam = llvm::dyn_cast_or_null<llvm::ConstantAsMetadata>(
+                module.getModuleFlag("halide_arm64e_x1"));
+            const auto *ci = cam ? llvm::dyn_cast<llvm::ConstantInt>(cam->getValue()) : nullptr;
+            if (ci && !ci->isZero()) {
+                llvm::SmallVector<char, 0> buf;
+                llvm::raw_svector_ostream buf_os(buf);
+                emit_file(module, buf_os, llvm::CodeGenFileType::ObjectFile);
+                // Verify 64-bit Mach-O little-endian header magic (MH_MAGIC_64 =
+                // 0xfeedfacf) before patching mach_header_64.cpusubtype (bytes 8..11)
+                // to 0x8000000c (CPU_SUBTYPE_ARM64E_X1 |
+                // CPU_SUBTYPE_ARM64E_VERSIONED_PTRAUTH_ABI_MASK).
+                internal_assert(buf.size() >= 12 &&
+                                static_cast<uint8_t>(buf[0]) == 0xcf &&
+                                static_cast<uint8_t>(buf[1]) == 0xfa &&
+                                static_cast<uint8_t>(buf[2]) == 0xed &&
+                                static_cast<uint8_t>(buf[3]) == 0xfe);
+                buf[8] = 0x0c;
+                buf[9] = 0x00;
+                buf[10] = 0x00;
+                buf[11] = static_cast<char>(0x80);
+                out.write(buf.data(), buf.size());
+                return;
+            }
+        }
         emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
     });
 }

@@ -504,7 +504,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else {
             user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
 #ifdef WITH_AARCH64
-            if (target.has_feature(Target::ARM64e)) {
+            if (target.has_feature(Target::ARM64e) || target.has_feature(Target::ARM64eX1)) {
                 triple.setArch(llvm::Triple::aarch64, llvm::Triple::AArch64SubArch_arm64e);
             } else {
                 triple.setArch(llvm::Triple::aarch64);
@@ -543,7 +543,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::MacOS) {
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::MacOSX);
-            if (!target.has_feature(Target::ARM64e)) {
+            if (!target.has_feature(Target::ARM64e) && !target.has_feature(Target::ARM64eX1)) {
                 triple.setArchName("arm64");
             }
         } else if (target.os == Target::NoOS) {

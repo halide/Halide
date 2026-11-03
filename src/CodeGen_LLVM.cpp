@@ -238,19 +238,6 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
 void CodeGen_LLVM::initialize_llvm() {
     static std::once_flag init_llvm_once;
     std::call_once(init_llvm_once, []() {
-        // You can hack in command-line args to llvm with the
-        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
-        std::string args = get_env_variable("HL_LLVM_ARGS");
-        if (!args.empty()) {
-            vector<std::string> arg_vec = split_string(args, " ");
-            vector<const char *> c_arg_vec;
-            c_arg_vec.push_back("llc");
-            for (const std::string &s : arg_vec) {
-                c_arg_vec.push_back(s.c_str());
-            }
-            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
-        }
-
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
@@ -269,6 +256,42 @@ void CodeGen_LLVM::initialize_llvm() {
     Initialize##target##AsmPrinter();
 #include <llvm/Config/AsmPrinters.def>
 #undef LLVM_ASM_PRINTER
+
+#ifdef WITH_AARCH64
+        // Enable Checked Pointer Arithmetic (FEAT_CPA) instruction selection
+        // when +cpa is present on the subtarget (e.g. arm64e_x1). Run after
+        // Initialize*Target() so AArch64 backend options are registered, and
+        // before HL_LLVM_ARGS so explicit user overrides still win.
+        auto &llvm_opts = cl::getRegisteredOptions();
+        if (auto it = llvm_opts.find("aarch64-use-featcpa-codegen"); it != llvm_opts.end()) {
+            if (it->second->getNumOccurrences() == 0) {
+                static_cast<cl::opt<bool> *>(it->second)->setValue(true);
+            }
+        } else {
+            // In LLVM 24+, target backend flags migrated from cl::opt to
+            // TableGen LibraryOptions, which are not in getRegisteredOptions()
+            // and are configured via ParseCommandLineOptions. Pass
+            // &llvm::nulls() so this stays non-fatal if a future LLVM release
+            // enables CPA codegen unconditionally and removes the flag.
+            const char *featcpa_args[] = {"llc", "-aarch64-use-featcpa-codegen=true"};
+            cl::ParseCommandLineOptions(2, featcpa_args, "Halide compiler\n", &llvm::nulls());
+        }
+#endif
+
+        // You can hack in command-line args to llvm with the
+        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
+        std::string args = get_env_variable("HL_LLVM_ARGS");
+        if (!args.empty()) {
+            vector<std::string> arg_vec = split_string(args, " ");
+            vector<const char *> c_arg_vec;
+            c_arg_vec.push_back("llc");
+            for (const std::string &s : arg_vec) {
+                if (!s.empty()) {
+                    c_arg_vec.push_back(s.c_str());
+                }
+            }
+            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
+        }
     });
 }
 
@@ -451,6 +474,9 @@ void CodeGen_LLVM::apply_target_options(llvm::Module &m) const {
     m.addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
     if (effective_vscale != 0) {
         m.addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
+    }
+    if (target.has_feature(Target::ARM64eX1)) {
+        m.addModuleFlag(llvm::Module::Warning, "halide_arm64e_x1", 1);
     }
 }
 
