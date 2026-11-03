@@ -422,38 +422,39 @@ Weights take a compute format too, `<storage>:<compute>` (Metal mul_mat only;
 `formats.cmake`): `q4_0:f16` is q4_0's round trip approximated again by the
 `binary16` `MiniFloat` (`approximate_by` on the first approximation's
 replacement, `kernels/matmul.cpp`), i.e. each decoded weight rounded to f16, as
-GGML's Metal gemm (`kernel_mul_mm`) dequantizes to half. The algorithm is still
-the plain mul_mat; the roundings are its approximations. On f16 acts (`f16`, or
-`f32:f16`) its Metal schedule (`metal_gemm`, `schedule.h`) specializes on M >= 8
-and N >= 32 for `metal_mm`: threadgroup tiles of out, the weights decoded to f16
-and the acts converted into threadgroup memory per 64 values of K, multiplied by
-the simdgroups as 8 x 8 `simdgroup_half8x8` fragments into `simdgroup_float8x8`
-accumulators (`MemoryType::Tile`). Other shapes run `metal_rows` in the same
-kernel, on a clone of the dot (each branch's dot is stored apart). The rounding
-is per value, so the rows can no longer factor a block's scale out of its
-products: small M runs a few percent slower than the exact q4_0 rows (which
-GGML's mul_mv also is). `--check` declares it as `Precision::w_quant` (an f16
-rounding of every decoded weight: half an ulp, 2^-25 at least). The exact
-blocked formats' Metal libraries (f32 or f16 acts) run the same `metal_mm` on
-f32 operands (their decoded weights and acts staged as f32, `simdgroup_float8x8`
-fragments) for M >= 16 and N >= 32: no rounding, and on the M3 Max about as fast
-as f16's (q4_0 at 4096 x 4096: M = 16 98 us, M = 32 170; f16 operands 99 and
-160). Not two-level formats (K-quants, iq4_xs): with the gemm's specialization
-in their kernel, SkipStages' flags keep dead stages in the rows' gemv (M = 1
-1.17-1.28x slower), though their gemm is 1.1-2.4x faster at M = 16..64.
+GGML's Metal gemm (`kernel_mul_mm`) dequantizes to half (`q8_0:f16` likewise).
+The algorithm is still the plain mul_mat; the roundings are its approximations.
+On f16 acts (`f16`, or `f32:f16`) its Metal schedule (`metal_gemm`,
+`schedule.h`) specializes on M >= 8 and N >= 32 for `metal_mm`: threadgroup
+tiles of out, the weights decoded to f16 and the acts converted into threadgroup
+memory per 64 values of K, multiplied by the simdgroups as 8 x 8
+`simdgroup_half8x8` fragments into `simdgroup_float8x8` accumulators
+(`MemoryType::Tile`). Other shapes run `metal_rows` in the same kernel, on a
+clone of the dot (each branch's dot is stored apart). The rounding is per value,
+so the rows can no longer factor a block's scale out of its products: small M
+runs a few percent slower than the exact q4_0 rows (which GGML's mul_mv also
+is). `--check` declares it as `Precision::w_quant` (an f16 rounding of every
+decoded weight: half an ulp, 2^-25 at least). The exact blocked formats' Metal
+libraries (f32 or f16 acts) run the same `metal_mm` on f32 operands (their
+decoded weights and acts staged as f32, `simdgroup_float8x8` fragments) for M >=
+16 and N >= 32: no rounding, and on the M3 Max about as fast as f16's (q4_0 at
+4096 x 4096: M = 16 98 us, M = 32 170; f16 operands 99 and 160). Not two-level
+formats (K-quants, iq4_xs): with the gemm's specialization in their kernel,
+SkipStages' flags keep dead stages in the rows' gemv (M = 1 1.17-1.28x slower),
+though their gemm is 1.1-2.4x faster at M = 16..64.
 
 GGML picks its Metal kernel by M: mul_mv (exact; `kernel_mul_mv_mma_*` for M =
 2..16 on q4_0) up to 16, then `kernel_mul_mm` (f16 weights). The Halide
-counterpart is two libraries, the exact one and `q4_0:f16`, picked by M on the
-host: `halide-by-m-<name>` in the harness reports that (the exact library for M
-\<= 16), next to `ggml-metal`, and an integration (`llama/`; Metal isn't wired
-up there yet) would dispatch the same way. Each library is correct for every M.
-GGML's mv_mma, at M = 8 about 1.4x faster than ours, builds its operand
-fragments per lane from the q4_0 codes in registers (`thread_elements()`, no
-threadgroup memory), multiplies the codes (exact in half) by f32 acts, and
-applies each block's scale to the accumulators; `MemoryType::Tile` fragments are
-only loaded from memory, take one element type, and can't be scaled, so that
-kernel has no Halide schedule yet.
+counterpart is two libraries, the exact one and `q4_0:f16` (or `q8_0:f16`),
+picked by M on the host: `halide-by-m-<name>` in the harness reports that (the
+exact library for M \<= 16), next to `ggml-metal`, and an integration (`llama/`;
+Metal isn't wired up there yet) would dispatch the same way. Each library is
+correct for every M. GGML's mv_mma, at M = 8 about 1.4x faster than ours, builds
+its operand fragments per lane from the q4_0 codes in registers
+(`thread_elements()`, no threadgroup memory), multiplies the codes (exact in
+half) by f32 acts, and applies each block's scale to the accumulators;
+`MemoryType::Tile` fragments are only loaded from memory, take one element type,
+and can't be scaled, so that kernel has no Halide schedule yet.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
