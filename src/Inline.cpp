@@ -46,7 +46,7 @@ void validate_schedule_inlined_function(Function f) {
             user_error << "Cannot unroll dimension "
                        << d.var << " of function "
                        << f.name() << " because the function is scheduled inline.\n";
-        } else if (d.for_type == ForType::Vectorized) {
+        } else if (is_vectorized(d.for_type)) {
             user_error << "Cannot vectorize dimension "
                        << d.var << " of function "
                        << f.name() << " because the function is scheduled inline.\n";

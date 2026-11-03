@@ -64,7 +64,11 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("parallel", (T & (T::*)(const VarOrRVar &, const Expr &, TailStrategy)) & T::parallel, py::arg("var"), py::arg("task_size"), py::arg("tail") = TailStrategy::Auto)
 
         .def("vectorize", (T & (T::*)(const VarOrRVar &)) & T::vectorize, py::arg("var"))
+        // This must come before the overload taking an Expr factor, which
+        // would otherwise accept a VectorizeIn by converting it to an int.
+        .def("vectorize", (T & (T::*)(const VarOrRVar &, VectorizeIn)) & T::vectorize, py::arg("var"), py::arg("where"))
         .def("vectorize", (T & (T::*)(const VarOrRVar &, const Expr &, TailStrategy)) & T::vectorize, py::arg("var"), py::arg("factor"), py::arg("tail") = TailStrategy::Auto)
+        .def("vectorize", (T & (T::*)(const VarOrRVar &, const Expr &, VectorizeIn, TailStrategy)) & T::vectorize, py::arg("var"), py::arg("factor"), py::arg("where"), py::arg("tail") = TailStrategy::Auto)
 
         .def("gpu_blocks", (T & (T::*)(const VarOrRVar &, DeviceAPI)) & T::gpu_blocks, py::arg("block_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
         .def("gpu_blocks", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, DeviceAPI)) & T::gpu_blocks, py::arg("block_x"), py::arg("block_y"), py::arg("device_api") = DeviceAPI::Default_GPU)

@@ -418,6 +418,8 @@ public:
     Stage &unroll(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var, const Expr &task_size, TailStrategy tail = TailStrategy::Auto);
     Stage &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &vectorize(const VarOrRVar &var, VectorizeIn where);
+    Stage &vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &partition(const VarOrRVar &var, Partition partition_policy);
     Stage &never_partition_all();
@@ -1642,6 +1644,49 @@ public:
      * one. After this call, var refers to the outer dimension of the
      * split. 'factor' must be an integer. */
     Func &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+
+    /** Variants of vectorize that also choose how the lanes are
+     * computed on. VectorizeIn::SIMD is the same as the overloads
+     * above. VectorizeIn::SWAR packs all the lanes of the vector into a
+     * single general-purpose integer register (32 or 64 bits wide,
+     * depending on the target) and implements lane-wise operations with
+     * ordinary integer instructions, masking off bits that would cross
+     * lane boundaries ("SIMD within a register"). This can be faster
+     * than SIMD vectorization for short vectors of narrow integers that
+     * are only loaded, shuffled with shifts and masks, and stored, where
+     * moving data between the general-purpose and SIMD register files
+     * would dominate. A common pattern is to split and unroll the outer
+     * dimension so that shift amounts and masks become uniform across
+     * the lanes of each word:
+     \code
+     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
+     \endcode
+     *
+     * SWAR vectorization only applies to CPU targets. The vector must fit in
+     * one general-purpose register, its lanes must be integers, and every
+     * operation in the vectorized loop must be one that can be done
+     * lane-wise within an integer register (see VectorizeIn::SWAR). Anything
+     * else is a compile-time error suggesting SIMD vectorization instead.
+     *
+     * A loop vectorized with VectorizeIn::SWAR may be nested inside a loop
+     * vectorized with VectorizeIn::SIMD (in the same Func, or in a Func
+     * computed inside the SIMD loop). Each lane of the SIMD vectors then
+     * holds one word of packed lanes, so the SIMD loop runs several words
+     * side by side. For example, to decode four blocks at once:
+     \code
+     f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR).vectorize(b, 4);
+     \endcode
+     * The reverse nesting, a SIMD loop inside a SWAR loop, is an error.
+     *
+     * Where a SWAR-vectorized Func is stored is chosen separately with
+     * store_in. By default its words are stored to memory as vectors of
+     * their lanes; MemoryType::GPR stores them as integer words instead,
+     * so that consumers that read one lane at a time extract the lanes
+     * with shifts and masks. */
+    // @{
+    Func &vectorize(const VarOrRVar &var, VectorizeIn where);
+    Func &vectorize(const VarOrRVar &var, const Expr &factor, VectorizeIn where, TailStrategy tail = TailStrategy::Auto);
+    // @}
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by

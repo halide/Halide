@@ -18,9 +18,11 @@ namespace Internal {
 
 /** Take a statement with for loops marked for vectorization, and turn
  * them into single statements that operate on vectors. The loops in
- * question must have constant extent.
+ * question must have constant extent. Loops vectorized with
+ * VectorizeIn::SWAR are then lowered to operate on the lanes packed into
+ * general-purpose registers of the target (see lower_swar_vectors).
  */
-Stmt vectorize_loops(const Stmt &s, const std::map<std::string, Function> &env);
+Stmt vectorize_loops(const Stmt &s, const std::map<std::string, Function> &env, const Target &target);
 
 }  // namespace Internal
 }  // namespace Halide

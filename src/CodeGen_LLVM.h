@@ -747,6 +747,14 @@ protected:
      * be non-temporal. */
     void add_streaming_load_metadata(llvm::Instruction *inst);
 
+    /** The allocations in MemoryType::GPR currently in scope. */
+    Scope<> gpr_allocations;
+
+    /** If an unpredicated vector load or store of type t at the given
+     * index is a dense access to an allocation in MemoryType::GPR, the
+     * integer type of the word to do it as. Otherwise null. */
+    llvm::Type *gpr_word_type(const std::string &name, const Type &t, const Expr &index);
+
     /** Warning messages which we want to avoid displaying number of times */
     enum class WarningKind {
         EmulatedFloat16,

@@ -229,6 +229,7 @@ target_sources(
     Util.h
     Var.h
     VectorizeLoops.h
+    VectorizeSWAR.h
     WasmExecutor.h
     # keep-sorted end
 )
@@ -431,6 +432,7 @@ target_sources(
     Util.cpp
     Var.cpp
     VectorizeLoops.cpp
+    VectorizeSWAR.cpp
     WasmExecutor.cpp
     # keep-sorted end
 )

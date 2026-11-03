@@ -62,6 +62,7 @@ void define_enums(py::module_ &m) {
         .value("VTCM", MemoryType::VTCM)
         .value("Tile", MemoryType::Tile)
         .value("GPUSharedAsync", MemoryType::GPUSharedAsync)
+        .value("GPR", MemoryType::GPR)
         // Deprecated alias for Tile.
         .value("AMXTile", MemoryType::Tile);
 
@@ -94,6 +95,10 @@ void define_enums(py::module_ &m) {
         .value("ShiftInwardsAndBlend", TailStrategy::ShiftInwardsAndBlend)
         .value("RoundUpAndBlend", TailStrategy::RoundUpAndBlend)
         .value("Auto", TailStrategy::Auto);
+
+    py::enum_<VectorizeIn>(m, "VectorizeIn")
+        .value("SIMD", VectorizeIn::SIMD)
+        .value("SWAR", VectorizeIn::SWAR);
 
     // Predicate is deprecated in C++ (identical to GuardWithIf), but the
     // Python binding is kept for one release for backwards compatibility.

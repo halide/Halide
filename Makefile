@@ -632,6 +632,7 @@ SOURCE_FILES = \
   Util.cpp \
   Var.cpp \
   VectorizeLoops.cpp \
+  VectorizeSWAR.cpp \
   WasmExecutor.cpp \
 # keep-sorted end
 
@@ -826,6 +827,7 @@ HEADER_FILES = \
   Util.h \
   Var.h \
   VectorizeLoops.h \
+  VectorizeSWAR.h \
   WasmExecutor.h \
 # keep-sorted end
 
