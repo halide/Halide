@@ -161,14 +161,10 @@ function(add_halide_generator TARGET)
             get_property(is_imported TARGET Halide::Generator PROPERTY IMPORTED)
             if (
                 APPLE
-                AND (
-                    num_platforms GREATER 1
-                    OR (
-                        is_imported
+                AND (num_platforms GREATER 1
+                    OR (is_imported
                         AND CMAKE_SYSTEM_NAME STREQUAL "Darwin"
-                        AND NOT Halide_CMAKE_TARGET STREQUAL Halide_HOST_TARGET
-                    )
-                )
+                        AND NOT Halide_CMAKE_TARGET STREQUAL Halide_HOST_TARGET))
                 AND Halide_HOST_TARGET MATCHES "^(arm|x86)-64-macos(-arm64e)?$"
             )
                 _Halide_set_osx_arch("${TARGET}" "${Halide_HOST_TARGET}")
