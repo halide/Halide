@@ -43,6 +43,51 @@ public:
         if (target.arch == Target::X86) {
             check_sse_and_avx();
             check_streaming_accesses();
+            check_table_lookups();
+        }
+    }
+
+    void check_table_lookups() {
+        // Vectorized lookups into small constant tables (a mux of constants)
+        // or small embedded Buffers should use pshufb, or vpermb for tables
+        // of more than 16 entries when avx512vbmi is available.
+        if (!use_ssse3) {
+            return;
+        }
+        const bool use_vbmi = target.has_feature(Target::AVX512_Cannonlake);
+        for (int n : {4, 16, 32, 64}) {
+            if (n > 16 && !use_vbmi) {
+                continue;
+            }
+            std::vector<Expr> i8_table, u8_table;
+            Buffer<uint8_t> lut(n);
+            for (int i = 0; i < n; i++) {
+                i8_table.push_back(i8(i * 37 - 100));
+                u8_table.push_back(u8(i * 53 + 7));
+                lut(i) = (uint8_t)(i * 29 + 3);
+            }
+            for (int w : {16, 32, 64}) {
+                const char *op = "pshufb";
+                if (n > 16) {
+                    op = "vpermb*zmm";
+                } else if (w >= 64 && use_avx512) {
+                    op = "vpshufb*zmm";
+                } else if (w >= 32 && use_avx2) {
+                    op = "vpshufb*ymm";
+                }
+                Expr idx = in_u8(x) % n;
+                check(op, w, mux(idx, i8_table));
+                check(op, w, mux(idx, u8_table) + in_u8(x + 16));
+                // Out-of-range mux indices select the last value.
+                check(op, w, mux(in_u8(x), u8_table));
+                check(op, w, mux(in_i32(x), i8_table));
+                check(op, w, lut(i32(idx)));
+                check(op, w, lut(clamp(in_i32(x), 0, n - 1)) * in_u8(x + 16));
+                Func internal;
+                internal(x) = in_u8(x);
+                internal.compute_root();
+                check(op, w, internal(i32(idx)));
+            }
         }
     }
 

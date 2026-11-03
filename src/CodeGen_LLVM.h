@@ -542,6 +542,14 @@ protected:
                              bool is_reduction = false);
     // @}
 
+    /** Lower dynamic_shuffle using a table-lookup intrinsic. The table
+     * registers are already codegened and padded to the intrinsic's input
+     * widths. Replicate them alongside the uint8 indices so call_intrin can
+     * slice the arguments into calls returning intrin_lanes elements. */
+    llvm::Value *codegen_dynamic_shuffle(const Call *op, int intrin_lanes,
+                                         const std::string &intrin,
+                                         const std::vector<llvm::Value *> &tables);
+
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
      * if you ask for more lanes than the vector has. */
     virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);

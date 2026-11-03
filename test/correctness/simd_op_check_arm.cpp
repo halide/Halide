@@ -23,6 +23,50 @@ public:
         if (target.arch == Target::ARM) {
             check_neon_all();
             check_streaming_accesses();
+            check_table_lookups();
+        }
+    }
+
+    void check_table_lookups() {
+        // Vectorized lookups into small constant tables (a mux of constants)
+        // or small embedded Buffers should use tbl, with one table register
+        // per 16 (AArch64) or 8 (ARMv7) bytes.
+        const bool arm32 = (target.bits == 32);
+        const int reg_bytes = arm32 ? 8 : 16;
+        for (int n : {8, 16, 32, 48, 64}) {
+            if (arm32 && n > 32) {
+                continue;
+            }
+            std::vector<Expr> i8_table, u8_table;
+            Buffer<int8_t> lut(n);
+            for (int i = 0; i < n; i++) {
+                i8_table.push_back(i8(i * 37 - 100));
+                u8_table.push_back(u8(i * 53 + 7));
+                lut(i) = (int8_t)(i * 29 - 50);
+            }
+            const int regs = (n + reg_bytes - 1) / reg_bytes;
+            std::string op = arm32 ? "vtbl.8*{" : "tbl*{";
+            for (int i = 1; i < regs; i++) {
+                op += "*,";
+            }
+            op += "*}";
+            for (int w : {3, 8, 16, 17, 32}) {
+                if (arm32 && w > 16) {
+                    continue;
+                }
+                Expr idx = in_u8(x) % n;
+                check(op, w, mux(idx, i8_table));
+                check(op, w, mux(idx, u8_table) + in_u8(x + 16));
+                // Out-of-range mux indices select the last value.
+                check(op, w, mux(in_u8(x), u8_table));
+                check(op, w, mux(in_i32(x), i8_table));
+                check(op, w, lut(i32(idx)));
+                check(op, w, lut(clamp(in_i32(x), 0, n - 1)) * in_i8(x + 16));
+                Func internal;
+                internal(x) = in_i8(x);
+                internal.compute_root();
+                check(op, w, internal(i32(idx)));
+            }
         }
     }
 
