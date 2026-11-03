@@ -12,8 +12,10 @@ every timestep units of time.
 Figures of parallel schedules depend on thread timing, and the inputs in
 lesson 18 are random, so those figures differ from run to run.
 
-Requires numpy, Pillow, and ffmpeg (for the mp4s). The lessons are built with
-the top-level Makefile, so LLVM_CONFIG etc. are taken from the environment.
+Run with `uv run --group figures tutorial/figures/generate_figures.py`, or
+with numpy, Pillow, and imageio-ffmpeg otherwise installed. The lessons are
+built with the top-level Makefile, so LLVM_CONFIG etc. are taken from the
+environment.
 """
 
 import argparse
@@ -26,8 +28,9 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 
+import imageio_ffmpeg
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 FIGURES_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(os.path.dirname(FIGURES_DIR))
@@ -39,22 +42,15 @@ BEGIN_PIPELINE, END_PIPELINE, TAG = 8, 9, 10
 STORE_COLOR = (255, 221, 68)
 LOAD_COLOR = (68, 221, 255)
 
-# Labels are drawn in fixed-size character cells, with the bottom-left corner
-# of the first cell at the label's position.
-CHAR_WIDTH, CHAR_HEIGHT = 12, 32
+# Labels are drawn in a box of this height, with its bottom-left corner at the
+# label's position and the text baseline TEXT_DESCENT pixels above that.
+TEXT_HEIGHT, TEXT_DESCENT = 32, 8
 
+# The tolerance of --check, which absorbs differences in font rendering and
+# video encoding.
+MAX_MEAN_DIFF = 3.0
 
-def load_font():
-    for path in [
-        "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-    ]:
-        if os.path.exists(path):
-            return ImageFont.truetype(path, 21)
-    return ImageFont.load_default(21)
-
-
-FONT = load_font()
+FONT = ImageFont.load_default(21)
 
 
 @dataclass
@@ -162,17 +158,15 @@ class Figure:
             self.fill(self.image, x, y, cfg.zoom, color)
 
     def draw_text(self, text, pos, gray):
-        w = CHAR_WIDTH * len(text)
-        cell = Image.new("L", (w, CHAR_HEIGHT), 0)
-        draw = ImageDraw.Draw(cell)
-        for c, ch in enumerate(text):
-            draw.text(
-                (CHAR_WIDTH * c, CHAR_HEIGHT - 8), ch, fill=255, font=FONT, anchor="ls"
-            )
-        alpha = np.asarray(cell)
-        x, y = pos[0], pos[1] - CHAR_HEIGHT + 1
+        w = math.ceil(FONT.getlength(text))
+        box = Image.new("L", (w, TEXT_HEIGHT), 0)
+        ImageDraw.Draw(box).text(
+            (0, TEXT_HEIGHT - TEXT_DESCENT), text, fill=255, font=FONT, anchor="ls"
+        )
+        alpha = np.asarray(box)
+        x, y = pos[0], pos[1] - TEXT_HEIGHT + 1
         x0, y0 = max(x, 0), max(y, 0)
-        x1, y1 = min(x + w, self.width), min(y + CHAR_HEIGHT, self.height)
+        x1, y1 = min(x + w, self.width), min(y + TEXT_HEIGHT, self.height)
         if x0 >= x1 or y0 >= y1:
             return
         region = self.text[y0:y1, x0:x1]
@@ -263,7 +257,7 @@ class Figure:
                     v = 255.0 * (values[lane] - cfg.min) / (cfg.max - cfg.min)
                     gray = int(max(0.0, min(255.0, v)))
                     self.fill(self.image, x, y, z, (gray, gray, gray))
-                self.fill(self.anim, x, y, z, anim_color + (255,))
+                self.fill(self.anim, x, y, z, (*anim_color, 255))
         elif event == BEGIN_REALIZATION:
             self.num_realizations[qualified] = (
                 self.num_realizations.get(qualified, 0) + 1
@@ -301,7 +295,7 @@ class Figure:
             )
         else:
             cmd = [
-                "ffmpeg",
+                imageio_ffmpeg.get_ffmpeg_exe(),
                 "-loglevel",
                 "error",
                 "-y",
@@ -328,6 +322,42 @@ class Figure:
             if proc.wait() != 0:
                 raise RuntimeError(f"ffmpeg failed writing {path}")
         print(f"Wrote {path} ({len(self.frames)} frames)")
+
+    def check(self, figures_dir):
+        """Compares the rendered frames to an existing figure. Returns whether
+        they have the same number of frames and differ by at most
+        MAX_MEAN_DIFF per channel on average, and that every Func was found."""
+        path = os.path.join(figures_dir, self.output)
+        if self.funcs:
+            print(f"FAIL {path}: Funcs not found in trace: {', '.join(self.funcs)}")
+            return False
+        total, count = 0.0, 0
+        for ref in read_figure(path, self.gif_delay):
+            if count < len(self.frames):
+                total += np.abs(ref.astype(np.int16) - self.frames[count]).mean()
+            count += 1
+        if count != len(self.frames):
+            print(f"FAIL {path}: {count} frames, but rendered {len(self.frames)}")
+            return False
+        mean_diff = total / count
+        ok = mean_diff <= MAX_MEAN_DIFF
+        print(f"{'ok' if ok else 'FAIL'} {path}: mean difference {mean_diff:.2f}")
+        return ok
+
+
+def read_figure(path, gif_delay):
+    """Yields the frames of a gif or mp4 as RGB arrays. Gif frames are repeated
+    according to their duration, as identical frames get merged."""
+    if path.endswith(".gif"):
+        for frame in ImageSequence.Iterator(Image.open(path)):
+            rgb = np.asarray(frame.convert("RGB"))
+            for _ in range(max(1, round(frame.info["duration"] / (gif_delay * 10)))):
+                yield rgb
+    else:
+        reader = imageio_ffmpeg.read_frames(path)
+        width, height = next(reader)["size"]
+        for frame in reader:
+            yield np.frombuffer(frame, np.uint8).reshape(height, width, 3)
 
 
 VALUE_FORMATS = {
@@ -774,15 +804,14 @@ LESSONS = [
 ]
 
 
-def record_trace(lesson, trace_path):
+def record_trace(lesson, trace_path, lesson_dir):
     env = dict(os.environ, HL_JIT_TARGET="host-trace_all", HL_TRACE_FILE=trace_path)
     print(f"Tracing {lesson} into {trace_path}")
-    subprocess.run(
-        ["make", "-C", ROOT_DIR, f"tutorial_{lesson}"],
-        env=env,
-        check=True,
-        stdout=subprocess.DEVNULL,
-    )
+    if lesson_dir:
+        cmd = [os.path.join(lesson_dir, lesson)]
+    else:
+        cmd = ["make", "-C", ROOT_DIR, f"tutorial_{lesson}"]
+    subprocess.run(cmd, env=env, check=True, stdout=subprocess.DEVNULL)
 
 
 def main():
@@ -792,7 +821,18 @@ def main():
         help="Directory in which to keep lesson traces. Existing traces are "
         "reused. By default, traces go in a temporary directory.",
     )
+    parser.add_argument(
+        "--lesson-dir",
+        help="Directory containing built lesson executables. By default, "
+        "lessons are built and run with the top-level Makefile.",
+    )
     parser.add_argument("--output-dir", default=FIGURES_DIR)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Instead of writing the figures, check that they match the "
+        "existing ones in the output directory.",
+    )
     parser.add_argument(
         "only",
         nargs="*",
@@ -801,6 +841,7 @@ def main():
     )
     args = parser.parse_args()
 
+    ok = True
     with tempfile.TemporaryDirectory() as tmp:
         trace_dir = os.path.abspath(args.trace_dir or tmp)
         os.makedirs(trace_dir, exist_ok=True)
@@ -815,11 +856,15 @@ def main():
                 continue
             trace_path = os.path.join(trace_dir, f"{lesson}.bin")
             if not os.path.exists(trace_path):
-                record_trace(lesson, trace_path)
+                record_trace(lesson, trace_path, args.lesson_dir)
             render_trace(trace_path, figures)
             for fig in figures:
-                fig.save(args.output_dir)
+                if args.check:
+                    ok = fig.check(args.output_dir) and ok
+                else:
+                    fig.save(args.output_dir)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
