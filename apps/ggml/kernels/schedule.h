@@ -1214,38 +1214,71 @@ inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 // `chunk` codes (GGML's repacked gemv): per block, int32 sdot sums vectorized
 // across the record's rows, the act's piece broadcast (by-element sdot). On
 // gemm tiles of more than `group` rows (KleidiAI's dotprod gemm): per act
-// record, its codes staged in memory order, its scales one vector.
+// record, its codes staged in memory order, its scales one vector. Two-level
+// weights (`sub`; GGML's ggml_gemv_q4_K_8x8_q8_K, q5_K, q6_K): per sub-block
+// of `sub` values, the codes' int32 dot across the rows times the sub-block's
+// scales, summed in int32, then times the block scales. An affine weight's
+// min term reads the act's sub-block sums (derived_sums()).
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
-                         const std::vector<ApproximationResult> &rs, int group = 0) {
-    if (affine(rs)) throw std::invalid_argument("blocked_rows: weights decoded as codes times scales");
+                         const std::vector<ApproximationResult> &rs, int group = 0, int sub = 0, int act_sub = 0) {
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
-    Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), bacc("bacc");
-    RVar ry = r.y, rx = r.x, rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
+    Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc"), mo("mog"), mi("mig");
+    RVar ry = r.y, rx = r.x, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
+    Sums d;
+    if (affine(rs) && !(sub && derived_sums(out, st, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows: affine weights need sub-blocks and an act with derived sums");
+    if (sub) {
+        s.split(rx, rxs, rxc, sub);
+        rx = rxc;
+    }
     Func blk = s.rfactor(ry, u);
     // the act's codes (and on gemm tiles its scales) stay out of the inline:
-    // staged per block in registers, below
+    // staged in registers, below
     bool grouped = group && ts.mt > group;
     std::vector<Func> ac = decoders(rs, only({tag::codes}), 1), as = grouped ? decoders(rs, only({tag::scale}), 1) : std::vector<Func>{};
     std::vector<Func> dec = decoders(rs, all_but({}), 0, 1), rest = decoders(rs, grouped ? all_but({tag::codes, tag::scale}) : all_but({tag::codes}), 1);
     dec.insert(dec.end(), rest.begin(), rest.end());
     blk.update().eager_inline(dec);
-    Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
-    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
-    Func acc = s.rfactor(ryi, bacc);
-    Var mo("mog"), mi("mig");
-    LoopLevel at(acc, grouped ? VarOrRVar(mo) : VarOrRVar(ryo));
-    s.reorder(n, ryi).vectorize(n).unroll(ryi).unroll(m);
-    Stage cu = codes.update();
+    Func codes = blk.update().hoist_invariants()[0].change_type(Int(32)), part, inner;
+    if (sub) {  // per sub-block (v): its scales times its codes' dot (inner)
+        part = codes.update().rfactor(rxs, v);
+        inner = part.update().hoist_invariants()[0];
+    }
+    Stage cu = (sub ? inner : codes).update();
     cu.split(rx, rp, rx, chunk).split(rx, rq, ri, 4);
     Func quads = cu.rfactor(rq, q);
-    cu.reorder(rq, n).atomic().vectorize(rq);
-    // gemm tiles: per act record, piece-major, each piece of its codes
-    // staged just before use (the record's sums the only ones live)
-    Stage qu = quads.update();
-    grouped ? qu.split(m, mo, mi, group).reorder(ri, q, n, mi, rp, mo, u) : qu.reorder(ri, q, n, rp, u, m);
-    qu.atomic().vectorize(ri);
-    regs(quads.reorder_storage(q, n, m).compute_at(at).bound_storage(u, ts.interleave), {q, n}, {m, mi, mo, rp, u});
-    // A piece's act codes then are a lane of a register: by-element sdot
+    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+    Func acc = s.rfactor(ryi, bacc);
+    LoopLevel at(acc, grouped ? VarOrRVar(mo) : VarOrRVar(ryo)), per_sub;
+    s.reorder(n, ryi).vectorize(n).unroll(ryi).unroll(m);
+    for (Func f : {blk, codes}) {
+        regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
+    }
+    if (!sub) {
+        cu.reorder(rq, n).atomic().vectorize(rq);
+        // gemm tiles: per act record, piece-major, each piece of its codes
+        // staged just before use (the record's sums the only ones live)
+        Stage qu = quads.update();
+        grouped ? qu.split(m, mo, mi, group).reorder(ri, q, n, mi, rp, mo, u) : qu.reorder(ri, q, n, rp, u, m);
+        qu.atomic().vectorize(ri);
+        regs(quads.reorder_storage(q, n, m).compute_at(at).bound_storage(u, ts.interleave), {q, n}, {m, mi, mo, rp, u});
+    } else {
+        // a loop over groups of sub-blocks, each unrolled (fully unrolled, the
+        // codes' loads are scheduled early and spill); groups larger than pairs
+        // where a bit field's position varies across pairs (constant shifts)
+        RVar rxso("rxso"), rxsi("rxsi");
+        auto bx = as_const_int(r.x.extent());
+        int subs = bx ? (int)*bx / sub : 2, g = 2;
+        while (g < subs && bit_position_varies(quads, v, g))
+            g *= 2;
+        codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, g).unroll(rxsi);
+        per_sub = LoopLevel(codes, rxsi);
+        regs(part.compute_at(per_sub), {n}, {v, u, m});
+        regs(inner.compute_at(per_sub), {n}, {v, u, m});
+        cu.reorder(n, rq, v, u, m).unroll(rq);
+        regs(quads.reorder_storage(q, n, v, u, m).compute_at(per_sub), {q, n}, {v, u, m, rp});
+        quads.update().reorder(ri, q, n, rp, v, u, m).atomic().vectorize(ri);
+    }
+    // a piece's act codes then are a lane of a register: by-element sdot
     for (Func a : ac) {
         if (calls(quads, a)) {
             Func ai = a.in(quads);
@@ -1256,11 +1289,10 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
                 ai.split(k, ko, ki, 4).reorder(ki, am, ko).fuse(ki, am, kv).unroll(ko);
                 k = kv;
             }
-            ai.compute_at(grouped ? LoopLevel(quads, rp) : LoopLevel(quads, u)).vectorize(k);
+            ai.compute_at(sub ? per_sub : grouped ? LoopLevel(quads, rp) :
+                                                    LoopLevel(quads, u))
+                .vectorize(k);
         }
-    }
-    for (Func f : {blk, codes}) {
-        regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
     }
     // the record's scales: one load, each row's a lane (fmla by element)
     for (Func a : as) {
@@ -1273,65 +1305,6 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Stage au = acc.update();
     grouped ? au.split(m, mo, mi, group).reorder(n, bacc, mi, mo, ryo) : au.reorder(n, bacc, m, ryo);
     regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m, mi, mo});
-}
-
-// blocked_rows() for two-level weights (GGML's ggml_gemv_q4_K_8x8_q8_K; q5_K,
-// q6_K): per sub-block of `sub` values, the codes' int32 dot across the rows
-// times the sub-block's scales, summed in int32, then times the block scales.
-// An affine weight's min term reads the act's sub-block sums (derived_sums()).
-inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
-                             const std::vector<ApproximationResult> &rs, int sub, int act_sub) {
-    Stage s = tile_out(out, st, dot, cond, ts, r, true);
-    Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc");
-    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
-    Sums d;
-    if (!sub || (affine(rs) && !derived_sums(out, st, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows_sub: two-level weights (affine: an act with derived sums)");
-    s.split(r.x, rxs, rxc, sub);
-    Func blk = s.rfactor(ry, u);
-    // the act's codes stay out of the inline (staged per sub-block, below)
-    std::vector<Func> ac = decoders(rs, only({tag::codes}), 1);
-    std::vector<Func> dec = decoders(rs, all_but({}), 0, 1), rest = decoders(rs, all_but({tag::codes}), 1);
-    dec.insert(dec.end(), rest.begin(), rest.end());
-    blk.update().eager_inline(dec);
-    Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
-    // per sub-block (v): its scales times its codes' dot (inner)
-    Func part = codes.update().rfactor(rxs, v);
-    Func inner = part.update().hoist_invariants()[0];
-    Stage iu = inner.update();
-    iu.split(rxc, rp, rxc, chunk).split(rxc, rq, ri, 4);
-    Func quads = iu.rfactor(rq, q);
-    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
-    Func acc = s.rfactor(ryi, bacc);
-    LoopLevel at(acc, ryo);
-    s.reorder(n, ryi).vectorize(n).unroll(ryi).unroll(m);
-    for (Func f : {blk, codes}) {
-        regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
-    }
-    // a loop over groups of sub-blocks, each unrolled (fully unrolled, the
-    // codes' loads are scheduled early and spill); groups larger than pairs
-    // where a bit field's position varies across pairs (constant shifts)
-    RVar rxso("rxso"), rxsi("rxsi");
-    auto bx = as_const_int(r.x.extent());
-    int subs = bx ? (int)*bx / sub : 2, group = 2;
-    while (group < subs && bit_position_varies(quads, v, group))
-        group *= 2;
-    codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, group).unroll(rxsi);
-    LoopLevel per_sub(codes, rxsi);
-    regs(part.compute_at(per_sub), {n}, {v, u, m});
-    regs(inner.compute_at(per_sub), {n}, {v, u, m});
-    inner.update().reorder(n, rq, v, u, m).unroll(rq);
-    regs(quads.reorder_storage(q, n, v, u, m).compute_at(per_sub), {q, n}, {v, u, m, rp});
-    quads.update().reorder(ri, q, n, rp, v, u, m).atomic().vectorize(ri);
-    // the sub-block's act codes, in registers: each piece a lane of them
-    for (Func a : ac) {
-        if (calls(quads, a)) {
-            Func ai = a.in(quads);
-            ai.compute_at(per_sub).vectorize(ai.args()[0]);
-        }
-    }
-    Stage au = acc.update();
-    au.reorder(n, bacc, m, ryo);
-    regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m});
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, true);
 }
 
@@ -2336,7 +2309,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (a two-level record, 8 rows of q4_K: 1152 bytes, one per iteration)
         if (fmt.sub) {
             rt.interleave = 1;
-            blocked_rows_sub(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, fmt.sub, fmt.act_sub);
+            blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, 0, fmt.sub, fmt.act_sub);
             return;
         }
         // Codes decoded from a field: two records per tile where N allows

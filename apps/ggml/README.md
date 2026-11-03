@@ -202,31 +202,31 @@ recipes, its codes read as stored (gemv: 8-byte pieces are a broadcast
 half-register, plain sdot). `q4_K.8x8` is GGML's `q4_K_8x8` (8 rows'
 super-blocks, each sub-block's 6-bit scales and mins regrouped across the rows
 by the lossless `Transpose`, `schemes/common.h`), with q8_K acts (gemv:
-`blocked_rows_sub`, one record per tile) and `f32:q8_K.4x8`, GGML's path for f32
-acts: `q8_K.4x8` is GGML's `block_q8_Kx4` (q8_K's `Interleave{4, 8}`: 4 rows'
-`d`, their `qs` in 8-byte pieces and their `bsums` in pieces of 4), whose codec
-is also checked bitwise against the harness's transcription of
-`quantize_mat_q8_K_4x8` and GGML's own `ggml_quantize_mat_t`. With i8mm its
-whole records run `blocked_mmla` over records (one weight record by one act
-record per tile, 8 x 4 outputs as GGML's, 128 act rows per task): each smmla act
-operand is one 16-byte load (a row pair's 8-byte pieces), each sub-block's
-scales and mins are decoded once per tile as a vector across the record's rows
-(its scale factors one 16-lane shuffle of them), and the mins' products read the
-act's `bsums` (`derived_sums`: per weight sub-block, pairwise adds of whole
-`bsums` vectors, dense across the act's rows); the rest of M (up to 3 rows) runs
-the gemv. `q5_K.8x8` is GGML's `q5_K_8x8` on the same recipes (`kx8_layout`,
-`schemes/kquants.h`: its `qh` interleaved as `qs`); its gemv unrolls all of a
-block's sub-blocks, not pairs, since its high bits' positions vary per sub-block
-(`bit_position_varies`: constant shifts). `q6_K.8x8` is GGML's `q6_K_8x8` (its
-16 int8 scales per row regrouped across the rows, a `Transpose` per 64-byte
-block); its gemv groups 8 sub-blocks (128 values: those sharing `ql`/`qh`
-bytes). With act records the gemm loops over such groups of sub-blocks (q4_K's
-pairs, q6_K's 128 values; fully unrolled, the codes' loads are scheduled early
-and spill), each unrolled with those reading the same bytes adjacent
-(`sharing_order`: q6_K's 0, 4, 2, 6, ...). An in-kernel activation encoder runs
-first, parallel over activation rows when M > 1, and vectorized per encoded
-block (`encoder`: the block's reductions, e.g. its scale, across the block;
-per-value Funcs, e.g. the codes, across their values). Kernel ABI
+`blocked_rows` per sub-block, one record per tile) and `f32:q8_K.4x8`, GGML's
+path for f32 acts: `q8_K.4x8` is GGML's `block_q8_Kx4` (q8_K's
+`Interleave{4, 8}`: 4 rows' `d`, their `qs` in 8-byte pieces and their `bsums`
+in pieces of 4), whose codec is also checked bitwise against the harness's
+transcription of `quantize_mat_q8_K_4x8` and GGML's own `ggml_quantize_mat_t`.
+With i8mm its whole records run `blocked_mmla` over records (one weight record
+by one act record per tile, 8 x 4 outputs as GGML's, 128 act rows per task):
+each smmla act operand is one 16-byte load (a row pair's 8-byte pieces), each
+sub-block's scales and mins are decoded once per tile as a vector across the
+record's rows (its scale factors one 16-lane shuffle of them), and the mins'
+products read the act's `bsums` (`derived_sums`: per weight sub-block, pairwise
+adds of whole `bsums` vectors, dense across the act's rows); the rest of M (up
+to 3 rows) runs the gemv. `q5_K.8x8` is GGML's `q5_K_8x8` on the same recipes
+(`kx8_layout`, `schemes/kquants.h`: its `qh` interleaved as `qs`); its gemv
+unrolls all of a block's sub-blocks, not pairs, since its high bits' positions
+vary per sub-block (`bit_position_varies`: constant shifts). `q6_K.8x8` is
+GGML's `q6_K_8x8` (its 16 int8 scales per row regrouped across the rows, a
+`Transpose` per 64-byte block); its gemv groups 8 sub-blocks (128 values: those
+sharing `ql`/`qh` bytes). With act records the gemm loops over such groups of
+sub-blocks (q4_K's pairs, q6_K's 128 values; fully unrolled, the codes' loads
+are scheduled early and spill), each unrolled with those reading the same bytes
+adjacent (`sharing_order`: q6_K's 0, 4, 2, 6, ...). An in-kernel activation
+encoder runs first, parallel over activation rows when M > 1, and vectorized per
+encoded block (`encoder`: the block's reductions, e.g. its scale, across the
+block; per-value Funcs, e.g. the codes, across their values). Kernel ABI
 (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N / rows or M]`
 records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
 kernel declares the whole contract (checked in `checked`, assumed in `bench`):
