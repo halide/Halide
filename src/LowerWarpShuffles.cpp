@@ -1,5 +1,6 @@
 #include "LowerWarpShuffles.h"
 
+#include "BoundsTracker.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -142,7 +143,7 @@ class DetermineAllocStride : public IRVisitor {
     // be assumed to be zero.
     Scope<Expr> dependent_vars;
 
-    Scope<Interval> bounds;
+    BoundsTracker tracker;
 
     // Get the derivative of an integer expression w.r.t the warp
     // lane. Returns an undefined Expr if the result is non-trivial.
@@ -192,11 +193,13 @@ class DetermineAllocStride : public IRVisitor {
 
     void visit(const Let *op) override {
         ScopedBinding<Expr> bind(dependent_vars, op->name, warp_stride(op->value));
+        auto bounds_bind = tracker.push_let(op->name, op->value);
         IRVisitor::visit(op);
     }
 
     void visit(const LetStmt *op) override {
         ScopedBinding<Expr> bind(dependent_vars, op->name, warp_stride(op->value));
+        auto bounds_bind = tracker.push_let(op->name, op->value);
         IRVisitor::visit(op);
     }
 
@@ -236,9 +239,7 @@ class DetermineAllocStride : public IRVisitor {
     }
 
     void visit(const For *op) override {
-        ScopedBinding<Interval>
-            bind_bounds_if(is_const(op->min) && is_const(op->max),
-                           bounds, op->name, Interval(op->min, op->max));
+        auto bounds_bind = tracker.push_for(op->name, op->min, op->max);
         ScopedBinding<Expr>
             bound_dependent_if((expr_uses_vars(op->min, dependent_vars) ||
                                 expr_uses_vars(op->max, dependent_vars)),
@@ -288,7 +289,7 @@ public:
 
     // A version of can_prove which exploits the constant bounds we've been tracking
     bool can_prove(const Expr &e) {
-        return is_const_one(simplify(e, bounds));
+        return is_const_one(simplify(e, tracker.interval_scope()));
     }
 
     Expr get_stride() {
@@ -310,7 +311,7 @@ public:
             // any already discovered on previous stores.
             bool this_ok = (s.defined() &&
                             (can_prove(stride == s) &&
-                             can_prove(reduce_expr(e / stride - var, warp_size, bounds) == 0)));
+                             can_prove(reduce_expr(e / stride - var, warp_size, tracker.interval_scope()) == 0)));
 
             internal_assert(stride.defined());
 
@@ -343,7 +344,7 @@ public:
         for (const Expr &e : single_stores) {
             // If only thread zero was active for the store, that makes the proof simpler.
             Expr simpler = substitute(lane_var, 0, e);
-            bool this_ok = can_prove(reduce_expr(simpler / stride, warp_size, bounds) == 0);
+            bool this_ok = can_prove(reduce_expr(simpler / stride, warp_size, tracker.interval_scope()) == 0);
             if (!this_ok) {
                 bad.push_back(e);
             }
@@ -634,12 +635,20 @@ class LowerWarpShuffles : public IRMutator {
         Expr stride;
     };
     Scope<AllocInfo> allocation_info;
-    Scope<Interval> bounds;
+    BoundsTracker tracker;
+
+    Expr visit(const Let *op) override {
+        auto binding = tracker.push_let(op->name, op->value);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        auto binding = tracker.push_let(op->name, op->value);
+        return IRMutator::visit(op);
+    }
 
     Stmt visit(const For *op) override {
-        ScopedBinding<Interval>
-            bind_if(is_const(op->min) && is_const(op->max),
-                    bounds, op->name, Interval(op->min, op->max));
+        auto bounds_bind = tracker.push_for(op->name, op->min, op->max);
         if (!this_lane.defined() && op->for_type == ForType::GPULane) {
 
             bool should_mask = false;
@@ -688,9 +697,8 @@ class LowerWarpShuffles : public IRMutator {
                 // the number of lanes (rounded up).
                 Expr extent = op->extent();
                 Expr new_size = (alloc->extents[0] + extent - 1) / extent;
-                new_size = simplify(new_size, bounds);
-                new_size = find_constant_bound(new_size, Direction::Upper, bounds);
-                auto sz = as_const_int(new_size);
+                new_size = simplify(new_size, tracker.interval_scope());
+                auto sz = tracker.find_constant_bound(new_size, Direction::Upper);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
                                 << alloc->extents[0] << ". Use Func::bound_extent.";
                 DetermineAllocStride stride(alloc->name, op->name, warp_size);
@@ -746,11 +754,11 @@ class LowerWarpShuffles : public IRMutator {
         if ((lt && equal(lt->a, this_lane) && is_const(lt->b)) ||
             (le && equal(le->a, this_lane) && is_const(le->b))) {
             Expr condition = mutate(op->condition);
-            const Interval *in = bounds.find(this_lane_name);
+            const Interval *in = tracker.interval_scope().find(this_lane_name);
             internal_assert(in);
             Interval interval = *in;
             interval.max = lt ? simplify(lt->b - 1) : le->b;
-            ScopedBinding<Interval> bind(bounds, this_lane_name, interval);
+            auto bind = tracker.push_interval(this_lane_name, interval);
             Stmt then_case = mutate(op->then_case);
             Stmt else_case = mutate(op->else_case);
             return IfThenElse::make(condition, then_case, else_case);
@@ -780,7 +788,7 @@ class LowerWarpShuffles : public IRMutator {
             // of the index and shifting the high bits down to cover
             // them. Reassembling the result into a flat address gives
             // the expression below.
-            Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
+            Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, tracker.interval_scope()), tracker.interval_scope());
             return op->with(value, in_warp_idx, op->predicate, ModulusRemainder());
         } else {
             return IRMutator::visit(op);
@@ -807,7 +815,7 @@ class LowerWarpShuffles : public IRMutator {
         }
 
         int ws = (int)*as_const_int(warp_size);
-        Expr delta = simplify(lane - this_lane, bounds);
+        Expr delta = simplify(lane - this_lane, tracker.interval_scope());
         if (auto c = as_const_int(delta)) {
             if (*c == 0) {
                 return value;
@@ -839,7 +847,7 @@ class LowerWarpShuffles : public IRMutator {
                 // Load the right lanes from stripe number i
                 equiv = select(idx >= i, make_warp_load(type, name, make_const(idx.type(), i), lane), equiv);
             }
-            return simplify(equiv, bounds);
+            return simplify(equiv, tracker.interval_scope());
         }
 
         // Load the value to be shuffled
@@ -869,10 +877,10 @@ class LowerWarpShuffles : public IRMutator {
             Expr stride = alloc->stride;
 
             // Break the index into lane and stripe components
-            Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), bounds);
-            idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
+            Expr lane = simplify(reduce_expr(idx / stride, warp_size, tracker.interval_scope()), tracker.interval_scope());
+            idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, tracker.interval_scope()), tracker.interval_scope());
             // We don't want the idx to depend on the lane var, so try to eliminate it
-            idx = simplify(solve_expression(idx, this_lane_name).result, bounds);
+            idx = simplify(solve_expression(idx, this_lane_name).result, tracker.interval_scope());
             return make_warp_load(op->type, op->name, idx, lane);
         } else {
             return IRMutator::visit(op);
