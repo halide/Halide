@@ -167,7 +167,7 @@ public:
             record(p).set_extent(record(w[0]).extent());
             row(p).set_extent(row(w[0]).extent());
         }
-        row_bytes = 0;
+        Expr row_bytes = 0;
         for (const ImageParam &p : w) {
             row_bytes += row(p).stride() * p.type().bytes();
         }
@@ -183,7 +183,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block, wc != wn};
+        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block, wc != wn, row_bytes};
         acc = fw.acc;
         // The accumulation's order is part of its numerics: without
         // strict_float, LLVM may reassociate the partial sums' tree
@@ -193,10 +193,11 @@ public:
     }
 
     void generate() {
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words};
         if (op == "vec_dot") {
-            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets);
+            ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave, sublanes, gpr_scales, fold_offsets, row_pairs, row_bytes, gemm_index_words);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         }
     }
 
@@ -208,7 +209,6 @@ private:
     std::vector<Func> staged;                 // encoded inside the pipeline
     ggml::Formats fmt;
     Approximation acc;  // the dot's sums (undefined: f32)
-    Expr row_bytes;     // a weight row's (record row's) bytes
     GeneratorOutput<Buffer<>> *result = nullptr;
 
     // The encoded ports of a format (the values themselves for plain f32);

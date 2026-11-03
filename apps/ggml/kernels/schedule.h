@@ -306,6 +306,25 @@ struct Formats {
     // the weight's decoded values approximated again (a compute format, e.g.
     // q4_0:f16): by rs.back()
     bool wcompute = false;
+    Expr row_bytes;  // a weight row's (record row's) bytes, if known
+};
+
+// Where a weight's constant code offsets fold into the act's sub-block sums
+// (derived_sums()): everywhere, vec_dot and gemv only (GGML's i8mm q6_K gemm
+// subtracts per value), or nowhere (a per-format parameter).
+enum class Fold {
+    None,
+    Gemv,
+    All,
+};
+
+// The per-format schedule parameters (formats.cmake; matmul.cpp's
+// GeneratorParams document them).
+struct Knobs {
+    int interleave = 2;
+    bool sublanes = false, gpr_scales = false;
+    Fold fold = Fold::All;
+    bool row_pairs = true, index_words = false;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -1018,14 +1037,16 @@ inline bool hoisted_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per,
 // hoisted scales, accumulated per lane in f32 (GGML's order), on ts tiles of
 // out under `cond`. `derived`: derived_sums(). Two-level weights (`sub`
 // values per sub-block): the block's dot splits per sub-block (rfactor),
-// whose scale hoists out of its codes' dot. `sublanes`: the sub-blocks
-// across the lanes instead (GGML's NEON iq2_xs). `gpr_scales`: the
-// sub-block scales decoded in GPRs (SWAR, GGML's q4_K). `defer`: the bit
-// fields' shifts deferred (hoisted_shifts()).
+// whose scale hoists out of its codes' dot. `gemv` (vec_dot and the gemv
+// tiles): k's sublanes (the sub-blocks across the lanes, GGML's NEON
+// iq2_xs) and gpr_scales (the sub-block scales decoded in GPRs, GGML's
+// q4_K), the bit fields' shifts deferred (hoisted_shifts()); else k's
+// index_words.
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
-                    int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false, bool fold_offsets = true,
-                    bool defer = false, bool index_words = false) {
+                    int sub = 0, int act_sub = 0, const Knobs &k = Knobs(), bool gemv = false) {
+    bool sublanes = gemv && k.sublanes, gpr_scales = gemv && k.gpr_scales, defer = gemv, index_words = !gemv && k.index_words;
+    bool fold_offsets = gemv ? k.fold != Fold::None : k.fold == Fold::All;
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
@@ -1344,7 +1365,8 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // (scale-only weights), the weight's scale once per weight block.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
                          const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
-                         int per = 1, bool fold_offsets = true, bool gpr_scales = false, bool index_words = false) {
+                         int per = 1, const Knobs &k = Knobs()) {
+    bool fold_offsets = k.fold == Fold::All, gpr_scales = k.gpr_scales, index_words = k.index_words;
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi"), ryw("ryw"), ryp("ryp");
@@ -1574,20 +1596,10 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
     }
 }
 
-// Where a weight's constant code offsets fold into the act's sub-block sums
-// (derived_sums()): everywhere, vec_dot and gemv only (GGML's i8mm q6_K gemm
-// subtracts per value), or nowhere (a per-format parameter).
-enum class Fold {
-    None,
-    Gemv,
-    All,
-};
-
 // The N = M = 1 schedule (GGML's vec_dot). Staged activations are encoded
-// once, up front. `interleave` blocks per iteration (formats.cmake).
+// once, up front.
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
     luts(rs, true);
     for (Func e : staged) {
         e.compute_root();
@@ -1600,7 +1612,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_offsets != Fold::None, true);
+    blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true);
 }
 
 // The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
@@ -2226,9 +2238,7 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // update is the rows in whole records (dots[1]), its second M = 1's
 // (dots[0]).
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false, bool gpr_scales = false, Fold fold_offsets = Fold::All, bool row_pairs = true,
-                    Expr row_bytes = Expr(), bool gemm_index_words = false) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
     luts(rs, !t.has_gpu_feature());
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
@@ -2253,7 +2263,6 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         metal_rows(out, dots[0], r, rs, fmt.sub);
         return;
     }
-    bool fold_gemm = fold_offsets == Fold::All, fold_gemv = fold_offsets != Fold::None;
     if (fmt.rowwise) {
         rowwise_mul_mat(out, dots, r, fmt, rs, staged, t);
         return;
@@ -2336,12 +2345,12 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (dr's act is the last result: its derived ports, rs[1]'s for derived_sums)
         std::vector<ApproximationResult> rr = rs;
         if (whole) std::swap(rr[1], rr.back());
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, fold_gemm);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, k);
     } else if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, fold_gemm, gpr_scales, gemm_index_words);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, k);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
-    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, false, false, fold_gemm, false, gemm_index_words);
+    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
     // The rows past Mr (with whole records, M = 1's): no tasks when there are none.
     Expr rest = whole ? M == 1 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
@@ -2361,20 +2370,20 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             Tiles r2 = rt;
             r2.nt = 2 * fmt.rows;
             Expr two = N % r2.nt == 0;
-            if (row_bytes.defined()) two = two && (row_bytes <= 11 * 1024 || threads() > 4);
+            if (fmt.row_bytes.defined()) two = two && (fmt.row_bytes <= 11 * 1024 || threads() > 4);
             blocked_rows(out, 2 * whole, dots[0], two, r2, r, fmt.chunk, rs);
         }
         blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs);
         return;
     }
     pairs.busy = rows.busy = rest;
-    pairs.interleave = rows.interleave = interleave;
+    pairs.interleave = rows.interleave = k.interleave;
     // Staged tables: no row pairs. Rows over 11 KB in single rows (q8_0 gemv
     // at K = 14336 1.15x on one thread).
     Expr paired = fits(pairs, 1);
-    if (row_bytes.defined()) paired = paired && row_bytes <= 11 * 1024;
-    if (row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, true);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales, fold_gemv, true);
+    if (fmt.row_bytes.defined()) paired = paired && fmt.row_bytes <= 11 * 1024;
+    if (k.row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
 }
 
 }  // namespace ggml
