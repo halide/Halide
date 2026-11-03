@@ -758,15 +758,11 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     d.sum = d.blk.update().hoist_invariants()[0];
     if (act_sub) {
         // the act's codes decoded up to what its ports read: an int32 sum
-        std::set<std::string> read;
+        std::vector<Func> read;
         for (const DerivedPort &p : rs[1].derived_ports()) {
-            for (const Func &f : p.from) {
-                read.insert(f.name());
-            }
+            read.insert(read.end(), p.from.begin(), p.from.end());
         }
-        std::vector<Func> dec = decoders(rs, only({tag::codes}), 1), above;
-        std::copy_if(dec.begin(), dec.end(), std::back_inserter(above), [&](const Func &f) { return !read.count(f.name()); });
-        d.sum.update().eager_inline(above);
+        d.sum.update().eager_inline(without(decoders(rs, only({tag::codes}), 1), read));
         d.sum = d.sum.change_type(Int(32));
         RVar rxt("rxt"), rxj("rxj"), rxh("rxh"), rxa("rxa");
         bool pairs = sub > act_sub;
