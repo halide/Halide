@@ -176,6 +176,16 @@ protected:
      * nor in the Halide::Runtime::Internal namespace. */
     std::set<std::string> runtime_symbols;
 
+    /** Embedded buffers that the pipeline loads from (e.g. lookup tables),
+     * if their placement in memory matters for the target, and placeholder
+     * globals for the data of those that are laid out by
+     * place_lookup_tables(). */
+    // @{
+    std::set<std::string> lookup_table_buffers;
+    std::vector<llvm::GlobalVariable *> lookup_table_blobs;
+    void place_lookup_tables();
+    // @}
+
     llvm::Function *function = nullptr;
     llvm::LLVMContext *context = nullptr;
     std::unique_ptr<llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>> builder;
