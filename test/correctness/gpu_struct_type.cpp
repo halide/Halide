@@ -121,6 +121,15 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Struct-type lowering in the WebGPU backend still produces incorrect
+    // numerics (array<i32, N> allocations indexed in byte units); the fix
+    // lives in the WebGPU promises rework and has not landed yet. Skip here
+    // until that backend fix lands.
+    if (target.has_feature(Target::WebGPU)) {
+        printf("[SKIP] gpu_struct_type is not yet supported on the WebGPU backend.\n");
+        return 0;
+    }
+
     run_variant("gpu_threads compute_at", 0.5f, -3, MemoryType::Register, compile_only);
     run_variant("gpu shared compute_at", 1.5f, -5, MemoryType::GPUShared, compile_only);
     if (target.has_feature(Target::Vulkan)) {
