@@ -745,7 +745,11 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     s.eager_inline(dec);
     if (offsets) s.eager_inline(path);
     FuncVec parts = s.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
-    if (!parts[1].defined()) throw std::invalid_argument("derived_sums: no terms free of the codes in " + s.name() + (offsets ? " (fold_offsets=none: no constant offset splits off provably exactly)" : ""));
+    if (!parts[1].defined() && offsets) {  // no exact split (iq1's delta): no fold
+        d = Sums();
+        return false;
+    }
+    if (!parts[1].defined()) throw std::invalid_argument("derived_sums: no terms free of the codes in " + s.name());
     Func with = parts[0];
     d.sums = parts[1];
     d.blk = d.sums.update().rfactor(r.y, Var("u"));
