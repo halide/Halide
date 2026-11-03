@@ -876,20 +876,21 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
     }
 }
 
-// Eagerly inline into f's update every pure Func it calls but `kept`,
-// transitively (e.g. a float weight's view and decode).
-inline void inline_operands(Func f, const std::vector<Func> &kept) {
+// Eagerly inline into f's update every Func it calls but `kept`, transitively
+// (views, decoders): it then calls those directly. `pure`: only Funcs without
+// updates, extern definitions or specializations.
+inline void inline_callees(Func f, const std::vector<Func> &kept, bool pure = false) {
     for (;;) {
         std::vector<Func> fs;
-        std::set<std::string> seen;
+        std::set<std::string> seen{f.name()};
         for (const Func &k : kept) {
             seen.insert(k.name());
         }
-        for (const Expr &v : f.function().update(0).values()) {
+        for (const Expr &v : f.update().values()) {
             Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
                 if (c->call_type == Internal::Call::Halide && c->func.defined() && seen.insert(c->name).second) {
                     Internal::Function g(c->func);
-                    if (!g.has_update_definition() && !g.has_extern_definition() && g.definition().specializations().empty()) {
+                    if (!pure || (!g.has_update_definition() && !g.has_extern_definition() && g.definition().specializations().empty())) {
                         fs.emplace_back(g);
                     }
                 }
@@ -914,7 +915,7 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
     for (const Level &l : levels) {
         fs.push_back(s.rfactor(l));
     }
-    if (narrow) inline_operands(fs[0], kept);
+    if (narrow) inline_callees(fs[0], kept, true);
     for (int i = 0; i < narrow; i++) {
         ApproximationResult a = fs[i].approximate_by(acc, {fs[i + 1]});
         fs[i + 1].update().eager_inline({a.replacement});
@@ -1915,28 +1916,6 @@ inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, c
     return dot.type() == Float(32) && wh.type() == Float(32) && xh.type() == Float(32);
 }
 
-// f's update with every Func it calls on the way to `to` (views, decoders)
-// inlined: it then calls those directly.
-inline void inline_until(Func f, const std::vector<Func> &to) {
-    using namespace Internal;
-    Stage s = f.update();
-    for (;;) {
-        std::vector<Func> fs;
-        std::set<std::string> seen{f.name()};
-        for (const Func &g : to) {
-            seen.insert(g.name());
-        }
-        for (const Expr &v : s.values()) {
-            visit_with(v, [&](auto *self, const Call *c) {
-                if (c->call_type == Call::Halide && c->func.defined() && seen.insert(c->name).second) fs.emplace_back(Function(c->func));
-                self->visit_base(c);
-            });
-        }
-        if (fs.empty()) return;
-        s.eager_inline(fs);
-    }
-}
-
 // Metal gemm on f16 or f32 operands (wh, xh), as GGML's kernel_mul_mm, on the
 // simdgroup_matrix unit, for `o` (out's specialization). A threadgroup takes
 // a bn x bm tile, its simdgroups wn x 1 sub-tiles of 8 * tn x 8 * tm, each
@@ -1958,7 +1937,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
-    inline_until(dot, {wh, xh});
+    inline_callees(dot, {wh, xh});
     Func ws = wh.in(dot), xs = xh.in(dot), wf = ws.in(dot), xf = xs.in(dot);
     // the weights' luts the gemm's own, per threadgroup (iq4_nl/mxfp4 M = 16
     // 1.03-1.06x, M = 64..128 0.94-0.98x vs packed muxes; M3 Max)
