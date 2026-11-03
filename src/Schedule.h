@@ -640,6 +640,13 @@ public:
     bool memoized() const;
     // @}
 
+    /** This flag is set to true if the Function is evaluated at compile time
+     * and embedded as a constant Buffer. See \ref Func::precompute */
+    // @{
+    bool &precomputed();
+    bool precomputed() const;
+    // @}
+
     /** This flag is set to true if the schedule is memoized and has an attached
      *  eviction key. */
     // @{

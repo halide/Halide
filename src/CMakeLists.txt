@@ -177,6 +177,7 @@ target_sources(
     Parameter.h
     PartitionLoops.h
     Pipeline.h
+    PrecomputeConstants.h
     Prefetch.h
     PrefetchDirective.h
     Profiling.h
@@ -361,6 +362,7 @@ target_sources(
     Parameter.cpp
     PartitionLoops.cpp
     Pipeline.cpp
+    PrecomputeConstants.cpp
     Prefetch.cpp
     PrintLoopNest.cpp
     Profiling.cpp
