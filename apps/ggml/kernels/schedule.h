@@ -1925,9 +1925,14 @@ inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, c
 // a bn x bm tile, its simdgroups wn x 1 sub-tiles of 8 * tn x 8 * tm, each
 // 8 x 8 an accumulator in Tile memory. Per step of K the operands are staged
 // in threadgroup memory, then loaded as 8 x 8 fragments. Tiles by M: 64 x 64
-// on blocked f16 operands, else 64 x 32 (M >= 256, N >= 64), 32 x 32, 32 x 16
-// on f16 operands at M > 16, 16 x 16, 16 x 8; steps of 64 values.
-inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
+// on blocked f16 operands, else 64 x 32 (M >= 256, N >= 64), 32 x 32, 16 x 16,
+// 16 x 8; steps of 64 values. On f16 operands at 16 < M < 32 one 32 x 32
+// tile, guarded (decoding the weights once, not in two shifted tiles): out
+// reads it from a threadgroup copy (edge; a guarded store from Tile memory
+// doesn't lower), its stores predicated (guarded calls would give every tile
+// SkipStages flags); the rows past M it computes read the last act row (the
+// algorithm clamps them).
+inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
     if (fmt.block % 8 && fmt.block != 1) throw std::invalid_argument("metal_mm: flat, or blocks of a multiple of 8 values");
     const int t = 8;
     // (names apart from the other specializations' loops, which compute
@@ -1938,9 +1943,10 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     struct Shape {
         Expr cond;
         int tn, tm, wn;
+        bool guard = false;
     };
     const bool h = wh.type() == Float(16);
-    std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, h && fmt.block > 1 ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M > 16 && h, 2, 2, 2}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    std::vector<Shape> shapes{{M > 16 && M < 32 && h, 1, 4, 4, true}, {M >= 256 && N >= 64, 2, h && fmt.block > 1 ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
     inline_callees(dot, {wh, xh});
@@ -1955,14 +1961,30 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
         metal_lut(f, out, n);
     }
     Stage sd = Stage(dot), su = dot.update();
+    std::function<void()> edged;
     for (const Shape &sh : shapes) {
+        if (sh.cond.defined() && Internal::is_const_zero(sh.cond)) continue;
         const int bn = t * sh.tn * sh.wn, bm = t * sh.tm;
         auto tile = [&](Stage st) {
-            return st.tile(n, m, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+            if (sh.guard) st.tile({n, m}, {nw, mw}, {ni, mi}, {t * sh.tn, t * sh.tm}, {TailStrategy::Auto, TailStrategy::RoundUp});
+            else
+                st.tile(n, m, nw, mw, ni, mi, t * sh.tn, t * sh.tm);
+            return st.tile(ni, mi, nt, mt, t, t).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
         };
-        Stage so = when(o, sh.cond);
-        so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t);
-        so.gpu_blocks(n, m).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+        Stage so = o.specialize(sh.cond.defined() ? sh.cond : Internal::const_true());
+        if (sh.guard) {
+            Var sw("mm_sw");
+            so.split(n, n, ni, bn, TailStrategy::ShiftInwards).split(m, m, mi, bm / sh.wn, TailStrategy::PredicateStores).split(m, m, sw, sh.wn, TailStrategy::RoundUp).reorder(ni, mi, sw, n, m);
+            so.gpu_blocks(n, m).gpu_lanes(ni).gpu_threads(sw);
+            edged = [=]() mutable {
+                edge.compute_at(out, n).store_in(MemoryType::GPUShared);
+                tile(edge);
+            };
+        } else {
+            so.eager_inline(edge);
+            so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t);
+            so.gpu_blocks(n, m).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+        }
         tile(when(sd, sh.cond));
         Stage u = when(su, sh.cond);
         // ks: the steps of K; kb: their blocks (or, for blocks longer than a
@@ -2001,6 +2023,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
             s.gpu_lanes(ln).gpu_threads(sw).vectorize(jv);
         }
     }
+    if (edged) edged();
     dot.compute_at(out, n).store_in(MemoryType::Tile);
     for (Func f : {ws, xs}) {
         f.compute_at(dot, ks).store_in(MemoryType::GPUShared);
@@ -2034,15 +2057,16 @@ inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, cons
                        const std::vector<Func> &staged = {}) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
-    // once, reading dot; then via reads the clone, and the other branches
-    // inline it, reading the clone
-    Func via = dot.in(out);
+    // once, reading edge (dot's copy, inlined unless guarded); then via reads
+    // pass, reading the clone, and the other branches inline both
+    Func via = dot.in(out), edge = dot.in(via);
     Expr cond = M >= min_m && N >= 32;
     if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && cast<int64_t>(M) * N >= (1 << 16);
     Stage mm = Stage(out).specialize(cond).eager_inline(via);
-    Func rows = dot.clone_in(via);
-    out.eager_inline(via);
-    metal_mm(mm, out, dot, wh, xh, r, fmt, rs);
+    Func pass = edge.clone_in(via);
+    Func rows = dot.clone_in(pass);
+    out.eager_inline(via, pass);
+    metal_mm(mm, out, dot, edge, wh, xh, r, fmt, rs);
     if (fmt.block > 1) {
         metal_rows(out, rows, r, rs, fmt.sub);
         return;

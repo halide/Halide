@@ -429,21 +429,25 @@ On f16 acts (`f16`, or `f32:f16`) its Metal schedule (`metal_gemm`,
 tiles of out, the weights decoded to f16 and the acts converted into threadgroup
 memory per 64 values of K, multiplied by the simdgroups as 8 x 8
 `simdgroup_half8x8` fragments into `simdgroup_float8x8` accumulators
-(`MemoryType::Tile`). Other shapes run `metal_rows` in the same kernel, on a
-clone of the dot (each branch's dot is stored apart). The rounding is per value,
-so the rows can no longer factor a block's scale out of its products: small M
-runs a few percent slower than the exact q4_0 rows (which GGML's mul_mv also
-is). `--check` declares it as `Precision::w_quant` (an f16 rounding of every
-decoded weight: half an ulp, 2^-25 at least). The exact blocked formats' Metal
-libraries (f32 or f16 acts) run the same `metal_mm` on f32 operands (their
-decoded weights and acts staged as f32, `simdgroup_float8x8` fragments) for M >=
-16 and N >= 32: no rounding, and on the M3 Max about as fast as f16's (q4_0 at
-4096 x 4096: M = 16 98 us, M = 32 170; f16 operands 99 and 160). Not two-level
-formats (K-quants, iq4_xs): with the gemm's specialization in their kernel,
-SkipStages' flags keep dead stages in the rows' gemv (M = 1 1.17-1.28x slower),
-though their gemm is 1.1-2.4x faster at M = 16..64. `f16` weights with f16 acts
-(`f16`, `f32:f16`) run `metal_mm` too, K in steps of 64 (or 32) values, for M >=
-8, N >= 32, K % 32 == 0 and M * N >= 2^16, and `flat`'s rows otherwise.
+(`MemoryType::Tile`). At 16 < M < 32 one 32-row tile decodes the weights once
+(not two shifted 16-row tiles): the spec clamps the act rows past M (computed,
+never stored), and out reads the tile through a copy in threadgroup memory with
+predicated stores (`PredicateStores`: a guarded call would give every tile
+SkipStages flags). Other shapes run `metal_rows` in the same kernel, on a clone
+of the dot (each branch's dot is stored apart). The rounding is per value, so
+the rows can no longer factor a block's scale out of its products: small M runs
+a few percent slower than the exact q4_0 rows (which GGML's mul_mv also is).
+`--check` declares it as `Precision::w_quant` (an f16 rounding of every decoded
+weight: half an ulp, 2^-25 at least). The exact blocked formats' Metal libraries
+(f32 or f16 acts) run the same `metal_mm` on f32 operands (their decoded weights
+and acts staged as f32, `simdgroup_float8x8` fragments) for M >= 16 and N >= 32:
+no rounding, and on the M3 Max about as fast as f16's (q4_0 at 4096 x 4096: M =
+16 98 us, M = 32 170; f16 operands 99 and 160). Not two-level formats (K-quants,
+iq4_xs): with the gemm's specialization in their kernel, SkipStages' flags keep
+dead stages in the rows' gemv (M = 1 1.17-1.28x slower), though their gemm is
+1.1-2.4x faster at M = 16..64. `f16` weights with f16 acts (`f16`, `f32:f16`)
+run `metal_mm` too, K in steps of 64 (or 32) values, for M >= 8, N >= 32, K % 32
+== 0 and M * N >= 2^16, and `flat`'s rows otherwise.
 
 GGML picks its Metal kernel by M: mul_mv (exact; `kernel_mul_mv_mma_*` for M =
 2..16 on q4_0) up to 16, then `kernel_mul_mm` (f16 weights). The Halide

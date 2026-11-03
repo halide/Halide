@@ -68,9 +68,9 @@ public:
         block = ab > 1 && ab < wblock && wblock % ab == 0 ? ab : wblock;
         const int per = wblock / block;
         Wf(k, n) = operand(fw, w, k, n);
-        // a rowwise act encoded here may be encoded on rows past M (whole
-        // groups of rows for the gemm's tiles): they repeat the last one
-        Xf(k, m) = operand(fa, a, k, fc.rowwise && cn != an ? clamp(m, 0, row(a[0]).extent() - 1) : m);
+        // an act encoded here may be encoded on rows past M (a gemm tile's,
+        // or a rowwise format's whole groups of rows): they repeat the last one
+        Xf(k, m) = operand(fa, a, k, cn != an ? clamp(m, 0, row(a[0]).extent() - 1) : m);
         view(W, Wf, wblock);
         view(X, Xf, block);
         // r.x: a value within a block, r.y: the block
@@ -142,6 +142,23 @@ public:
             for (size_t i = 0; c && i < cut.size(); i++) {
                 if (c->name == Func(bound[i]).name()) stand_in.emplace(cut[i].name(), Func(f));
             }
+        }
+        // The severed acts' stand-ins read rows past M clamped too (as Xf):
+        // every Func calling one calls a clamping wrapper of it instead.
+        std::map<Internal::FunctionPtr, Internal::FunctionPtr> rows;
+        for (size_t i = 0; i < cut.size(); i++) {
+            auto it = stand_in.find(cut[i].name());
+            if (it == stand_in.end() || std::none_of(a.begin(), a.end(), [&](const ImageParam &p) { return p.name() == bound[i].name(); })) continue;
+            Func s = it->second, c(s.name() + "_rows");
+            std::vector<Var> vs = s.args();
+            std::vector<Expr> es(vs.begin(), vs.end());
+            es.back() = clamp(es.back(), 0, row(a[0]).extent() - 1);
+            c(vs) = s(es);
+            rows[s.function().get_contents()] = c.function().get_contents();
+            it->second = c;
+        }
+        for (auto [name, f] : Internal::build_environment(fs)) {
+            if (!rows.empty()) f.substitute_calls(rows);
         }
         for (ApproximationResult &res : approx) {
             for (Func &e : res.encoded) {
