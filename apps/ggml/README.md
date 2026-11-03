@@ -441,7 +441,9 @@ decoded weights and acts staged as f32, `simdgroup_float8x8` fragments) for M >=
 4096 x 4096: M = 16 98 us, M = 32 170; f16 operands 99 and 160). Not two-level
 formats (K-quants, iq4_xs): with the gemm's specialization in their kernel,
 SkipStages' flags keep dead stages in the rows' gemv (M = 1 1.17-1.28x slower),
-though their gemm is 1.1-2.4x faster at M = 16..64.
+though their gemm is 1.1-2.4x faster at M = 16..64. `f16` weights with f16 acts
+(`f16`, `f32:f16`) run `metal_mm` too, K in steps of 64 (or 32) values, for M >=
+8, N >= 32, K % 32 == 0 and M * N >= 2^16, and `flat`'s rows otherwise.
 
 GGML picks its Metal kernel by M: mul_mv (exact; `kernel_mul_mv_mma_*` for M =
 2..16 on q4_0) up to 16, then `kernel_mul_mm` (f16 weights). The Halide

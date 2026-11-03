@@ -43,6 +43,7 @@
 # as GGML's Metal gemm (kernel_mul_mm) does; with f16 acts (f16, f32:f16) its
 # library runs that gemm on the GPU's matrix unit for M >= 8 and N >= 32 (and
 # its mul_mv's rows otherwise: one kernel); its library is <storage>_to_<compute>_<act>_<op>.
+# f16 weights with f16 acts take the same gemm (K % 32 == 0).
 # Each generated library
 # has a checked variant (default target: asserts and bounds queries on; used
 # by --check and tests) and a bench variant

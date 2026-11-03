@@ -1888,13 +1888,17 @@ inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func
 }
 
 // The f16 operands of a Metal gemm: the weight's compute format's encoded
-// values (wh: its decoded values rounded to f16, e.g. q4_0:f16) and the act's
-// (xh: an f16 compute format's, staged, or f16 storage's), else false.
+// values (wh: its decoded values rounded to f16, e.g. q4_0:f16) or f16
+// storage's, and the act's (xh: an f16 compute format's, staged, or f16
+// storage's), else false.
 inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
-    if (!fmt.wcompute || rs.size() < 2) return false;
-    wh = rs.back().encoded[0];
-    xh = staged.size() == 1 ? staged[0] : rs.size() == 3 && rs[1].encoded.size() == 1 ? rs[1].encoded[0] :
-                                                                                        Func();
+    const ApproximationResult *w = fmt.wcompute ? &rs.back() : fmt.block == 1 && !rs.empty() ? &rs[0] :
+                                                                                               nullptr;
+    size_t acts = rs.size() - fmt.wcompute;
+    if (!w || w->encoded.size() != 1) return false;
+    wh = w->encoded[0];
+    xh = staged.size() == 1 ? staged[0] : acts == 2 && rs[1].encoded.size() == 1 ? rs[1].encoded[0] :
+                                                                                   Func();
     return wh.type() == Float(16) && xh.defined() && xh.type() == Float(16);
 }
 
@@ -1921,10 +1925,10 @@ inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, c
 // a bn x bm tile, its simdgroups wn x 1 sub-tiles of 8 * tn x 8 * tm, each
 // 8 x 8 an accumulator in Tile memory. Per step of K the operands are staged
 // in threadgroup memory, then loaded as 8 x 8 fragments. Tiles by M: 64 x 64
-// on f16 operands, else 64 x 32 (M >= 256, N >= 64), 32 x 32, 32 x 16 on f16
-// operands at M > 16, 16 x 16, 16 x 8; steps of 64 values.
+// on blocked f16 operands, else 64 x 32 (M >= 256, N >= 64), 32 x 32, 32 x 16
+// on f16 operands at M > 16, 16 x 16, 16 x 8; steps of 64 values.
 inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
-    if (fmt.block % 8) throw std::invalid_argument("metal_mm: blocks of a multiple of 8 values");
+    if (fmt.block % 8 && fmt.block != 1) throw std::invalid_argument("metal_mm: flat, or blocks of a multiple of 8 values");
     const int t = 8;
     // (names apart from the other specializations' loops, which compute
     // other Funcs at theirs)
@@ -1936,7 +1940,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
         int tn, tm, wn;
     };
     const bool h = wh.type() == Float(16);
-    std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, h ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M > 16 && h, 2, 2, 2}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    std::vector<Shape> shapes{{M >= 256 && N >= 64, 2, h && fmt.block > 1 ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M > 16 && h, 2, 2, 2}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
     inline_callees(dot, {wh, xh});
@@ -1962,18 +1966,25 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
         tile(when(sd, sh.cond));
         Stage u = when(su, sh.cond);
         // ks: the steps of K; kb: their blocks (or, for blocks longer than a
-        // step, ko: the step's 8-value pieces of its block)
+        // step or flat, ko: the step's 8-value pieces)
         auto steps = [&](Stage st, int kstep) {
             tile(st);
-            if (fmt.block >= kstep) {
+            if (fmt.block == 1) {
+                st.split(ry, ks, rxk, kstep).split(rxk, ko, kt, t).reorder(kt, nt, mt, ni, mi, ko, rx, nw, mw, ks);
+            } else if (fmt.block >= kstep) {
                 st.split(rx, ks, rxk, kstep).split(rxk, ko, kt, t).reorder(kt, nt, mt, ni, mi, ko, nw, mw, ks, ry);
             } else {
                 st.split(ry, ks, kb, kstep / fmt.block).split(rx, ko, kt, t).reorder(kt, nt, mt, ni, mi, ko, kb, nw, mw, ks).unroll(kb);
             }
             st.unroll(ko).atomic().vectorize(kt);
         };
-        if (fmt.block < 64) steps(u.specialize(nb % (64 / fmt.block) == 0), 64);
-        steps(u, std::min(fmt.block, 64));
+        if (fmt.block == 1) {
+            steps(u.specialize(nb % 64 == 0), 64);
+            steps(u, 32);  // (metal_gemm: K % 32 == 0)
+        } else {
+            if (fmt.block < 64) steps(u.specialize(nb % (64 / fmt.block) == 0), 64);
+            steps(u, std::min(fmt.block, 64));
+        }
         // each lane 4 values of K of a row of the step's weights or acts
         // (blocked (j, b, i) or flat (k, i))
         for (Func f : {ws, xs}) {
@@ -2014,20 +2025,35 @@ inline void metal_mm(Stage o, Func out, Func dot, Func wh, Func xh, const RDom &
     }
 }
 
-// Metal on f16 or f32 operands: metal_mm where M >= min_m and N >= 32, else
-// metal_rows on a clone of dot, one kernel. min_m: 8 on f16 (GGML's), 16 on
-// f32 (below it the f32 tiles lose on mxfp4, iq4_nl, q4_1).
-inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m) {
+// Metal on f16 or f32 operands: metal_mm where M >= min_m and N >= 32 (flat:
+// K % 32 == 0 and M * N >= 2^16; below it flat's rows win, 1.2-2.6x at M =
+// 8..32, N = 512..2048), else metal_rows (flat: metal_flat) on a clone of
+// dot, one kernel but flat's staged acts. min_m: 8 on f16 (GGML's), 16 on f32 (below
+// it the f32 tiles lose on mxfp4, iq4_nl, q4_1).
+inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
+                       const std::vector<Func> &staged = {}) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
     // once, reading dot; then via reads the clone, and the other branches
     // inline it, reading the clone
     Func via = dot.in(out);
-    Stage mm = Stage(out).specialize(M >= min_m && N >= 32).eager_inline(via);
+    Expr cond = M >= min_m && N >= 32;
+    if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && cast<int64_t>(M) * N >= (1 << 16);
+    Stage mm = Stage(out).specialize(cond).eager_inline(via);
     Func rows = dot.clone_in(via);
     out.eager_inline(via);
     metal_mm(mm, out, dot, wh, xh, r, fmt, rs);
-    metal_rows(out, rows, r, rs, fmt.sub);
+    if (fmt.block > 1) {
+        metal_rows(out, rows, r, rs, fmt.sub);
+        return;
+    }
+    // the rows' own staged acts (their kernel skipped under the gemm, whose
+    // tiles stage theirs)
+    std::set<std::string> names;
+    for (const Func &e : staged) {
+        names.insert(e.name());
+    }
+    metal_flat(out, rows, r, clone_paths(rows, [&](const Func &f) { return names.count(f.name()) > 0; }));
 }
 
 // Rowwise formats (schemes/kleidiai.h: qsi8cx weights, qai8dx acts): one
@@ -2180,14 +2206,14 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
-        if (fmt.block == 1) {
-            metal_flat(out, dots[0], r, staged);
-            return;
-        }
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
-            metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 8);
+            metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, staged);
             metal_luts(out, rs);
+            return;
+        }
+        if (fmt.block == 1) {
+            metal_flat(out, dots[0], r, staged);
             return;
         }
         if (f32_operands(dots[0], rs, staged, fmt, wh, xh)) {
