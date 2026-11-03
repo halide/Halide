@@ -1537,8 +1537,9 @@ inline bool reassociable(const Func &f) {
 
 // An encoder computed per record, vectorized: its per-value Funcs across
 // their elements, its reassociable reductions across the block (a
-// strict_float sum, q1_0's, stays in order).
-inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
+// strict_float sum, q1_0's, stays in order). `vec`: e itself vectorized
+// (acts of values, not blocks).
+inline void encoder(Func e, const std::vector<ApproximationResult> &rs, int vec = 0) {
     for (Func f : encoder_funcs(e, rs)) {
         if (f.name() == e.name()) continue;
         if (f.dimensions() > e.dimensions()) {
@@ -1551,6 +1552,7 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
             if (reassociable(f)) f.update().atomic().vectorize(f.rvars()[0]);
         }
     }
+    if (vec) e.vectorize(e.args()[0], vec, TailStrategy::GuardWithIf);
 }
 
 // The N = M = 1 schedule (GGML's vec_dot). Staged activations are encoded
@@ -1559,9 +1561,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
     luts(rs, true);
     for (Func e : staged) {
-        e.compute_root();
-        encoder(e, rs);
-        if (fmt.act_block == 1) e.vectorize(e.args()[0], t.natural_vector_size<float>() * 4, TailStrategy::GuardWithIf);
+        encoder(e.compute_root(), rs, fmt.act_block == 1 ? 4 * t.natural_vector_size<float>() : 0);
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     if (fmt.block == 1) {
@@ -2223,11 +2223,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             Expr chunks = balanced(cs, 4096, [&](int c) { return std::pair{recs * c, (B + c - 1) / c * fmt.act_block * fmt.act_rows}; });
             s.split(b, bo, b, (B + chunks - 1) / chunks, TailStrategy::GuardWithIf).fuse(rec, bo, t).parallel(t);
         }
-        encoder(e, rs);
-        if (fmt.act_block == 1) {  // values: vectorized (also for M = 1)
-            s.vectorize(b, fv, TailStrategy::GuardWithIf);
-            e.vectorize(b, fv, TailStrategy::GuardWithIf);
-        }
+        encoder(e, rs, fmt.act_block == 1 ? fv : 0);
+        if (fmt.act_block == 1) s.vectorize(b, fv, TailStrategy::GuardWithIf);
     }
     if (fmt.block == 1) {
         // Float weights: 4 x 2 tiles, row pairs, single rows; gemv in single
