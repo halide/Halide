@@ -385,10 +385,21 @@ class FlattenAliasedAllocations : public IRMutator {
         return alignment + modulus_remainder(offset);
     }
 
+    // Shift an index into the backing allocation by the offset. Nothing
+    // simplifies the result, so add the offset to the base of a ramp rather
+    // than adding a broadcast to it: the device code generators only emit a
+    // dense vector load or store for an index that is a Ramp.
+    static Expr shift_index(const Expr &index, const Expr &offset) {
+        if (const Ramp *r = index.as<Ramp>()) {
+            return Ramp::make(shift_index(r->base, offset), r->stride, r->lanes);
+        }
+        return index + offset;
+    }
+
     Expr visit(const Load *op) override {
         if (aliases.contains(op->name)) {
             const Alias &a = aliases.get(op->name);
-            return Load::make(op->type, a.backing, mutate(op->index) + a.offset,
+            return Load::make(op->type, a.backing, shift_index(mutate(op->index), a.offset),
                               op->image, op->param, mutate(op->predicate),
                               shift_alignment(op->alignment, a.offset), false);
         }
@@ -398,7 +409,7 @@ class FlattenAliasedAllocations : public IRMutator {
     Stmt visit(const Store *op) override {
         if (aliases.contains(op->name)) {
             const Alias &a = aliases.get(op->name);
-            return Store::make(a.backing, mutate(op->value), mutate(op->index) + a.offset,
+            return Store::make(a.backing, mutate(op->value), shift_index(mutate(op->index), a.offset),
                                op->param, mutate(op->predicate),
                                shift_alignment(op->alignment, a.offset), false);
         }
