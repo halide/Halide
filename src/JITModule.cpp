@@ -363,6 +363,12 @@ void compile_module_impl(
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
 
+    if (!WasmModule::can_jit_target(target)) {
+        const Target host = get_host_target();
+        user_assert(target.has_feature(Target::ARM64e) == host.has_feature(Target::ARM64e))
+            << "Cannot JIT target (" << target << ") with a different arm64e pointer authentication ABI than the host (" << host << ").\n";
+    }
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     debug(2) << "Target triple: " << m->getTargetTriple().str() << "\n";
@@ -1173,6 +1179,10 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                                           runtime_kind != MainShared);
         if (for_module) {
             clone_target_options(*for_module, *module);
+        } else {
+            CodeGen_LLVM::new_for_target(one_gpu.with_implied_features(),
+                                         *runtime.jit_module->context)
+                ->apply_target_options(*module);
         }
         module->setModuleIdentifier(module_name);
 

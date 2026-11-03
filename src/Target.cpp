@@ -733,6 +733,11 @@ Target get_jit_target_from_environment() {
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
+        user_assert(Internal::WasmModule::can_jit_target(t) ||
+                    t.has_feature(Target::ARM64e) == host.has_feature(Target::ARM64e))
+            << "HL_JIT_TARGET must match the host arm64e pointer authentication ABI.\n"
+            << "HL_JIT_TARGET was " << target << ". "
+            << "Host is " << host.to_string() << ".\n";
         user_assert(!t.has_feature(Target::NoBoundsQuery))
             << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bounds_query: " << target;
         set_sanitizer_bits(t);
@@ -1034,6 +1039,8 @@ void Target::validate_features() const {
     if (has_feature(ARM64e)) {
         user_assert(arch == ARM && bits == 64 && (os == IOS || os == MacOS))
             << "Target feature arm64e requires 64-bit ARM on iOS or macOS. (" << *this << ")\n";
+        user_assert(!has_feature(Simulator))
+            << "Target feature arm64e cannot be combined with simulator. (" << *this << ")\n";
     }
 }
 
@@ -1478,40 +1485,32 @@ int Target::get_d3d12compute_capability_lower_bound() const {
 }
 
 int Target::get_arm_v8_lower_bound() const {
+    int bound = -1;
     if (has_feature(Target::ARMv8a)) {
-        return 80;
-    }
-    if (has_feature(Target::ARMv81a)) {
-        return 81;
-    }
-    if (has_feature(Target::ARMv82a)) {
-        return 82;
-    }
-    if (has_feature(Target::ARMv83a)) {
-        return 83;
-    }
-    if (has_feature(Target::ARMv84a)) {
-        return 84;
-    }
-    if (has_feature(Target::ARMv85a)) {
-        return 85;
-    }
-    if (has_feature(Target::ARMv86a)) {
-        return 86;
-    }
-    if (has_feature(Target::ARMv87a)) {
-        return 87;
-    }
-    if (has_feature(Target::ARMv88a)) {
-        return 88;
-    }
-    if (has_feature(Target::ARMv89a)) {
-        return 89;
+        bound = 80;
+    } else if (has_feature(Target::ARMv81a)) {
+        bound = 81;
+    } else if (has_feature(Target::ARMv82a)) {
+        bound = 82;
+    } else if (has_feature(Target::ARMv83a)) {
+        bound = 83;
+    } else if (has_feature(Target::ARMv84a)) {
+        bound = 84;
+    } else if (has_feature(Target::ARMv85a)) {
+        bound = 85;
+    } else if (has_feature(Target::ARMv86a)) {
+        bound = 86;
+    } else if (has_feature(Target::ARMv87a)) {
+        bound = 87;
+    } else if (has_feature(Target::ARMv88a)) {
+        bound = 88;
+    } else if (has_feature(Target::ARMv89a)) {
+        bound = 89;
     }
     if (has_feature(Target::ARM64e)) {
-        return 83;
+        bound = std::max(bound, 83);
     }
-    return -1;
+    return bound;
 }
 
 bool Target::supports_type(const Type &t) const {
@@ -1877,7 +1876,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
+        debug(1) << "runtime targets must agree on ARM64e, ASAN, Debug, EnableBacktraces, HexagonDma, HVX, MSAN, SoftFloatABI, TSAN, WasmThreads, SanitizerCoverage, Simulator\n"
                  << "  this:  " << *this << "\n"
                  << "  other: " << other << "\n";
         return false;
@@ -2044,6 +2043,12 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
     if (arm_v8_capability < 89) {
         output.features.reset(ARMv89a);
+    }
+    if (output.has_feature(ARM64e)) {
+        output.features.reset(ARMv8a);
+        output.features.reset(ARMv81a);
+        output.features.reset(ARMv82a);
+        output.features.reset(ARMv83a);
     }
 
     result = output;

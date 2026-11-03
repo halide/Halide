@@ -193,6 +193,10 @@ def test_target():
         "x86-64-macos-arm64e",
         "Target feature arm64e is incompatible with the Target's architecture.",
     )
+    assert_invalid_target(
+        "arm-64-ios-arm64e-simulator",
+        "Target feature arm64e cannot be combined with simulator.",
+    )
 
     # with_feature with non-convertible lists
     try:

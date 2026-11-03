@@ -288,6 +288,33 @@ int main(int argc, char **argv) {
         }
     }
 
+    for (const char *s : {"arm-64-ios-arm64e", "arm-64-macos-arm64e"}) {
+        Target raw{s};
+        Target implied = raw.with_implied_features();
+        Target gcd{};
+        if (!raw.get_runtime_compatible_target(implied, gcd) || gcd != raw) {
+            printf("Expected gcd(%s, %s) == %s, got %s\n",
+                   raw.to_string().c_str(), implied.to_string().c_str(),
+                   raw.to_string().c_str(), gcd.to_string().c_str());
+            return 1;
+        }
+    }
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+    {
+        bool threw = false;
+        try {
+            (void)Target("arm-64-ios-arm64e-simulator");
+        } catch (const Halide::Error &) {
+            threw = true;
+        }
+        if (!threw) {
+            printf("Expected Target(\"arm-64-ios-arm64e-simulator\") to fail validation.\n");
+            return 1;
+        }
+    }
+#endif
+
     if (Target().vector_bits != 0) {
         printf("Default Target vector_bits not 0.\n");
         return 1;
