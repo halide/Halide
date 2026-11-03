@@ -1203,8 +1203,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     if (affine(rs)) throw std::invalid_argument("blocked_rows: weights decoded as codes times scales");
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), bacc("bacc");
-    // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
-    RVar ry = r.y, rx = r.x, rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
+    RVar ry = r.y, rx = r.x, rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
     Func blk = s.rfactor(ry, u);
     // the act's codes (and on gemm tiles its scales) stay out of the inline:
     // staged per block in registers, below
@@ -1269,7 +1268,7 @@ inline void blocked_rows_sub(Func out, int st, Func dot, Expr cond, Tiles ts, co
                              const std::vector<ApproximationResult> &rs, int sub, int act_sub) {
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc");
-    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
+    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
     Sums d;
     if (!sub || (affine(rs) && !derived_sums(out, st, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows_sub: two-level weights (affine: an act with derived sums)");
     s.split(r.x, rxs, rxc, sub);
