@@ -13,8 +13,8 @@ def test_warnings():
     g[i] = f[i * i]
 
     expected_warning = (
-        "Warning: It is meaningless to bound dimension v0 of function f to be within [0, 127] because "
-        "the function is scheduled inline.\n"
+        "Warning: Bounding dimension v0 of function f to be within [0, 127] has no effect "
+        "when its calls are inlined during lowering.\n"
     )
 
     buffer = io.StringIO()
