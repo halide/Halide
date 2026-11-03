@@ -235,6 +235,7 @@ struct FuncScheduleContents {
     mutable RefCount ref_count;
 
     LoopLevel store_level, compute_level, hoist_storage_level;
+    std::vector<LoopLevel> slide_levels;
     std::vector<StorageDim> storage_dims;
     std::vector<StorageSplit> storage_splits;
     std::map<std::string, Bound> bounds;
@@ -386,6 +387,11 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->store_level.set(contents->store_level);
     copy.contents->compute_level.set(contents->compute_level);
     copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
+    copy.contents->slide_levels.clear();
+    for (const auto &l : contents->slide_levels) {
+        copy.contents->slide_levels.emplace_back();
+        copy.contents->slide_levels.back().set(l);
+    }
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->storage_splits = contents->storage_splits;
     copy.contents->bounds = contents->bounds;
@@ -546,6 +552,14 @@ LoopLevel &FuncSchedule::store_level() {
 
 LoopLevel &FuncSchedule::compute_level() {
     return contents->compute_level;
+}
+
+std::vector<LoopLevel> &FuncSchedule::slide_levels() {
+    return contents->slide_levels;
+}
+
+const std::vector<LoopLevel> &FuncSchedule::slide_levels() const {
+    return contents->slide_levels;
 }
 
 LoopLevel &FuncSchedule::hoist_storage_level() {

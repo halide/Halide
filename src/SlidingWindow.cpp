@@ -158,7 +158,10 @@ class RollFunc : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        // When sliding over a let, it's the let's variable that steps back by
+        // one, so leave it unexpanded.
+        ScopedBinding<Expr> bind(op->name != loop_var, scope, op->name,
+                                 simplify(expand_expr(op->value, scope)));
         return IRMutator::visit(op);
     }
 
@@ -169,7 +172,24 @@ public:
     }
 };
 
-// What sliding window decided to do with one Func over one loop. The
+// The level f was told to slide over that this loop or let carries, if any.
+const LoopLevel *slides_over(const Function &f, const string &name) {
+    for (const LoopLevel &l : f.schedule().slide_levels()) {
+        if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(name)) {
+            return &l;
+        }
+    }
+    return nullptr;
+}
+
+// Loop and let names in the IR are mangled, so error messages use the name
+// the schedule used instead.
+string slide_level_name(const Function &f, const string &name) {
+    const LoopLevel *l = slides_over(f, name);
+    return l ? l->to_string() : name;
+}
+
+// What sliding window decided to do with one Func over one loop or let. The
 // rewrite makes no decisions of its own.
 struct SlideDecision {
     string func_name;
@@ -230,7 +250,7 @@ std::ostream &operator<<(std::ostream &s, const SlideDecision &d) {
 }
 
 // Perform sliding window optimization for a function over a particular serial
-// for loop. Rewrites the lets that give the region
+// for loop, or a let inside it. Rewrites the lets that give the region
 // required of the func to only cover the sliver newly required this iteration.
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
@@ -238,15 +258,26 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // The value of loop_var at the first iteration anything consumes this
     // func, which is earlier than the loop min if a consumer is warming up.
     Expr loop_min;
-    set<int> &slid_dimensions;
+    // For each dimension of func's storage already slid, what it slid over.
+    map<int, string> &slid_dimensions;
     Scope<Expr> scope;
     Scope<Interval> &bounds_scope;
+
+    // Whether loop_var is the variable of the loop whose body we're
+    // mutating, rather than a let inside it.
+    bool over_loop;
+
+    // The loops loop_var is built from.
+    Scope<> loops_building_var;
+
+    // Whether we're inside the definition of loop_var.
+    bool var_in_scope;
 
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
     Scope<> enclosing_loops;
 
-    // How many of those run more than once.
+    // How many of those inside the definition of loop_var run more than once.
     int enclosing_real_loops = 0;
 
     map<string, Expr> replacements;
@@ -346,6 +377,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
 
         if (!dim.empty() && slid_dimensions.count(dim_idx)) {
+            // The window can only advance along a dimension once, so one of
+            // the two would be silently dropped.
+            user_assert(func.schedule().slide_levels().empty())
+                << "Func " << func.name() << " was told to slide over both "
+                << slide_level_name(func, slid_dimensions[dim_idx]) << " and "
+                << slide_level_name(func, loop_var) << ", but both of those move "
+                << "the same dimension (" << dim << ") of " << func.name()
+                << ", so the window would have to advance along it twice. Slide "
+                << "over dimensions that move different dimensions of "
+                << func.name() << ".\n";
             return result.reject("this dimension has already been slid over");
         }
         if (func.schedule().memory_type() == MemoryType::Register &&
@@ -356,6 +397,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
         if (!min_required.defined()) {
             return result.reject("more than one dimension depends on the loop var");
+        }
+
+        if (expr_uses_vars(min_required, loops_building_var) ||
+            expr_uses_vars(max_required, loops_building_var)) {
+            return result.reject("the region required depends on the loops the "
+                                 "dimension is built from, not just the dimension");
         }
 
         // If the function is not pure in the given dimension, give up. We also
@@ -450,9 +497,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // We have a new loop min, so we an assume every iteration has
             // a previous iteration. In order for this to be safe, we need
             // the new min/max at the new loop min to be less than or equal to
-            // the min/max required at the loop min, which is before the
-            // original loop min if a consumer is warming up a window of its
-            // own.
+            // the min/max required at the loop min. This also keeps the
+            // region empty on any warm-up iterations before the one we solved
+            // for, which a let moving by more than one per iteration can have.
             if (can_slide_up) {
                 Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
                 new_min = max(new_min, min_required_at_loop_min);
@@ -465,10 +512,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // every iteration has a previous iteration. The first iteration
             // will warm up the loop instead.
             Expr need_explicit_warmup = loop_var_expr <= loop_min;
+            // The loop a let is slid at contains the producer's loop, which
+            // only collapses once the warm-up is peeled off, so
+            // likely_if_innermost would never fire.
+            auto mark = [&](const Expr &e) {
+                return over_loop ? likely_if_innermost(e) : likely(e);
+            };
             if (can_slide_up) {
-                new_min = select(need_explicit_warmup, min_required, likely_if_innermost(new_min));
+                new_min = select(need_explicit_warmup, min_required, mark(new_min));
             } else {
-                new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
+                new_max = select(need_explicit_warmup, max_required, mark(new_max));
             }
         }
 
@@ -524,6 +577,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (!(op->is_producer && op->name == func.name())) {
             return IRMutator::visit(op);
         }
+        if (!var_in_scope) {
+            // Computed outside the let we're sliding over, so it doesn't move
+            // with it.
+            return op;
+        }
+
         internal_assert(!decision.slid()) << "Slid " << func.name()
                                           << "'s producer twice\n";
         decision = plan_slide();
@@ -533,7 +592,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (!decision.slid()) {
             return op;
         }
-        slid_dimensions.insert(decision.dim_idx);
+        slid_dimensions[decision.dim_idx] = loop_var;
 
         if (func.schedule().memory_type() == MemoryType::Register) {
             // Sliding in registers leaves the region written alone, and
@@ -550,6 +609,14 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         Expr min = expand_expr(op->min, scope);
         Expr max = expand_expr(op->max, scope);
         ScopedBinding<> bind(enclosing_loops, op->name);
+        ScopedBinding<> bind_building(!var_in_scope, loops_building_var, op->name);
+        // The loops loop_var is built from bound it.
+        Interval loop_bounds;
+        if (!var_in_scope) {
+            loop_bounds = Interval(bounds_of_expr_in_scope(op->min, bounds_scope).min,
+                                   bounds_of_expr_in_scope(op->max, bounds_scope).max);
+        }
+        ScopedBinding<Interval> bind_bounds(!var_in_scope, bounds_scope, op->name, loop_bounds);
         if (equal(min, max)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
@@ -565,7 +632,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << min << ", " << max << "\n";
             return op;
         } else {
-            ScopedValue<int> bind_count(enclosing_real_loops, enclosing_real_loops + 1);
+            ScopedValue<int> bind_count(enclosing_real_loops, enclosing_real_loops + var_in_scope);
             loop_bounds_stack.emplace_back(op->name, Interval(min, max));
             binding_stack.push_back(op->name);
             Stmt s = IRMutator::visit(op);
@@ -613,6 +680,31 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
+        if (op->name == loop_var) {
+            // Keep the let we're sliding over opaque, so that the region
+            // required is written in terms of it.
+            Interval b = bounds_of_expr_in_scope(op->value, bounds_scope);
+            if (b.has_lower_bound()) {
+                b.min = simplify(b.min);
+            }
+            if (b.has_upper_bound()) {
+                b.max = simplify(b.max);
+            }
+            ScopedBinding<Interval> bind_bounds(bounds_scope, op->name, b);
+            ScopedValue<bool> bind_in_scope(var_in_scope, true);
+            Scope<Interval> inner;
+            for (const auto &l : loop_bounds_stack) {
+                inner.push(l.first, l.second);
+            }
+            loop_bounds_stack.emplace_back(
+                op->name, bounds_of_expr_in_scope(expand_expr(op->value, scope), inner));
+            binding_stack.push_back(op->name);
+            Stmt new_body = mutate(op->body);
+            binding_stack.pop_back();
+            loop_bounds_stack.pop_back();
+            return op->with(op->value, new_body);
+        }
+
         ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
                                             bounds_of_expr_in_scope(op->value, bounds_scope));
         ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), bounds_scope));
@@ -641,12 +733,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    // Slide over the loop over v, which starts at v_min.
+    // Slide over v, which starts at v_min. It is either the variable of the
+    // loop whose body we mutate, or a let inside it, in which case outer_loop
+    // names that loop.
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min,
-                                   set<int> &slid_dimensions,
-                                   Scope<Interval> &bounds_scope)
+                                   map<int, string> &slid_dimensions,
+                                   Scope<Interval> &bounds_scope, const string &outer_loop)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
-          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
+          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope),
+          over_loop(outer_loop.empty()),
+          var_in_scope(outer_loop.empty()) {
+        if (!over_loop) {
+            loops_building_var.push(outer_loop);
+        }
         decision.func_name = func.name();
         decision.slide_over = loop_var;
     }
@@ -705,6 +804,11 @@ class InjectWarmupGuards : public IRMutator {
     // The loop min before anything rewound it.
     const Expr &orig_loop_min;
     FuncDependencies &deps;
+    // Whether to use likely_if_innermost rather than likely. If a Func slid
+    // over a let inside the loop, the loop contains producer loops that only
+    // collapse once the warm-up is peeled off, so the loop never looks
+    // innermost.
+    bool innermost;
 
     // Memoized, because answering the question requires a traversal. An
     // undefined Expr means the func's producer needs no guard.
@@ -716,7 +820,8 @@ class InjectWarmupGuards : public IRMutator {
             return cached->second;
         }
         Expr start = orig_loop_min;
-        if (warmup_starts.count(func)) {
+        auto w = warmup_starts.find(func);
+        if (w != warmup_starts.end()) {
             // A producer warming up needs no guard, because its bounds are
             // empty until it has work.
             start = Expr();
@@ -785,7 +890,7 @@ class InjectWarmupGuards : public IRMutator {
             return s;
         }
         Expr cond = current_start <= Variable::make(Int(32), loop_var);
-        Expr guard = likely_if_innermost(cond);
+        Expr guard = innermost ? likely_if_innermost(cond) : likely(cond);
         debug(3) << "Guarding body " << guard << "\n";
         return IfThenElse::make(guard, s);
     }
@@ -809,6 +914,10 @@ class InjectWarmupGuards : public IRMutator {
     }
 
     Stmt visit(const IfThenElse *op) override {
+        return has_common_start(op) ? wrap(op) : IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
         return has_common_start(op) ? wrap(op) : IRMutator::visit(op);
     }
 
@@ -837,9 +946,10 @@ class InjectWarmupGuards : public IRMutator {
 
 public:
     InjectWarmupGuards(const map<string, Expr> &warmup_starts, const string &loop_var,
-                       const Expr &orig_loop_min, FuncDependencies &deps)
+                       const Expr &orig_loop_min, FuncDependencies &deps,
+                       bool innermost)
         : warmup_starts(warmup_starts), loop_var(loop_var),
-          orig_loop_min(orig_loop_min), deps(deps),
+          orig_loop_min(orig_loop_min), deps(deps), innermost(innermost),
           current_start(orig_loop_min) {
     }
 };
@@ -872,20 +982,174 @@ public:
     }
 };
 
+// A let a Func was told to slide over, found in the body of a loop. A split
+// Var has no loop of its own, but it still has a let.
+struct SlideLet {
+    string name;
+    // Its value, and the loops between the loop and it (outermost first) with
+    // their bounds, all written in terms of names in scope at the loop.
+    Expr value;
+    vector<pair<string, Interval>> loops;
+};
+
+// Find the lets inside a Stmt that a Func was told to slide over, and that
+// enclose its producer.
+class FindSlideLets : public IRVisitor {
+    const Function &func;
+    Scope<Expr> lets;
+    vector<pair<string, Interval>> loops;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) override {
+        loops.emplace_back(op->name, Interval(expand_expr(op->min, lets),
+                                              expand_expr(op->max, lets)));
+        op->body.accept(this);
+        loops.pop_back();
+    }
+
+    void visit(const LetStmt *op) override {
+        Expr value = expand_expr(op->value, lets);
+        if (slides_over(func, op->name)) {
+            bool contains_producer = false;
+            visit_with(op->body, [&](auto *self, const ProducerConsumer *pc) {
+                contains_producer |= pc->is_producer && pc->name == func.name();
+                self->visit_base(pc);
+            });
+            if (contains_producer) {
+                result.push_back({op->name, value, loops});
+            }
+        }
+        ScopedBinding<Expr> bind(lets, op->name, value);
+        op->body.accept(this);
+    }
+
+    void visit(const ProducerConsumer *op) override {
+        if (!(op->is_producer && op->name == func.name())) {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    vector<SlideLet> result;
+
+    FindSlideLets(const Function &func)
+        : func(func) {
+    }
+};
+
+// Something a Func slides over at a particular serial loop: that loop's
+// variable, or a let inside it built from that loop and some loops inside it.
+// The window advances by one each time it does, and warms up by prepending
+// iterations to the loop.
+struct SlideTarget {
+    string var;
+    // Its value and the loops between the loop and it, as found by
+    // FindSlideLets. For the loop itself, that's just the loop variable.
+    Expr value;
+    vector<pair<string, Interval>> inner_loops;
+    // How much one iteration of the loop advances var.
+    Expr stride = 1;
+
+    bool is_loop() const {
+        const Variable *v = value.as<Variable>();
+        return v && v->name == var;
+    }
+
+    // The value var first takes on the given iteration of the loop.
+    Expr at_iteration(const string &loop, const Expr &i) const {
+        Expr e = value;
+        for (auto it = inner_loops.rbegin(); it != inner_loops.rend(); it++) {
+            e = Let::make(it->first, it->second.min, e);
+        }
+        return simplify(Let::make(loop, i, e));
+    }
+
+    // The latest iteration of the loop no later than `from` on which var is
+    // at or before q, which it never passes.
+    Expr iteration_reaching(const string &loop, const Expr &from, const Expr &q) const {
+        internal_assert(is_positive_const(stride));
+        Expr steps = (at_iteration(loop, from) - q + stride - 1) / stride;
+        return simplify(from - steps);
+    }
+};
+
 // Perform sliding window optimization for all functions
 class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
     FuncDependencies deps;
 
-    // A map of which dimensions we've already slid over, by Func name.
-    map<string, set<int>> slid_dimensions;
+    // A map of which dimensions we've already slid over, and what over, by
+    // Func name.
+    map<string, map<int, string>> slid_dimensions;
 
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
+    // The loops we're inside of, outermost first.
+    vector<string> loop_stack;
+    // For each let in scope, the loops its value depends on, directly or
+    // through other lets.
+    Scope<set<string>> let_loops;
     Scope<Interval> bounds_scope;
 
     using IRMutator::visit;
+
+    // The loops an Expr depends on, directly or through lets.
+    set<string> loops_used(const Expr &e) {
+        set<string> result;
+        visit_with(
+            e,
+            [&](auto *self, const Let *op) {
+                ScopedBinding<set<string>> bind(let_loops, op->name, loops_used(op->value));
+                op->body.accept(self);
+            },
+            [&](auto *self, const Variable *v) {
+                if (const set<string> *s = let_loops.find(v->name)) {
+                    result.insert(s->begin(), s->end());
+                } else if (std::find(loop_stack.begin(), loop_stack.end(), v->name) != loop_stack.end()) {
+                    result.insert(v->name);
+                }
+            });
+        return result;
+    }
+
+    // The things func can slide over at the serial loop op, currently called
+    // name and with the given body. A func not told what to slide over slides
+    // over every loop. A func told what to slide over slides over each loop
+    // and let it names, at the outermost loop it varies over.
+    vector<SlideTarget> slide_targets(const Function &func, const For *op,
+                                      const string &name, const Stmt &body) {
+        vector<SlideTarget> targets;
+        const bool named = !func.schedule().slide_levels().empty();
+        if (!named || slides_over(func, op->name)) {
+            targets.push_back({name, Variable::make(Int(32), name)});
+        }
+        if (!named) {
+            return targets;
+        }
+
+        FindSlideLets finder(func);
+        body.accept(&finder);
+        for (const SlideLet &l : finder.result) {
+            set<string> used = loops_used(l.value);
+            size_t outer = 0;
+            while (outer < loop_stack.size() && !used.count(loop_stack[outer])) {
+                outer++;
+            }
+            if (outer < loop_stack.size() || !expr_uses_var(l.value, name)) {
+                // It slides at an outer or inner loop instead.
+                continue;
+            }
+
+            SlideTarget t{l.name, l.value, l.loops};
+            ConstantInterval stride = derivative_bounds(l.value, name);
+            internal_assert(stride.is_single_point());
+            t.stride = make_const(Int(32), stride.min);
+            targets.push_back(t);
+        }
+        return targets;
+    }
 
     Stmt visit(const LetStmt *op) override {
         // Loop extents of splits arrive as constant arithmetic like 2 - 1,
@@ -895,6 +1159,7 @@ class SlidingWindow : public IRMutator {
         Interval b = is_constant ? Interval::single_point(simplify(op->value)) :
                                    bounds_of_expr_in_scope(op->value, bounds_scope);
         ScopedBinding<Interval> bind(bounds_scope, op->name, b);
+        ScopedBinding<set<string>> bind_loops(let_loops, op->name, loops_used(op->value));
         return IRMutator::visit(op);
     }
 
@@ -956,7 +1221,10 @@ class SlidingWindow : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (!(op->for_type == ForType::Serial || op->for_type == ForType::Unrolled)) {
-            return IRMutator::visit(op);
+            loop_stack.push_back(op->name);
+            Stmt s = IRMutator::visit(op);
+            loop_stack.pop_back();
+            return s;
         }
         debug(3) << "Doing sliding window analysis on loop " << op->name << "\n";
 
@@ -972,6 +1240,9 @@ class SlidingWindow : public IRMutator {
         // The funcs that slide by rewinding the loop min, and the iteration
         // each of them starts at.
         map<string, Expr> warming_up;
+        // Whether everything that rewound the loop slid over the loop itself,
+        // rather than over a let inside it.
+        bool rewound_for_loop_only = true;
         // The loop min before any warm-up iterations were prepended.
         // <loop>.loop_min follows the loop as we rewind it, so this gets a
         // name of its own.
@@ -979,80 +1250,116 @@ class SlidingWindow : public IRMutator {
         Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
         for (const Function &func : consumers_first(sliding)) {
-            debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
-
-            // Figure out the first iteration at which this func is consumed.
-            // If nothing that consumes it is warming up a window of its own,
-            // that's just the loop min.
-            Expr consumed_from = orig_loop_min;
-            // Otherwise we need to have this func warmed up in time for the
-            // earliest-starting consumer, which means rewinding the loop even
-            // further than they did.
-            for (const auto &i : warmup_starts) {
-                if (deps.depends_on(func.name(), i.first)) {
-                    consumed_from = simplify(min(consumed_from, i.second));
+            // Rewinding the loop renames it, so find the targets afresh each
+            // time.
+            for (size_t k = 0;; k++) {
+                vector<SlideTarget> targets = slide_targets(func, op, name, body);
+                if (k >= targets.size()) {
+                    break;
                 }
-            }
+                const SlideTarget &target = targets[k];
+                debug(3) << "Doing sliding window analysis on function " << func.name()
+                         << " over " << target.var << "\n";
 
-            set<int> &slid_dims = slid_dimensions[func.name()];
-            size_t old_slid_dims_size = slid_dims.size();
+                // Figure out the first iteration at which this func is
+                // consumed. If nothing that consumes it is warming up a window
+                // of its own, that's just the loop min.
+                Expr consumed_from = orig_loop_min;
+                // Otherwise we need to have this func warmed up in time for
+                // the earliest-starting consumer, which means rewinding the
+                // loop even further than they did.
+                for (const auto &i : warmup_starts) {
+                    if (deps.depends_on(func.name(), i.first)) {
+                        consumed_from = simplify(min(consumed_from, i.second));
+                    }
+                }
 
-            Interval min_bounds = bounds_of_expr_in_scope(loop_min, bounds_scope);
-            Interval max_bounds = bounds_of_expr_in_scope(loop_max, bounds_scope);
-            ScopedBinding<Interval> bind_bounds(bounds_scope, name,
-                                                Interval(min_bounds.min, max_bounds.max));
+                map<int, string> &slid_dims = slid_dimensions[func.name()];
+                size_t old_slid_dims_size = slid_dims.size();
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims, bounds_scope);
+                Interval min_bounds = bounds_of_expr_in_scope(loop_min, bounds_scope);
+                Interval max_bounds = bounds_of_expr_in_scope(loop_max, bounds_scope);
+                ScopedBinding<Interval> bind_bounds(bounds_scope, name,
+                                                    Interval(min_bounds.min, max_bounds.max));
 
-            body = slider(body);
-            const SlideDecision &decision = slider.decision;
-            if (func.schedule().memory_type() == MemoryType::Register &&
-                decision.slid() && decision.old_bounds.has_lower_bound()) {
-                body = slider.translate_loop(body);
-            }
+                SlidingWindowOnFunctionAndLoop slider(func, target.var,
+                                                      target.at_iteration(name, consumed_from),
+                                                      slid_dims, bounds_scope,
+                                                      target.is_loop() ? "" : name);
 
-            if (decision.warmup_start.defined()) {
-                // An earlier func may already have rewound the loop further
-                // than this, so keep the earlier of the two.
-                Expr warmup_start = decision.warmup_start;
-                warmup_starts.emplace_front(func.name(), warmup_start);
-                warming_up[func.name()] = warmup_start;
-                Expr new_loop_min =
-                    loop_min.same_as(op->min) ? warmup_start : min(warmup_start, loop_min);
+                body = slider(body);
+                const SlideDecision &decision = slider.decision;
+                if (func.schedule().memory_type() == MemoryType::Register &&
+                    decision.slid() && decision.old_bounds.has_lower_bound()) {
+                    body = slider.translate_loop(body);
+                }
 
-                // Rename the loop var in the body, and with it any reference
-                // to the loop's min, so that <loop>.loop_min keeps meaning the
-                // min of that loop. Storage folding relies on it.
-                string new_name = name + ".$n";
-                loop_min = Variable::make(Int(32), new_name + ".loop_min");
-                body = substitute({{name, Variable::make(Int(32), new_name)},
-                                   {name + ".loop_min", loop_min}},
-                                  body);
-                body = SubstitutePrefetchVar(name, new_name)(body);
+                if (decision.warmup_start.defined()) {
+                    // An earlier func may already have rewound the loop
+                    // further than this, so keep the earlier of the two.
+                    Expr warmup_start = target.iteration_reaching(name, orig_loop_min,
+                                                                  decision.warmup_start);
+                    rewound_for_loop_only &= target.is_loop();
+                    warmup_starts.emplace_front(func.name(), warmup_start);
+                    warming_up[func.name()] = warmup_start;
+                    Expr new_loop_min =
+                        loop_min.same_as(op->min) ? warmup_start : min(warmup_start, loop_min);
 
-                name = new_name;
+                    // Rename the loop var in the body, and with it any
+                    // reference to the loop's min, so that <loop>.loop_min
+                    // keeps meaning the min of that loop. Storage folding
+                    // relies on it.
+                    string new_name = name + ".$n";
+                    loop_min = Variable::make(Int(32), new_name + ".loop_min");
+                    body = substitute({{name, Variable::make(Int(32), new_name)},
+                                       {name + ".loop_min", loop_min}},
+                                      body);
+                    body = SubstitutePrefetchVar(name, new_name)(body);
 
-                // The new loop interval is the new loop min to the old loop max.
-                new_lets.emplace_front(name + ".loop_min", new_loop_min);
-            }
+                    name = new_name;
 
-            if (slid_dims.size() > old_slid_dims_size) {
-                // Let storage folding know there's now a read-after-write
-                // hazard here. The loop may have been renamed above.
-                Expr marker = Call::make(Int(32), Call::sliding_window_marker,
-                                         {func.name(), Variable::make(Int(32), name)},
-                                         Call::Intrinsic);
-                body = Block::make(Evaluate::make(marker), body);
+                    // The new loop interval is the new loop min to the old loop max.
+                    new_lets.emplace_front(name + ".loop_min", new_loop_min);
+                }
+
+                if (slid_dims.size() > old_slid_dims_size) {
+                    // Let storage folding know there's now a read-after-write
+                    // hazard here, where the variable slid over is defined. A
+                    // loop may have been renamed above.
+                    string var = target.is_loop() ? name : target.var;
+                    Stmt marker = Evaluate::make(
+                        Call::make(Int(32), Call::sliding_window_marker,
+                                   {func.name(), Variable::make(Int(32), var)},
+                                   Call::Intrinsic));
+                    if (target.is_loop()) {
+                        body = Block::make(marker, body);
+                    } else {
+                        body = mutate_with(body, [&](auto *self, const LetStmt *l) -> Stmt {
+                            if (l->name == var) {
+                                return LetStmt::make(l->name, l->value, Block::make(marker, l->body));
+                            }
+                            return self->visit_base(l);
+                        });
+                    }
+                }
             }
         }
 
         if (!warming_up.empty()) {
             // The loop now starts before the original loop min. Everything the
             // extra iterations aren't there to warm up must be skipped over.
-            body = InjectWarmupGuards(warming_up, name, orig_loop_min, deps)(body);
+            body = InjectWarmupGuards(warming_up, name, orig_loop_min, deps,
+                                      rewound_for_loop_only)(body);
         }
 
-        body = mutate(body);
+        {
+            Interval lo = bounds_of_expr_in_scope(loop_min, bounds_scope);
+            Interval hi = bounds_of_expr_in_scope(loop_max, bounds_scope);
+            ScopedBinding<Interval> bind(bounds_scope, name, Interval(lo.min, hi.max));
+            loop_stack.push_back(name);
+            body = mutate(body);
+            loop_stack.pop_back();
+        }
 
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_max.same_as(op->max) && name == op->name) {
             return op;
@@ -1068,7 +1375,7 @@ class SlidingWindow : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         // Don't let specializations corrupt the tracking of which
         // dimensions have been slid.
-        map<string, set<int>> old_slid_dimensions = slid_dimensions;
+        map<string, map<int, string>> old_slid_dimensions = slid_dimensions;
         Stmt then_case = mutate(op->then_case);
         slid_dimensions = old_slid_dimensions;
         Stmt else_case = mutate(op->else_case);

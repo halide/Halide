@@ -2725,6 +2725,64 @@ public:
      */
     Func &hoist_storage(const Func &f, const Var &var);
 
+    /** Slide this Func's window over a dimension of a consumer, rather than
+     * over whichever loop sliding window analysis would otherwise pick. Use
+     * this when the dimension has been split, so that it survives only as a
+     * combination of several loops:
+     \code
+     g.split(x, xo, xi, 2).unroll(xi);
+     f.store_root().compute_at(g, xi).slide(g, x);
+     \endcode
+     * The window then advances once per value of x rather than once per xo,
+     * so folded storage is indexed by x, and unrolling the inner loop lets
+     * each unrolled body resolve the modulus that folding introduces.
+     *
+     * The dimension need not be one of the consumer's original Vars. After
+     * splitting twice the loops are xoo, xoi and xi, and xo is neither an
+     * original Var nor a loop, but the window can still slide along it:
+     \code
+     g.split(x, xo, xi, 4).split(xo, xoo, xoi, 2);
+     f.store_root().compute_at(g, xoi).slide(g, xo);
+     \endcode
+     *
+     * A window can slide over several dimensions at once, so calls
+     * accumulate. Naming a dimension that a loop does correspond to is
+     * allowed, and just pins sliding to that loop:
+     \code
+     f.store_root().compute_at(g, x).slide(g, x).slide(g, y);
+     \endcode
+     * Naming no dimensions at all leaves the choice to sliding window
+     * analysis, which is the default.
+     *
+     * The dimension can belong to an update stage, in which case it is an
+     * RVar:
+     \code
+     g(r) = f(r) + f(r - 1);
+     g.update().split(r, ro, ri, 2).unroll(ri);
+     f.store_root().compute_at(g, ri).slide(g, r);
+     \endcode
+     *
+     * The window is warmed up by starting the outermost loop the dimension
+     * varies over early, so that the values the first iteration needs are
+     * computed on the way in. Only what those values need runs on those extra
+     * iterations.
+     *
+     * The dimension must step up by exactly one each time it changes as the
+     * loop nest runs, because a window only moves forwards and has no gaps.
+     * Reordering the loops of a split puts the smaller term on the outer
+     * loop, tiling puts another loop between the two halves of a split, and
+     * ShiftInwards moves the last iteration backwards unless the extent is a
+     * multiple of the split factor, so all of those are errors. So is sliding
+     * over a dimension that varies over a parallel, vectorized or otherwise
+     * non-serial loop.
+     *
+     * It is an error to slide over a dimension whose storage does not live
+     * across every loop that dimension varies over, because the window would
+     * have to reach values that are no longer there. It is also an error to
+     * name two dimensions that move the same dimension of this Func, because
+     * the window can only advance along that dimension once. */
+    Func &slide(const Func &f, const VarOrRVar &var);
+
     /** Equivalent to the version of hoist_storage that takes a Var, but
      * schedules storage within the loop over a dimension of a
      * reduction domain */
