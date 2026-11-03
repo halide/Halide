@@ -154,7 +154,7 @@ jobs:
         env:
           Halide_ROOT: ${{ github.workspace }}/install
 
-      - name: Build HelloiOS
+      - name: Build HelloiOS (iOS Simulator)
         if: matrix.arch == 'arm-64'
         run: >-
           xcodebuild -workspace HelloiOS.xcworkspace
@@ -163,6 +163,36 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           build
         working-directory: apps/HelloiOS
+
+      - name: Build HelloiOS (iOS device, arm64 + arm64e)
+        if: matrix.arch == 'arm-64'
+        run: |
+          xcodebuild -workspace HelloiOS.xcworkspace \
+            -scheme HelloiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-device \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          archs="$(lipo -archs build-device/Build/Products/Release-iphoneos/HelloiOS.app/HelloiOS)"
+          echo "HelloiOS.app architectures: ${archs}"
+          [[ " ${archs} " == *" arm64 "* && " ${archs} " == *" arm64e "* ]]
+        working-directory: apps/HelloiOS
+
+      - name: Build multi-arch AOT (arm64 + arm64e)
+        if: matrix.arch == 'arm-64'
+        run: |
+          cmake -G Ninja -S test/integration/xc -B build-xc-arm64e \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install" \
+            -DCMAKE_DISABLE_FIND_PACKAGE_PNG=TRUE \
+            -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=TRUE \
+            '-DCMAKE_OSX_ARCHITECTURES=arm64;arm64e'
+          cmake --build build-xc-arm64e
+          archs="$(lipo -archs build-xc-arm64e/run_add)"
+          echo "run_add architectures: ${archs}"
+          [[ " ${archs} " == *" arm64 "* && " ${archs} " == *" arm64e "* ]]
+          arch -arm64 build-xc-arm64e/run_add '--output_extents=[10,10]' --benchmarks=all
 
       # --- x86-64-macos correctness. No no-SSE4.1 variant: no real Intel Mac
       # lacks SSE4.1, and that hypothetical baseline is already exercised by
