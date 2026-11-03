@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -77,8 +78,16 @@ Func::Func(const string &name)
     : func(unique_name(name)) {
 }
 
+Func::Func(const Type &required_type, const string &name)
+    : func({required_type}, AnyDims, unique_name(name)) {
+}
+
 Func::Func(const Type &required_type, int required_dims, const string &name)
     : func({required_type}, required_dims, unique_name(name)) {
+}
+
+Func::Func(const std::vector<Type> &required_types, const string &name)
+    : func(required_types, AnyDims, unique_name(name)) {
 }
 
 Func::Func(const std::vector<Type> &required_types, int required_dims, const string &name)
@@ -516,7 +525,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition,
             // unless it is flagged explicitly or is a associative atomic operation.
-            if (!dim.is_pure() && var.is_rvar && is_parallel(t)) {
+            if (!dim.is_pure() && (var.is_rvar || dim.is_inductive()) && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
@@ -1746,6 +1755,8 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
         dims[inner_pos].dim_type = DimType::ImpureRVar;
     } else if (dims[inner_pos].dim_type == DimType::PureRVar || outer_type == DimType::PureRVar) {
         dims[inner_pos].dim_type = DimType::PureRVar;
+    } else if (dims[inner_pos].dim_type == DimType::InductiveVar || outer_type == DimType::InductiveVar) {
+        dims[inner_pos].dim_type = DimType::InductiveVar;
     } else {
         dims[inner_pos].dim_type = DimType::PureVar;
     }
@@ -2237,6 +2248,35 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
     return tile(previous, previous, inners, factors, tail);
 }
 
+namespace {
+// Trace a dim name back through the splits list to the set of original
+// dims it derives from.
+std::set<std::string> root_vars(const std::string &var, const std::vector<Split> &splits) {
+    std::set<std::string> roots{var};
+    for (auto it = splits.rbegin(); it != splits.rend(); ++it) {
+        switch (it->split_type) {
+        case Split::SplitVar:
+            if (roots.erase(it->outer) + roots.erase(it->inner)) {
+                roots.insert(it->old_var);
+            }
+            break;
+        case Split::FuseVars:
+            if (roots.erase(it->old_var)) {
+                roots.insert(it->outer);
+                roots.insert(it->inner);
+            }
+            break;
+        case Split::RenameVar:
+            if (roots.erase(it->outer)) {
+                roots.insert(it->old_var);
+            }
+            break;
+        }
+    }
+    return roots;
+}
+}  // namespace
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     definition.schedule().touched() = true;
     const string &func_name = function.name();
@@ -2277,6 +2317,33 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
         if (!dims[idx[i]].is_pure()) {
             for (size_t j = i + 1; !safe_to_reorder && j < idx.size(); j++) {
                 if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
+                    if (dims[idx[i]].dim_type == DimType::InductiveVar &&
+                        dims[idx[j]].dim_type == DimType::InductiveVar) {
+                        // Two inductive dims may swap if they derive from
+                        // distinct original vars: every self-reference is
+                        // non-increasing in each inductive var, so each
+                        // recurrence chain sees its var increase under any
+                        // nesting of the two. Loops deriving from a single
+                        // inductive var must keep their order - swapping
+                        // them makes the composed traversal of that var
+                        // non-monotonic.
+                        const vector<Split> &splits = definition.schedule().splits();
+                        std::set<string> roots_i = root_vars(dims[idx[i]].var, splits);
+                        std::set<string> roots_j = root_vars(dims[idx[j]].var, splits);
+                        bool disjoint =
+                            std::none_of(roots_i.begin(), roots_i.end(),
+                                         [&](const string &r) { return roots_j.count(r); });
+                        if (disjoint) {
+                            continue;
+                        }
+                        user_error
+                            << "In schedule for " << name()
+                            << ", can't reorder the loops " << vars[i].name()
+                            << " and " << vars[j].name()
+                            << " because they both derive from the same original "
+                            << "inductive variable, whose loops must keep their "
+                            << "nesting order.\n";
+                    }
                     // Generate an error if the operator is not both associative and commutative.
                     const auto &prover_result = prove_associativity(func_name, args, values);
                     safe_to_reorder = prover_result.associative() &&
@@ -4664,8 +4731,11 @@ Stage FuncRef::operator/=(const FuncRef &e) {
 }
 
 FuncRef::operator Expr() const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    user_assert(func.has_pure_definition() || func.has_extern_definition() ||
+                !func.required_types().empty())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined. "
+        << "A Func that refers to itself in its own definition must be declared "
+        << "with an explicit type.\n";
 
     user_assert(func.outputs() == 1)
         << "Can't convert a reference Func \"" << func.name()
@@ -4675,8 +4745,11 @@ FuncRef::operator Expr() const {
 }
 
 FuncTupleElementRef FuncRef::operator[](int i) const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    user_assert(func.has_pure_definition() || func.has_extern_definition() ||
+                !func.required_types().empty())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined. "
+        << "A Func that refers to itself in its own definition must be declared "
+        << "with an explicit type.\n";
 
     user_assert(func.outputs() != 1)
         << "Can't index into a reference to Func \"" << func.name()

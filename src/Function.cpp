@@ -1,5 +1,6 @@
 #include <atomic>
 #include <cstdlib>
+#include <set>
 #include <utility>
 
 #include "CSE.h"
@@ -17,6 +18,10 @@
 
 namespace Halide {
 namespace Internal {
+
+namespace {
+bool inductive_in(const std::vector<Definition> &defs, const std::string &var, const std::string &fname);
+}  // namespace
 
 using std::map;
 using std::pair;
@@ -234,9 +239,11 @@ struct CheckVars : public IRGraphVisitor {
     Scope<> defined_internally;
     const std::string name;
     bool unbound_reduction_vars_ok = false;
+    bool allow_inductive_self_reference = false;
+    bool pure;
 
-    CheckVars(const std::string &n)
-        : name(n) {
+    CheckVars(const std::string &n, bool pure)
+        : name(n), pure(pure) {
     }
 
     using IRVisitor::visit;
@@ -249,15 +256,35 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
-        if (op->name == name && op->call_type == Call::Halide) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                const Variable *var = op->args[i].as<Variable>();
-                if (!pure_args[i].empty()) {
-                    user_assert(var && var->name == pure_args[i])
-                        << "In definition of Func \"" << name << "\":\n"
-                        << "All of a function's recursive references to itself"
-                        << " must contain the same pure variables in the same"
-                        << " places as on the left-hand-side.\n";
+        bool proper_func = (name == op->name || op->call_type != Call::Halide);
+        if (op->call_type == Call::Halide &&
+            op->func.defined() &&
+            op->name != name) {
+            Function func = Function(op->func);
+            proper_func = (name == op->name || func.has_pure_definition() || func.has_extern_definition());
+        }
+        if (pure) {
+            user_assert(proper_func)
+                << "In pure definition of Func \"" << name << "\":\n"
+                << "Can't call Func \"" << op->name
+                << "\" because it has not yet been defined,"
+                << " and it is not a recursive call.\n";
+        } else {
+            user_assert(proper_func)
+                << "In update definition of Func \"" << name << "\":\n"
+                << "Can't call Func \"" << op->name
+                << "\" because it has not yet been defined.\n";
+            if (op->name == name && op->call_type == Call::Halide) {
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    const Variable *var = op->args[i].as<Variable>();
+                    if (!pure_args[i].empty()) {
+                        bool matches = var && var->name == pure_args[i];
+                        user_assert(matches || allow_inductive_self_reference)
+                            << "In update definition of Func \"" << name << "\":\n"
+                            << "All of a function's recursive references to itself"
+                            << " in update definitions must contain the same pure"
+                            << " variables in the same places as on the left-hand-side.\n";
+                    }
                 }
             }
         }
@@ -609,7 +636,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
-    CheckVars check(name());
+    CheckVars check(name(), true);
     check.pure_args = args;
     for (const auto &value : values) {
         value.accept(&check);
@@ -676,11 +703,27 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         init_def_args[i] = Var(args[i]);
     }
 
+    // If the function is inductive,
+    // the value and args might refer back to the
+    // function itself, introducing circular references and hence
+    // memory leaks. We need to break these cycles.
+    WeakenFunctionPtrs weakener(contents.get());
+    for (auto &arg : init_def_args) {
+        arg = weakener(arg);
+    }
+    for (auto &value : values) {
+        value = weakener(value);
+    }
+
     ReductionDomain rdom;
     contents->init_def = Definition(init_def_args, values, rdom, true);
 
     for (const auto &arg : args) {
-        Dim d = {arg, ForType::Serial, DeviceAPI::None, DimType::PureVar};
+        DimType dtype = DimType::PureVar;
+        if (is_inductive(arg)) {
+            dtype = DimType::InductiveVar;
+        }
+        Dim d = {arg, ForType::Serial, DeviceAPI::None, dtype};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {arg};
         contents->func_schedule.storage_dims().push_back(sd);
@@ -753,6 +796,13 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
         << "because it has already been realized, used in the definition of "
         << "another Func, or been the target of a wrapper via in()/clone_in().\n";
 
+    // Inductive functions cannot have updates on top of them
+    user_assert(!is_inductive())
+        << "An update definition was added to Func " << name() << " after an inductive definition.\n";
+
+    // An update can be inductive only if it is the function's sole update
+    bool allow_inductive_self_reference = contents->updates.empty();
+
     for (auto &value : values) {
         user_assert(value.defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
@@ -822,8 +872,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     // pure args, in the reduction domain, or a parameter. Also checks
     // that recursive references to the function contain all the pure
     // vars in the LHS in the correct places.
-    CheckVars check(name());
+    CheckVars check(name(), false);
     check.pure_args = pure_args;
+    check.allow_inductive_self_reference = allow_inductive_self_reference;
     for (const auto &arg : args) {
         arg.accept(&check);
     }
@@ -913,6 +964,23 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     Definition r(args, values, check.reduction_domain, false);
     internal_assert(!r.is_init()) << "Should have been an update definition\n";
 
+    // The update's inductive pure variables. Their loops are serial by
+    // construction (they may be split but not parallelized), so two
+    // parallel iterations of an RVar see the same value of them: the race analysis
+    // below treats them as shared, which lets a read of an earlier step
+    // pass, as it should, since that step is complete.
+    std::set<string> serial_vars;
+    {
+        std::vector<Definition> defs = {definition()};
+        defs.insert(defs.end(), updates().begin(), updates().end());
+        defs.push_back(r);
+        for (const string &pure_arg : pure_args) {
+            if (!pure_arg.empty() && inductive_in(defs, pure_arg, name())) {
+                serial_vars.insert(pure_arg);
+            }
+        }
+    }
+
     // First add any reduction domain
     if (check.reduction_domain.defined()) {
         for (const auto &rvar : check.reduction_domain.domain()) {
@@ -922,7 +990,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
             // writing to.
             const string &v = rvar.var;
 
-            bool pure = can_parallelize_rvar(v, name(), r);
+            bool pure = can_parallelize_rvar(v, name(), r, serial_vars);
             Dim d = {v, ForType::Serial, DeviceAPI::None,
                      pure ? DimType::PureRVar : DimType::ImpureRVar};
             r.schedule().dims().push_back(d);
@@ -1058,7 +1126,9 @@ int Function::dimensions() const {
 }
 
 int Function::outputs() const {
-    return (int)output_types().size();
+    return (has_pure_definition() || has_extern_definition()) ?
+               (int)output_types().size() :
+               (int)required_types().size();
 }
 
 const std::vector<Type> &Function::output_types() const {
@@ -1129,8 +1199,122 @@ bool Function::has_pure_definition() const {
     return contents->init_def.defined();
 }
 
+bool Function::is_inductive() const {
+    if (!has_pure_definition()) {
+        return false;
+    }
+
+    auto has_self_call = [&](const std::vector<Expr> &values) {
+        bool found = false;
+        for (const Expr &e : values) {
+            visit_with(e, [&](auto *self, const Call *op) {
+                if (op->name == name() && op->call_type == Call::Halide) {
+                    found = true;
+                }
+                self->visit_base(op);
+            });
+        }
+        return found;
+    };
+
+    const std::vector<std::string> &pure_args = args();
+    auto has_shifted_self_call = [&](const std::vector<Expr> &def_args, const std::vector<Expr> &values) {
+        bool found = false;
+        for (const Expr &e : values) {
+            visit_with(e, [&](auto *self, const Call *op) {
+                if (op->name == name() && op->call_type == Call::Halide) {
+                    for (size_t i = 0; i < op->args.size() && i < def_args.size() && i < pure_args.size(); i++) {
+                        const Variable *lhs_var = def_args[i].as<Variable>();
+                        if (lhs_var && !lhs_var->reduction_domain.defined() && lhs_var->name == pure_args[i]) {
+                            const Variable *call_var = op->args[i].as<Variable>();
+                            bool matches = call_var && call_var->name == lhs_var->name;
+                            if (!matches) {
+                                found = true;
+                            }
+                        }
+                    }
+                }
+                self->visit_base(op);
+            });
+        }
+        return found;
+    };
+
+    bool recursive = has_self_call(definition().values());
+    for (const Definition &update : updates()) {
+        if (recursive) {
+            break;
+        }
+        recursive = has_shifted_self_call(update.args(), update.values());
+    }
+
+    return recursive;
+}
+
+namespace {
+
+// Whether var, a pure variable of the Func named fname, is inductive
+// across the given definitions: some definition writes at var and reads
+// the Func at some other position along it.
+bool inductive_in(const std::vector<Definition> &defs, const string &var, const string &fname) {
+    // Only pure vars can be inductive
+    for (const Definition &def : defs) {
+        for (const ReductionVariable &rv : def.schedule().rvars()) {
+            if (rv.var == var) {
+                return false;
+            }
+        }
+    }
+
+    bool inductive_in_var = false;
+    for (const Definition &def : defs) {
+        std::vector<int> positions;
+        for (size_t i = 0; i < def.args().size(); i++) {
+            if (const auto &v = def.args()[i].as<Variable>()) {
+                if (v->name == var) {
+                    positions.push_back((int)i);
+                }
+            }
+        }
+        if (positions.empty()) {
+            continue;
+        }
+
+        for (const Expr &e : def.values()) {
+            visit_with(e, [&](auto *self, const Call *op) {
+                if (op->call_type == Call::Halide && op->name == fname) {
+                    for (int pos : positions) {
+                        if (const auto &v = op->args[pos].as<Variable>()) {
+                            if (v->name != var) {
+                                inductive_in_var = true;
+                            }
+                        } else {
+                            inductive_in_var = true;
+                        }
+                    }
+                }
+                self->visit_base(op);
+            });
+        }
+    }
+
+    return inductive_in_var;
+}
+
+}  // namespace
+
+bool Function::is_inductive(const string &var) const {
+    if (!has_pure_definition()) {
+        return false;
+    }
+
+    std::vector<Definition> defs = {definition()};
+    defs.insert(defs.end(), updates().begin(), updates().end());
+    return inductive_in(defs, var, name());
+}
+
 bool Function::can_be_inlined() const {
-    return is_pure() && definition().specializations().empty();
+    return is_pure() && definition().specializations().empty() && !is_inductive();
 }
 
 bool Function::has_update_definition() const {

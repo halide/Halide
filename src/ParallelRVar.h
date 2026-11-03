@@ -7,6 +7,7 @@
  * definition across a reduction variable.
  */
 
+#include <set>
 #include <string>
 
 namespace Halide {
@@ -17,11 +18,15 @@ class Definition;
 /** Returns whether or not Halide can prove that it is safe to
  * parallelize an update definition across a specific variable. If
  * this returns true, it's definitely safe. If this returns false, it
- * may still be safe, but Halide couldn't prove it.
+ * may still be safe, but Halide couldn't prove it. serial_vars names
+ * the definition's variables whose loops can never run two iterations
+ * at once, such as the Func's inductive Vars, so two parallel
+ * iterations of rvar see the same value of them.
  */
 bool can_parallelize_rvar(const std::string &rvar,
                           const std::string &func,
-                          const Definition &r);
+                          const Definition &r,
+                          const std::set<std::string> &serial_vars = {});
 
 }  // namespace Internal
 }  // namespace Halide

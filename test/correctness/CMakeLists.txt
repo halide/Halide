@@ -213,6 +213,7 @@ tests(
     float16_t_image_type.cpp
     float16_t_neon_op_check.cpp
     float_arg.cpp
+    fold_inductive_keeps_step.cpp
     fold_storage_not_applied.cpp
     for_each_element.cpp
     force_onto_stack.cpp
@@ -319,6 +320,12 @@ tests(
     in_place.cpp
     incomplete_target.cpp
     indexing_access_undef.cpp
+    inductive.cpp
+    inductive_base_case_bounds.cpp
+    inductive_errors.cpp
+    inductive_folding.cpp
+    inductive_ring_buffer.cpp
+    inductive_var_race.cpp
     infer_arguments.cpp
     init_def_should_be_all_vars.cpp
     inline_reduction.cpp
