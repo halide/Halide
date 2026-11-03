@@ -371,6 +371,17 @@ bool dim_match(const Dim &candidate, const VarOrRVar &var) {
 
 }  // namespace
 
+Expr Stage::value() const {
+    user_assert(definition.values().size() == 1)
+        << "Can't call Stage::value() on " << name()
+        << ", because it has multiple values. Use Stage::values() instead.\n";
+    return definition.values()[0];
+}
+
+Tuple Stage::values() const {
+    return Tuple(definition.values());
+}
+
 std::string Stage::name() const {
     std::string stage_name = (stage_index == 0) ? function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
     return stage_name;
@@ -868,13 +879,71 @@ void flatten_associative_chain(const Expr &e, IRNodeType op, vector<Expr> &leave
     }
 }
 
+// widening_mul(a, b), widening_add(a, b), and widening_sub(a, b) are a*b, a + b,
+// and a - b computed exactly in their wider result type, so each is the Mul,
+// Add, or Sub of its operands cast to that type, with no overflow. So is a
+// cast of one to a type that represents every value of the result type (a
+// wider integer, or a float whose significand holds it), and the operands
+// too, as the operation on the operands cast to that type: for a float type,
+// the operands and the exact result are all representable, so the float op
+// is exact too. Returns that form of `e`, or an undefined Expr if `e` is none
+// of these.
+Expr exact_widening_form(const Expr &e) {
+    const Cast *cast_op = e.as<Cast>();
+    const Call *op = Call::as_intrinsic(cast_op ? cast_op->value : e,
+                                        {Call::widening_mul, Call::widening_add, Call::widening_sub});
+    if (!op) {
+        return Expr();
+    }
+    const Type t = e.type();
+    if (!t.can_represent(op->type) ||
+        !t.can_represent(op->args[0].type()) ||
+        !t.can_represent(op->args[1].type())) {
+        return Expr();
+    }
+    Expr a = cast(t, op->args[0]), b = cast(t, op->args[1]);
+    if (op->is_intrinsic(Call::widening_mul)) {
+        return Mul::make(a, b);
+    } else if (op->is_intrinsic(Call::widening_add)) {
+        return Add::make(a, b);
+    }
+    return Sub::make(a, b);
+}
+
+// Like flatten_associative_chain(), but also looks through a widening
+// intrinsic (or a cast of one) whose exact_widening_form() is an `op`, where
+// that separates leaves `wanted` accepts from others it doesn't. Otherwise it
+// is a single leaf, keeping its form.
+void flatten_exact_chain(const Expr &e, IRNodeType op, const std::function<bool(const Expr &)> &wanted,
+                         vector<Expr> &leaves) {
+    if (e.node_type() == op) {
+        auto [a, b] = *as_binary_operands(e);
+        flatten_exact_chain(a, op, wanted, leaves);
+        flatten_exact_chain(b, op, wanted, leaves);
+        return;
+    }
+    if (Expr exact = exact_widening_form(e); exact.defined() && exact.node_type() == op) {
+        vector<Expr> inner;
+        flatten_exact_chain(exact, op, wanted, inner);
+        const auto n = std::count_if(inner.begin(), inner.end(), wanted);
+        if (n > 0 && n < (std::ptrdiff_t)inner.size()) {
+            leaves.insert(leaves.end(), inner.begin(), inner.end());
+            return;
+        }
+    }
+    leaves.push_back(e);
+}
+
 struct HoistedFactor {
     IRNodeType op;
-    Expr factor;      // The loop-invariant distributable factor, expressed in
-                      // the preserved update's coordinate system.
-    Expr inner_body;  // The remaining body after removing the factor. It keeps
-                      // its natural type; changing the accumulation type is the
-                      // job of the separate change_type() directive.
+    Expr factor;          // The loop-invariant distributable factor, expressed in
+                          // the preserved update's coordinate system.
+    Expr inner_body;      // The remaining body after removing the factor. It keeps
+                          // its natural type; changing the accumulation type is the
+                          // job of the separate change_type() directive.
+    Expr shift = Expr();  // If defined, an exact right shift to apply before the
+                          // factor (of a sum's bit fields, see hoist_field_shift());
+                          // `factor` may then be undefined.
 };
 
 struct HoistedTerm {
@@ -961,6 +1030,57 @@ struct InvarianceBounds {
     vector<pair<string, Interval>> pure_vars;
 };
 
+// A simplification of an expression equal to it wherever the variables are in
+// the given bounds.
+using BoundedSimplifier = std::function<Expr(const Expr &, const Scope<> &, const Scope<Interval> &)>;
+
+// If `leaf` is invariant over the reduction, the form of it to apply once at
+// write-back; nullopt if it depends on an RVar. `reduction_vars` is the set of
+// RVar names the factor must not reference, and `bounds` holds the constant
+// bounds for deciding invariance modulo those bounds, by `simplifier`.
+optional<Expr> invariant_form(const Expr &leaf,
+                              const Scope<> &reduction_vars,
+                              const InvarianceBounds &bounds,
+                              const BoundedSimplifier &simplifier = simplify_with_reduction_bounds) {
+    auto is_rvar_free = [&](const Expr &e) {
+        return !expr_uses_vars(e, reduction_vars);
+    };
+    if (is_rvar_free(leaf)) {
+        return leaf;
+    }
+    if (Expr simplified = simplifier(leaf, reduction_vars, bounds.rvars);
+        is_rvar_free(simplified)) {
+        // Equal to `leaf` for every RVar value the reduction runs, so it is
+        // invariant and can be applied once at write-back.
+        return simplified;
+    }
+    if (Expr within_bounds = bounds.pure_vars.empty() ?
+                                 Expr() :
+                                 simplifier(leaf, reduction_vars, bounds.rvars_and_pure_vars);
+        within_bounds.defined() && is_rvar_free(within_bounds)) {
+        // Equal to `leaf` only within the explicit bounds of the pure vars.
+        // Those bound the region the Func is computed over now, but could
+        // be changed by a later bound() call, so check them where the
+        // factor is applied. The check simplifies away while the bounds
+        // stand.
+        Expr in_bounds = const_true();
+        for (const auto &[var, interval] : bounds.pure_vars) {
+            if (expr_uses_var(leaf, var)) {
+                Expr v = Variable::make(Int(32), var);
+                in_bounds = in_bounds && interval.min <= v && v <= interval.max;
+            }
+        }
+        return require(simplify(in_bounds), within_bounds,
+                       "hoist_invariants() hoisted a factor that is invariant only "
+                       "within the explicit bounds the Func had at the time, and they no "
+                       "longer hold. Don't widen a Func's bound() after calling "
+                       "hoist_invariants() on it.");
+    }
+    // The caller keeps the original (with its promises) when simplification
+    // can't prove invariance.
+    return std::nullopt;
+}
+
 // Given the non-self-reference increment from an update body and the
 // distributive law of the outer associative op, extract a loop-invariant factor
 // that distributes over the outer op. `reduction_vars` is the set of RVar names
@@ -970,53 +1090,22 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
                                        const DistributiveLaw &law,
                                        const Scope<> &reduction_vars,
                                        const InvarianceBounds &bounds) {
-    auto is_rvar_free = [&](const Expr &e) {
-        return !expr_uses_vars(e, reduction_vars);
-    };
-
     // An invariant factor may be nested arbitrarily deep in an
     // associative/commutative chain, so flatten the whole chain
     // into leaves and partition by invariance. This is just
     // commutative-ring algebra: l1*l2*...*lN can always be regrouped
     // as (product of invariant leaves) * (product of dependent leaves),
-    // regardless of how the multiplication was parenthesized.
+    // regardless of how the multiplication was parenthesized. A widening
+    // intrinsic is looked through as its exact form where that separates an
+    // invariant leaf (e.g. int32(widening_mul(s, x_k)) = int32(s) * int32(x_k)).
     vector<Expr> leaves;
-    flatten_associative_chain(increment, law.inner_op, leaves);
+    flatten_exact_chain(increment, law.inner_op, [&](const Expr &leaf) { return invariant_form(leaf, reduction_vars, bounds).has_value(); }, leaves);
 
     vector<Expr> invariant_leaves, dependent_leaves;
     for (const Expr &leaf : leaves) {
-        if (is_rvar_free(leaf)) {
-            invariant_leaves.push_back(leaf);
-        } else if (Expr simplified = simplify_with_reduction_bounds(leaf, reduction_vars, bounds.rvars);
-                   is_rvar_free(simplified)) {
-            // Equal to `leaf` for every RVar value the reduction runs, so it is
-            // invariant and can be applied once at write-back.
-            invariant_leaves.push_back(simplified);
-        } else if (Expr within_bounds = bounds.pure_vars.empty() ?
-                                            Expr() :
-                                            simplify_with_reduction_bounds(leaf, reduction_vars, bounds.rvars_and_pure_vars);
-                   within_bounds.defined() && is_rvar_free(within_bounds)) {
-            // Equal to `leaf` only within the explicit bounds of the pure vars.
-            // Those bound the region the Func is computed over now, but could
-            // be changed by a later bound() call, so check them where the
-            // factor is applied. The check simplifies away while the bounds
-            // stand.
-            Expr in_bounds = const_true();
-            for (const auto &[var, interval] : bounds.pure_vars) {
-                if (expr_uses_var(leaf, var)) {
-                    Expr v = Variable::make(Int(32), var);
-                    in_bounds = in_bounds && interval.min <= v && v <= interval.max;
-                }
-            }
-            invariant_leaves.push_back(
-                require(simplify(in_bounds), within_bounds,
-                        "hoist_invariants() hoisted a factor that is invariant only "
-                        "within the explicit bounds the Func had at the time, and they no "
-                        "longer hold. Don't widen a Func's bound() after calling "
-                        "hoist_invariants() on it."));
+        if (optional<Expr> invariant = invariant_form(leaf, reduction_vars, bounds)) {
+            invariant_leaves.push_back(*invariant);
         } else {
-            // Keep the original (with its promises) when simplification can't
-            // prove invariance.
             dependent_leaves.push_back(leaf);
         }
     }
@@ -1095,7 +1184,818 @@ Expr apply_hoisted_factor(const Expr &r, const optional<HoistedFactor> &factor) 
     if (!factor) {
         return r;
     }
-    return make_binary_op(factor->op, factor->factor, r);
+    Expr result = factor->shift.defined() ? (r >> factor->shift) : r;
+    return factor->factor.defined() ? make_binary_op(factor->op, factor->factor, result) : result;
+}
+
+// Selects the calls a part of hoist_invariants(parts) isolates.
+using CallSelector = std::function<bool(const Expr &)>;
+
+// Constant bounds of an integer Expr's value (see value_bounds_of_calls()).
+using ValueBounds = std::function<ConstantInterval(const Expr &)>;
+
+// Constant bounds of the values of the Funcs `e` calls, directly or not, for
+// constant_integer_bounds(). Each pure Func's integer values are bounded by
+// constant_integer_bounds() of their simplified definitions (which, e.g.,
+// turns a mask x & 3 into x % 4), given the bounds of the Funcs they call;
+// other Funcs are left unbounded (constant_integer_bounds() then uses their
+// type's bounds).
+FuncValueBounds value_bounds_of_calls(const Expr &e) {
+    map<string, Function> env;
+    vector<Function> called;
+    visit_with(e, [&](auto *self, const Call *op) {
+        if (op->call_type == Call::Halide && op->func.defined() && !env.count(op->name)) {
+            Function f(op->func);
+            called.push_back(f);
+            for (const auto &[name, g] : find_transitive_calls(f)) {
+                env.emplace(name, g);
+            }
+        }
+        self->visit_base(op);
+    });
+    FuncValueBounds fb;
+    if (called.empty()) {
+        return fb;
+    }
+    for (const string &name : topological_order(called, env)) {
+        const Function &f = env.at(name);
+        if (!f.is_pure()) {
+            continue;
+        }
+        for (int j = 0; j < f.outputs(); j++) {
+            const Expr &value = f.values()[j];
+            if (!value.type().is_int_or_uint()) {
+                continue;
+            }
+            ConstantInterval b = constant_integer_bounds(simplify(value), Scope<ConstantInterval>::empty_scope(), nullptr, &fb);
+            fb[{name, j}] = Interval(b.min_defined ? make_const(value.type(), b.min) : Interval::neg_inf(),
+                                     b.max_defined ? make_const(value.type(), b.max) : Interval::pos_inf());
+        }
+    }
+    return fb;
+}
+
+// A sum split by whether its terms make a selected call: the original equals
+// with + without, every term of `with` makes a selected call, and `without`
+// makes none. Either may be undefined, meaning zero.
+struct IsolatedTerms {
+    Expr with, without;
+};
+
+Expr add_terms(const Expr &a, const Expr &b) {
+    if (!a.defined()) {
+        return b;
+    }
+    return b.defined() ? Add::make(a, b) : a;
+}
+
+Expr sub_terms(const Expr &a, const Expr &b) {
+    if (!b.defined()) {
+        return a;
+    }
+    return Sub::make(a.defined() ? a : make_zero(b.type()), b);
+}
+
+// Split `e` into the terms that make a selected call and the rest, multiplying
+// out a product over a sum only where the sum has terms of both kinds. Only
+// +, -, and * are looked through: (a + b) * c = a*c + b*c and
+// (a + b) - (c + d) = (a - c) + (b - d) hold in any commutative ring, so for
+// integers, wrapping or not, this is exact, and for floats it is the
+// reassociation hoist_invariants() already relies on. So are, where they hold
+// terms of both kinds:
+// - a Let, as its body with the value substituted,
+// - a widening intrinsic, as its exact_widening_form(), and
+// - a cast of an integer x to a type that represents every value of x's type,
+//   split as cast(with) + cast(without) where `bounds` proves that
+//   with + without does not wrap in x's type. Then it is x (with + without is
+//   x modulo 2^bits, and both are in range), so the casts' sum is exactly the
+//   cast of x, for a float type too (every partial sum is an integer in x's
+//   type's range, which it represents).
+// Any other node (a division, a select, a call, ...) is a single term,
+// selected if it makes a selected call anywhere inside, and so is a node
+// above whose terms are all of one kind, keeping its form. Constant zero
+// terms are dropped, as are products with a constant zero factor unless they
+// are floats.
+IsolatedTerms isolate_terms(const Expr &e, const CallSelector &selects, const ValueBounds &bounds) {
+    if (is_const_zero(e)) {
+        return {};
+    }
+    if (e.node_type() == IRNodeType::Add || e.node_type() == IRNodeType::Sub ||
+        e.node_type() == IRNodeType::Mul) {
+        auto [a_expr, b_expr] = *as_binary_operands(e);
+        IsolatedTerms a = isolate_terms(a_expr, selects, bounds);
+        IsolatedTerms b = isolate_terms(b_expr, selects, bounds);
+        auto is_zero = [](const IsolatedTerms &t) { return !t.with.defined() && !t.without.defined(); };
+        const bool zero_operand = is_zero(a) || is_zero(b);
+        if (e.node_type() == IRNodeType::Mul) {
+            if (zero_operand && !e.type().is_float()) {
+                return {};
+            } else if (zero_operand) {
+                // 0 * x is not zero for every float x.
+                const bool selected = a.with.defined() || b.with.defined();
+                return selected ? IsolatedTerms{e, Expr()} : IsolatedTerms{Expr(), e};
+            }
+            if (!a.with.defined() && !b.with.defined()) {
+                return {Expr(), e};
+            }
+            // A selected call in every term of either operand is one in every
+            // term of the product.
+            if (!a.without.defined() || !b.without.defined()) {
+                return {e, Expr()};
+            }
+            if (!b.with.defined()) {
+                return {Mul::make(a.with, b_expr), Mul::make(a.without, b_expr)};
+            }
+            if (!a.with.defined()) {
+                return {Mul::make(a_expr, b.with), Mul::make(a_expr, b.without)};
+            }
+            return {add_terms(Mul::make(a.with, b_expr), Mul::make(a.without, b.with)),
+                    Mul::make(a.without, b.without)};
+        }
+        if (!zero_operand) {
+            if (!a.with.defined() && !b.with.defined()) {
+                return {Expr(), e};
+            }
+            if (!a.without.defined() && !b.without.defined()) {
+                return {e, Expr()};
+            }
+        }
+        if (e.node_type() == IRNodeType::Add) {
+            return {add_terms(a.with, b.with), add_terms(a.without, b.without)};
+        }
+        return {sub_terms(a.with, b.with), sub_terms(a.without, b.without)};
+    }
+    auto mixed = [](const IsolatedTerms &t) { return t.with.defined() && t.without.defined(); };
+    if (Expr exact = exact_widening_form(e); exact.defined()) {
+        if (IsolatedTerms t = isolate_terms(exact, selects, bounds); mixed(t)) {
+            return t;
+        }
+    } else if (const Let *op = e.as<Let>()) {
+        // E.g. from eager_inline(), which binds the inlined Func's args.
+        if (IsolatedTerms t = isolate_terms(substitute(op->name, op->value, op->body), selects, bounds); mixed(t)) {
+            return t;
+        }
+    } else if (const Cast *op = e.as<Cast>();
+               op && op->value.type().is_int_or_uint() && op->type.can_represent(op->value.type())) {
+        if (IsolatedTerms t = isolate_terms(op->value, selects, bounds); mixed(t)) {
+            const ConstantInterval sum = bounds(t.with) + bounds(t.without);
+            if (ConstantInterval::bounds_of_type(op->value.type()).contains(sum)) {
+                return {cast(op->type, t.with), cast(op->type, t.without)};
+            }
+        }
+    }
+    bool selected = false;
+    visit_with(e, [&](auto *self, const Call *op) {
+        selected = selected || selects(op);
+        self->visit_base(op);
+    });
+    return selected ? IsolatedTerms{e, Expr()} : IsolatedTerms{Expr(), e};
+}
+
+// Collect the terms of a sum, with whether each is subtracted. Zero terms
+// are dropped.
+void flatten_signed_sum(const Expr &e, bool negated, vector<pair<bool, Expr>> &terms) {
+    if (const Add *add = e.as<Add>()) {
+        flatten_signed_sum(add->a, negated, terms);
+        flatten_signed_sum(add->b, negated, terms);
+    } else if (const Sub *sub = e.as<Sub>()) {
+        flatten_signed_sum(sub->a, negated, terms);
+        flatten_signed_sum(sub->b, !negated, terms);
+    } else if (!is_const_zero(e)) {
+        terms.emplace_back(negated, e);
+    }
+}
+
+// An expression written as the product of RVar-invariant factors and a body.
+struct FactoredTerm {
+    vector<Expr> factors;  // In the form to apply at write-back.
+    Expr body;             // Undefined means one.
+};
+
+using InvariantForm = std::function<optional<Expr>(const Expr &)>;
+
+FactoredTerm factor_sum(const Expr &e, const InvariantForm &invariant);
+
+// The invariant leaves of a product, and those common to all the terms of a
+// sum that is one of its leaves.
+FactoredTerm factor_product(const Expr &e, const InvariantForm &invariant) {
+    vector<Expr> leaves;
+    flatten_exact_chain(e, IRNodeType::Mul, [&](const Expr &leaf) { return invariant(leaf).has_value(); }, leaves);
+    FactoredTerm result;
+    for (const Expr &leaf : leaves) {
+        if (optional<Expr> inv = invariant(leaf)) {
+            result.factors.push_back(*inv);
+            continue;
+        }
+        Expr body = leaf;
+        if (leaf.node_type() == IRNodeType::Add || leaf.node_type() == IRNodeType::Sub) {
+            FactoredTerm sum = factor_sum(leaf, invariant);
+            result.factors.insert(result.factors.end(), sum.factors.begin(), sum.factors.end());
+            body = sum.body;
+        }
+        result.body = body.defined() && result.body.defined() ? Mul::make(result.body, body) :
+                      body.defined()                          ? body :
+                                                                result.body;
+    }
+    return result;
+}
+
+// The invariant factors common to all the terms of a sum (as many times as
+// each appears in all of them), so that sum_k(s * x_k) = s * sum_k(x_k). A sum
+// whose terms are all subtracted also has a factor of -1, unless unsigned.
+FactoredTerm factor_sum(const Expr &e, const InvariantForm &invariant) {
+    vector<pair<bool, Expr>> terms;
+    flatten_signed_sum(e, false, terms);
+    if (terms.empty()) {
+        return {{}, e};
+    }
+    vector<FactoredTerm> factored;
+    for (const auto &[negated, term] : terms) {
+        factored.push_back(factor_product(term, invariant));
+    }
+    vector<Expr> common;
+    vector<vector<bool>> used(factored.size());
+    for (size_t i = 0; i < factored.size(); i++) {
+        used[i].resize(factored[i].factors.size(), false);
+    }
+    for (size_t k = 0; k < factored[0].factors.size(); k++) {
+        const Expr &candidate = factored[0].factors[k];
+        vector<size_t> match{k};
+        for (size_t i = 1; i < factored.size(); i++) {
+            for (size_t j = 0; j < factored[i].factors.size(); j++) {
+                if (!used[i][j] && equal(factored[i].factors[j], candidate)) {
+                    match.push_back(j);
+                    break;
+                }
+            }
+            if (match.size() != i + 1) {
+                break;
+            }
+        }
+        if (match.size() == factored.size()) {
+            for (size_t i = 0; i < factored.size(); i++) {
+                used[i][match[i]] = true;
+            }
+            common.push_back(candidate);
+        }
+    }
+    const bool all_negated = !e.type().is_uint() &&
+                             std::all_of(terms.begin(), terms.end(), [](const auto &t) { return t.first; });
+    if (common.empty() && !all_negated) {
+        return {{}, e};
+    }
+    if (all_negated) {
+        common.push_back(make_const(e.type(), -1));
+    }
+    Expr body;
+    for (size_t i = 0; i < factored.size(); i++) {
+        Expr term = factored[i].body;
+        for (size_t j = 0; j < factored[i].factors.size(); j++) {
+            if (!used[i][j]) {
+                term = term.defined() ? Mul::make(factored[i].factors[j], term) : factored[i].factors[j];
+            }
+        }
+        if (!term.defined()) {
+            term = make_one(e.type());
+        }
+        if (terms[i].first && !all_negated) {
+            body = sub_terms(body, term);
+        } else {
+            body = add_terms(body, term);
+        }
+    }
+    return {common, body};
+}
+
+// One part of hoist_invariants(parts): its invariant factors to apply at
+// write-back, and the body its own reduction accumulates.
+HoistedTerm hoist_part(const Expr &part, const InvariantForm &invariant) {
+    FactoredTerm factored = factor_sum(part, invariant);
+    if (factored.factors.empty() || !factored.body.defined()) {
+        // Nothing invariant to hoist, or nothing but: a sum over the RDom of
+        // an invariant is left to the reduction.
+        return {std::nullopt, part, 0};
+    }
+    Expr factor;
+    for (const Expr &f : factored.factors) {
+        factor = factor.defined() ? Mul::make(factor, f) : f;
+    }
+    Expr body = common_subexpression_elimination(factored.body);
+    return {HoistedFactor{IRNodeType::Mul, common_subexpression_elimination(factor), body}, body, 0};
+}
+
+// The increment of a sum update f(...) = f(...) + increment (or += or -=),
+// and the associativity proof of the update as that sum. The proof is not
+// associative if the update is not such a sum (the increment may be undefined).
+pair<Expr, AssociativeOp> sum_increment(const Function &function, const Definition &definition) {
+    // Find the self-reference among the terms of the sum; the increment is the
+    // rest.
+    vector<pair<bool, Expr>> terms;
+    flatten_signed_sum(substitute_in_all_lets(definition.values()[0]), false, terms);
+    Expr self_ref, increment;
+    int self_refs = 0;
+    for (const auto &[negated, term] : terms) {
+        const Call *call = term.as<Call>();
+        if (!negated && call && call->call_type == Call::Halide && call->name == function.name()) {
+            self_ref = term;
+            self_refs++;
+            continue;
+        }
+        increment = negated ? sub_terms(increment, term) : add_terms(increment, term);
+    }
+    AssociativeOp prover_result;
+    if (self_refs == 1 && increment.defined()) {
+        // The prover need not see through the increment, which may have a
+        // form it does not recognize (e.g. 0 - x), so stand in a variable for it.
+        Expr y = Variable::make(increment.type(), unique_name('y'));
+        prover_result = prove_associativity(function.name(), definition.args(), {Add::make(self_ref, y)});
+    }
+    const bool is_sum = prover_result.associative() &&
+                        prover_result.pattern.ops.size() == 1 &&
+                        prover_result.pattern.ops[0].node_type() == IRNodeType::Add &&
+                        !prover_result.xs[0].var.empty();
+    return {increment, is_sum ? prover_result : AssociativeOp()};
+}
+
+// e with each product by a constant distributed over the sums and
+// differences it multiplies: (a + b) * k -> a * k + b * k. Exact, also modulo
+// 2^n.
+Expr distribute_constant_products(const Expr &e) {
+    std::function<Expr(const Expr &, const Expr &)> times = [&](const Expr &x, const Expr &k) -> Expr {
+        if (const Add *op = x.as<Add>()) {
+            return times(op->a, k) + times(op->b, k);
+        }
+        if (const Sub *op = x.as<Sub>()) {
+            return times(op->a, k) - times(op->b, k);
+        }
+        return Mul::make(x, k);
+    };
+    return mutate_with(e, [&](auto *self, const Mul *op) -> Expr {
+        Expr a = self->mutate(op->a), b = self->mutate(op->b);
+        if (is_const(b)) {
+            return times(a, b);
+        }
+        if (is_const(a)) {
+            return times(b, a);
+        }
+        return Mul::make(a, b);
+    });
+}
+
+// simplify_with_reduction_bounds(), also seeing through the index arithmetic
+// of a split: a position computed from a split index, e.g.
+// ((((ro * 4 + c) * 2 + rp) * 16 + ri) % 128) / 32, is c given the bounds of
+// c, rp and ri, which the simplifier doesn't find, as it doesn't reassociate
+// the terms whose coefficient the divisor divides out of the sum. So each
+// division or modulo of a sum by a positive constant k, in a signed type of
+// at least 32 bits (which doesn't overflow, as the simplifier assumes), the
+// products
+// distributed, splits the terms whose constant coefficient k divides, k * q,
+// from the rest, r (exact: Euclidean division and modulo):
+//   (k * q + r) % k -> r % k, and r if r is in [0, k)
+//   (k * q + r) / k -> q + r / k, and q if r is in [0, k)
+Expr simplify_split_indices(const Expr &e, const Scope<> &reduction_vars, const Scope<Interval> &bounds) {
+    Expr x = simplify_with_reduction_bounds(e, reduction_vars, bounds);
+    x = simplify_with_reduction_bounds(distribute_constant_products(x), reduction_vars, bounds);
+    auto in_range = [&](const Expr &r, int64_t k) {
+        Interval i = bounds_of_expr_in_scope(r, bounds);
+        if (!i.is_bounded()) {
+            return false;
+        }
+        optional<int64_t> lo = as_const_int(simplify(i.min)), hi = as_const_int(simplify(i.max));
+        return lo && hi && *lo >= 0 && *hi < k;
+    };
+    auto split = [&](const Expr &a, int64_t k, Expr &q, Expr &r) {
+        vector<pair<bool, Expr>> terms;
+        flatten_signed_sum(a, false, terms);
+        for (const auto &[negated, t] : terms) {
+            const Mul *mul = t.as<Mul>();
+            optional<int64_t> c = mul ? as_const_int(mul->b) : as_const_int(t);
+            if (c && *c % k == 0) {
+                Expr qt = mul ? Mul::make(mul->a, make_const(t.type(), *c / k)) : make_const(t.type(), *c / k);
+                q = negated ? sub_terms(q, qt) : add_terms(q, qt);
+            } else {
+                r = negated ? sub_terms(r, t) : add_terms(r, t);
+            }
+        }
+        if (!r.defined()) {
+            r = make_zero(a.type());
+        }
+    };
+    auto mod = [&](auto *self, const Mod *op) -> Expr {
+        Expr a = self->mutate(op->a);
+        optional<int64_t> k = as_const_int(op->b);
+        if (!op->type.is_int() || op->type.bits() < 32 || !k || *k <= 0) {
+            return Mod::make(a, op->b);
+        }
+        Expr q, r;
+        split(a, *k, q, r);
+        return in_range(r, *k) ? r : Mod::make(r, op->b);
+    };
+    auto div = [&](auto *self, const Div *op) -> Expr {
+        Expr a = self->mutate(op->a);
+        optional<int64_t> k = as_const_int(op->b);
+        if (!op->type.is_int() || op->type.bits() < 32 || !k || *k <= 0) {
+            return Div::make(a, op->b);
+        }
+        Expr q, r;
+        split(a, *k, q, r);
+        Expr quotient = q.defined() ? q : make_zero(op->type);
+        return in_range(r, *k) ? quotient : quotient + Div::make(r, op->b);
+    };
+    x = mutate_with(x, std::move(mod), std::move(div));
+    return simplify_with_reduction_bounds(x, reduction_vars, bounds);
+}
+
+// A bit field (x >> s) & m, with m a non-negative constant.
+struct BitField {
+    Expr x, s;
+    uint64_t m;
+};
+
+optional<BitField> as_bit_field(const Expr &e) {
+    const Call *a = Call::as_intrinsic(e, {Call::bitwise_and});
+    const Call *sh = a ? Call::as_intrinsic(a->args[0], {Call::shift_right}) : nullptr;
+    if (!sh || !e.type().is_int_or_uint()) {
+        return std::nullopt;
+    }
+    if (optional<uint64_t> m = as_const_uint(a->args[1])) {
+        return BitField{sh->args[0], sh->args[1], *m};
+    }
+    if (optional<int64_t> m = as_const_int(a->args[1]); m && *m >= 0) {
+        return BitField{sh->args[0], sh->args[1], (uint64_t)*m};
+    }
+    return std::nullopt;
+}
+
+// For hoist_field_shift(): the constant bounds of `e` with each of the
+// bit fields in `fields` read in place at shift k, (x >> (s - k)) & (m << k),
+// which is exactly 2^k times the field if m << k is in the field's type. If
+// `e` is linear in the fields (built from them by int casts, constant left
+// shifts, sums, differences, products with values that read no field, and
+// widening ops) and no value on the way from them to `e` wraps, `e` is then
+// exactly 2^k times its value. Returns nullopt if `e` reads none of the
+// fields, and also sets `ok` to false if it does but not so.
+optional<ConstantInterval> scaled_field_bounds(const Expr &e, int k, const std::set<const Call *> &fields,
+                                               const ValueBounds &bounds, bool &ok) {
+    auto reads_field = [&](const Expr &x) {
+        bool found = false;
+        visit_with(x, [&](auto *self, const Call *op) {
+            found = found || fields.count(op);
+            if (!found) {
+                self->visit_base(op);
+            }
+        });
+        return found;
+    };
+    auto fail = [&]() -> optional<ConstantInterval> {
+        ok = false;
+        return std::nullopt;
+    };
+    auto fits = [&](const ConstantInterval &i) -> optional<ConstantInterval> {
+        if (!ConstantInterval::bounds_of_type(e.type()).contains(i)) {
+            return fail();
+        }
+        return i;
+    };
+    auto recurse = [&](const Expr &x) {
+        return ok ? scaled_field_bounds(x, k, fields, bounds, ok) : std::nullopt;
+    };
+    if (!e.type().is_int_or_uint()) {
+        return reads_field(e) ? fail() : std::nullopt;
+    }
+    if (const Call *op = e.as<Call>(); op && fields.count(op)) {
+        const uint64_t m = as_bit_field(e)->m;
+        if (k >= 63 || m > ((uint64_t)std::numeric_limits<int64_t>::max() >> k)) {
+            return fail();
+        }
+        return fits(ConstantInterval(0, (int64_t)(m << k)));
+    }
+    if (Expr exact = exact_widening_form(e); exact.defined()) {
+        return recurse(exact);
+    }
+    if (const Cast *op = e.as<Cast>()) {
+        if (!op->value.type().is_int_or_uint()) {
+            return reads_field(e) ? fail() : std::nullopt;
+        }
+        optional<ConstantInterval> i = recurse(op->value);
+        return i ? fits(*i) : std::nullopt;
+    }
+    if (const Call *op = Call::as_intrinsic(e, {Call::shift_left})) {
+        optional<ConstantInterval> i = recurse(op->args[0]);
+        if (!ok || !i) {
+            return reads_field(op->args[1]) ? fail() : std::nullopt;
+        }
+        optional<int64_t> b = as_const_int(op->args[1]);
+        if (optional<uint64_t> u = as_const_uint(op->args[1])) {
+            b = (int64_t)*u;
+        }
+        if (!b || *b < 0 || *b >= 62) {
+            return fail();
+        }
+        return fits(*i * ((int64_t)1 << *b));
+    }
+    if (e.node_type() == IRNodeType::Add || e.node_type() == IRNodeType::Sub ||
+        e.node_type() == IRNodeType::Mul) {
+        auto [a, b] = *as_binary_operands(e);
+        optional<ConstantInterval> ia = recurse(a), ib = recurse(b);
+        if (!ok || (!ia && !ib)) {
+            return std::nullopt;
+        }
+        if (e.node_type() == IRNodeType::Mul) {
+            if (ia && ib) {
+                return fail();
+            }
+            return fits(ia ? *ia * bounds(b) : bounds(a) * *ib);
+        }
+        // Only the fields' terms scale: a sum with a field-free term (other
+        // than zero, e.g. the 0 - x of a -= update) does not.
+        if (!ia && is_const_zero(a)) {
+            ia = ConstantInterval::single_point(0);
+        }
+        if (!ib && is_const_zero(b)) {
+            ib = ConstantInterval::single_point(0);
+        }
+        if (!ia || !ib) {
+            return fail();
+        }
+        return fits(e.node_type() == IRNodeType::Add ? *ia + *ib : *ia - *ib);
+    }
+    return reads_field(e) ? fail() : std::nullopt;
+}
+
+// The number of points of an update's reduction domain, if its extents are
+// constant (and the product fits an int32).
+optional<int64_t> reduction_points(const Definition &definition) {
+    int64_t points = 1;
+    for (const ReductionVariable &rv : definition.schedule().rvars()) {
+        optional<int64_t> extent = as_const_int(simplify(rv.extent));
+        if (!extent || *extent < 0 || *extent > std::numeric_limits<int32_t>::max()) {
+            return std::nullopt;
+        }
+        points *= std::max<int64_t>(*extent, 1);
+        if (points > std::numeric_limits<int32_t>::max()) {
+            return std::nullopt;
+        }
+    }
+    return points;
+}
+
+// A sum's term with the right shift of its bit fields hoisted out (see
+// hoist_invariants()): `body` reads each field (x >> s) & m in place, as
+// (x >> (s - shift)) & (m << shift), so it is 2^shift times the term, and
+// the write-back shifts the term's sum right by `shift`.
+struct ShiftedTerm {
+    Expr body, shift;
+};
+
+// The hoisted shift of the bit fields `term`, accumulated alone by a sum over
+// `points` points, reads at a position invariant over the reduction, if
+// there is one: all such fields are at the same position s, `term` is
+// linear in them (see scaled_field_bounds()), and s is at most the greatest
+// k for which, with the fields read in place at k, neither `term` nor the
+// sum wraps. The shift is select(0 <= s <= k, s, 0): a partial shift would
+// still shift every term. Exact, as every term of the sum is then a
+// multiple of 2^shift.
+optional<ShiftedTerm> hoist_field_shift(const Expr &let_term, const Scope<> &reduction_vars,
+                                        const InvarianceBounds &invariance_bounds,
+                                        const optional<int64_t> &points) {
+    // A position bound by a Let would hide its RVars from the invariance test.
+    const Expr term = substitute_in_all_lets(let_term);
+    if (!points || !term.type().is_int_or_uint() || !expr_uses_vars(term, reduction_vars)) {
+        return std::nullopt;
+    }
+    std::set<const Call *> fields;
+    Expr position;
+    bool same_position = true;
+    visit_with(term, [&](auto *self, const Call *op) {
+        if (optional<BitField> f = as_bit_field(Expr(op))) {
+            if (optional<Expr> s = invariant_form(f->s, reduction_vars, invariance_bounds, simplify_split_indices)) {
+                same_position = same_position && (!position.defined() || equal(position, *s));
+                position = *s;
+                fields.insert(op);
+                return;
+            }
+        }
+        self->visit_base(op);
+    });
+    if (fields.empty() || !same_position) {
+        return std::nullopt;
+    }
+
+    optional<FuncValueBounds> func_bounds;
+    ValueBounds bounds = [&](const Expr &e) {
+        if (!func_bounds) {
+            func_bounds = value_bounds_of_calls(term);
+        }
+        return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &*func_bounds);
+    };
+    int max_shift = 0;
+    for (int k = 1; k < term.type().bits(); k++) {
+        bool ok = true;
+        optional<ConstantInterval> i = scaled_field_bounds(term, k, fields, bounds, ok);
+        if (!ok || !i) {
+            break;
+        }
+        ConstantInterval sum = *i * *points;
+        sum.include(0);
+        if (!ConstantInterval::bounds_of_type(term.type()).contains(sum)) {
+            break;
+        }
+        max_shift = k;
+    }
+    if (max_shift == 0) {
+        return std::nullopt;
+    }
+    const Type st = position.type();
+    Expr shift = simplify(select(make_zero(st) <= position && position <= make_const(st, max_shift),
+                                 position, make_zero(st)));
+    if (is_const_zero(shift)) {
+        return std::nullopt;
+    }
+    Expr body = mutate_with(term, [&](auto *self, const Call *op) -> Expr {
+        if (!fields.count(op)) {
+            return self->visit_base(op);
+        }
+        BitField f = *as_bit_field(Expr(op));
+        Expr d = cast(f.s.type(), shift);
+        return (f.x >> (f.s - d)) & (make_const(op->type, f.m) << d);
+    });
+    return ShiftedTerm{common_subexpression_elimination(body), shift};
+}
+
+// Hoist the shifts of the bit fields out of the integer sums' terms (see
+// hoist_field_shift()), as one more factor of each term.
+void hoist_field_shifts(vector<vector<HoistedTerm>> &hoisted_terms, const AssociativeOp &prover_result,
+                        const Definition &definition, const Scope<> &reduction_vars,
+                        const InvarianceBounds &invariance_bounds) {
+    const optional<int64_t> points = reduction_points(definition);
+    for (size_t i = 0; i < hoisted_terms.size(); i++) {
+        if (prover_result.pattern.ops[i].node_type() != IRNodeType::Add) {
+            continue;
+        }
+        for (HoistedTerm &term : hoisted_terms[i]) {
+            if (optional<ShiftedTerm> shifted = hoist_field_shift(term.body, reduction_vars, invariance_bounds, points)) {
+                if (!term.factor) {
+                    term.factor = HoistedFactor{IRNodeType::Mul, Expr(), shifted->body};
+                }
+                term.factor->inner_body = shifted->body;
+                term.factor->shift = shifted->shift;
+                term.body = shifted->body;
+            }
+        }
+    }
+}
+
+// The RDom an update definition reduces over, if any.
+ReductionDomain reduction_domain_of(const Definition &definition) {
+    ReductionDomain rdom;
+    auto find = [&](const Expr &e) {
+        visit_with(e, [&](auto *self, const Variable *op) {
+            if (!rdom.defined() && op->reduction_domain.defined()) {
+                rdom = op->reduction_domain;
+            }
+        });
+    };
+    for (const Expr &e : definition.args()) {
+        find(e);
+    }
+    for (const Expr &e : definition.values()) {
+        find(e);
+    }
+    find(definition.predicate());
+    return rdom;
+}
+
+// The RVars of an update definition, and the bounds for deciding invariance
+// modulo them (see InvarianceBounds).
+void collect_invariance_bounds(const Function &function, const Definition &definition,
+                               Scope<> &reduction_vars, Scope<Interval> &reduction_bounds,
+                               InvarianceBounds &constant_bounds) {
+    // The simplifier only uses constant bounds, so simplify each RVar's bounds
+    // (e.g. 0 + 32 - 1 after a split) for deciding invariance. Provably empty
+    // domains are left out.
+    for (const auto &[var, min, extent] : definition.schedule().rvars()) {
+        reduction_vars.push(var);
+        reduction_bounds.push(var, Interval{min, min + extent - 1});
+        Interval bounds{simplify(min), simplify(min + extent - 1)};
+        const auto lo = as_const_int(bounds.min), hi = as_const_int(bounds.max);
+        if (!(lo && hi && *hi < *lo)) {
+            constant_bounds.rvars.push(var, bounds);
+            constant_bounds.rvars_and_pure_vars.push(var, bounds);
+        }
+    }
+    // An explicit bound() with a constant min and extent on one of the Func's
+    // pure vars fixes the region every stage is computed over, and Halide
+    // asserts that consumers need no more than that region. So the values of
+    // this update outside it are never used, and the pure var may be assumed in
+    // range while deciding invariance. E.g. a lane preserved by rfactor() has no
+    // recorded range otherwise. Bounds inference sees the rewritten expression,
+    // so producers are sized for whatever it reads over the actual loops. These
+    // bounds are only used for leaves that the RVar bounds alone don't make
+    // invariant.
+    for (const auto &[var, bound] : function.schedule().bounds()) {
+        if (!bound.min.defined() || !bound.extent.defined() || reduction_vars.contains(var)) {
+            continue;
+        }
+        Interval bounds{simplify(bound.min), simplify(bound.min + bound.extent - 1)};
+        const auto lo = as_const_int(bounds.min), hi = as_const_int(bounds.max);
+        if (lo && hi && *lo <= *hi) {
+            constant_bounds.rvars_and_pure_vars.push(var, bounds);
+            constant_bounds.pure_vars.emplace_back(var, bounds);
+        }
+    }
+}
+
+// Define one factor-free intermediate reduction per HoistedTerm (numbering
+// them in order), and replace `definition` with a write-back update that
+// combines their results, each with its hoisted factor applied.
+FuncVec define_hoisted_reductions(const Function &function, Definition definition,
+                                  const string &stage_name,
+                                  const vector<Var> &dim_vars,
+                                  const vector<Split> &var_splits,
+                                  const AssociativeOp &prover_result,
+                                  vector<vector<HoistedTerm>> &hoisted_terms,
+                                  const Scope<Interval> &reduction_bounds) {
+    const vector<Expr> dim_vars_exprs(dim_vars.begin(), dim_vars.end());
+
+    size_t intermediate_count = 0;
+    for (auto &terms : hoisted_terms) {
+        for (HoistedTerm &term : terms) {
+            term.intermediate_index = intermediate_count++;
+        }
+    }
+    FuncVec intms(function.name() + "_intm", intermediate_count);
+
+    // Define one factor-free scalar intermediate reduction per outer term.
+    const ReductionDomain rdom = reduction_domain_of(definition);
+    for (size_t i = 0; i < hoisted_terms.size(); ++i) {
+        for (const HoistedTerm &term : hoisted_terms[i]) {
+            Func &intm = intms[term.intermediate_index];
+            intm(dim_vars_exprs) = prover_result.pattern.identities[i];
+
+            Expr self_ref = Call::make(term.body.type(), intm.name(), dim_vars_exprs,
+                                       Call::Halide, FunctionPtr());
+            Expr value = make_binary_op(prover_result.pattern.ops[i].node_type(), self_ref, term.body);
+
+            // Reuse the original RDom, with its predicate, even if this term
+            // doesn't use the RVars: it still runs once per point of the
+            // domain. The entire update schedule transfers unchanged.
+            intm.function().define_update(definition.args(), {value}, rdom);
+            intm.function().update(0).schedule() = definition.schedule().get_copy();
+        }
+    }
+
+    // Replace the original reduction with a factor-applying write-back update.
+    SubstitutionMap writeback_map;
+    for (size_t i = 0; i < definition.values().size(); ++i) {
+        if (!prover_result.ys[i].var.empty()) {
+            Expr r;
+            for (const HoistedTerm &term : hoisted_terms[i]) {
+                Expr term_result = intms[term.intermediate_index](dim_vars_exprs);
+                term_result = apply_hoisted_factor(term_result, term.factor);
+                r = r.defined() ? make_binary_op(prover_result.pattern.ops[i].node_type(), r, term_result) : term_result;
+            }
+            internal_assert(r.defined());
+            add_let(writeback_map, prover_result.ys[i].var, r);
+        }
+
+        if (!prover_result.xs[i].var.empty()) {
+            Expr prev_val = Call::make(function.output_types()[i], function.name(),
+                                       dim_vars_exprs, Call::Halide,
+                                       FunctionPtr(), (int)i);
+            add_let(writeback_map, prover_result.xs[i].var, prev_val);
+        } else {
+            user_warning << "Update definition of " << stage_name << " at index " << i
+                         << " doesn't depend on the previous value. This isn't a"
+                         << " reduction operation\n";
+        }
+    }
+
+    vector<Dim> writeback_dims;
+    for (const Dim &dim : definition.schedule().dims()) {
+        if (!dim.is_rvar()) {
+            writeback_dims.push_back(dim);
+        }
+    }
+    // Add pure vars not referenced by the original update just before
+    // outermost, as rfactor() does for histogram-style updates.
+    for (size_t i = 0; i < dim_vars.size(); i++) {
+        if (!expr_uses_var(definition.args()[i], dim_vars[i].name())) {
+            Dim d = {dim_vars[i].name(), ForType::Serial, DeviceAPI::None,
+                     DimType::PureVar, Partition::Auto};
+            writeback_dims.insert(writeback_dims.end() - 1, d);
+        }
+    }
+
+    definition.args() = dim_vars_exprs;
+    definition.values() = substitute(writeback_map, prover_result.pattern.ops);
+    definition.predicate() = or_condition_over_domain(definition.predicate(), reduction_bounds);
+    definition.schedule().dims() = std::move(writeback_dims);
+    definition.schedule().rvars().clear();
+    definition.schedule().splits() = var_splits;
+
+    return intms;
 }
 
 }  // namespace
@@ -1440,48 +2340,15 @@ FuncVec Stage::hoist_invariants() {
     const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
     const auto &[var_splits, _] = rfactor_validate_args({}, prover_result);
 
-    const vector<Expr> dim_vars_exprs(dim_vars.begin(), dim_vars.end());
-
     Scope<> reduction_vars;
     Scope<Interval> reduction_bounds;
-    // The simplifier only uses constant bounds, so simplify each RVar's bounds
-    // (e.g. 0 + 32 - 1 after a split) for deciding invariance. Provably empty
-    // domains are left out.
     InvarianceBounds constant_bounds;
-    for (const auto &[var, min, extent] : definition.schedule().rvars()) {
-        reduction_vars.push(var);
-        reduction_bounds.push(var, Interval{min, min + extent - 1});
-        Interval bounds{simplify(min), simplify(min + extent - 1)};
-        const auto lo = as_const_int(bounds.min), hi = as_const_int(bounds.max);
-        if (!(lo && hi && *hi < *lo)) {
-            constant_bounds.rvars.push(var, bounds);
-            constant_bounds.rvars_and_pure_vars.push(var, bounds);
-        }
-    }
-    // An explicit bound() with a constant min and extent on one of the Func's
-    // pure vars fixes the region every stage is computed over, and Halide
-    // asserts that consumers need no more than that region. So the values of
-    // this update outside it are never used, and the pure var may be assumed in
-    // range while deciding invariance. E.g. a lane preserved by rfactor() has no
-    // recorded range otherwise. Bounds inference sees the rewritten expression,
-    // so producers are sized for whatever it reads over the actual loops. These
-    // bounds are only used for leaves that the RVar bounds alone don't make
-    // invariant.
-    for (const auto &[var, bound] : function.schedule().bounds()) {
-        if (!bound.min.defined() || !bound.extent.defined() || reduction_vars.contains(var)) {
-            continue;
-        }
-        Interval bounds{simplify(bound.min), simplify(bound.min + bound.extent - 1)};
-        const auto lo = as_const_int(bounds.min), hi = as_const_int(bounds.max);
-        if (lo && hi && *lo <= *hi) {
-            constant_bounds.rvars_and_pure_vars.push(var, bounds);
-            constant_bounds.pure_vars.emplace_back(var, bounds);
-        }
-    }
+    collect_invariance_bounds(function, definition, reduction_vars, reduction_bounds, constant_bounds);
     vector<vector<HoistedTerm>> hoisted_terms =
         extract_hoisted_terms(definition.values(), prover_result,
                               function.name(), reduction_vars,
                               constant_bounds);
+    hoist_field_shifts(hoisted_terms, prover_result, definition, reduction_vars, constant_bounds);
     const bool any_hoisted = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
                                          [](const auto &terms) {
                                              return std::any_of(terms.begin(), terms.end(),
@@ -1496,83 +2363,112 @@ FuncVec Stage::hoist_invariants() {
         << "distributable loop-invariant factor in the update definition of "
         << function.name() << ".\n";
 
-    size_t intermediate_count = 0;
-    for (auto &terms : hoisted_terms) {
-        for (HoistedTerm &term : terms) {
-            term.intermediate_index = intermediate_count++;
+    return define_hoisted_reductions(function, definition, name(), dim_vars, var_splits,
+                                     prover_result, hoisted_terms, reduction_bounds);
+}
+
+FuncVec Stage::hoist_invariants(const vector<vector<Func>> &groups) {
+    vector<CallSelector> parts;
+    vector<string> part_names;
+    for (const vector<Func> &group : groups) {
+        user_assert(!group.empty())
+            << "hoist_invariants() on " << name() << " was passed an empty group of Funcs.\n";
+        std::set<string> names;
+        string part_name;
+        for (const Func &f : group) {
+            user_assert(f.name() != function.name())
+                << "hoist_invariants() on " << name() << " cannot isolate the calls to "
+                << f.name() << " itself.\n";
+            names.insert(f.name());
+            part_name += (part_name.empty() ? "" : " or ") + f.name();
         }
+        parts.emplace_back([names = std::move(names)](const Expr &e) {
+            const Call *call = e.as<Call>();
+            return call && call->call_type == Call::Halide && names.count(call->name);
+        });
+        part_names.push_back(part_name);
     }
-    FuncVec intms(function.name() + "_intm", intermediate_count);
+    return hoist_invariants_impl(parts, part_names);
+}
 
-    // Define one factor-free scalar intermediate reduction per outer term.
-    for (size_t i = 0; i < hoisted_terms.size(); ++i) {
-        for (const HoistedTerm &term : hoisted_terms[i]) {
-            Func &intm = intms[term.intermediate_index];
-            intm(dim_vars_exprs) = prover_result.pattern.identities[i];
+FuncVec Stage::hoist_invariants(std::initializer_list<Func> funcs) {
+    vector<vector<Func>> groups;
+    for (const Func &f : funcs) {
+        groups.push_back({f});
+    }
+    return hoist_invariants(groups);
+}
 
-            Expr self_ref = Call::make(term.body.type(), intm.name(), dim_vars_exprs,
-                                       Call::Halide, FunctionPtr());
-            Expr value = make_binary_op(prover_result.pattern.ops[i].node_type(), self_ref, term.body);
+FuncVec Stage::hoist_invariants_impl(const vector<std::function<bool(const Expr &)>> &parts,
+                                     const vector<string> &part_names) {
+    user_assert(!definition.is_init()) << "hoist_invariants() must be called on an update definition\n";
+    user_assert(!parts.empty())
+        << "hoist_invariants() on " << name() << " needs at least one group of Funcs to isolate.\n";
+    user_assert(definition.values().size() == 1)
+        << "hoist_invariants() with a list of Funcs requires a single-valued sum reduction, "
+        << "but " << name() << " is Tuple-valued.\n";
 
-            // The args and value still refer to the original RDom, so define_update()
-            // discovers and reuses it. The entire update schedule transfers unchanged.
-            intm.function().define_update(definition.args(), {value});
-            intm.function().update(0).schedule() = definition.schedule().get_copy();
+    Expr increment;
+    AssociativeOp prover_result;
+    std::tie(increment, prover_result) = sum_increment(function, definition);
+    user_assert(prover_result.associative())
+        << "hoist_invariants() with a list of Funcs requires a sum reduction, "
+        << function.name() << "(...) = " << function.name() << "(...) + increment (or += or -=), but "
+        << name() << " is:\n"
+        << "  " << function.name() << "(...) = " << definition.values()[0] << "\n";
+
+    vector<Expr> part_exprs;
+    // The value bounds of the Funcs the increment calls, computed only if a
+    // cast needs them (see isolate_terms()).
+    optional<FuncValueBounds> func_bounds;
+    const Expr all_terms = increment;
+    ValueBounds bounds = [&](const Expr &e) {
+        if (!func_bounds) {
+            func_bounds = value_bounds_of_calls(all_terms);
         }
+        return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &*func_bounds);
+    };
+    for (size_t i = 0; i < parts.size(); i++) {
+        auto [with, without] = increment.defined() ? isolate_terms(increment, parts[i], bounds) : IsolatedTerms{};
+        user_assert(with.defined())
+            << "hoist_invariants() on " << name() << ": no term of the update calls "
+            << part_names[i] << (i > 0 ? " (other than terms an earlier group took)" : "")
+            << ":\n"
+            << "  " << function.name() << "(...) = " << definition.values()[0] << "\n";
+        part_exprs.push_back(with);
+        increment = without;
+    }
+    const bool has_residual = increment.defined();
+    if (parts.size() == 1 && !has_residual) {
+        // Every term calls the only group: this reduction is its part.
+        return {Func(function), Func()};
+    }
+    if (has_residual) {
+        part_exprs.push_back(increment);
     }
 
-    // Replace the original reduction with a factor-applying write-back update.
-    {
-        SubstitutionMap writeback_map;
-        for (size_t i = 0; i < definition.values().size(); ++i) {
-            if (!prover_result.ys[i].var.empty()) {
-                Expr r;
-                for (const HoistedTerm &term : hoisted_terms[i]) {
-                    Expr term_result = intms[term.intermediate_index](dim_vars_exprs);
-                    term_result = apply_hoisted_factor(term_result, term.factor);
-                    r = r.defined() ? make_binary_op(prover_result.pattern.ops[i].node_type(), r, term_result) : term_result;
-                }
-                internal_assert(r.defined());
-                add_let(writeback_map, prover_result.ys[i].var, r);
-            }
+    definition.schedule().touched() = true;
+    const auto &[var_splits, _] = rfactor_validate_args({}, prover_result);
 
-            if (!prover_result.xs[i].var.empty()) {
-                Expr prev_val = Call::make(function.output_types()[i], function.name(),
-                                           dim_vars_exprs, Call::Halide,
-                                           FunctionPtr(), (int)i);
-                add_let(writeback_map, prover_result.xs[i].var, prev_val);
-            } else {
-                user_warning << "Update definition of " << name() << " at index " << i
-                             << " doesn't depend on the previous value. This isn't a"
-                             << " reduction operation\n";
-            }
-        }
-
-        vector<Dim> writeback_dims;
-        for (const Dim &dim : definition.schedule().dims()) {
-            if (!dim.is_rvar()) {
-                writeback_dims.push_back(dim);
-            }
-        }
-        // Add pure vars not referenced by the original update just before
-        // outermost, as rfactor() does for histogram-style updates.
-        for (size_t i = 0; i < dim_vars.size(); i++) {
-            if (!expr_uses_var(definition.args()[i], dim_vars[i].name())) {
-                Dim d = {dim_vars[i].name(), ForType::Serial, DeviceAPI::None,
-                         DimType::PureVar, Partition::Auto};
-                writeback_dims.insert(writeback_dims.end() - 1, d);
-            }
-        }
-
-        definition.args() = dim_vars_exprs;
-        definition.values() = substitute(writeback_map, prover_result.pattern.ops);
-        definition.predicate() = or_condition_over_domain(definition.predicate(), reduction_bounds);
-        definition.schedule().dims() = std::move(writeback_dims);
-        definition.schedule().rvars().clear();
-        definition.schedule().splits() = var_splits;
+    Scope<> reduction_vars;
+    Scope<Interval> reduction_bounds;
+    InvarianceBounds constant_bounds;
+    collect_invariance_bounds(function, definition, reduction_vars, reduction_bounds, constant_bounds);
+    InvariantForm invariant = [&](const Expr &leaf) {
+        return invariant_form(leaf, reduction_vars, constant_bounds);
+    };
+    vector<vector<HoistedTerm>> hoisted_terms(1);
+    for (const Expr &e : part_exprs) {
+        hoisted_terms[0].push_back(hoist_part(e, invariant));
     }
+    hoist_field_shifts(hoisted_terms, prover_result, definition, reduction_vars, constant_bounds);
 
-    return intms;
+    FuncVec result = define_hoisted_reductions(function, definition, name(), dim_vars, var_splits,
+                                               prover_result, hoisted_terms, reduction_bounds);
+    if (!has_residual) {
+        result.emplace_back();
+    }
+    return result;
 }
 
 void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, const Expr &align_arg, bool exact, TailStrategy tail) {
