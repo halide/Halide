@@ -43,7 +43,9 @@ void check_simple_unions() {
         a[0] = Interval(-7, 3);
         b[0] = Interval(1, 13);
         a.used = kind == 0 ? Expr() : flag;
-        b.used = kind <= 1 ? Expr() : kind == 2 ? !flag : kind == 3 ? flag : other;
+        b.used = kind <= 1 ? Expr() : kind == 2 ? !flag :
+                                  kind == 3     ? flag :
+                                                  other;
         Box merged = a;
         merge_boxes(merged, b);
         for (int f = 0; f < 2; ++f) {

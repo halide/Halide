@@ -633,9 +633,9 @@ tests(
 )
 
 set_tests_properties(
-    correctness_conditional_box_merge
-    correctness_bounds_inference_specialized_spans
-    PROPERTIES TIMEOUT 60
+    correctness_conditional_box_merge correctness_bounds_inference_specialized_spans
+    PROPERTIES
+    TIMEOUT 60
 )
 
 # These test the host CPU detection logic that libHalide shares with the
