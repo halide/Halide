@@ -71,7 +71,7 @@ void run_mixed_fields_variant() {
 
     Func producer("mixed_producer");
     std::vector<Expr> mixed_vals = {blk % 2 == 0, blk % 3 == 0, blk % 5 == 0, blk % 7 == 0,
-                                   cast<int32_t>(blk * 100)};
+                                    cast<int32_t>(blk * 100)};
     producer(blk) = pack_struct(t, mixed_vals);
 
     Func result("mixed_result");
