@@ -454,6 +454,13 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     BlockRegion *next_region = block_region->next_ptr;
     BlockRegion *empty_region = create_block_region(user_context, split_request);
     halide_abort_if_false(user_context, empty_region != nullptr);
+    // Conforming the tail can add alignment padding and push its end past the
+    // original region. In that case, discard the temporary tail; the caller
+    // will satisfy the request from the unsplit region instead.
+    if (empty_region->memory.allocation.offset + empty_region->memory.allocation.size > original_offset + original_size) {
+        destroy_block_region(user_context, empty_region);
+        return nullptr;
+    }
 
     empty_region->next_ptr = next_region;
     if (next_region) {

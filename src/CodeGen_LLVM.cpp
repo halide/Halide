@@ -2328,12 +2328,12 @@ void CodeGen_LLVM::add_streaming_load_metadata(llvm::Instruction *inst) {
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
-    // If the type should be stored as some other type, insert a reinterpret cast.
+    // Convert from the storage representation of the type.
     Type storage_type = upgrade_type_for_storage(op->type);
     if (op->type != storage_type) {
-        codegen(reinterpret(op->type, Load::make(storage_type, op->name,
-                                                 op->index, op->image,
-                                                 op->param, op->predicate, op->alignment, op->is_streaming)));
+        Expr load = Load::make(storage_type, op->name, op->index, op->image,
+                               op->param, op->predicate, op->alignment, op->is_streaming);
+        codegen(op->type.is_bool() ? cast(op->type, load) : reinterpret(op->type, load));
         return;
     }
 
@@ -4358,7 +4358,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     Halide::Type value_type = op->value.type();
     Halide::Type storage_type = upgrade_type_for_storage(value_type);
     if (value_type != storage_type) {
-        Expr v = reinterpret(storage_type, op->value);
+        Expr v = value_type.is_bool() ? cast(storage_type, op->value) : reinterpret(storage_type, op->value);
         codegen(op->with(v, op->index, op->predicate, op->alignment));
         return;
     }
