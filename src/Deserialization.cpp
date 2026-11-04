@@ -1047,6 +1047,9 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto store_level = deserialize_loop_level(func_schedule->store_level());
     const auto compute_level = deserialize_loop_level(func_schedule->compute_level());
     const auto hoist_storage_level = deserialize_loop_level(func_schedule->hoist_storage_level());
+    const std::vector<LoopLevel> slide_levels =
+        deserialize_vector<Serialize::LoopLevel, LoopLevel>(func_schedule->slide_levels(),
+                                                            &Deserializer::deserialize_loop_level);
     const std::vector<StorageDim> storage_dims =
         deserialize_vector<Serialize::StorageDim, StorageDim>(func_schedule->storage_dims(),
                                                               &Deserializer::deserialize_storage_dim);
@@ -1087,6 +1090,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     hl_func_schedule.store_level() = store_level;
     hl_func_schedule.compute_level() = compute_level;
     hl_func_schedule.hoist_storage_level() = hoist_storage_level;
+    hl_func_schedule.slide_levels() = slide_levels;
     hl_func_schedule.storage_dims() = storage_dims;
     hl_func_schedule.storage_splits() = std::move(storage_splits);
     hl_func_schedule.bounds() = bounds;

@@ -61,6 +61,19 @@ enum IndexMode {
     NUM_INDEX_MODES
 };
 constexpr bool generate_index_modes = true;
+// Whether every stage from `i` onwards indexes its producer normally. Sliding
+// a stage over y as well as x needs the region required of it in y to depend
+// only on y, and that's a property of the whole chain of consumers between it
+// and the output, not just of the stage itself.
+template<typename Stages>
+bool all_normal_downstream(const Stages &stages, int i) {
+    for (int j = i; j < (int)stages.size(); j++) {
+        if (stages[j].index_mode != NORMAL) {
+            return false;
+        }
+    }
+    return true;
+}
 // Give some stages update definitions. A Func with updates slides differently:
 // the bounds of every stage have to move together, and the region computed has
 // to cover what the earlier stages wrote. An update that scatters along the
@@ -79,6 +92,7 @@ constexpr bool generate_vectorize = true;
 constexpr bool generate_unroll = true;
 constexpr bool generate_specialize = true;
 constexpr bool generate_prefetch = true;
+constexpr bool generate_slide_directive = true;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -677,6 +691,52 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                 stages[i].f.compute_at(f, v);
                 source << ".compute_at(f[" << compute_at.func << "], " << var_name(v) << ")";
             }
+        }
+
+        // Sometimes name the dimension to slide over instead of
+        // letting sliding window pick a loop. Only the output's y is
+        // split, so it's the only dimension that isn't a loop by the
+        // time sliding window runs. Draw unconditionally to keep the
+        // rng stream the same when this is turned off.
+        bool want_slide_directive = (fuzz() % 3) == 0;
+        // Sometimes name x too. Unlike y it is still a loop by the
+        // time sliding window runs, and naming both dimensions slides
+        // the window along both at once.
+        bool want_slide_x = (fuzz() % 3) == 0;
+        // Only legal if the storage lives across every loop y spans.
+        // y is split into yo and yi, so the storage has to be outside
+        // both of them.
+        bool storage_outlives_y =
+            store_at.is_root() ||
+            (store_at.func == num_stages - 1 && store_at.var == 0);
+        if (generate_slide_directive && want_slide_directive &&
+            store_at != compute_at &&
+            storage_outlives_y &&
+            !compute_at.is_root() &&
+            compute_at.func == num_stages - 1 &&
+            // Computing further in than yi is only legal if the region
+            // required doesn't move with the loops in between, which
+            // depends on the index expressions rather than the
+            // schedule, so we can't tell from here.
+            compute_at.var == 2) {
+            stages[i].f.slide(stages.back().f, y);
+            source << ".slide(f[" << (num_stages - 1) << "], y)";
+        } else if (generate_slide_directive && want_slide_x &&
+                   store_at != compute_at &&
+                   storage_outlives_y &&
+                   !compute_at.is_root() &&
+                   compute_at.func == num_stages - 1 &&
+                   // Computed at the output's innermost loop, so both
+                   // x and y are dimensions the window can advance
+                   // along from here.
+                   compute_at.var == 3 &&
+                   // Any other index mode anywhere between here and
+                   // the output can make the region required in y
+                   // move with the x loop, which is rejected.
+                   all_normal_downstream(stages, i)) {
+            stages[i].f.slide(stages.back().f, x).slide(stages.back().f, y);
+            source << ".slide(f[" << (num_stages - 1) << "], x)"
+                   << ".slide(f[" << (num_stages - 1) << "], y)";
         }
 
         // Vectorizing or unrolling the producer's own loops changes
