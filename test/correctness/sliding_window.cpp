@@ -687,6 +687,56 @@ int main(int argc, char **argv) {
         }
     }
 
+    for (bool unrolled : {false, true}) {
+        // A cascade of stencils guarded at the boundary. Every stage slides.
+        // Over an unrolled loop, warming up must not change its extent.
+        const int N = 32, K = 4;
+        count = 0;
+        Func in("in");
+        in(x) = x * 13 % 17;
+        Func prev = BoundaryConditions::constant_exterior(in, 0, {{0, N}});
+        std::vector<Func> stages;
+        for (int k = 0; k < K; k++) {
+            Func s("s" + std::to_string(k));
+            s(x) = (prev(x) + select(x < 1, 0, prev(x - 1)) +
+                    select(x < 2, 0, prev(x - 2)) + call_counter(x, k));
+            stages.push_back(s);
+            prev = s;
+        }
+        Func out("out");
+        out(x) = prev(x);
+        in.compute_root();
+        Var xo, xi;
+        if (unrolled) {
+            out.split(x, xo, xi, 4).unroll(xi);
+        }
+        for (Func s : stages) {
+            s.store_root().compute_at(out, unrolled ? xi : x);
+        }
+        Buffer<int> result = out.realize({N});
+
+        std::vector<int> u(N), v(N);
+        for (int i = 0; i < N; i++) {
+            u[i] = i * 13 % 17;
+        }
+        for (int k = 0; k < K; k++) {
+            for (int i = 0; i < N; i++) {
+                v[i] = u[i] + (i >= 1 ? u[i - 1] : 0) + (i >= 2 ? u[i - 2] : 0);
+            }
+            std::swap(u, v);
+        }
+        for (int i = 0; i < N; i++) {
+            if (result(i) != u[i]) {
+                printf("out(%d) = %d instead of %d\n", i, result(i), u[i]);
+                return 1;
+            }
+        }
+        if (!unrolled && count != K * N) {
+            printf("Cascade of %d stencils made %d calls instead of %d\n", K, count, K * N);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

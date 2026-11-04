@@ -238,6 +238,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // The value of loop_var at the first iteration anything consumes this
     // func, which is earlier than the loop min if a consumer is warming up.
     Expr loop_min;
+    Expr loop_max;
+    // Rewinding an unrolled loop must leave it with a constant extent.
+    bool unrolled;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
     Scope<Interval> &bounds_scope;
@@ -437,14 +440,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // Try to solve the equation.
         new_loop_min_eq = simplify(new_loop_min_eq);
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
-        // The solver returns something even when the constraints can't all be
-        // met, so check its answer.
+        // The constraints hold everywhere in the interval the solver returns,
+        // which is empty if they can't all be met. Nothing reads what an empty
+        // loop computes, so it may rewind regardless.
         bool solved = (solve_result.has_upper_bound() &&
-                       can_prove(substitute(new_loop_min_name, solve_result.max,
-                                            new_loop_min_eq),
-                                 bounds_scope));
+                       (!solve_result.has_lower_bound() ||
+                        can_prove(loop_max < loop_min ||
+                                      solve_result.min <= solve_result.max,
+                                  bounds_scope)));
         if (solved &&
-            !expr_uses_vars(solve_result.max, enclosing_loops)) {
+            !expr_uses_vars(solve_result.max, enclosing_loops) &&
+            (!unrolled || is_const(simplify(loop_min - solve_result.max)))) {
             result.warmup_start = simplify(solve_result.max);
 
             // We have a new loop min, so we an assume every iteration has
@@ -642,10 +648,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
 public:
     // Slide over the loop over v, which starts at v_min.
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min,
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, Expr v_max,
+                                   bool unrolled,
                                    set<int> &slid_dimensions,
                                    Scope<Interval> &bounds_scope)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
+          loop_max(std::move(v_max)), unrolled(unrolled),
           slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
         decision.func_name = func.name();
         decision.slide_over = loop_var;
@@ -1014,7 +1022,9 @@ class SlidingWindow : public IRMutator {
             ScopedBinding<Interval> bind_bounds(bounds_scope, name,
                                                 Interval(min_bounds.min, max_bounds.max));
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims, bounds_scope);
+            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, loop_max,
+                                                  op->for_type == ForType::Unrolled,
+                                                  slid_dims, bounds_scope);
 
             body = slider(body);
             const SlideDecision &decision = slider.decision;
