@@ -1060,7 +1060,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
     std::optional<int64_t> bx = Internal::as_const_int(r.x.extent());
     int nsub = sub && bx ? (int)*bx / sub : 0;
-    if (nsub && integer && !sublanes && !gpr_scales && !affine(rs) && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {
+    if (nsub && integer && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {
         blocked_sub_lanes(out, st, s, dot.args()[0], dot.args()[1], r, ts, sub, nsub, vec, per, rs, t);
         return;
     }
