@@ -1718,6 +1718,17 @@ public:
     Func clone_in(const std::vector<Func> &fs);
     //@}
 
+    /** Like in(fs) and clone_in(fs), but only for the Funcs in 'fs' that call
+     * this Func, directly or through other Funcs (which are resolved as for
+     * in()). The other Funcs in 'fs', and undefined ones, are ignored, so a
+     * schedule can wrap a Func in whichever of a set of consumers use it.
+     * If none of them does, nothing changes and an undefined Func is
+     * returned. */
+    //@{
+    Func in_callers(const std::vector<Func> &fs);
+    Func clone_in_callers(const std::vector<Func> &fs);
+    //@}
+
     /** Eagerly and destructively replace every call to this Func inside
      * each Func in 'consumers' with a call to the round trip
      * p.decode(p.encode(*this)) instead. The substitution happens

@@ -330,6 +330,7 @@ tests(
     implicit_args_tests.cpp
     implicit_pure_def_with_rvar_args.cpp
     impossible_constraints.cpp
+    in_callers.cpp
     in_place.cpp
     incomplete_target.cpp
     indexing_access_undef.cpp

@@ -433,6 +433,8 @@ void define_func(py::module_ &m) {
 
             .def("clone_in", static_cast<Func (Func::*)(const Func &)>(&Func::clone_in), py::arg("f"))
             .def("clone_in", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::clone_in), py::arg("fs"))
+            .def("in_callers", &Func::in_callers, py::arg("fs"))
+            .def("clone_in_callers", &Func::clone_in_callers, py::arg("fs"))
 
             .def("copy_to_device", &Func::copy_to_device, py::arg("device_api") = DeviceAPI::Default_GPU)
             .def("copy_to_host", &Func::copy_to_host)

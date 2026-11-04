@@ -3772,6 +3772,25 @@ vector<Func> resolve_transitive_callers(const Function &target, const vector<Fun
     return out;
 }
 
+// The defined Funcs of 'fs' that call 'target', directly or through other
+// Funcs, i.e. those that resolve_transitive_callers() would accept.
+vector<Func> callers_of(const Function &target, const vector<Func> &fs) {
+    std::set<std::string> stop_names = wrapper_stop_names(target);
+    vector<Func> out;
+    for (const Func &f : fs) {
+        if (!f.defined()) {
+            continue;
+        }
+        std::map<std::string, Function> direct_callers;
+        std::set<std::string> visited;
+        collect_direct_callers_of(stop_names, f.function(), visited, direct_callers);
+        if (!direct_callers.empty() || find_direct_calls(f.function()).count(target.name())) {
+            out.push_back(f);
+        }
+    }
+    return out;
+}
+
 Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs_in, bool clone) {
     vector<Func> fs = fs_in.empty() ? fs_in : resolve_transitive_callers(wrapped_fn, fs_in);
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
@@ -3890,6 +3909,16 @@ Func Func::clone_in(const vector<Func> &fs) {
     }
     invalidate_cache();
     return get_wrapper(func, name() + "_clone", fs, true);
+}
+
+Func Func::in_callers(const vector<Func> &fs) {
+    vector<Func> callers = callers_of(func, fs);
+    return callers.empty() ? Func() : in(callers);
+}
+
+Func Func::clone_in_callers(const vector<Func> &fs) {
+    vector<Func> callers = callers_of(func, fs);
+    return callers.empty() ? Func() : clone_in(callers);
 }
 
 ApproximationResult Func::approximate_by(const Approximation &p, const vector<Func> &consumers) {
