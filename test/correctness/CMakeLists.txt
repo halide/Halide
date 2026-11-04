@@ -69,6 +69,7 @@ tests(
     bounds_inference_chunk.cpp
     bounds_inference_complex.cpp
     bounds_inference_outer_split.cpp
+    bounds_inference_specialized_spans.cpp
     bounds_internal.cpp
     bounds_of_abs.cpp
     bounds_of_cast.cpp
@@ -121,6 +122,7 @@ tests(
     compute_with_inlined.cpp
     computed_index.cpp
     concat.cpp
+    conditional_box_merge.cpp
     constant_expr.cpp
     constant_interval.cpp
     constant_type.cpp
@@ -629,6 +631,12 @@ tests(
     wrong_type.cpp
     x86_cpu_detect.cpp
     # keep-sorted end
+)
+
+set_tests_properties(
+    correctness_conditional_box_merge correctness_bounds_inference_specialized_spans
+    PROPERTIES
+    TIMEOUT 60
 )
 
 # These test the host CPU detection logic that libHalide shares with the
