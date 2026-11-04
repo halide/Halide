@@ -2350,8 +2350,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             return;
         }
         // Codes decoded from a field: two records per tile where N allows
-        // (gemv 1.02-1.1x; q8_0 0.85x), unless records over 11 KB on <= 4
-        // threads.
+        // (gemv 1.02-1.1x; q8_0's, not decoded, 1.02-1.11x slower on ten
+        // threads at K = 14336), unless records over 11 KB on <= 4 threads.
         std::vector<Func> cd = decoders(rs, only({tag::codes}), 0, 1);
         cd.erase(std::remove_if(cd.begin(), cd.end(), constant), cd.end());  // (not a codebook's lut)
         if (!cd.empty() && cd.front().type() != cd.back().type()) {
