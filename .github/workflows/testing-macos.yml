@@ -277,6 +277,12 @@ jobs:
           path: ~/.cache/vcpkg/archives
           key: vcpkg-archives-macos-arm64-webgpu-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/arm64-osx-halide.cmake', 'cmake/vcpkg-ports/**') }}
 
+      - name: Check vendored WebGPU header matches the Dawn pin
+        run: python3 tools/mini-webgpu-tool.py check
+
+      - name: Test the vendored WebGPU header guard
+        run: python3 tools/mini-webgpu-tool.py selftest
+
       - name: Configure CMake
         run: cmake --preset ci-macos-arm-64-webgpu -DHalide_TARGET=host-webgpu
 
