@@ -122,8 +122,13 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # Schedule parameters (kernels/matmul.cpp's GeneratorParams) of some of the
 # rows' libraries: `type op act params...`. interleave=1 (one block per
 # iteration of vec_dot and of mul_mat's gemv tiles, default 2) where measured
-# faster on Apple M3: a q8_K act's block is 292 bytes, so a second block's
-# loads fall outside ldur's immediate range and each needs its own address.
+# faster on Apple M3 (1.02-2.7x): a q8_K act's block is 292 bytes, so a second
+# block's loads fall outside ldur's immediate range and each needs its own
+# address. Not a rule on q8_K acts (retimed): with 1, iq3_s's and iq1_m's
+# vec_dot 1.14-1.18x slower and gemv 1.07-1.13x, q2_K's, q4_K's, q5_K's,
+# iq2_s's and tq1_0's gemv 1.01-1.06x, and with an f32 act (staged by the
+# pipeline) every vec_dot 1.03-1.05x; with 2, q2_K's, q4_K's and q6_K's
+# vec_dot and iq1_s's gemv as fast or faster (q3_K's vec_dot 1.02x slower).
 # sublanes=true (vec_dot and mul_mat's gemv tiles: the sub-blocks across the
 # vector lanes, their scales one vector multiply-add per 4 sub-blocks) where
 # measured faster (iq2_xs's gemv +14-19%, with interleave=1: with two blocks
@@ -176,11 +181,9 @@ set(GGML_SCHEDULE_PARAMS
     "iq3_s mul_mat q8_K gemm_index_words=true"
     "iq3_s mul_mat f32 gemm_index_words=true"
     "iq3_s mul_mat f32:q8_K gemm_index_words=true"
-    "q2_K vec_dot q8_K interleave=1 sublanes=true"
+    "q2_K vec_dot q8_K sublanes=true"
     "iq2_xs vec_dot q8_K interleave=1 sublanes=true"
     "q3_K vec_dot q8_K interleave=1"
-    "q4_K vec_dot q8_K interleave=1"
-    "q6_K vec_dot q8_K interleave=1"
     "tq1_0 vec_dot q8_K interleave=1"
     "tq2_0 vec_dot q8_K interleave=1"
     "iq2_xxs vec_dot q8_K interleave=1"
@@ -194,10 +197,10 @@ set(GGML_SCHEDULE_PARAMS
     "iq2_xxs mul_mat f32:q8_K interleave=1"
     "iq3_xxs mul_mat q8_K interleave=1 sublanes=true"
     "iq3_xxs mul_mat f32:q8_K interleave=1 sublanes=true"
-    "iq1_s mul_mat q8_K interleave=1 slp=false"
+    "iq1_s mul_mat q8_K slp=false"
     "iq1_m mul_mat q8_K slp=false"
     "iq1_m mul_mat f32:q8_K slp=false"
-    "iq1_s mul_mat f32:q8_K interleave=1 slp=false"
+    "iq1_s mul_mat f32:q8_K slp=false"
     "iq4_xs mul_mat q8_K interleave=1"
     "iq4_xs mul_mat f32:q8_K interleave=1"
 )
