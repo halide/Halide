@@ -856,7 +856,8 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         d.part.compute_at(blocks).reorder_storage(t, u, n, m);
         if (d.offsets) {
             // q6_K's int8 scales times the act's int16 sums, 8 lanes a step
-            // (sshll, smull; at 16 LLVM shuffles the sign extend; untimed)
+            // (sshll, smull; at 16 LLVM shuffles the sign extend: q6_K's
+            // vec_dot and one-thread gemv 5-6% slower on M3)
             d.part.split(t, to, ti, 8);
             d.part.update().split(t, to, ti, 8);
             regs(d.part, {ti}, {to, u, n, m});
