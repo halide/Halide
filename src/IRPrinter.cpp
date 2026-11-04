@@ -250,6 +250,14 @@ ostream &operator<<(ostream &stream, const Target &target) {
 
 namespace Internal {
 
+std::ostream &operator<<(std::ostream &stream, const IRHandle &ir) {
+    if (ir.defined() && ir->node_type > StrongestExprNodeType) {
+        return stream << Stmt((const BaseStmtNode *)ir.get());
+    } else {
+        return stream << Expr((const BaseExprNode *)ir.get());
+    }
+}
+
 std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
 #define CASE(e)         \
     case IRNodeType::e: \
