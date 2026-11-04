@@ -1848,6 +1848,40 @@ public:
      * of unroll you want the two-argument form. */
     Func &unroll(const VarOrRVar &var);
 
+    /** Vectorize the given Vars and RVars in every stage of this Func (the
+     * initial definition and each update definition) that has a loop over
+     * them, and leave the other stages alone. This is useful for a Func
+     * whose updates loop over only some of its pure Vars, or over RVars
+     * that the initial definition lacks. A Var or RVar that no stage loops
+     * over is ignored, so that one list of loops can be applied to Funcs
+     * whose stages differ, e.g. to the intermediates of a chain of
+     * rfactor() calls; to catch a misspelled loop, use vectorize() on each
+     * stage instead. Specializations that already exist are unaffected, as
+     * for other directives. */
+    // @{
+    Func &vectorize_all_stages(const std::vector<VarOrRVar> &vars);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>
+    vectorize_all_stages(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return vectorize_all_stages(collected_args);
+    }
+    // @}
+
+    /** Unroll the given Vars and RVars in every stage of this Func that has
+     * a loop over them. See \ref Func::vectorize_all_stages. */
+    // @{
+    Func &unroll_all_stages(const std::vector<VarOrRVar> &vars);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>
+    unroll_all_stages(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return unroll_all_stages(collected_args);
+    }
+    // @}
+
     /** Split a dimension by the given factor, then vectorize the
      * inner dimension. This is how you vectorize a loop of unknown
      * size. The variable to be vectorized should be the innermost

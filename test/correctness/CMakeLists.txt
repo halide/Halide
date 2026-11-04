@@ -630,6 +630,7 @@ tests(
     vector_shuffle.cpp
     vector_store_alignment.cpp
     vector_tile.cpp
+    vectorize_all_stages.cpp
     vectorize_dynamic.cpp
     vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp

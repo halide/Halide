@@ -227,6 +227,14 @@ void define_func(py::module_ &m) {
                 return func.eager_inline(args_to_vector<Func>(args));
             })
             .def("change_type", &Func::change_type, py::arg("type"), py::arg("unsafe") = false)
+            .def("vectorize_all_stages", (Func & (Func::*)(const std::vector<VarOrRVar> &)) & Func::vectorize_all_stages, py::arg("vars"))
+            .def("vectorize_all_stages", [](Func &func, const py::args &args) -> Func & {
+                return func.vectorize_all_stages(args_to_vector<VarOrRVar>(args));
+            })
+            .def("unroll_all_stages", (Func & (Func::*)(const std::vector<VarOrRVar> &)) & Func::unroll_all_stages, py::arg("vars"))
+            .def("unroll_all_stages", [](Func &func, const py::args &args) -> Func & {
+                return func.unroll_all_stages(args_to_vector<VarOrRVar>(args));
+            })
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
 

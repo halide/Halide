@@ -4214,6 +4214,36 @@ Func &Func::unroll(const VarOrRVar &var) {
     return *this;
 }
 
+namespace {
+
+// Call fn(stage, var) for each var and each stage of func with a loop over it.
+template<typename Fn>
+void schedule_stages_with(const Function &func, const vector<VarOrRVar> &vars, Fn &&fn) {
+    for (const VarOrRVar &var : vars) {
+        for (size_t i = 0; i <= func.updates().size(); i++) {
+            Definition def = i == 0 ? func.definition() : func.update(i - 1);
+            const vector<Dim> &dims = def.schedule().dims();
+            if (std::any_of(dims.begin(), dims.end(), [&](const Dim &d) { return var_name_match(d.var, var.name()); })) {
+                fn(Stage(func, def, i), var);
+            }
+        }
+    }
+}
+
+}  // namespace
+
+Func &Func::vectorize_all_stages(const vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    schedule_stages_with(func, vars, [](Stage s, const VarOrRVar &v) { s.vectorize(v); });
+    return *this;
+}
+
+Func &Func::unroll_all_stages(const vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    schedule_stages_with(func, vars, [](Stage s, const VarOrRVar &v) { s.unroll(v); });
+    return *this;
+}
+
 Func &Func::parallel(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).parallel(var, factor, tail);
