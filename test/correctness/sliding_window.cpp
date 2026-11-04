@@ -622,6 +622,40 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Unrolling h's y loop leaves the two copies of f's clamp sharing an
+        // IR node, but f slides differently in each copy, so loop
+        // partitioning must only drop the clamp where it's safe in both.
+        const int size = 15;
+        Param<int> lo, hi;
+        Func f, g, h, out;
+        f(x, y) = x + clamp(likely(y), lo, hi) * 32;
+        g(x, y) = f(x / 2 - 1, y / 2) + f(x / 2 + 1, y / 2);
+        h(x, y) = g(7, y / 2 - 2) + g(7, y / 2);
+        out(x, y) = h(x / 2 - 1, y / 2);
+
+        f.store_at(h, y).compute_at(g, y).unroll(y, 2, TailStrategy::GuardWithIf);
+        g.store_at(out, Var::outermost()).compute_at(h, x);
+        h.compute_at(out, Var::outermost()).unroll(y, 2, TailStrategy::GuardWithIf);
+        lo.set(0);
+        hi.set(14);
+
+        Buffer<int> im = out.realize({size, size});
+        auto div2 = [](int a) { return a >= 0 ? a / 2 : -((1 - a) / 2); };
+        auto f_ref = [](int a, int b) { return a + std::clamp(b, 0, 14) * 32; };
+        auto g_ref = [&](int a, int b) { return f_ref(div2(a) - 1, div2(b)) + f_ref(div2(a) + 1, div2(b)); };
+        auto h_ref = [&](int a, int b) { return g_ref(7, div2(b) - 2) + g_ref(7, div2(b)); };
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int correct = h_ref(div2(x) - 1, div2(y));
+                if (im(x, y) != correct) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // Bounds inference emits a .min/.max let per enclosing loop level, and
         // sliding rewrites each one with a bound valid where it sits. Here acc
         // walks rt carrying step, which slides along it. The panel feeding
