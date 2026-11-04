@@ -566,9 +566,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Scope<Interval> bounds;
         bounds.push(op->name, Interval(op->min, op->max));
 
-        Scope<Interval> steady_bounds;
-        steady_bounds.push(op->name, Interval(simplify(op->min + 1), op->max));
-
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
 
@@ -580,8 +577,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 continue;
             }
 
-            Expr min = simplify(common_subexpression_elimination(box[dim].min));
-            Expr max = simplify(common_subexpression_elimination(box[dim].max));
+            // Deliberately not CSE'd independently. Doing that gives the min
+            // and the max divergent let bindings for the same subexpression,
+            // which stops the terms they have in common from cancelling when
+            // we take their difference below.
+            Expr min = simplify(remove_likelies(box[dim].min));
+            Expr max = simplify(remove_likelies(box[dim].max));
 
             if (is_const(min) || is_const(max)) {
                 debug(3) << "\nNot considering folding " << func.name()
@@ -612,14 +613,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr loop_var = Variable::make(Int(32), op->name);
             Expr steady_state = (op->min < loop_var);
 
-            Expr min_steady = simplify(substitute(steady_state, const_true(), min), steady_bounds);
-            Expr max_steady = simplify(substitute(steady_state, const_true(), max), steady_bounds);
-            Expr min_initial = simplify(substitute(steady_state, const_false(), min), bounds);
-            Expr max_initial = simplify(substitute(steady_state, const_false(), max), bounds);
-            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), bounds);
-            Expr extent_steady = simplify(max_steady - min_steady + 1, steady_bounds);
-            Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent), bounds);
+            // Take the difference before CSE, so that the terms the two ends
+            // have in common cancel rather than being hidden behind lets.
+            Expr diff = max - min;
+            Expr extent_expr = (Max::make(substitute(steady_state, const_true(), diff),
+                                          substitute(steady_state, const_false(), diff)) +
+                                1);
+            Expr extent = simplify(common_subexpression_elimination(extent_expr), bounds);
+
+            // The simplifier can't cancel promises across the two ends of a
+            // clamped index, so also try without them, and take whichever
+            // bounds more tightly. A promise can be the only thing bounding an
+            // index.
+            Expr no_promises = remove_promises(extent_expr);
+            if (!no_promises.same_as(extent_expr)) {
+                Expr stripped =
+                    simplify(common_subexpression_elimination(no_promises), bounds);
+                Expr a = find_constant_bound(extent, Direction::Upper, bounds);
+                Expr b = find_constant_bound(stripped, Direction::Upper, bounds);
+                if (b.defined() && (!a.defined() || can_prove(b < a))) {
+                    extent = stripped;
+                }
+            }
 
             const string &arg = func.args()[dim];
             if (storage_arg_was_split(func, arg)) {
@@ -659,20 +674,35 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             bool can_fold_forwards = false, can_fold_backwards = false;
 
             if (!explicit_only) {
-                // We can't clobber data that will be read later. If
-                // async, the producer can't un-release slots in the
-                // circular buffer.
-                can_fold_forwards = (is_monotonic(min, op->name) == Monotonic::Increasing);
-                can_fold_backwards = (is_monotonic(max, op->name) == Monotonic::Decreasing);
+                // We can't clobber data that will be read later.
+                // Either end advancing is enough. The footprint always fits
+                // in extent values, so if the max advances then everything
+                // below max - extent + 1 is outside every future footprint and
+                // is dead, and if the min advances then everything below it is
+                // dead. Either way the live values occupy extent distinct
+                // residues, and the other end is free to wander backwards
+                // within the window without aliasing anything live.
+                can_fold_forwards = (is_monotonic(min, op->name) == Monotonic::Increasing) ||
+                                    (is_monotonic(max, op->name) == Monotonic::Increasing);
+                can_fold_backwards = (is_monotonic(max, op->name) == Monotonic::Decreasing) ||
+                                     (is_monotonic(min, op->name) == Monotonic::Decreasing);
                 if (func.schedule().async()) {
                     // Our semaphore acquire primitive can't take
                     // negative values, so we can't un-acquire slots
                     // in the circular buffer.
                     can_fold_forwards &= (is_monotonic(max_provided, op->name) == Monotonic::Increasing);
                     can_fold_backwards &= (is_monotonic(min_provided, op->name) == Monotonic::Decreasing);
-                    // We need to be able to analyze the required footprint to know how much to release
-                    can_fold_forwards &= min_required.defined();
-                    can_fold_backwards &= max_required.defined();
+                    // We need to be able to analyze the required footprint to
+                    // know how much to release, and the amount released each
+                    // iteration can't be negative either. Checking the ends
+                    // above isn't enough for this, because either one alone
+                    // may satisfy it. The amount acquired is derived from
+                    // max_provided alone, which is why only that end is
+                    // checked just above.
+                    can_fold_forwards &= min_required.defined() &&
+                                         is_monotonic(min_required, op->name) == Monotonic::Increasing;
+                    can_fold_backwards &= max_required.defined() &&
+                                          is_monotonic(max_required, op->name) == Monotonic::Decreasing;
                 }
             }
 
@@ -731,10 +761,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // Can't do much with this dimension
                     if (!explicit_only) {
                         debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                                 << "min_initial = " << min_initial << "\n"
-                                 << "min_steady = " << min_steady << "\n"
-                                 << "max_initial = " << max_initial << "\n"
-                                 << "max_steady = " << max_steady << "\n";
+                                 << "min = " << min << "\n"
+                                 << "max = " << max << "\n";
                     } else {
                         debug(3) << "Not folding because there is no explicit storage folding factor\n";
                     }
