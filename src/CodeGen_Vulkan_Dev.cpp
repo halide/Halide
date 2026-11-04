@@ -1203,8 +1203,12 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        if (op->type.is_uint() || (op->args[1].type().is_uint())) {
+        if (op->type.is_uint()) {
             visit_binary_op(SpvOpShiftRightLogical, op->type, op->args[0], op->args[1]);
+        } else if (op->args[1].type().is_uint()) {
+            // A signed value shifted by an unsigned amount must still
+            // replicate the sign bit.
+            visit_binary_op(SpvOpShiftRightArithmetic, op->type, op->args[0], op->args[1]);
         } else {
             Expr e = lower_signed_shift_right(op->args[0], op->args[1]);
             e.accept(this);
