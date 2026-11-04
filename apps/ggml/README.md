@@ -429,9 +429,11 @@ On f16 acts (`f16`, or `f32:f16`) its Metal schedule (`metal_gemm`,
 tiles of out, the weights decoded to f16 and the acts converted into threadgroup
 memory per 64 values of K, multiplied by the simdgroups as 8 x 8
 `simdgroup_half8x8` fragments into `simdgroup_float8x8` accumulators
-(`MemoryType::Tile`). At 16 < M < 32 one 32-row tile decodes the weights once
-(not two shifted 16-row tiles): the spec clamps the act rows past M (computed,
-never stored), and out reads the tile through a copy in threadgroup memory with
+(`MemoryType::Tile`). At M >= 256 a tile is 64 rows of the weights by 64 of the
+acts, or by 56 where that computes fewer act rows past M (M = 1159: 1176 rows,
+not 1216). At 16 < M < 32 one 32-row tile decodes the weights once (not two
+shifted 16-row tiles): the spec clamps the act rows past M (computed, never
+stored), and out reads the tile through a copy in threadgroup memory with
 predicated stores (`PredicateStores`: a guarded call would give every tile
 SkipStages flags). Other shapes run `metal_rows` in the same kernel, on a clone
 of the dot (each branch's dot is stored apart). The rounding is per value, so

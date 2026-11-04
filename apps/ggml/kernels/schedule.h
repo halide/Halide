@@ -1925,13 +1925,13 @@ inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, c
 // a bn x bm tile, its simdgroups wn x 1 sub-tiles of 8 * tn x 8 * tm, each
 // 8 x 8 an accumulator in Tile memory. Per step of K the operands are staged
 // in threadgroup memory, then loaded as 8 x 8 fragments. Tiles by M: 64 x 64
-// on blocked f16 operands, else 64 x 32 (M >= 256, N >= 64), 32 x 32, 16 x 16,
-// 16 x 8; steps of 64 values. On f16 operands at 16 < M < 32 one 32 x 32
-// tile, guarded (decoding the weights once, not in two shifted tiles): out
-// reads it from a threadgroup copy (edge; a guarded store from Tile memory
-// doesn't lower), its stores predicated (guarded calls would give every tile
-// SkipStages flags); the rows past M it computes read the last act row (the
-// algorithm clamps them).
+// on blocked f16 operands (or 64 x 56), else 64 x 32 (M >= 256, N >= 64),
+// 32 x 32, 16 x 16, 16 x 8; steps of 64 values. On f16 operands at
+// 16 < M < 32 one 32 x 32 tile, guarded (decoding the weights once, not in
+// two shifted tiles): out reads it from a threadgroup copy (edge; a guarded
+// store from Tile memory doesn't lower), its stores predicated (guarded calls
+// would give every tile SkipStages flags); the rows past M it computes read
+// the last act row (the algorithm clamps them).
 inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
     if (fmt.block % 8 && fmt.block != 1) throw std::invalid_argument("metal_mm: flat, or blocks of a multiple of 8 values");
     const int t = 8;
@@ -1945,8 +1945,10 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
         int tn, tm, wn;
         bool guard = false;
     };
-    const bool h = wh.type() == Float(16);
-    std::vector<Shape> shapes{{M > 16 && M < 32 && h, 1, 4, 4, true}, {M >= 256 && N >= 64, 2, h && fmt.block > 1 ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    const bool h = wh.type() == Float(16), hb = h && fmt.block > 1;
+    // (64 x 56 where it computes fewer rows past M than 64 x 64)
+    Expr m56 = (M + 55) / 56 * 56 < (M + 63) / 64 * 64;
+    std::vector<Shape> shapes{{M > 16 && M < 32 && h, 1, 4, 4, true}, {hb ? M >= 256 && N >= 64 && m56 : Internal::const_false(), 2, 7, 4}, {M >= 256 && N >= 64, 2, hb ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
     inline_callees(dot, {wh, xh});
@@ -2008,7 +2010,8 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
             steps(u, std::min(fmt.block, 64));
         }
         // each lane 4 values of K of a row of the step's weights or acts
-        // (blocked (j, b, i) or flat (k, i))
+        // (blocked (j, b, i) or flat (k, i)), unrolled (f32 acts on 64 x 56
+        // 0.92 -> 1.0x of GGML's)
         for (Func f : {ws, xs}) {
             std::vector<Var> a = f.args();
             Var l("l"), ln("ln"), lt("lt"), sw("sw"), jv("jv");
@@ -2020,7 +2023,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
                 l = fl;
             }
             s.split(l, l, ln, 32).split(l, lt, sw, sh.wn).reorder(jv, lt, ln, sw);
-            s.gpu_lanes(ln).gpu_threads(sw).vectorize(jv);
+            s.gpu_lanes(ln).gpu_threads(sw).vectorize(jv).unroll(lt);
         }
     }
     if (edged) edged();
