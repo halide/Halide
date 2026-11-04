@@ -58,6 +58,59 @@ int main(int argc, char *argv[]) {
         p.realize({100, 100});
     }
 
+    {
+        // Two statements share a clamp node, but bind the clamped variable
+        // differently, as happens with unrolled copies of a loop body. Each
+        // use of the clamp must be simplified according to its own binding.
+        using namespace Halide::Internal;
+        Expr y = Variable::make(Int(32), "y");
+        Expr t = Variable::make(Int(32), "t");
+        Expr lo = Variable::make(Int(32), "lo");
+        Expr hi = Variable::make(Int(32), "hi");
+        Expr clamped = max(min(likely(t), hi), lo);
+        Stmt body = Block::make(LetStmt::make("t", y, Store::make("f", clamped, 0)),
+                                LetStmt::make("t", y * y, Store::make("f", clamped, 1)));
+        Stmt s = For::make("y", 0, 100, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
+        s = partition_loops(s);
+
+        bool unclamped = false;
+        visit_with(s, [&](auto *, const Store *op) {
+            if (is_const_one(op->index) && !op->value.as<Max>()) {
+                unclamped = true;
+            }
+        });
+        if (unclamped) {
+            printf("Loop partitioning removed a clamp that was still needed:\n");
+            std::cout << s << "\n";
+            return 1;
+        }
+    }
+
+    {
+        // Where a likely predicate is false, a store does nothing and a load
+        // returns zero.
+        using namespace Halide::Internal;
+        Expr x = Variable::make(Int(32), "x");
+        Expr pred = Broadcast::make(likely(x < 50), 4);
+        Expr idx = Ramp::make(x * 4, 1, 4);
+        Expr load = Load::make(Int(32, 4), "g", idx, Buffer<>(), Parameter(), pred, ModulusRemainder(), false);
+        Stmt body = Block::make(Store::make("f", Broadcast::make(1, 4), idx, Parameter(), pred, ModulusRemainder(), false),
+                                Store::make("h", load, idx));
+        Stmt s = For::make("x", 0, 100, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
+        s = partition_loops(s);
+
+        int stores_to_f = 0, zero_stores_to_h = 0;
+        visit_with(s, [&](auto *, const Store *op) {
+            stores_to_f += op->name == "f";
+            zero_stores_to_h += op->name == "h" && is_const_zero(op->value);
+        });
+        if (stores_to_f != 1 || zero_stores_to_h != 1) {
+            printf("Loop partitioning did not simplify the epilogue:\n");
+            std::cout << s << "\n";
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

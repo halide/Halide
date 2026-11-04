@@ -33,8 +33,8 @@ class Checker : public IRMutator {
     Expr visit(const Shuffle *op) override {
         transposes += op->is_transpose().has_value();
         interleaves += op->is_interleave();
-        if (op->is_slice()) {
-            if (op->slice_stride() == 1) {
+        if (auto slice = op->is_slice()) {
+            if (slice->stride == 1) {
                 dense_slices++;
             } else {
                 strided_slices++;

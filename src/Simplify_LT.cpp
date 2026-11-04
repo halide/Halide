@@ -28,6 +28,23 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
         return const_false(lanes, info);
     }
 
+    // Or using what the facts (e.g. a loop variable's bounds) say about a - b,
+    // rounded to the values its alignment allows: x * 64 < y with y a multiple
+    // of 64 means y - x * 64 >= 64.
+    if (has_difference_facts() && no_overflow_int(ty)) {
+        ExprInfo diff;
+        diff.bounds = known_difference(a.get(), b.get());
+        if (diff.bounds.min_defined || diff.bounds.max_defined) {
+            diff.alignment = a_info.alignment - b_info.alignment;
+            diff.trim_bounds_using_alignment();
+            if (diff.bounds < 0) {
+                return const_true(lanes, info);
+            } else if (diff.bounds >= 0) {
+                return const_false(lanes, info);
+            }
+        }
+    }
+
     auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
 
     if (EVAL_IN_LAMBDA  //

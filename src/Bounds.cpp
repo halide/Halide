@@ -1919,6 +1919,11 @@ void merge_boxes(Box &a, const Box &b) {
                 } else {
                     a[i].min = Interval::make_min(a[i].min, b[i].min);
                 }
+                // Conditional unions reuse old bounds. Keep those expressions shared
+                // while simplifying, rather than repeatedly traversing an expanded tree.
+                if (a_maybe_unused || b_maybe_unused) {
+                    a[i].min = common_subexpression_elimination(a[i].min);
+                }
                 a[i].min = simplify(a[i].min);
             } else {
                 a[i].min = Interval::neg_inf();
@@ -1940,6 +1945,9 @@ void merge_boxes(Box &a, const Box &b) {
                     a[i].max = select(b.used, Interval::make_max(a[i].max, b[i].max), a[i].max);
                 } else {
                     a[i].max = Interval::make_max(a[i].max, b[i].max);
+                }
+                if (a_maybe_unused || b_maybe_unused) {
+                    a[i].max = common_subexpression_elimination(a[i].max);
                 }
                 a[i].max = simplify(a[i].max);
             } else {

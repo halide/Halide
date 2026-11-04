@@ -1270,9 +1270,15 @@ struct Shuffle : public ExprNode<Shuffle> {
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
 
-    /** Convenience constructor for making a shuffle representing a
-     * broadcast of a vector. */
+    /** Convenience constructor for making a shuffle that repeats an entire
+     * vector the given number of times. For example, with a factor of 3, ABCD
+     * becomes ABCDABCDABCD. */
     static Expr make_broadcast(Expr vector, int factor);
+
+    /** Convenience constructor for making a shuffle that repeats each lane of
+     * a vector the given number of times. For example, with a factor of 3,
+     * ABCD becomes AAABBBCCCDDD. */
+    static Expr make_repeat_each_lane(Expr vector, int factor);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
@@ -1292,12 +1298,16 @@ struct Shuffle : public ExprNode<Shuffle> {
      * row-major. Otherwise returns nullopt. */
     std::optional<int> is_transpose() const;
 
-    /** If this shuffle can be represented as a repeating pattern that
-     * repeats the same shuffle of the single input vector some number of
-     * times, returns the number of repetitions. Otherwise returns nullopt.
-     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
-     */
+    /** If this shuffle repeats an entire single vector of at least two lanes
+     * some number of times (at least two), returns the number of repeats.
+     * Otherwise returns nullopt. For example: 0, 1, 2, 0, 1, 2, 0, 1, 2. */
     std::optional<int> is_broadcast() const;
+
+    /** If this shuffle repeats each lane of a single vector of at least two
+     * lanes some number of times (at least two), returns the number of
+     * repeats. Otherwise returns nullopt. For example: 0, 0, 0, 1, 1, 1, 2, 2,
+     * 2. */
+    std::optional<int> is_repeat_each_lane() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
@@ -1307,13 +1317,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * vector arguments, and if so, the offset and stride of the
      * slice. */
     ///@{
-    bool is_slice() const;
-    int slice_begin() const {
-        return indices[0];
-    }
-    int slice_stride() const {
-        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
-    }
+    struct Slice {
+        int begin, stride;
+    };
+    std::optional<Slice> is_slice() const;
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector

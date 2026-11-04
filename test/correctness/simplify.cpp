@@ -786,11 +786,17 @@ void check_vectors() {
     check(concat_vectors({ramp(x, 2, 4), ramp(x + 8, 2, 4)}), ramp(x, 2, 8));
     check(concat_vectors({ramp(x, 3, 2), ramp(x + 6, 3, 2), ramp(x + 12, 3, 2)}), ramp(x, 3, 6));
 
+    // Self-interleaves, and transposes of broadcast and repeat_each_lane
+    check(interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)}),
+          Shuffle::make_repeat_each_lane(ramp(x, 2, 4), 2));
+    check(Shuffle::make_transpose(Shuffle::make_broadcast(ramp(x, 2, 4), 3), 4),
+          Shuffle::make_repeat_each_lane(ramp(x, 2, 4), 3));
+    check(Shuffle::make_transpose(Shuffle::make_repeat_each_lane(ramp(x, 2, 4), 3), 3),
+          Shuffle::make_broadcast(ramp(x, 2, 4), 3));
+
     // Now some ones that can't work
     {
-        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
-        check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x + 2, 2, 4)});
+        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x + 2, 2, 4)});
         check(e, e);
         e = interleave_vectors({ramp(x, 3, 4), ramp(x + 1, 3, 4)});
         check(e, e);
@@ -2755,6 +2761,24 @@ void check_facts() {
     // A fact over a division is learned multiplied out, so it orders the
     // operands as well as one spelled that way: x < y / 8 means 8 * x <= y - 8.
     check_with_assumptions(max(x * 8, y) / 8, y / 8, {x < y / 8});
+
+    // Facts settle comparisons too, as with the guard of a split by 64 in the
+    // loop over x in [0, y / 64): x < y / 64 means x * 64 + 64 <= y.
+    check_with_assumptions(x * 64 + 57 <= y, const_true(), {x < y / 64});
+    check_with_assumptions(x * 64 + 64 <= y, const_true(), {x < y / 64});
+    check_with_assumptions(y < x * 64 + 1, const_false(), {x < y / 64});
+    check_with_assumptions(x * 64 + 65 <= y, x * 64 + 65 <= y, {x < y / 64});
+
+    // The difference can only take the values its alignment allows: with y a
+    // multiple of 64, y - x * 64 >= 1 means y - x * 64 >= 64.
+    check_with_assumptions(x * 64 + 57 <= y, const_true(), {x * 64 < y, y % 64 == 0});
+    check_with_assumptions(y < x * 64 + 64, const_false(), {x * 64 < y, y % 64 == 0});
+    check_with_assumptions(x * 64 + 65 <= y, x * 64 + 65 <= y, {x * 64 < y, y % 64 == 0});
+    check_with_assumptions(x * 64 + 57 <= y, x * 64 + 57 <= y, {x * 64 < y});
+    // Remainders are Euclidean: with y % 64 == 3, y - x * 64 >= -60 means
+    // y - x * 64 >= 3, but not 4.
+    check_with_assumptions(x * 64 + 3 <= y, const_true(), {x * 64 - 60 <= y, y % 64 == 3});
+    check_with_assumptions(x * 64 + 4 <= y, x * 64 + 4 <= y, {x * 64 - 60 <= y, y % 64 == 3});
 }
 
 int main(int argc, char **argv) {
