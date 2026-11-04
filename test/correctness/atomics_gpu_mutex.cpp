@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     // On some backends, this pipeline hits an unrelated, earlier restriction
     // (e.g. lack of 64-bit integer support) before reaching the mutex-lock
     // check that this test is meant to exercise.
-    return error_test("atomics_gpu_mutex", {"The atomic update requires a mutex lock, which is not supported in ", "Metal does not support 64-bit integers", "D3D12Compute does not support atomic operations that require a mutex lock", "HLSL SM 5.1 does not support 64-bit integers", "Atomic updates are not supported inside Vulkan kernels"},
+    return error_test("atomics_gpu_mutex", {"The atomic update requires a mutex lock, which is not supported in ", "Metal does not support 64-bit integers", "D3D12Compute does not support atomic operations that require a mutex lock", "HLSL SM 5.1 does not support 64-bit integers"},
                       []() {
                           int img_size = 10000;
 
