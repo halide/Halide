@@ -22,6 +22,7 @@ tests(
     approximation_derived_ports.cpp
     approximation_parallel.cpp
     approximation_signatures.cpp
+    approximation_structure_queries.cpp
     approximation_tags.cpp
     approximation_testing.cpp
     approximation_trace.cpp

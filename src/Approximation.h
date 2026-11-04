@@ -9,6 +9,7 @@
  * call graph, and doc/Approximation.md for the design rationale.
  */
 
+#include <cstring>
 #include <functional>
 #include <initializer_list>
 #include <iosfwd>
@@ -60,10 +61,11 @@ struct ApproximationRange {
  * prescribes no vocabulary: it carries the tags through the combinators (see
  * Approximation::signature()) and through the Funcs a round trip traces (see
  * ApproximationTraceNode), so a schedule can ask for the Funcs of a component
- * by its tag (ApproximationResult::decode_funcs(tag)) rather than by their
- * types or the shapes of their definitions. A port carrying several
- * components (e.g. a record of a block's codes and scale) has all of their
- * tags. */
+ * by its tag (ApproximationResult::decode_funcs(tag), and the component as
+ * stored and as decoded: stored_components(tag), decoded_components(tag))
+ * rather than by their types or the shapes of their definitions. A port
+ * carrying several components (e.g. a record of a block's codes and scale)
+ * has all of their tags. */
 using ApproximationTags = std::set<std::string>;
 
 /** A named slot in an Approximation's interface: one Func that flows into or
@@ -307,6 +309,8 @@ class Approximation {
         virtual Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const = 0;
         virtual bool lossless() const = 0;
         virtual const Derive *derive() const = 0;
+        // The unit, if pretty_type_name<T>() of its type T is `type`.
+        virtual const void *unit_of_type(const char *type) const = 0;
     };
 
     // The shared identity of a stage: every copy of a handle points at one
@@ -616,6 +620,19 @@ public:
      * derived_ports()). */
     const Derive *as_derive() const;
 
+    /** The unit this handle wraps, if it is a T (the decayed type of the unit
+     * passed to the constructor), or null if it is not (or the handle is
+     * undefined), as std::function::target(). This lets code that finds a
+     * stage in a trace (e.g. with ApproximationResult::defining_call()) read
+     * the parameters of a unit of its own, e.g. a lookup table's size. Types
+     * are told apart by their names as the compiler spells them, so it needs
+     * no RTTI; two types of the same name (in anonymous namespaces of
+     * different translation units) are not told apart. */
+    template<typename T>
+    const T *target() const {
+        return defined() ? static_cast<const T *>(state_->impl->unit_of_type(pretty_type_name<T>())) : nullptr;
+    }
+
     /** Render this stage's structure without running anything: one line per
      * stage, `label (inputs) -> (outputs)`, where a port prints as
      * `name: type xN in [lo, hi]` (`N` being its dimensionality; unset parts
@@ -824,6 +841,11 @@ struct Approximation::Model final : Approximation::Concept {
             return nullptr;
         }
     }
+
+    const void *unit_of_type(const char *type) const override {
+        const char *own = pretty_type_name<T>();
+        return type == own || std::strcmp(type, own) == 0 ? &unit : nullptr;
+    }
 };
 
 template<typename T, typename>
@@ -975,6 +997,45 @@ struct ApproximationResult {
      * when they were traced: later rewrites (e.g. Pipeline::sever()) do not
      * change them. */
     ApproximationTags tags_of(const Func &f) const;
+
+    /** The stage call that defines `f` (matched by name): the innermost
+     * call that reports it as a port or an intermediate, i.e. the first in
+     * post-order (children before parents) in the decode trace, then in the
+     * encode trace, not counting a port that is one of the call's inputs
+     * passed through (e.g. Identity's). Null if there is none (e.g. `f` is
+     * the original Func's input). With Approximation::target(), a schedule
+     * can read the parameters of the unit behind a Func, e.g. the shape of a
+     * lookup table a unit of its own builds:
+     * \code
+     * const ApproximationTraceNode *call = result.defining_call(f);
+     * const MyTable *t = call ? call->stage.target<MyTable>() : nullptr;
+     * \endcode
+     * The pointer is into `decode_trace` or `encode_trace`. */
+    const ApproximationTraceNode *defining_call(const Func &f) const;
+
+    /** The decoded components tagged `tag`: the Funcs the decode reads them
+     * as when it combines them with other components (e.g. the decoded
+     * codes and scales a quantizer's decode multiplies). These are the
+     * inputs tagged `tag` of the innermost decode calls that have such an
+     * input but no port tagged `tag` (calls none of whose descendants do
+     * too), in trace order, each once. A component decoded from several
+     * stored fields (e.g. high and low bits) is the one Func they are
+     * combined into. Unlike decode_funcs(tag), this depends only on the
+     * trace: a Func a schedule has already scheduled (e.g. precomputed) is
+     * still one. */
+    std::vector<Func> decoded_components(const std::string &tag) const;
+
+    /** The stored components tagged `tag`: the Funcs the decode first reads
+     * them as, split out of the encoded form (e.g. a record layout's decode
+     * of one field, out of a record of the codes and the scale). These are
+     * the encoded Funcs tagged `tag` that no decode call splits (e.g. planar
+     * codes), then the ports tagged `tag` whose tags differ from those of
+     * every input of their decode call (it splits them out), of the
+     * innermost calls that have such ports, in trace order, each once. A
+     * decode that only changes a component's values keeps its tags, so
+     * comparing these with decoded_components(tag) tells whether the decode
+     * changes them, e.g. their type. */
+    std::vector<Func> stored_components(const std::string &tag) const;
 
     /** The derived ports of this round trip (see DerivedPort), and the one
      * named `name` (an error if there is none, or more than one). */

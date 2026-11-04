@@ -141,6 +141,97 @@ std::vector<Func> ApproximationResult::decode_funcs() const {
 
 namespace {
 
+bool has_name(const std::vector<Func> &fs, const std::string &name) {
+    return std::any_of(fs.begin(), fs.end(), [&](const Func &g) { return g.defined() && g.name() == name; });
+}
+
+const ApproximationTraceNode *defining_call_in(const ApproximationTraceNode &node, const std::string &name) {
+    for (const ApproximationTraceNode &child : node.children) {
+        if (const ApproximationTraceNode *found = defining_call_in(child, name)) {
+            return found;
+        }
+    }
+    if ((has_name(node.ports, name) && !has_name(node.inputs, name)) || has_name(node.intermediates, name)) {
+        return &node;
+    }
+    return nullptr;
+}
+
+// The decoded components tagged `tag` in node's subtree, appended to `out`
+// (each once); whether the subtree has a call that combines them.
+bool collect_components(const ApproximationTraceNode &node, const std::string &tag, std::vector<Func> &out) {
+    bool inner = false;
+    for (const ApproximationTraceNode &child : node.children) {
+        inner |= collect_components(child, tag, out);
+    }
+    if (inner) {
+        return true;
+    }
+    auto tagged = [&](const std::vector<ApproximationTags> &ts, size_t i) {
+        return i < ts.size() && ts[i].count(tag);
+    };
+    for (size_t i = 0; i < node.ports.size(); i++) {
+        if (tagged(node.port_tags, i)) {
+            return false;
+        }
+    }
+    bool combines = false;
+    for (size_t i = 0; i < node.inputs.size(); i++) {
+        if (tagged(node.input_tags, i) && node.inputs[i].defined()) {
+            combines = true;
+            if (!has_name(out, node.inputs[i].name())) {
+                out.push_back(node.inputs[i]);
+            }
+        }
+    }
+    return combines;
+}
+
+// The stored components tagged `tag` in node's subtree, appended to `out`
+// (each once); whether the subtree has a call that splits them out.
+bool collect_stored(const ApproximationTraceNode &node, const std::string &tag, std::vector<Func> &out) {
+    bool inner = false;
+    for (const ApproximationTraceNode &child : node.children) {
+        inner |= collect_stored(child, tag, out);
+    }
+    if (inner) {
+        return true;
+    }
+    bool splits = false;
+    for (size_t i = 0; i < node.ports.size() && i < node.port_tags.size(); i++) {
+        const ApproximationTags &t = node.port_tags[i];
+        if (!node.ports[i].defined() || !t.count(tag) ||
+            std::find(node.input_tags.begin(), node.input_tags.end(), t) != node.input_tags.end()) {
+            continue;
+        }
+        splits = true;
+        if (!has_name(out, node.ports[i].name())) {
+            out.push_back(node.ports[i]);
+        }
+    }
+    return splits;
+}
+
+// Does a call in node's subtree read `name` (with tags `tags`) and split
+// out a port tagged `tag` (one with other tags)?
+bool splits(const ApproximationTraceNode &node, const std::string &name, const ApproximationTags &tags,
+            const std::string &tag) {
+    for (const ApproximationTraceNode &child : node.children) {
+        if (splits(child, name, tags, tag)) {
+            return true;
+        }
+    }
+    if (!has_name(node.inputs, name)) {
+        return false;
+    }
+    for (const ApproximationTags &t : node.port_tags) {
+        if (t.count(tag) && t != tags) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The tags of the Funcs a trace reports, by name: the innermost stage's
 // (children first), as ports, then inputs, then intermediates.
 void collect_tags(const ApproximationTraceNode &node, std::map<std::string, ApproximationTags> &tags) {
@@ -195,6 +286,34 @@ ApproximationTags ApproximationResult::tags_of(const Func &f) const {
         }
     }
     return {};
+}
+
+const ApproximationTraceNode *ApproximationResult::defining_call(const Func &f) const {
+    if (!f.defined()) {
+        return nullptr;
+    }
+    const ApproximationTraceNode *found = defining_call_in(decode_trace, f.name());
+    return found ? found : defining_call_in(encode_trace, f.name());
+}
+
+std::vector<Func> ApproximationResult::decoded_components(const std::string &tag) const {
+    std::vector<Func> result;
+    collect_components(decode_trace, tag, result);
+    return result;
+}
+
+std::vector<Func> ApproximationResult::stored_components(const std::string &tag) const {
+    // The encoded Funcs that carry the components but that no call splits.
+    std::vector<Func> result;
+    const ApproximationTraceNode &root = decode_trace;
+    for (size_t i = 0; i < root.inputs.size() && i < root.input_tags.size(); i++) {
+        const ApproximationTags &t = root.input_tags[i];
+        if (root.inputs[i].defined() && t.count(tag) && !splits(root, root.inputs[i].name(), t, tag)) {
+            result.push_back(root.inputs[i]);
+        }
+    }
+    collect_stored(decode_trace, tag, result);
+    return result;
 }
 
 namespace {

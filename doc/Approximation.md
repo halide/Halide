@@ -415,6 +415,23 @@ dot.update().eager_inline(rest);
 FuncVec parts = dot.update().hoist_invariants({codes});
 ```
 
+A component also has its two ends: `stored_components(tag)`, the Funcs the
+decode first reads it as (split out of the encoded form: a record layout's
+fields, or the encoded Funcs themselves when planar), and
+`decoded_components(tag)`, the Funcs it is decoded to (what the decode combines
+with the other components: a quantizer's decode's inputs). Comparing the two
+tells whether the decode changes the component (e.g. its type), without matching
+definitions. And `defining_call(f)` is the trace node of the stage call that
+defines `f`; with `Approximation::target<T>()` (the unit if it is a `T`, like
+`std::function::target()`), a schedule reads the parameters of a unit of its own
+behind a Func, e.g. a lookup table's size:
+
+```cpp
+const ApproximationTraceNode *call = r.defining_call(f);
+const MyTable *t = call ? call->stage.target<MyTable>() : nullptr;
+bool small = t && t->entries * f.type().bytes() <= 16;
+```
+
 ### Signatures and validation
 
 ```cpp
