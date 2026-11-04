@@ -149,7 +149,8 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # hoist_invariants() can't prove the split exact (iq1_s's and iq1_m's delta,
 # +-1 added to 8 times a grid value, a table's, of unknown bounds), no fold.
 # row_pairs=false (mul_mat's gemv on single rows, not row pairs): q6_K's
-# gemv 1.05-1.1x on one thread (row pairs spill), 0.85-0.95x on ten; q3_K's
+# gemv 1.02-1.03x on one thread at K = 4096 (row pairs spill), even on ten
+# (retimed); q3_K's
 # gemv, with interleave=1 (as GGML's vec_dot, a row at a time: a row's block
 # 232 instructions, 149 SIMD, the bound on M3; ~260 in row pairs), 0.94-0.98x
 # of GGML's to 1.01-1.03x on one thread, 1.04-1.13x on ten. An act of `*`:
