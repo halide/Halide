@@ -651,6 +651,18 @@ int main(int argc, char **argv) {
             g.realize({16, 16});
         });
 
+    failures += !expect_user_error(
+        "cannot_slide", "can't slide there", [] {
+            Func f("f"), g("g");
+            Var x("x");
+            f(x) = x;
+            // Each value of x needs a fresh pair of values of f, so there is
+            // no window to carry from one iteration to the next.
+            g(x) = f(2 * x) + f(2 * x + 1);
+            f.store_root().compute_at(g, x).slide(g, x);
+            g.realize({16});
+        });
+
     if (failures != 0) {
         printf("%d bad schedule(s) were not rejected\n", failures);
         return 1;

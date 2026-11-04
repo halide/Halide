@@ -2780,7 +2780,10 @@ public:
      * across every loop that dimension varies over, because the window would
      * have to reach values that are no longer there. It is also an error to
      * name two dimensions that move the same dimension of this Func, because
-     * the window can only advance along that dimension once. */
+     * the window can only advance along that dimension once. Finally, it is
+     * an error if the window can't slide along the dimension at all, for
+     * example because the region of this Func required doesn't move
+     * monotonically along it. */
     Func &slide(const Func &f, const VarOrRVar &var);
 
     /** Equivalent to the version of hoist_storage that takes a Var, but

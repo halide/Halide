@@ -1308,6 +1308,11 @@ class SlidingWindow : public IRMutator {
 
                 body = slider(body);
                 const SlideDecision &decision = slider.decision;
+                user_assert(func.schedule().slide_levels().empty() || !decision.considered ||
+                            !decision.rejected)
+                    << "Func " << func.name() << " was told to slide over "
+                    << slide_level_name(func, target.is_loop() ? name : target.var)
+                    << ", but it can't slide there because " << decision.rejected << ".\n";
                 if (func.schedule().memory_type() == MemoryType::Register &&
                     decision.slid() && decision.old_bounds.has_lower_bound()) {
                     body = slider.translate_loop(body);
