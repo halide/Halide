@@ -51,13 +51,13 @@ void check_simple_unions() {
         for (int f = 0; f < 2; ++f) {
             for (int o = 0; o < 2; ++o) {
                 std::map<std::string, Expr> values{{"flag", cast<bool>(f)}, {"other", cast<bool>(o)}};
-                bool au = !a.used.defined() || evaluate(a.used, values);
-                bool bu = !b.used.defined() || evaluate(b.used, values);
+                bool a_used = !a.used.defined() || evaluate(a.used, values);
+                bool b_used = !b.used.defined() || evaluate(b.used, values);
                 bool used = !merged.used.defined() || evaluate(merged.used, values);
-                require(used == (au || bu), "Wrong union used predicate");
+                require(used == (a_used || b_used), "Wrong union used predicate");
                 if (!used) continue;
-                require(evaluate(merged[0].min, values) == (au ? -7 : 1), "Wrong union minimum");
-                require(evaluate(merged[0].max, values) == (bu ? 13 : 3), "Wrong union maximum");
+                require(evaluate(merged[0].min, values) == (a_used ? -7 : 1), "Wrong union minimum");
+                require(evaluate(merged[0].max, values) == (b_used ? 13 : 3), "Wrong union maximum");
             }
         }
         Box empty;
