@@ -69,6 +69,7 @@ tests(
     bounds_inference_chunk.cpp
     bounds_inference_complex.cpp
     bounds_inference_outer_split.cpp
+    bounds_inference_specialized_spans.cpp
     bounds_internal.cpp
     bounds_of_abs.cpp
     bounds_of_cast.cpp
@@ -80,6 +81,7 @@ tests(
     bounds_of_split.cpp
     bounds_query.cpp
     bounds_query_respects_specialize_fail.cpp
+    bounds_tracker.cpp
     broken_promise.cpp
     buffer_larger_than_two_gigs.cpp
     buffer_t.cpp
@@ -120,6 +122,7 @@ tests(
     compute_with_inlined.cpp
     computed_index.cpp
     concat.cpp
+    conditional_box_merge.cpp
     constant_expr.cpp
     constant_interval.cpp
     constant_type.cpp
@@ -276,6 +279,7 @@ tests(
     gpu_register_stored_by_one_thread.cpp
     gpu_register_stored_by_one_warp.cpp
     gpu_reuse_shared_memory.cpp
+    gpu_shared_vector_codegen.cpp
     gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp
     gpu_struct_type.cpp
@@ -449,6 +453,7 @@ tests(
     reduction_type_mismatch.cpp
     register_shuffle.cpp
     reorder_storage.cpp
+    repeat_each_element.cpp
     require.cpp
     require_fail.cpp
     reschedule.cpp
@@ -496,6 +501,7 @@ tests(
     sort_exprs.cpp
     specialize.cpp
     specialize_fail.cpp
+    specialize_split_rvar_guard.cpp
     specialize_stride_lowering.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
@@ -506,6 +512,7 @@ tests(
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp
     split_predicate.cpp
+    split_predicate_stores_compute_at.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
     split_storage.cpp
@@ -624,6 +631,12 @@ tests(
     wrong_type.cpp
     x86_cpu_detect.cpp
     # keep-sorted end
+)
+
+set_tests_properties(
+    correctness_conditional_box_merge correctness_bounds_inference_specialized_spans
+    PROPERTIES
+    TIMEOUT 60
 )
 
 # These test the host CPU detection logic that libHalide shares with the
