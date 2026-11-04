@@ -884,6 +884,7 @@ class SlidingWindow : public IRMutator {
     // outermost.
     list<Function> sliding;
     Scope<Interval> bounds_scope;
+    Scope<Expr> let_values;
 
     using IRMutator::visit;
 
@@ -895,6 +896,8 @@ class SlidingWindow : public IRMutator {
         Interval b = is_constant ? Interval::single_point(simplify(op->value)) :
                                    bounds_of_expr_in_scope(op->value, bounds_scope);
         ScopedBinding<Interval> bind(bounds_scope, op->name, b);
+        ScopedBinding<Expr> bind_value(let_values, op->name,
+                                       simplify(expand_expr(op->value, let_values)));
         return IRMutator::visit(op);
     }
 
@@ -978,7 +981,16 @@ class SlidingWindow : public IRMutator {
         string orig_loop_min_name = op->name + ".loop_min.orig";
         Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
-        for (const Function &func : consumers_first(sliding)) {
+        // Slide inner loops first. A func slid over an inner loop requires less
+        // of its producers on later iterations, and a producer sliding over
+        // this loop has to know that, or it assumes previous iterations
+        // computed more than they did.
+        body = mutate(body);
+
+        // Nothing slides over a loop with a single iteration, and claiming the
+        // dimension here would stop an enclosing loop sliding over it.
+        bool one_iteration = is_const_zero(simplify(expand_expr(loop_max - loop_min, let_values)));
+        for (const Function &func : consumers_first(one_iteration ? list<Function>{} : sliding)) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
             // Figure out the first iteration at which this func is consumed.
@@ -1051,8 +1063,6 @@ class SlidingWindow : public IRMutator {
             // extra iterations aren't there to warm up must be skipped over.
             body = InjectWarmupGuards(warming_up, name, orig_loop_min, deps)(body);
         }
-
-        body = mutate(body);
 
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_max.same_as(op->max) && name == op->name) {
             return op;
