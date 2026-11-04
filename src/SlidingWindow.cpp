@@ -1092,6 +1092,7 @@ class SlidingWindow : public IRMutator {
     // through other lets.
     Scope<set<string>> let_loops;
     Scope<Interval> bounds_scope;
+    Scope<Expr> let_values;
 
     using IRMutator::visit;
 
@@ -1160,6 +1161,8 @@ class SlidingWindow : public IRMutator {
                                    bounds_of_expr_in_scope(op->value, bounds_scope);
         ScopedBinding<Interval> bind(bounds_scope, op->name, b);
         ScopedBinding<set<string>> bind_loops(let_loops, op->name, loops_used(op->value));
+        ScopedBinding<Expr> bind_value(let_values, op->name,
+                                       simplify(expand_expr(op->value, let_values)));
         return IRMutator::visit(op);
     }
 
@@ -1249,7 +1252,23 @@ class SlidingWindow : public IRMutator {
         string orig_loop_min_name = op->name + ".loop_min.orig";
         Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
-        for (const Function &func : consumers_first(sliding)) {
+        // Slide inner loops first. A func slid over an inner loop requires less
+        // of its producers on later iterations, and a producer sliding over
+        // this loop has to know that, or it assumes previous iterations
+        // computed more than they did.
+        {
+            Interval lo = bounds_of_expr_in_scope(loop_min, bounds_scope);
+            Interval hi = bounds_of_expr_in_scope(loop_max, bounds_scope);
+            ScopedBinding<Interval> bind(bounds_scope, name, Interval(lo.min, hi.max));
+            loop_stack.push_back(name);
+            body = mutate(body);
+            loop_stack.pop_back();
+        }
+
+        // Nothing slides over a loop with a single iteration, and claiming the
+        // dimension here would stop an enclosing loop sliding over it.
+        bool one_iteration = is_const_zero(simplify(expand_expr(loop_max - loop_min, let_values)));
+        for (const Function &func : consumers_first(one_iteration ? list<Function>{} : sliding)) {
             // Rewinding the loop renames it, so find the targets afresh each
             // time.
             for (size_t k = 0;; k++) {
@@ -1350,15 +1369,6 @@ class SlidingWindow : public IRMutator {
             // extra iterations aren't there to warm up must be skipped over.
             body = InjectWarmupGuards(warming_up, name, orig_loop_min, deps,
                                       rewound_for_loop_only)(body);
-        }
-
-        {
-            Interval lo = bounds_of_expr_in_scope(loop_min, bounds_scope);
-            Interval hi = bounds_of_expr_in_scope(loop_max, bounds_scope);
-            ScopedBinding<Interval> bind(bounds_scope, name, Interval(lo.min, hi.max));
-            loop_stack.push_back(name);
-            body = mutate(body);
-            loop_stack.pop_back();
         }
 
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_max.same_as(op->max) && name == op->name) {

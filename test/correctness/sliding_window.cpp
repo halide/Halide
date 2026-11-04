@@ -591,6 +591,37 @@ int main(int argc, char **argv) {
     }
 
     {
+        // f slides down over yi. The region required of f by h doesn't depend
+        // on x, so h slides over x, computing everything on the first x
+        // iteration. On later x iterations f is then only required by g, so
+        // f's window over yi has to be worked out from that smaller region,
+        // or rows that g needs are never computed.
+        const int size = 15;
+        Var yo, yi;
+        Func f, g, h, out;
+        f(x, y) = x + y * 32;
+        g(x, y) = f(x / 2 - 2, y / 2);
+        h(x, y) = f(2 * x, 2 * y);
+        out(x, y) = h(7, (14 - y) / 2) + g(2 * (14 - x), 2 * (14 - y));
+
+        out.split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+        f.store_at(out, yo).compute_at(out, x);
+        g.store_at(out, yi).compute_at(out, x);
+        h.store_at(out, yi).compute_at(out, x);
+
+        Buffer<int> im = out.realize({size, size});
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int correct = (14 + ((14 - y) / 2) * 64) + ((12 - x) + (14 - y) * 32);
+                if (im(x, y) != correct) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // Bounds inference emits a .min/.max let per enclosing loop level, and
         // sliding rewrites each one with a bound valid where it sits. Here acc
         // walks rt carrying step, which slides along it. The panel feeding
