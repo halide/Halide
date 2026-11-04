@@ -2283,13 +2283,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (fmt.act_block == 1) s.vectorize(b, fv, TailStrategy::GuardWithIf);
     }
     if (fmt.block == 1) {
-        // Float weights: 4 x 2 tiles, row pairs, single rows; gemv in single
-        // rows (row pairs: 0.65x GGML at K = 14336).
+        // Float weights: 4 x 2 tiles, else single rows (row pairs: gemv 0.65x
+        // GGML's at K = 14336; N < 4's gemm 1.2-2.4x slower).
         if (whole || fmt.rows > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
-        Tiles fg{4, 2, 1, 32, 32, true}, fp{2, 1, 2, 16}, fr{1, 1, 8, 16};
+        Tiles fg{4, 2, 1, 32, 32, true}, fr{1, 1, 8, 16};
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
         if (acc.defined()) fg = {2, 2, 1, 32, 32, true};
-        for (auto [c, ts] : Chain{{N >= fg.nt && M >= fg.mt, fg}, {N >= fp.nt && M > 1, fp}, {Expr(), fr}}) {
+        for (auto [c, ts] : Chain{{N >= fg.nt && M >= fg.mt, fg}, {Expr(), fr}}) {
             acc.defined() ? flat_tree(out, 0, dots[0], c, ts, r, acc, staged) : flat(out, 0, dots[0], c, ts, r, t);
         }
         return;
