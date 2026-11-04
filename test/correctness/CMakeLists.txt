@@ -528,6 +528,7 @@ tests(
     specialize_stride_lowering.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
+    specialize_undefined_condition.cpp
     spirv_ir.cpp
     split_by_non_factor.cpp
     split_factor_type.cpp

@@ -2818,6 +2818,9 @@ protected:
 }  // namespace Internal
 
 Stage Stage::specialize(const Expr &condition) {
+    if (!condition.defined()) {
+        return *this;
+    }
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
     definition.schedule().touched() = true;

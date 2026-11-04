@@ -2274,6 +2274,14 @@ public:
      \endcode
      * When cond is true, this is equivalent to g.compute_at(f,y).
      * When it is false, this is equivalent to g.compute_at(f,x).
+     *
+     * An undefined condition adds no specialization: specialize(Expr())
+     * returns a handle to the schedule it was called on, so a schedule that
+     * is specialized only in some configurations can be written once:
+     \code
+     Expr cond = tiled ? width >= 64 : Expr();
+     f.specialize(cond).vectorize(x, 8);  // Vectorizes f itself if !tiled.
+     \endcode
      */
     Stage specialize(const Expr &condition);
 
