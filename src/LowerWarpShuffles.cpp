@@ -600,6 +600,8 @@ public:
     }
 };
 
+bool has_lane_loop(const Stmt &s);
+
 // Remove the Free of an allocation that is being moved elsewhere.
 class RemoveFree : public IRMutator {
     using IRMutator::visit;
@@ -718,14 +720,7 @@ class LowerWarpShuffles : public IRMutator {
 
             // Mutate the body once more to apply the same transformation to any inner loops
             body = mutate(body);
-
-            // Rewrap any hoisted allocations that weren't placed outside some inner loop
-            for (const Stmt &s : allocations) {
-                const Allocate *alloc = s.as<Allocate>();
-                body = alloc->with(alloc->extents, alloc->condition,
-                                   Block::make(body, Free::make(alloc->name)));
-            }
-            allocations.clear();
+            internal_assert(allocations.empty());
 
             return op->with(op->min, op->min + warp_size - 1, body);
         } else {
@@ -883,12 +878,16 @@ class LowerWarpShuffles : public IRMutator {
         if (this_lane.defined() ||
             is_gpu_shared(op->memory_type) ||
             op->memory_type == MemoryType::Heap ||
-            op->memory_type == MemoryType::Tile) {
+            op->memory_type == MemoryType::Tile ||
+            !has_lane_loop(op->body)) {
             // Not an allocation for us to stripe. Warp-level storage is
             // per-lane register storage; shared and heap (global) memory are
             // never striped across lanes, and tensor core accumulators are
             // already striped across lanes in a layout that only the wmma
-            // instructions understand.
+            // instructions understand. An allocation with no loop over lanes
+            // inside it (e.g. one inside a serial loop within the loop over
+            // lanes) stays where it is: its condition and extents may refer
+            // to the variables of the loops around it.
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.

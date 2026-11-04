@@ -269,6 +269,7 @@ tests(
     gpu_free_sync.cpp
     gpu_give_input_buffers_device_allocations.cpp
     gpu_jit_explicit_copy_to_device.cpp
+    gpu_lanes_conditional_allocation.cpp
     gpu_lanes_reduction.cpp
     gpu_lanes_reduction_codegen.cpp
     gpu_large_alloc.cpp
