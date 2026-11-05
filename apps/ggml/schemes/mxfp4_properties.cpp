@@ -32,10 +32,10 @@ int main() {
     }
 
     int failures = 0;
-    Approximation q = ggml::MXFP4Quant{};  // held: its bound checked at it
-    Approximation a = Compose{BlockReshape{ggml::QK}, q,
-                              Parallel{{"codes", ggml::e2m1_codes()}, {"scale", ggml::e8m0_half()}},
-                              Parallel{{"codes", PlanarFieldPack{4, ggml::QK / 2}}}};
+    // the formats' stages before their layouts; their quantizers held: their
+    // bounds checked at them
+    std::vector<Approximation> mx = ggml::pre_layout(ggml::mxfp4("aos")), nvs = ggml::pre_layout(ggml::nvfp4("aos"));
+    Approximation q = mx[1], a = Compose{mx};
     for (const auto &[name, dist] : dists) {
         for (const Property &p : {within_declared_bound().at(q), outputs_within_declared_ranges(), idempotent_requantize(0), closed()}) {
             PropertyResult r = check_property(a, p, dist, Float(32), {ggml::QK * blocks}, trials, 1);
@@ -45,9 +45,7 @@ int main() {
     }
 
     const int n = ggml::NVFP4Quant::n, block = ggml::NVFP4Quant::block;
-    Approximation nq = ggml::NVFP4Quant{};
-    Approximation nv = Compose{BlockReshape{block}, nq, Parallel{{"codes", ggml::e2m1_codes()}, {"scales", ggml::ue4m3_half()}},
-                               Parallel{{"codes", Compose{BlockReshape{n}, PlanarFieldPack{4, n / 2}, ggml::Unblock{n / 2}}}}};
+    Approximation nq = nvs[1], nv = Compose{nvs};
     std::vector<std::pair<std::string, Distribution>> nvd = dists;
     nvd.emplace_back("mixed per 16", Distribution::mixture(parts, n));
     nvd.emplace_back("binades per 16", Distribution::mixture({Distribution::normal(0, 1e-3), Distribution::normal(0, 1), Distribution::normal(0, 3e2), Distribution::normal(0, 3e-3)}, n));

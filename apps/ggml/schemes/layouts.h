@@ -89,4 +89,23 @@ inline Approximation layout(const std::string &spec, std::vector<StructField> fi
     return Compose{il, StructLayout{il.record(), logical}};
 }
 
+// A format's stages before its layout (its last stage), nested Composes
+// flattened: the stack whose properties the property tests check (stage 1
+// its quantizer, after the BlockReshape), so that they follow the format.
+inline std::vector<Approximation> pre_layout(const Approximation &format) {
+    std::vector<Approximation> out;
+    std::function<void(const Approximation &)> add = [&](const Approximation &a) {
+        if (const Compose *c = a.target<Compose>()) {
+            for (const Approximation &s : c->stages) {
+                add(s);
+            }
+        } else {
+            out.push_back(a);
+        }
+    };
+    const std::vector<Approximation> &top = format.target<Compose>()->stages;
+    std::for_each(top.begin(), top.end() - 1, add);
+    return out;
+}
+
 }  // namespace ggml

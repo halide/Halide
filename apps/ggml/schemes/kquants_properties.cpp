@@ -37,17 +37,15 @@ int main() {
         {"mixed per 256", Distribution::mixture(parts, ggml::QK_K)},
     };
 
-    // held: their bounds checked at them
-    Approximation q8 = ggml::Q8KQuant{}, q4 = ggml::q4_K_quant(), q6 = ggml::Q6KQuant{};
-    Approximation q5 = ggml::q5_K_quant(), q2 = ggml::q2_K_quant(), q3 = ggml::Q3KQuant{};
-    const std::vector<std::tuple<std::string, Approximation, Approximation>> schemes = {
-        {"q8_K", q8, Compose{BlockReshape{ggml::QK_K}, q8, Derive{"bsums", {"codes"}, ggml::partial_sums(16)}, ggml::layout("aos", {{"d", Float(32)}, {"qs", Int(8), ggml::QK_K}, {"bsums", Int(16), ggml::QK_K / 16}}, {"qs", "d", "bsums"})}},
-        {"q4_K", q4, Compose{BlockReshape{ggml::QK_K}, q4, Parallel{{"codes", ggml::unsigned_codes(4)}}, Parallel{{"codes", ggml::q4_K_nibbles()}, {"scales", ggml::KScales{}}, {"scale", ggml::fp16()}, {"min", ggml::fp16()}}}},
-        {"q6_K", q6, Compose{BlockReshape{ggml::QK_K}, q6, Parallel{{"codes", ggml::SumSplit{4}}}, Parallel{{"low", Compose{BlockReshape{128}, PlanarFieldPack{4, 64}, ggml::Unblock{64}}}, {"high", Compose{ggml::multiples(4, -32, 4), BlockReshape{128}, PlanarFieldPack{2, 32}, ggml::Unblock{32}}}, {"scale", ggml::fp16()}}}},
-        {"q5_K", q5, Compose{BlockReshape{ggml::QK_K}, q5, Parallel{{"codes", ggml::SumSplit{4}}}, Parallel{{"low", ggml::q4_K_nibbles()}, {"high", Compose{ggml::multiples(4, 0, 2), PlanarFieldPack{1, 32}}}, {"scales", ggml::KScales{}}, {"scale", ggml::fp16()}, {"min", ggml::fp16()}}}},
-        {"q2_K", q2, Compose{BlockReshape{ggml::QK_K}, q2, Parallel{{"codes", ggml::unsigned_codes(2)}}, Parallel{{"codes", ggml::two_bit_planes()}, {"scales", PlanarFieldPack{4, 16}}, {"scale", ggml::fp16()}, {"min", ggml::fp16()}}}},
-        {"q3_K", q3, Compose{BlockReshape{ggml::QK_K}, q3, Parallel{{"codes", ggml::SumSplit{2}}}, Parallel{{"low", ggml::two_bit_planes()}, {"high", Compose{ggml::multiples(2, -4, 2), PlanarFieldPack{1, 32}}}}, Parallel{{"scales", Compose{ggml::SumSplit{4}, Parallel{{"low", PlanarFieldPack{4, 8}}, {"high", Compose{ggml::multiples(4, -32, 4), PlanarFieldPack{2, 4}}}}}}, {"scale", ggml::fp16()}}}},
-    };
+    // each format's stages before its layout (q8_K's with it), and its
+    // quantizer, held: their bounds checked at it
+    std::vector<std::tuple<std::string, Approximation, Approximation>> schemes;
+    Approximation q8 = ggml::Q8KQuant{};
+    schemes.emplace_back("q8_K", q8, Compose{BlockReshape{ggml::QK_K}, q8, Derive{"bsums", {"codes"}, ggml::partial_sums(16)}, ggml::layout("aos", {{"d", Float(32)}, {"qs", Int(8), ggml::QK_K}, {"bsums", Int(16), ggml::QK_K / 16}}, {"qs", "d", "bsums"})});
+    for (const auto &[name, format] : {std::pair{"q4_K", ggml::q4_K("aos")}, {"q6_K", ggml::q6_K("aos")}, {"q5_K", ggml::q5_K("aos")}, {"q2_K", ggml::q2_K("aos")}, {"q3_K", ggml::q3_K("aos")}}) {
+        std::vector<Approximation> stages = ggml::pre_layout(format);
+        schemes.emplace_back(name, stages[1], Compose{stages});
+    }
     int failures = 0;
     for (const auto &[scheme, q, a] : schemes) {
         for (const auto &[name, dist] : dists) {

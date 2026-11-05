@@ -33,12 +33,13 @@ int main() {
         {"mixed per 256", Distribution::mixture(parts, ggml::QK_K)},
     };
 
-    // held: their bounds checked at them
-    Approximation nl = ggml::IQ4Quant{ggml::QK}, xs = ggml::IQ4Quant{ggml::QK_K};
-    const std::vector<std::tuple<std::string, Approximation, Approximation>> schemes = {
-        {"iq4_nl", nl, Compose{BlockReshape{ggml::QK}, nl, Parallel{{"codes", ggml::iq4nl_codes()}, {"scale", ggml::fp16()}}, Parallel{{"codes", PlanarFieldPack{4, ggml::QK / 2}}}}},
-        {"iq4_xs", xs, Compose{BlockReshape{ggml::QK_K}, xs, Parallel{{"codes", ggml::iq4nl_codes()}}, Parallel{{"codes", Compose{BlockReshape{ggml::QK}, PlanarFieldPack{4, ggml::QK / 2}, ggml::Unblock{ggml::QK / 2}}}, {"scales", Compose{ggml::SumSplit{4}, Parallel{{"low", ggml::BitPack{4}}, {"high", Compose{ggml::multiples(4, -32, 4), ggml::BitPack{2}}}}}}, {"scale", ggml::fp16()}}}},
-    };
+    // each format's stages before its layout, and its quantizer, held: its
+    // bound checked at it
+    std::vector<std::tuple<std::string, Approximation, Approximation>> schemes;
+    for (const auto &[name, format] : {std::pair{"iq4_nl", ggml::iq4_nl("aos")}, {"iq4_xs", ggml::iq4_xs("aos")}}) {
+        std::vector<Approximation> stages = ggml::pre_layout(format);
+        schemes.emplace_back(name, stages[1], Compose{stages});
+    }
     int failures = 0;
     for (const auto &[scheme, q, a] : schemes) {
         for (const auto &[name, dist] : dists) {
