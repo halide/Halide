@@ -986,6 +986,24 @@ struct ApproximationResult {
      * each. */
     std::vector<Func> decode_funcs(const std::string &tag) const;
 
+    /** The encode side's Funcs, the counterpart of decode_funcs(): `encoded`,
+     * then every Func the encode computes them from, short of the original
+     * Func (the encode trace root's intermediates), without duplicates. These
+     * are the Funcs to schedule to compute the encoded form, e.g. at each of
+     * its blocks:
+     * \code
+     * Func e = result.encoded[0];
+     * for (Func f : result.encode_funcs()) {
+     *     if (f.name() != e.name()) {
+     *         f.compute_at(e, e.args().back());
+     *     }
+     * }
+     * \endcode
+     * Unlike decode_funcs(), none is left out for its schedule. Like
+     * `intermediates`, it may include Funcs the units referenced from
+     * outside. */
+    std::vector<Func> encode_funcs() const;
+
     /** Does this round trip have `f` (matched by name): is it a port, input
      * or intermediate of a stage in the decode or the encode trace? */
     bool owns(const Func &f) const;

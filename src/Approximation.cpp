@@ -139,6 +139,25 @@ std::vector<Func> ApproximationResult::decode_funcs() const {
     return result;
 }
 
+std::vector<Func> ApproximationResult::encode_funcs() const {
+    std::vector<Func> result;
+    std::set<std::string> seen;
+    for (const Func &f : encode_trace.inputs) {
+        seen.insert(f.name());
+    }
+    if (replacement.defined()) {
+        seen.insert(replacement.name());
+    }
+    for (const std::vector<Func> *fs : {&encoded, &encode_trace.intermediates}) {
+        for (const Func &f : *fs) {
+            if (f.defined() && seen.insert(f.name()).second) {
+                result.push_back(f);
+            }
+        }
+    }
+    return result;
+}
+
 namespace {
 
 bool has_name(const std::vector<Func> &fs, const std::string &name) {

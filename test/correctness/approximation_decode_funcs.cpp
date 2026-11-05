@@ -233,10 +233,68 @@ int test_skips_scheduled_funcs() {
     return 0;
 }
 
+// encode_funcs() is the encode side: `encoded` and what they are computed
+// from, short of the original Func, ready to schedule at the encoded blocks.
+int test_encode_funcs() {
+    Var k("k");
+    Func w("w"), a("a"), dot("dot");
+    w(k) = weight(k);
+    a(k) = activation(k);
+    RDom r(0, K, "r");
+    dot() = 0.0f;
+    dot() += w(r) * a(r);
+    ApproximationResult approx = w.approximate_by(make_scheme(), {dot});
+
+    std::vector<Func> funcs = approx.encode_funcs();
+    std::set<std::string> names = names_of(funcs);
+    CHECK(names.size() == funcs.size());
+    std::set<std::string> encode_side = names_of(approx.encoded);
+    for (const Func &f : approx.encode_trace.intermediates) {
+        encode_side.insert(f.name());
+    }
+    CHECK(names == encode_side);
+    auto has = [&](const std::string &prefix) {
+        for (const std::string &n : names) {
+            if (n.rfind(prefix + "$", 0) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(has("bq_amax") && has("bq_codes") && has("bq_scale"));
+    CHECK(!names.count(w.name()) && !names.count(approx.replacement.name()));
+    for (const Func &f : approx.decode_funcs()) {
+        CHECK(!names.count(f.name()));
+    }
+    // With the decode side's, the result's intermediates.
+    std::set<std::string> all = names;
+    for (const Func &f : approx.decode_trace.intermediates) {
+        all.insert(f.name());
+    }
+    CHECK(all == names_of(approx.intermediates));
+
+    // Each computed root, the dot is unchanged.
+    float reference = run_dot([](const ApproximationResult &approx, Func, const RDom &) {
+        for (Func f : approx.intermediates) {
+            if (f.has_update_definition() || approx.is_stage_port(f)) {
+                f.compute_root();
+            }
+        }
+    });
+    float scheduled = run_dot([](const ApproximationResult &approx, Func, const RDom &) {
+        for (Func f : approx.encode_funcs()) {
+            f.compute_root();
+        }
+    });
+    CHECK(reference == scheduled);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (test_folds_decode_chain() || test_correct_with_rfactor() || test_skips_scheduled_funcs()) {
+    if (test_folds_decode_chain() || test_correct_with_rfactor() || test_skips_scheduled_funcs() ||
+        test_encode_funcs()) {
         return 1;
     }
     printf("Success!\n");
