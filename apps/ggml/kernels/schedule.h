@@ -1338,16 +1338,10 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo), t, index_words);
 }
 
-// The Funcs of e's encoder: the intermediates of the result that encodes e,
-// minus its decode Funcs.
+// The Funcs of e's encoder: those of the result that encodes e.
 inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> dec;
     for (const ApproximationResult &res : rs) {
-        std::vector<Func> d = res.decode_funcs();
-        dec.insert(dec.end(), d.begin(), d.end());
-    }
-    for (const ApproximationResult &res : rs) {
-        if (res.encoded[0].name() == e.name()) return without(res.intermediates, dec);
+        if (res.encoded[0].name() == e.name()) return res.encode_funcs();
     }
     return {};
 }
