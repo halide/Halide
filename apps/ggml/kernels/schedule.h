@@ -1716,9 +1716,11 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
         bool guard = false;
     };
     const bool h = wh.type() == Float(16), hb = h && fmt.block > 1;
-    // (64 x 56 where it computes fewer rows past M than 64 x 64)
+    // (64 x 56 where it computes fewer rows past M than 64 x 64). The guarded
+    // tile only on f16 operands, 64 x 56 on blocked ones.
     Expr m56 = (M + 55) / 56 * 56 < (M + 63) / 64 * 64;
-    std::vector<Shape> shapes{{M > 16 && M < 32 && h, 1, 4, 4, true}, {hb ? M >= 256 && N >= 64 && m56 : Internal::const_false(), 2, 7, 4}, {M >= 256 && N >= 64, 2, hb ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    std::vector<Shape> shapes{{M > 16 && M < 32, 1, 4, 4, true}, {M >= 256 && N >= 64 && m56, 2, 7, 4}, {M >= 256 && N >= 64, 2, hb ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    shapes.erase(shapes.begin() + h + hb, shapes.begin() + 2);
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
     dot.update().eager_inline_all({wh, xh});
@@ -1735,7 +1737,6 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
     Stage sd = Stage(dot), su = dot.update();
     std::function<void()> edged;
     for (const Shape &sh : shapes) {
-        if (sh.cond.defined() && Internal::is_const_zero(sh.cond)) continue;
         const int bn = t * sh.tn * sh.wn, bm = t * sh.tm;
         auto tile = [&](Stage st) {
             if (sh.guard) st.tile({n, m}, {nw, mw}, {ni, mi}, {t * sh.tn, t * sh.tm}, {TailStrategy::Auto, TailStrategy::RoundUp});
