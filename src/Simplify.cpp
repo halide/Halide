@@ -718,27 +718,6 @@ Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
 
 namespace {
 
-// Intersect acc with d, reporting whether the result would be empty rather than
-// constructing it. make_intersection asserts on an empty result, and empty means
-// the facts contradict each other, which means this code is unreachable. We
-// don't try to exploit that here; we just decline to tighten any further.
-bool intersect_if_nonempty(ConstantInterval &acc, const ConstantInterval &d) {
-    ConstantInterval result = acc;
-    if (d.min_defined && (!result.min_defined || d.min > result.min)) {
-        result.min = d.min;
-        result.min_defined = true;
-    }
-    if (d.max_defined && (!result.max_defined || d.max < result.max)) {
-        result.max = d.max;
-        result.max_defined = true;
-    }
-    if (result.min_defined && result.max_defined && result.min > result.max) {
-        return false;
-    }
-    acc = result;
-    return true;
-}
-
 // What the shape of the two sides says about (a - b) on its own, with no facts
 // involved: a min is at most either of its operands, and a max is at least
 // either of them. Only the immediate operands are inspected, so this stays a
@@ -815,7 +794,7 @@ ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_
     } else if (coeff_a == 1 && coeff_b == 1) {
         // The structural heuristic is about (a - b) alone; it doesn't
         // generalize to a scaled combination.
-        intersect_if_nonempty(result, structural_difference(a, b));
+        result.intersect_if_nonempty(structural_difference(a, b));
     }
 
     if (!result.is_single_point() && !known_bounds.empty()) {
@@ -865,7 +844,7 @@ ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_
                     if (num_holes < max_holes) {
                         holes[num_holes++] = d.min;
                     }
-                } else if (!intersect_if_nonempty(result, d)) {
+                } else if (!result.intersect_if_nonempty(d)) {
                     break;
                 }
             }
