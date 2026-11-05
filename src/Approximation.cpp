@@ -1892,39 +1892,117 @@ const StructField &StructLayout::physical_field(const std::string &name) const {
     return record_type_.struct_type()->fields[0];
 }
 
-std::vector<Func> PlanarFieldPack::encode(const std::vector<Func> &inputs) const {
-    user_assert(inputs.size() == 1 && inputs[0].dimensions() >= 2)
-        << "PlanarFieldPack::encode requires (element, record, ...)\n";
-    const Func &fields = inputs[0];
-    Var position("position"), record("record");
-    std::vector<Var> rest = batch_vars(fields.dimensions() - 2);
-    std::vector<Expr> args = {position, record};
-    args.insert(args.end(), rest.begin(), rest.end());
-    RDom plane(0, planes_, "plane");
-    std::vector<Expr> field_args = args;
-    field_args[0] = plane * positions_ + position;
-    Expr value = cast<uint8_t>(fields(field_args)) & ((1 << field_bits_) - 1);
-    Func bytes("planar_field_bytes");
-    bytes(args) = cast<uint8_t>(0);
-    bytes(args) = bytes(args) | cast<uint8_t>(value << (plane * field_bits_));
-    return {bytes};
+namespace {
+
+using Internal::make_const;
+using Internal::make_zero;
+
+uint64_t low_bits_mask(int bits) {
+    return bits >= 64 ? ~(uint64_t)0 : ((uint64_t)1 << bits) - 1;
 }
 
-std::vector<Func> PlanarFieldPack::decode(const std::vector<Func> &encoded) const {
-    user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
+}  // namespace
+
+BitFields::BitFields(Type word, std::vector<Field> fields)
+    : word_(word), fields_(std::move(fields)) {
+    user_assert(word_.is_uint() && word_.is_scalar() && word_.bits() <= 64)
+        << "BitFields words must be scalar unsigned integers of at most 64 bits, but got " << word_ << "\n";
+    user_assert(!fields_.empty()) << "BitFields requires at least one field\n";
+    std::vector<int> owner(word_.bits(), -1);
+    for (size_t i = 0; i < fields_.size(); i++) {
+        const Field &f = fields_[i];
+        user_assert(f.bits > 0 && f.count > 0 && f.positions > 0 && f.offset >= 0 && f.stride >= 0 &&
+                    f.type.is_int_or_uint())
+            << "Invalid BitFields field \"" << f.name << "\"\n";
+        for (int slot = 0; slot < f.count; slot++) {
+            for (int bit = f.offset + f.stride * slot; bit < f.offset + f.stride * slot + f.bits; bit++) {
+                user_assert(bit < word_.bits() && owner[bit] < 0)
+                    << "BitFields field \"" << f.name << "\" "
+                    << (bit < word_.bits() ? "overlaps field \"" + fields_[owner[bit]].name + "\"" :
+                                             "does not fit its " + std::to_string(word_.bits()) + "-bit word")
+                    << "\n";
+                owner[bit] = (int)i;
+            }
+        }
+    }
+}
+
+std::vector<Func> BitFields::encode(const std::vector<Func> &inputs) const {
+    user_assert(inputs.size() == fields_.size())
+        << "BitFields::encode requires one input per field\n";
+    for (const Func &in : inputs) {
+        user_assert(in.dimensions() >= 2 && in.dimensions() == inputs[0].dimensions())
+            << "BitFields::encode requires (element, record, ...) fields of one dimensionality\n";
+    }
+    Var word("word"), record("record");
+    std::vector<Var> rest = batch_vars(inputs[0].dimensions() - 2);
+    std::vector<Var> args = {word, record};
+    args.insert(args.end(), rest.begin(), rest.end());
+    Expr packed = make_zero(word_);
+    for (size_t i = 0; i < fields_.size(); i++) {
+        const Field &f = fields_[i];
+        std::vector<Expr> element = component_exprs(args);
+        for (int slot = 0; slot < f.count; slot++) {
+            // The inverse of decode's mixed-radix digits.
+            element[0] = f.positions == 1 ? word * f.count + slot :
+                                            (word / f.positions * f.count + slot) * f.positions + word % f.positions;
+            Expr value = cast(word_, inputs[i](element)) & make_const(word_, low_bits_mask(f.bits));
+            packed = packed | (value << make_const(word_, f.offset + f.stride * slot));
+        }
+    }
+    Func words("bit_fields");
+    words(args) = packed;
+    return {words};
+}
+
+std::vector<Func> BitFields::decode(const std::vector<Func> &encoded) const {
+    user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{word_} &&
                 encoded[0].dimensions() >= 2)
-        << "PlanarFieldPack::decode requires (position, record, ...) bytes\n";
-    const Func &bytes = encoded[0];
+        << "BitFields::decode requires (word, record, ...) words of type " << word_ << "\n";
     Var element("element"), record("record");
-    std::vector<Var> rest = batch_vars(bytes.dimensions() - 2);
+    std::vector<Var> rest = batch_vars(encoded[0].dimensions() - 2);
     std::vector<Var> args = {element, record};
     args.insert(args.end(), rest.begin(), rest.end());
-    std::vector<Expr> byte_args = component_exprs(args);
-    Expr plane = element / positions_;
-    byte_args[0] = element % positions_;
-    Func fields("planar_field_values");
-    fields(args) = cast<uint8_t>((bytes(byte_args) >> (plane * field_bits_)) & ((1 << field_bits_) - 1));
-    return {fields};
+    std::vector<Func> out;
+    for (const Field &f : fields_) {
+        // element = (group * count + slot) * positions + position
+        Expr g = element, word = g, slot = 0;
+        if (f.positions == 1) {
+            word = f.count == 1 ? g : g / f.count;
+            slot = g % f.count;
+        } else {
+            word = g / (f.count * f.positions) * f.positions + g % f.positions;
+            slot = g / f.positions % f.count;
+        }
+        std::vector<Expr> word_args = component_exprs(args);
+        word_args[0] = word;
+        Expr bit = f.count == 1 ? Expr(f.offset) : f.offset == 0 ? slot * f.stride :
+                                                                   f.offset + slot * f.stride;
+        // The same value either way. A planar field shifts by an int, so
+        // narrow words widen to 32 bits and the per-plane shift stays an
+        // index expression; a dense field shifts in the word's own type.
+        Expr w = encoded[0](word_args);
+        Expr shifted = f.positions > 1 ? w >> bit : w >> cast(word_, bit);
+        Func value(f.name);
+        value(args) = cast(f.type, shifted & make_const(shifted.type(), low_bits_mask(f.bits)));
+        out.push_back(value);
+    }
+    return out;
+}
+
+ApproximationSignature BitFields::signature(const ApproximationPorts &inputs) const {
+    std::optional<int> dims = inputs.empty() ? std::nullopt : inputs[0].dimensions;
+    ApproximationPorts fields;
+    for (const Field &f : fields_) {
+        fields.push_back({f.name, f.type, dims, ApproximationRange(0, (double)low_bits_mask(f.bits))});
+    }
+    return {fields, {{"word", word_, dims}}};
+}
+
+PlanarFieldPack::PlanarFieldPack(int field_bits, int positions)
+    : BitFields(UInt(8), {{"fields", field_bits, field_bits > 0 ? 8 / field_bits : 0, 0, field_bits, positions}}) {
+    user_assert(field_bits > 0 && 8 % field_bits == 0 && positions > 0)
+        << "Invalid PlanarFieldPack shape\n";
 }
 
 ApproximationSignature PlanarFieldPack::signature(const ApproximationPorts &inputs) const {
@@ -1937,14 +2015,8 @@ ApproximationSignature PlanarFieldPack::signature(const ApproximationPorts &inpu
         dims = std::max(*dims, 2);
     }
     std::optional<Type> type = inputs.size() == 1 ? inputs[0].type : std::nullopt;
-    return {{{"fields", type, dims, ApproximationRange(0, (double)((1 << field_bits_) - 1))}},
+    return {{{"fields", type, dims, ApproximationRange(0, (double)low_bits_mask(fields_[0].bits))}},
             {{"bytes", UInt(8), dims}}};
-}
-
-PlanarFieldPack::PlanarFieldPack(int field_bits, int positions)
-    : field_bits_(field_bits), positions_(positions), planes_(8 / field_bits) {
-    user_assert(field_bits_ > 0 && 8 % field_bits_ == 0 && positions_ > 0)
-        << "Invalid PlanarFieldPack shape\n";
 }
 
 const Derive *Approximation::as_derive() const {

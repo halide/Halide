@@ -1755,30 +1755,78 @@ struct LittleEndianScalarPack {
     }
 };
 
-/** Exact fixed-width planar packing. For `(field_bits, positions)`, one byte
- * contains `8/field_bits` planes, each plane spanning `positions` consecutive
- * elements. This component applies no recentering and no lookup policy. Any
- * dimensions after the record dimension pass through unchanged. */
-struct PlanarFieldPack {
-    PlanarFieldPack(int field_bits, int positions);
+/** Lossless packing of unsigned bit fields into integer words. Each field
+ * is an input `(element, record, rest...)`; the output is one `(word,
+ * record, rest...)` Func of type `word`. A field places `count` of its
+ * elements in each word, `bits` bits each, the `i`th at bit `offset + stride
+ * * i`, and interleaves its words `positions` at a time: element `g` of a
+ * record is the digit `slot` of the mixed-radix number
+ * `g = (group * count + slot) * positions + position`, and lives in word
+ * `group * positions + position` at bit `offset + stride * slot`. With
+ * `positions = 1` consecutive elements share a word (dense packing, least
+ * significant first); with `positions = p` element `g` shares its word with
+ * elements `g +- p`, `g +- 2p`... (planar packing, see PlanarFieldPack).
+ *
+ * Every field must produce the same number of words per record (its record
+ * extent divided by `count`), and no two fields' bits may overlap. Encode
+ * masks each element to its `bits`, so values outside
+ * `[0, 2^bits - 1]` are silently truncated. Any dimensions after the record
+ * dimension pass through unchanged. */
+struct BitFields {
+    struct Field {
+        /** The name of the field's input port, and of its decoded Func. */
+        std::string name;
+        /** The width of each element, in bits. */
+        int bits;
+        /** The number of the field's elements in each word. */
+        int count = 1;
+        /** The bit of the word at which the field's first element starts. */
+        int offset = 0;
+        /** The distance in bits between consecutive elements in a word. */
+        int stride = 0;
+        /** The number of consecutive words whose elements interleave. */
+        int positions = 1;
+        /** The type of the decoded elements. */
+        Type type = UInt(8);
+    };
+
+    /** `word` must be an unsigned integer type of at most 64 bits, and each
+     * field's elements must fit in it, without overlapping another's. */
+    BitFields(Type word, std::vector<Field> fields);
 
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
-    /** (element, record, rest...) fields <-> (position, record, rest...)
-     * bytes. The fields must fit in `field_bits`: encode masks each one to
-     * that width, so values outside [0, 2^field_bits - 1] are silently
-     * truncated. The dimensionality comes from the context, and is unknown
-     * without one. */
+    /** One input per field, named after it, of its type and range `[0,
+     * 2^bits - 1]`, and one `word` output. The dimensionality comes from the
+     * context, and is unknown without one. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
-    /** Exact for fields in the declared input range. */
+    /** Exact for fields in their declared ranges. */
     bool lossless() const {
         return true;
     }
 
-private:
-    int field_bits_, positions_, planes_;
+protected:
+    Type word_;
+    std::vector<Field> fields_;
+};
+
+/** Planar packing of fixed-width fields into bytes: the BitFields of one
+ * field of `field_bits` bits, `8 / field_bits` per byte, whose bytes
+ * interleave `positions` at a time. Byte `p` of each group of `positions`
+ * holds elements `p`, `p + positions`, `p + 2 * positions`... of the group's
+ * `8 / field_bits * positions` elements, least significant bits first. A
+ * record holds any whole number of groups; `positions = 1` packs elements
+ * densely. This component applies no recentering and no lookup policy. */
+struct PlanarFieldPack : BitFields {
+    PlanarFieldPack(int field_bits, int positions);
+
+    /** (element, record, rest...) fields <-> (byte, record, rest...)
+     * bytes. The fields' type comes from the context, and must be an
+     * integer type; their range is `[0, 2^field_bits - 1]`. The
+     * dimensionality comes from the context, and is unknown without one. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
 };
 
 }  // namespace Halide

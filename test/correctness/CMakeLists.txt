@@ -17,6 +17,7 @@ tests(
     amx_matmul.cpp
     approximate_by.cpp
     approximation_affine.cpp
+    approximation_bit_fields.cpp
     approximation_codec.cpp
     approximation_components.cpp
     approximation_decode_funcs.cpp
