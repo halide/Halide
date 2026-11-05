@@ -1876,6 +1876,12 @@ size_t StructLayout::logical_slot(const std::string &name) const {
     return 0;
 }
 
+const StructField &StructLayout::port_field(size_t i) const {
+    user_assert(i < logical_fields_.size())
+        << "StructLayout::port_field: no port " << i << " of " << logical_fields_.size() << "\n";
+    return physical_field(logical_fields_[i]);
+}
+
 const StructField &StructLayout::physical_field(const std::string &name) const {
     for (const StructField &field : record_type_.struct_type()->fields) {
         if (field.name == name) {

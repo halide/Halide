@@ -7,7 +7,8 @@ using namespace Halide;
 // Structure queries on a round trip: the unit behind a stage
 // (Approximation::target()), the call that defines a Func
 // (ApproximationResult::defining_call()), and a component's Funcs as stored
-// and as decoded (stored_components(), decoded_components()).
+// and as decoded (stored_components(), decoded_components()), and the struct
+// field a layout's port is stored in (StructLayout::port_field()).
 
 namespace {
 
@@ -126,6 +127,13 @@ int test_record() {
     // A layout's field is its decode's; a Func of no call has none.
     Func field = r.decoded_by(layout, "codes");
     CHECK(r.defining_call(field) && r.defining_call(field)->stage.same_as(layout));
+    // ... and the layout tells the struct field each of its ports is stored
+    // in, the field's port by its place among the call's.
+    const ApproximationTraceNode *fields = r.defining_call(field);
+    const StructLayout *sl = fields->stage.target<StructLayout>();
+    CHECK(sl && fields->ports.size() == 2 && fields->ports[0].name() == field.name());
+    CHECK(sl->port_field(0).type == UInt(8) && sl->port_field(0).array_extent == B);
+    CHECK(sl->port_field(1).type == Float(16) && !sl->port_field(1).array_extent);
     CHECK(!r.defining_call(g) && !r.defining_call(Func()));
     // Identity passes the record through, both ways: the layout's encode
     // defines it.

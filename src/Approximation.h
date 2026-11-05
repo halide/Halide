@@ -1708,6 +1708,14 @@ struct StructLayout {
         return true;
     }
 
+    /** The field of the record type that port `i` is stored in (the
+     * encode's input `i` and the decode's output `i`, in the order of
+     * `logical_fields`): its type, and its extent if it is an array. E.g.
+     * a schedule can tell a Func the decode defines (by
+     * ApproximationResult::defining_call() and its index among the call's
+     * ports) as an array field's elements, read as they are. */
+    const StructField &port_field(size_t i) const;
+
 private:
     Type record_type_;
     std::vector<std::string> logical_fields_;
