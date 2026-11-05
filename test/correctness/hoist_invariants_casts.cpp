@@ -193,6 +193,22 @@ int offset_split_test() {
     if (!check(gout() == gref, "uint8 sum split: wrong result")) {
         return 1;
     }
+
+    // With the field inlined too, its mask bounds it as it does the Func.
+    Func raw{"raw"}, inlined{"inlined"};
+    raw(v) = packed(v);
+    inlined() = 0.0f;
+    inlined() += cast<float>(cast<int8_t>(cast<uint8_t>((raw(r) >> 7) & 3)) + cast<int8_t>(-1)) * act(r);
+    intms = inlined.update().hoist_invariants({raw});
+    if (!check(intms.size() == 2 && intms[0].defined() && intms[1].defined(),
+               "inlined field split: expected the field's part and a residual") ||
+        !check_mentions(intms[1].update_value(), {"act"}, {"raw"}, "inlined field split: the residual")) {
+        return 1;
+    }
+    Buffer<float> iout = inlined.realize();
+    if (!check(iout() == ref, "inlined field split: wrong result")) {
+        return 1;
+    }
     return 0;
 }
 

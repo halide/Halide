@@ -1236,6 +1236,17 @@ FuncValueBounds value_bounds_of_calls(const Expr &e) {
     return fb;
 }
 
+// constant_integer_bounds() of `e` given the bounds of the Funcs it calls,
+// tightened by those of `e` simplified, as value_bounds_of_calls() bounds a
+// Func's definition (a mask x & 3 is bounded only as x % 4). So the bounds
+// do not depend on whether a Func was inlined into `e`.
+ConstantInterval bounds_given_calls(const Expr &e, const FuncValueBounds &func_bounds) {
+    const Scope<ConstantInterval> &empty = Scope<ConstantInterval>::empty_scope();
+    return ConstantInterval::make_intersection(
+        constant_integer_bounds(e, empty, nullptr, &func_bounds),
+        constant_integer_bounds(simplify(e), empty, nullptr, &func_bounds));
+}
+
 // A sum split by whether its terms make a selected call: the original equals
 // with + without, every term of `with` makes a selected call, and `without`
 // makes none. Either may be undefined, meaning zero.
@@ -1789,7 +1800,7 @@ optional<ShiftedTerm> hoist_field_shift(const Expr &let_term, const Scope<> &red
         if (!func_bounds) {
             func_bounds = value_bounds_of_calls(term);
         }
-        return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &*func_bounds);
+        return bounds_given_calls(e, *func_bounds);
     };
     int max_shift = 0;
     for (int k = 1; k < term.type().bits(); k++) {
@@ -2427,7 +2438,7 @@ FuncVec Stage::hoist_invariants_impl(const vector<std::function<bool(const Expr 
         if (!func_bounds) {
             func_bounds = value_bounds_of_calls(all_terms);
         }
-        return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &*func_bounds);
+        return bounds_given_calls(e, *func_bounds);
     };
     for (size_t i = 0; i < parts.size(); i++) {
         auto [with, without] = increment.defined() ? isolate_terms(increment, parts[i], bounds) : IsolatedTerms{};
