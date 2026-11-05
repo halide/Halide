@@ -269,8 +269,8 @@ class Featurizer : public IRVisitor {
         for (size_t j = 0; j < stage.loop.size(); j++) {
             bool single_one = (ones_per_col[j] == 1) && (zeros_per_col[j] == args.size() - 1);
             bool all_zero = (zeros_per_col[j] == args.size());
-            is_transpose &= single_one || all_zero;
-            is_broadcast &= single_one;
+            is_transpose &= single_one;
+            is_broadcast &= single_one || all_zero;
             is_slice &= single_one;
         }
 
