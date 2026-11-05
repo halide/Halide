@@ -123,118 +123,47 @@ inline std::vector<Func> callers(const Func &f, const std::vector<Func> &gs) {
     return cs;
 }
 
-// Whether e reads a bit field at a position that varies with v other than
-// with v mod `period` (q5_K's high bits; not q4_K's nibbles at period 2): a
-// loop over v in steps of `period` would shift by a variable amount.
-inline bool bit_position_varies(const Expr &e, Var v, int period) {
-    using namespace Internal;
-    bool varies = false;
-    visit_with(e, [&](auto *self, const Call *c) {
-        if ((c->is_intrinsic(Call::shift_right) || c->is_intrinsic(Call::shift_left)) && expr_uses_var(c->args[1], v.name())) {
-            Expr a = c->args[1], b = substitute(v.name(), Expr(v) + period, a);
-            varies |= !can_prove(a == b);
-        }
-        self->visit_base(c);
-    });
-    return varies;
-}
-
-inline bool bit_position_varies(Func f, Var v, int period) {
-    return bit_position_varies(Internal::remove_promises(Internal::remove_likelies(Internal::substitute_in_all_lets(f.update_value()))), v, period);
-}
-
-// The bits of v below `group` (a power of 2), innermost first: those more
-// bit fields' positions vary with first (ties: the lower). Sub-blocks
-// differing in such a bit read the same bytes, so iterated innermost their
-// loads are reused. (counts: per bit, how many positions vary with it.)
-using Points = std::vector<std::map<std::string, Expr>>;
-inline std::vector<int> sharing_order(const Expr &e, const Points &points, Var v, int group, std::vector<int> *counts = nullptr) {
-    using namespace Internal;
-    int bits = 0;
-    while ((1 << bits) < group)
+// Per bit of the index of r.x's sub-blocks of `sub` values (a power of 2),
+// how many of dot's loads varying with r.x's bits below `low` (0: with any)
+// it leaves in place: sub-blocks differing only in it read the same bytes
+// (sub = 1: q4_0's bit 4, a byte's two nibbles; q5_K's sub-blocks: qh's bits).
+inline std::vector<int> shared_bits(Func dot, const RDom &r, int sub = 1, int low = 0) {
+    auto bx = Internal::as_const_int(r.x.extent());
+    int bits = 0, s = 0;
+    while (bx && (1 << bits) < *bx)
         bits++;
-    std::vector<int> count(bits, 0), order(bits);
-    visit_with(e, [&](auto *self, const Call *c) {
-        if ((c->is_intrinsic(Call::shift_right) || c->is_intrinsic(Call::shift_left)) && expr_uses_var(c->args[1], v.name())) {
-            for (int b = 0; b < bits; b++) {
-                bool varies = false;
-                for (int x = 0; x < group && !varies; x++) {
-                    for (size_t p = 0; p < points.size() && !varies && !(x >> b & 1); p++) {
-                        Expr a = substitute(points[p], substitute(v.name(), x, c->args[1]));
-                        Expr a2 = substitute(points[p], substitute(v.name(), x | 1 << b, c->args[1]));
-                        varies = !can_prove(a == a2);
-                    }
-                }
-                count[b] += varies;
-            }
+    while ((1 << s) < sub)
+        s++;
+    std::vector<int> count(std::max(bits - s, 0), 0);
+    for (uint64_t m : Internal::load_invariant_bits(dot.function().update(0), r.x.name(), bits)) {
+        for (int b = s; b < bits; b++) {
+            count[b - s] += (~m & ((1 << (low ? low : bits)) - 1)) && (m >> b & 1);
         }
-        self->visit_base(c);
-    });
-    for (int b = 0; b < bits; b++) {
-        order[b] = b;
+    }
+    return count;
+}
+
+// The sub-blocks per group, at least g, past which (up to subs) no load is
+// shared (count: shared_bits'): a group's bit fields at constant positions.
+inline int sharing_group(const std::vector<int> &count, int g, int subs) {
+    int top = 0;
+    for (int b = 0; b < (int)count.size() && (1 << b) < subs; b++) {
+        if (count[b]) top = 2 << b;
+    }
+    return std::max(g, std::min(top, subs));
+}
+
+// The bits of a sub-block's index in a group of g, innermost first: those
+// more loads share first (ties: the lower; count: shared_bits'). Sub-blocks
+// differing in such a bit read the same bytes, so iterated innermost their
+// loads are reused.
+inline std::vector<int> sharing_order(const std::vector<int> &count, int g) {
+    std::vector<int> order;
+    for (int b = 0; (1 << b) < g; b++) {
+        order.push_back(b);
     }
     std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return count[a] > count[b]; });
-    if (counts) *counts = count;
     return order;
-}
-
-inline std::vector<int> sharing_order(Func f, Var v, int group, std::vector<int> *counts = nullptr) {
-    using namespace Internal;
-    Expr e = remove_promises(remove_likelies(substitute_in_all_lets(f.update_value())));
-    // the shift at each value of f's update's (constant) reduction domain
-    Points points{{}};
-    for (const ReductionVariable &rv : f.function().update(0).schedule().rvars()) {
-        auto mn = as_const_int(simplify(rv.min)), ex = as_const_int(simplify(rv.extent));
-        if (!mn || !ex) continue;
-        Points next;
-        for (const auto &p : points) {
-            for (int64_t i = 0; i < *ex; i++) {
-                next.push_back(p);
-                next.back()[rv.var] = Expr((int)(*mn + i));
-            }
-        }
-        points.swap(next);
-    }
-    return sharing_order(e, points, v, group, counts);
-}
-
-// Whether some bit of a sub-block's index no bit field's position varies
-// with lies below one some do (counts: sharing_order's).
-inline bool bit_beneath(const std::vector<int> &counts) {
-    for (size_t b = 0; b < counts.size(); b++) {
-        for (size_t c = b + 1; c < counts.size(); c++) {
-            if (counts[b] == 0 && counts[c] > 0) return true;
-        }
-    }
-    return false;
-}
-
-// The values of x (in sub-blocks of `sub`, `subs` of them) over which f's
-// update's bit fields' positions (fs inlined) repeat, if within them
-// bit_beneath (q6_K's 128); else 0.
-inline int bit_period(Func f, const RVar &x, int sub, int subs, const std::vector<Func> &fs) {
-    using namespace Internal;
-    Expr e = f.update_value();
-    for (bool again = true; again;) {
-        again = false;
-        for (Func g : fs) {
-            if (!calls_any(e, {g})) continue;
-            e = inline_function(e, g.function());
-            again = true;
-        }
-    }
-    Var v("v"), y("y");
-    e = remove_promises(remove_likelies(substitute_in_all_lets(substitute(x.name(), v * sub + y, e))));
-    Points points;
-    for (int i = 0; i < sub; i++) {
-        points.push_back({{y.name(), i}});
-    }
-    int group = 2;
-    while (group < subs && bit_position_varies(e, v, group))
-        group *= 2;
-    std::vector<int> counts;
-    sharing_order(e, points, v, group, &counts);
-    return group < subs && bit_beneath(counts) ? group * sub : 0;
 }
 
 // The runtime's thread count.
@@ -1114,6 +1043,7 @@ inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 // min term reads the act's sub-block sums (derived_sums()).
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs, int group = 0, int sub = 0, int act_sub = 0) {
+    std::vector<int> shared = sub ? shared_bits(dot, r, sub) : std::vector<int>{};  // (dot as defined)
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc"), mo("mog"), mi("mig");
     RVar ry = r.y, rx = r.x, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
@@ -1160,9 +1090,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         // where a bit field's position varies across pairs (constant shifts)
         RVar rxso("rxso"), rxsi("rxsi");
         auto bx = as_const_int(r.x.extent());
-        int subs = bx ? (int)*bx / sub : 2, g = 2;
-        while (g < subs && bit_position_varies(quads, v, g))
-            g *= 2;
+        int g = sharing_group(shared, 2, bx ? (int)*bx / sub : 2);
         codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, g).unroll(rxsi);
         per_sub = LoopLevel(codes, rxsi);
         part.compute_at(per_sub).vectorize_all_stages(n).unroll_all_stages(v, u, m);
@@ -1226,6 +1154,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
                          const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
                          int per = 1, const Knobs &k = Knobs()) {
     bool fold_offsets = k.fold == Fold::All, gpr_scales = k.gpr_scales, index_words = k.index_words;
+    std::vector<int> shared = sub ? shared_bits(dot, r, sub) : std::vector<int>{};  // (dot as defined)
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi"), ryw("ryw"), ryp("ryp");
@@ -1239,14 +1168,21 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     if (swar) kept = scale_decoders(rs);
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub, records ? sub : 0, kept, fold_offsets)) aff = false;
     // With the act's records: r.x split first by the period over which the
-    // bit fields' positions repeat (bit_period: q6_K's 128 values), so the
-    // loads stay dense (split in sub-blocks first, the % 128 stays: gathers).
+    // bit fields' positions repeat (sharing_group: q6_K's 128 values), if
+    // within it a bit no load shares lies below one some do, so the loads
+    // stay dense (split in sub-blocks first, the % 128 stays: gathers).
     auto bx = as_const_int(r.x.extent());
     RVar rxp("rxp");
     Var vp("vp");
     int period = 0;
     if (sub && act_records && bx) {
-        period = bit_period(dot, r.x, sub, (int)*bx / sub, without(decoders(rs), kept));
+        int g = sharing_group(shared, 2, (int)*bx / sub);
+        bool zero = false, beneath = false;
+        for (int b = 0; (1 << b) < g; b++) {
+            beneath |= zero && shared[b];
+            zero |= !shared[b];
+        }
+        if (g < *bx / sub && beneath) period = g * sub;
     }
     if (period) {
         RVar rxx("rxx");
@@ -1301,20 +1237,18 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     if (sub) {  // per block and sub-block: the tile's sub-block dots, then their scales
         // With the act's records, a loop over groups of sub-blocks (fully
         // unrolled spills: 4-7% slower), those reading the same bytes adjacent
-        // (sharing_order); per period, bits that move no field loop inside.
+        // (sharing_order); per period, bits sharing no load loop inside.
         Stage cu = codes.update();
         int subs = bx ? (int)*bx / sub : 2;
         if (period) subs = period / sub;
-        int group = act_records && !period ? 2 : subs;
-        while (group < subs && bit_position_varies(inner, v, group))
-            group *= 2;
+        int group = act_records && !period ? sharing_group(shared, 2, subs) : subs;
         RVar rxso("rxso"), rxsi("rxsi"), g = rxs, at_sub;
         if (group < subs) {
             cu.split(rxs, rxso, rxsi, group);
             g = rxsi;
         }
         std::vector<VarOrRVar> order{nii, mii, nio, mio};
-        std::vector<int> counts, bits = act_records ? sharing_order(inner, v, group, &counts) : std::vector<int>{};
+        std::vector<int> bits = act_records ? sharing_order(shared, group) : std::vector<int>{};
         size_t loops = 0;
         if (std::is_sorted(bits.begin(), bits.end())) {
             order.push_back(at_sub = g);
@@ -1328,10 +1262,10 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             }
             bv.push_back(g);
             for (int b : bits) {
-                if (!period || counts[b]) order.push_back(bv[b]);
+                if (!period || shared[b]) order.push_back(bv[b]);
             }
             for (int b : bits) {
-                if (period && !counts[b]) order.push_back(bv[b]), loops++;
+                if (period && !shared[b]) order.push_back(bv[b]), loops++;
             }
             at_sub = bv[bits[0]];
         }
@@ -1482,54 +1416,6 @@ inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<
     dot.compute_at(out, ni);
 }
 
-// Of the bits of a block's value index (r.x, in [0, 2^bits)) from `low` up,
-// per bit how many of dot's code loads it leaves in place: values differing
-// only in it read the same bytes (q4_0's bit 4: a byte's two nibbles).
-inline std::vector<int> shared_bits(Func dot, const RDom &r, int bits, int low) {
-    using namespace Internal;
-    Expr e = dot.update_value();
-    for (;;) {
-        std::optional<Function> g;
-        visit_with(e, [&](auto *self, const Call *c) {
-            if (!g && c->call_type == Call::Halide && c->func.defined()) {
-                Function f(c->func);
-                if (!f.has_update_definition() && !f.has_extern_definition()) g = f;
-            }
-            self->visit_base(c);
-        });
-        if (!g) break;
-        e = inline_function(e, *g);
-    }
-    e = remove_promises(remove_likelies(substitute_in_all_lets(e)));
-    std::vector<int> count(bits, 0);
-    visit_with(e, [&](auto *self, const Call *c) {
-        // (a struct field's element: the struct's args, the field, the element)
-        const Call *s = c->is_intrinsic(Call::struct_field_read) ? c->args[0].as<Call>() : nullptr;
-        std::vector<Expr> args = s ? s->args : c->args;
-        if (s) args.insert(args.end(), c->args.begin() + 1, c->args.end());
-        if (s || c->call_type == Call::Image || c->call_type == Call::Halide) {
-            auto leaves = [&](int b) {
-                for (int j = 0; j < 1 << bits; j++) {
-                    if (j >> b & 1) continue;
-                    for (const Expr &a : args) {
-                        if (!is_const_zero(simplify(substitute(r.x.name(), j, a) - substitute(r.x.name(), j | 1 << b, a)))) return false;
-                    }
-                }
-                return true;
-            };
-            bool code = false;
-            for (int b = 0; b < low && !code; b++) {
-                code = !leaves(b);
-            }
-            for (int b = low; code && b < bits; b++) {
-                count[b] += leaves(b);
-            }
-        }
-        self->visit_base(c);
-    });
-    return count;
-}
-
 // Metal: lut f per threadgroup, at out's loop `at`, in threadgroup memory.
 inline void metal_lut(Func f, Func out, const Var &at) {
     Var p = f.args()[0], i = f.args()[1];
@@ -1603,7 +1489,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     for (int b = 0; b < run; b++) {
         kind[b] = Run;
     }
-    std::vector<int> count = shared_bits(dot, r, bits, run), order;
+    std::vector<int> count = shared_bits(dot, r, 1, run), order;
     for (int b = run; b < bits; b++) {
         if (count[b]) order.push_back(b);
     }
