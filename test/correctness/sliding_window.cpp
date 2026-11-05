@@ -890,7 +890,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (bool named : {false, true}) {
         // Specializing a consumer duplicates the producer computed inside
         // it, and each copy has to slide the same way.
         count = 0;
@@ -901,6 +901,9 @@ int main(int argc, char **argv) {
         h(x, y) = g(x, y) * 2;
         g.compute_at(h, y).specialize(p);
         f.store_root().compute_at(g, x);
+        if (named) {
+            f.slide(h, y);
+        }
         for (bool pv : {false, true}) {
             count = 0;
             p.set(pv);

@@ -2778,7 +2778,11 @@ public:
      *
      * It is an error to slide over a dimension whose storage does not live
      * across every loop that dimension varies over, because the window would
-     * have to reach values that are no longer there. It is also an error to
+     * have to reach values that are no longer there. Likewise, the Func must
+     * be computed inside every loop the dimension varies over. If it's
+     * computed between the loops of a split, slide over the outer loops
+     * instead, since they're the only ones that move the window. It is also
+     * an error to
      * name two dimensions that move the same dimension of this Func, because
      * the window can only advance along that dimension once. Finally, it is
      * an error if the window can't slide along the dimension at all, for

@@ -616,11 +616,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (!(op->is_producer && op->name == func.name())) {
             return IRMutator::visit(op);
         }
-        if (!var_in_scope) {
-            // Computed outside the let we're sliding over, so it doesn't move
-            // with it.
-            return op;
-        }
+        // Schedules computing a Func outside the loops a slide's dimension is
+        // built from are rejected before lowering.
+        internal_assert(var_in_scope) << func.name() << " is computed outside "
+                                      << loop_var << "\n";
 
         // The producer appears once per specialization of anything enclosing
         // it. Each copy is planned against the dimensions slid before any of

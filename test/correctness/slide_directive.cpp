@@ -663,6 +663,34 @@ int main(int argc, char **argv) {
             g.realize({16});
         });
 
+    failures += !expect_user_error(
+        "computed_between_split_loops", "which that dimension also varies over", [] {
+            Func f("f"), g("g");
+            Var x("x"), y("y"), yo("yo"), yi("yi");
+            f(x, y) = x + y;
+            g(x, y) = f(x, y) + f(x, y + 1);
+            // f is computed once per four rows, so the window only moves
+            // with yo.
+            g.split(y, yo, yi, 4, TailStrategy::RoundUp);
+            f.store_root().compute_at(g, yo).slide(g, y);
+            g.realize({16, 16});
+        });
+
+    failures += !expect_user_error(
+        "consumer_slid_first", "the loops the dimension is built from", [] {
+            Func f("f"), g("g"), h("h");
+            Var x("x"), y("y"), yo("yo"), yi("yi");
+            f(x, y) = x + y;
+            g(x, y) = f(x, y) + f(x, y + 1);
+            h(x, y) = g(x, y) + g(x, y + 1);
+            // g slides over yi first, which leaves the region of f it
+            // requires depending on yo as well as y.
+            h.split(y, yo, yi, 4, TailStrategy::RoundUp);
+            g.store_root().compute_at(h, yi);
+            f.store_root().compute_at(h, yi).slide(h, y);
+            h.realize({16, 16});
+        });
+
     if (failures != 0) {
         printf("%d bad schedule(s) were not rejected\n", failures);
         return 1;
