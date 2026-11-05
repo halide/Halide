@@ -174,31 +174,39 @@ each 2 x 2 sub-tile is dense and the tile's accumulators stay in registers),
 else by 4 x 4 (N, M >= 4), with 32 x 32 outputs per parallel task; otherwise
 (gemv) it is a 2 x 1 tile (N >= 2; two rows share each activation block) or the
 1 x 1 tile, with 2 blocks per iteration and 16 rows per parallel task (32 tasks
-at N = 512 balance 8-12 threads). Tiles at the edges of N and M shift inwards
-(they overlap the previous tile, recomputing a few outputs), so any token count
-M >= 8 runs on full 4 x 8 tiles. With a laid-out act, the whole records run the
-gemm tiles (smmla's for any M with i8mm: 4 x 12, 4 x 16 or 4 x 20, whichever
-computes the fewest rows past the records (about equal cost per row), 16 x 4 for
-one record, 4 x 8 for two, with each task's tiles covering up to 128 rows so the
-weights stream once; per block, all of the tile's sums, then its scales; when N
-is a multiple of their width, else 1-wide tiles as tall) starting on a record,
-with M tails guarded: `dotr` is bound to one tile's rows, and its rows past the
-records read the last activation row (clamped; nothing reads past the input).
-The rest run the gemv tiles; with a laid-out integer weight they run
-`blocked_rows` instead: one weight record per tile (rows-tall, as GGML's
-repacked gemv), its int32 sums vectorized across the record's rows and each
-piece's 4-code quads (sdot), so a piece is one dense load and the activation's
-piece is broadcast to the rows; the activation's codes are staged per block in
-registers, so with 4-code pieces (`q4_0.i4.4x4`, GGML's `q4_0_4x4`) the
-broadcast is a by-element sdot. Its gemm tiles (the same choice of shapes) use
-the same by-element sdot, as KleidiAI's dotprod gemm: per block the weight
-record is decoded once and the sums are computed per activation record, its
-codes staged in memory order (a 16-byte load holds a piece of each of its 4
-rows) and its 4 scales one vector. The default layout is `q4_0.i4.4x4`, for gemv
-and gemm alike (a weight is repacked once, as KleidiAI's is); `q4_0.i4.4x8`
-(smmla gemm, at parity on M3) and AoS are built with mul_mat as comparisons.
-q8_0 has the same layouts (`q8_0.4x4`, `q8_0.4x8`, `q8_0.soa`) on the same
-recipes, its codes read as stored (gemv: 8-byte pieces are a broadcast
+at N = 512 balance 8-12 threads). Where a single row already streams from DRAM
+at about a core's rate for two (codes read as stored, q8_0's), the pair is kept
+only where two weight streams don't slow it: rows of at most 11 KB or at least
+64 KB (`two_streams()`; on M3 a core streams two rows 12-56 KB apart at
+0.6-0.85x one's rate, an effect of the hardware prefetcher's, not of DRAM's
+pages or of cache sets: it follows the virtual distance, and is absent in
+cache). Decoded codes, slower per byte, pair at any row length. Tiles at the
+edges of N and M shift inwards (they overlap the previous tile, recomputing a
+few outputs), so any token count M >= 8 runs on full 4 x 8 tiles. With a
+laid-out act, the whole records run the gemm tiles (smmla's for any M with i8mm:
+4 x 12, 4 x 16 or 4 x 20, whichever computes the fewest rows past the records
+(about equal cost per row), 16 x 4 for one record, 4 x 8 for two, with each
+task's tiles covering up to 128 rows so the weights stream once; per block, all
+of the tile's sums, then its scales; when N is a multiple of their width, else
+1-wide tiles as tall) starting on a record, with M tails guarded: `dotr` is
+bound to one tile's rows, and its rows past the records read the last activation
+row (clamped; nothing reads past the input). The rest run the gemv tiles; with a
+laid-out integer weight they run `blocked_rows` instead: one weight record per
+tile (rows-tall, as GGML's repacked gemv; two where codes are decoded from a
+field and N allows, subject to `two_streams()` or more than 4 threads: a record
+streams at a single plain row's rate), its int32 sums vectorized across the
+record's rows and each piece's 4-code quads (sdot), so a piece is one dense load
+and the activation's piece is broadcast to the rows; the activation's codes are
+staged per block in registers, so with 4-code pieces (`q4_0.i4.4x4`, GGML's
+`q4_0_4x4`) the broadcast is a by-element sdot. Its gemm tiles (the same choice
+of shapes) use the same by-element sdot, as KleidiAI's dotprod gemm: per block
+the weight record is decoded once and the sums are computed per activation
+record, its codes staged in memory order (a 16-byte load holds a piece of each
+of its 4 rows) and its 4 scales one vector. The default layout is `q4_0.i4.4x4`,
+for gemv and gemm alike (a weight is repacked once, as KleidiAI's is);
+`q4_0.i4.4x8` (smmla gemm, at parity on M3) and AoS are built with mul_mat as
+comparisons. q8_0 has the same layouts (`q8_0.4x4`, `q8_0.4x8`, `q8_0.soa`) on
+the same recipes, its codes read as stored (gemv: 8-byte pieces are a broadcast
 half-register, plain sdot). `q4_K.8x8` is GGML's `q4_K_8x8` (8 rows'
 super-blocks, each sub-block's 6-bit scales and mins regrouped across the rows
 by the lossless `Transpose`, `schemes/common.h`), with q8_K acts (gemv:

@@ -34,8 +34,8 @@ public:
     // where a weight's constant code offsets fold into the act's sub-block
     // sums (see ggml::Fold)
     GeneratorParam<ggml::Fold> fold_offsets{"fold_offsets", ggml::Fold::All, {{"none", ggml::Fold::None}, {"gemv", ggml::Fold::Gemv}, {"all", ggml::Fold::All}}};
-    // mul_mat's gemv in tiles of two rows where N allows and a row is short
-    // enough (see ggml::mul_mat; else one)
+    // mul_mat's gemv in tiles of two rows where N allows and two weight
+    // streams don't slow it (see ggml::mul_mat, ggml::two_streams; else one)
     GeneratorParam<bool> row_pairs{"row_pairs", true};
     // mul_mat's gemm tiles' grid index bytes, nested in a computed index
     // (iq3_s's qs + qh << 8), staged in GPRs (see ggml::staged_indices)

@@ -171,6 +171,26 @@ inline Expr threads() {
     return max(Internal::Call::make(Int(32), "halide_get_num_threads", {}, Internal::Call::PureExtern), 1);
 }
 
+// Are the weight's codes decoded from a field (q4_0's nibbles), not read as
+// stored (q8_0's)?
+inline bool decoded_codes(const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> cc = rs[0].decoded_components(tag::codes), st = rs[0].stored_components(tag::codes);
+    return cc.size() == 1 && std::any_of(st.begin(), st.end(), [&](const Func &f) { return f.type() != cc[0].type(); });
+}
+
+// May a gemv tile stream two weight rows (or records) `d` bytes apart, where
+// one already streams from DRAM at about a core's rate for two (codes read
+// as stored, q8_0's; records)? On M3 a core streams two rows 12-56 KB apart
+// at 0.6-0.85x one row's rate (closer or farther, at 1-1.3x; from cache, at
+// 1.4x): the hardware prefetcher's (the distance virtual, not physical: not
+// DRAM's pages or banks, nor cache sets), so such pairs are 1.1-1.3x slower
+// on one thread (q8_0 at K >= 16384, two q4_0.i4.4x4 records at K = 8192).
+// Decoded codes stream at 20-30 GB/s, under the two rows' rate: their pairs
+// gain at any distance. M3's window: (11 KB, 64 KB).
+inline Expr two_streams(const Expr &d) {
+    return d <= 11 * 1024 || d >= 64 * 1024;
+}
+
 // Of the candidate splits ps (each `tasks` tasks of `size` work, plus
 // `overhead` per task), the one whose busiest thread does the least; on
 // ties, the earliest.
@@ -2120,13 +2140,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
         // Codes decoded from a field: two records per tile where N allows
         // (gemv 1.02-1.1x; q8_0's, not decoded, 1.02-1.11x slower on ten
-        // threads at K = 14336), unless records over 11 KB on <= 4 threads.
-        std::vector<Func> cc = rs[0].decoded_components(tag::codes), st = rs[0].stored_components(tag::codes);
-        if (cc.size() == 1 && std::any_of(st.begin(), st.end(), [&](const Func &f) { return f.type() != cc[0].type(); })) {
+        // threads at K = 14336), unless they stream too fast for two
+        // (two_streams()).
+        if (decoded_codes(rs)) {
             Tiles r2 = rt;
             r2.nt = 2 * fmt.rows;
             Expr two = N % r2.nt == 0;
-            if (fmt.row_bytes.defined()) two = two && (fmt.row_bytes <= 11 * 1024 || threads() > 4);
+            if (fmt.row_bytes.defined()) two = two && (two_streams(fmt.row_bytes) || threads() > 4);
             blocked_rows(out, 2 * whole, dots[0], two, r2, r, fmt.chunk, rs);
         }
         blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs);
@@ -2134,10 +2154,11 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = k.interleave;
-    // Staged tables: no row pairs. Rows over 11 KB in single rows (q8_0 gemv
-    // at K = 14336 1.15x on one thread).
+    // Staged tables: no row pairs. Codes read as stored (q8_0's): the rows
+    // stream too fast for two (two_streams()); decoded codes gain from
+    // sharing the act at any row length.
     Expr paired = fits(pairs, 1);
-    if (fmt.row_bytes.defined()) paired = paired && fmt.row_bytes <= 11 * 1024;
+    if (fmt.row_bytes.defined() && !decoded_codes(rs)) paired = paired && two_streams(fmt.row_bytes);
     if (k.row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
 }
