@@ -79,6 +79,13 @@ directory to `CMAKE_PREFIX_PATH`. This can be done by running
 Other build systems can find the Halide root path by running
 `python -c "import halide; print(halide.install_dir())"`.
 
+## Alternative for no-Python Environments
+
+If you cannot use Python tooling (e.g. `pip` or `uv`) to download the Halide
+wheels, you can download them directly from either our [nightly index](https://pypi.halide-lang.org/simple/halide-bin/)
+or the public [PyPI index](https://pypi.org/simple/halide-bin/). Python wheel
+files are just standard zip files with a `.whl` extension.
+
 ## Homebrew
 
 Alternatively, if you use macOS, you can install Halide via
