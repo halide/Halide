@@ -1004,16 +1004,10 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     for (auto [f, part, inner] : subs) {
         // the kept scales part reads: per block group, vectorized
-        for (const Expr &e : part.function().update(0).values()) {
-            Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
-                for (Func k : kept) {
-                    if (c->name == k.name()) {
-                        k.compute_at(acc, ryo).vectorize(k.args()[0], vec);
-                        readers.push_back(k);
-                    }
-                }
-                self->visit_base(c);
-            });
+        for (Func k : kept) {
+            if (!calls(part, k)) continue;
+            k.compute_at(acc, ryo).vectorize(k.args()[0], vec);
+            readers.push_back(k);
         }
     }
     tables(rs, readers, LoopLevel(acc, ryo), t, index_words);
