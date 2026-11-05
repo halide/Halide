@@ -252,10 +252,8 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
     let store_indices = trace.func_store_indices(func).unwrap_or(&[]);
     let load_indices = trace.func_load_indices(func).unwrap_or(&[]);
     let value_indices = trace.func_value_indices(func);
-    let k = packet_index.try_into().unwrap_or_else(|_| {
-        eprintln!("Packet index {} is too large.", packet_index);
-        std::process::exit(1);
-    });
+    // The number of the given packets at or before the packet index.
+    let k = |indices: &[usize]| indices.partition_point(|&p| p <= packet_index as usize);
 
     match ext {
         Some("json") => {
@@ -267,7 +265,7 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    gs.seek(&trace, value_indices, k);
+                    gs.seek(&trace, value_indices, k(value_indices));
                     serde_json::to_string_pretty(&gs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);
@@ -279,7 +277,7 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    rgbs.seek(&trace, value_indices, k);
+                    rgbs.seek(&trace, value_indices, k(value_indices));
                     serde_json::to_string_pretty(&rgbs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);
@@ -291,7 +289,7 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    sfs.seek(&trace, store_indices, k);
+                    sfs.seek(&trace, store_indices, k(store_indices));
                     serde_json::to_string_pretty(&sfs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);
@@ -303,7 +301,7 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    lfs.seek(&trace, load_indices, k);
+                    lfs.seek(&trace, load_indices, k(load_indices));
                     serde_json::to_string_pretty(&lfs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);
@@ -315,7 +313,13 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    rs.seek(&trace, store_indices, load_indices, k, k);
+                    rs.seek(
+                        &trace,
+                        store_indices,
+                        load_indices,
+                        k(store_indices),
+                        k(load_indices),
+                    );
                     serde_json::to_string_pretty(&rs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);
@@ -327,7 +331,13 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    rds.seek(&trace, store_indices, load_indices, k, k);
+                    rds.seek(
+                        &trace,
+                        store_indices,
+                        load_indices,
+                        k(store_indices),
+                        k(load_indices),
+                    );
                     serde_json::to_string_pretty(&rds.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);

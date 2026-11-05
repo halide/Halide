@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "halide_trace_config.h"
 #include <stdint.h>
 
 namespace {
@@ -191,18 +190,6 @@ public:
                 }
             }
         }
-
-        /* Optional tags to specify layout for HalideTraceViz */
-        Halide::Trace::FuncConfig cfg;
-        cfg.pos = {860, 340 - 220};
-        cfg.max = 1024;
-        for (Func f : intermediates) {
-            std::string label = f.name();
-            std::replace(label.begin(), label.end(), '_', '@');
-            cfg.pos.y += 220;
-            cfg.labels = {{label}};
-            f.add_trace_tag(cfg.to_trace_tag());
-        }
     }
 
 private:
@@ -340,14 +327,6 @@ Func CameraPipe::apply_curve(Func input) {
         }
     }
 
-    /* Optional tags to specify layout for HalideTraceViz */
-    {
-        Halide::Trace::FuncConfig cfg;
-        cfg.labels = {{"tone curve"}};
-        cfg.pos = {580, 1000};
-        curve.add_trace_tag(cfg.to_trace_tag());
-    }
-
     Func curved;
 
     if (lutResample == 1) {
@@ -375,14 +354,6 @@ Func CameraPipe::sharpen(Func input) {
         if (get_target().has_gpu_feature()) {
             sharpen_strength_x32.gpu_single_thread();
         }
-    }
-
-    /* Optional tags to specify layout for HalideTraceViz */
-    {
-        Halide::Trace::FuncConfig cfg;
-        cfg.labels = {{"sharpen strength"}};
-        cfg.pos = {10, 1000};
-        sharpen_strength_x32.add_trace_tag(cfg.to_trace_tag());
     }
 
     // Make an unsharp mask by blurring in y, then in x.
@@ -575,45 +546,6 @@ void CameraPipe::generate() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width) / (2 * vec)) * (2 * vec))
             .bound(y, 0, (out_height / strip_size) * strip_size);
-
-        /* Optional tags to specify layout for HalideTraceViz */
-        {
-            Halide::Trace::FuncConfig cfg;
-            cfg.max = 1024;
-            cfg.pos = {10, 348};
-            cfg.labels = {{"input"}};
-            input.add_trace_tag(cfg.to_trace_tag());
-
-            cfg.pos = {305, 360};
-            cfg.labels = {{"denoised"}};
-            denoised.add_trace_tag(cfg.to_trace_tag());
-
-            cfg.pos = {580, 120};
-            const int y_offset = 220;
-            cfg.strides = {{1, 0}, {0, 1}, {0, y_offset}};
-            cfg.labels = {
-                {"gr", {0, 0 * y_offset}},
-                {"r", {0, 1 * y_offset}},
-                {"b", {0, 2 * y_offset}},
-                {"gb", {0, 3 * y_offset}},
-            };
-            deinterleaved.add_trace_tag(cfg.to_trace_tag());
-
-            cfg.color_dim = 2;
-            cfg.strides = {{1, 0}, {0, 1}, {0, 0}};
-            cfg.pos = {1140, 360};
-            cfg.labels = {{"demosaiced"}};
-            processed.add_trace_tag(cfg.to_trace_tag());
-
-            cfg.pos = {1400, 360};
-            cfg.labels = {{"color-corrected"}};
-            corrected.add_trace_tag(cfg.to_trace_tag());
-
-            cfg.max = 256;
-            cfg.pos = {1660, 360};
-            cfg.labels = {{"gamma-corrected"}};
-            curved.add_trace_tag(cfg.to_trace_tag());
-        }
     }
 };
 

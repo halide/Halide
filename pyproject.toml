@@ -36,9 +36,11 @@ docs = [
   "sphinxcontrib-video>=0.4",
   "sphinx-design>=0.6",
 ]
+figures = ["imageio-ffmpeg>=0.5", "numpy>=1.26", "pillow>=10.1"]
 ci-base = [
   { include-group = "dev" },
   { include-group = "apps" },
+  { include-group = "figures" },
   { include-group = "tools" },
 ]
 ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm>=24.0.0.dev0,<25"]
