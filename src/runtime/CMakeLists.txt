@@ -90,8 +90,7 @@ set(RUNTIME_CPP
     vulkan
     wasm_cpu_features
     wasm_thread_id
-    # TODO(https://github.com/halide/Halide/issues/7248)
-    # webgpu
+    # webgpu # TODO(https://github.com/halide/Halide/issues/7248)
     webgpu_dawn_arm
     webgpu_dawn_x86
     webgpu_emscripten

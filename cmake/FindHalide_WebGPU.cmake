@@ -4,8 +4,7 @@ cmake_minimum_required(VERSION 3.28)
 # set(CMAKE_FIND_DEBUG_MODE TRUE)
 
 if (EXISTS "$ENV{HL_WEBGPU_NATIVE_LIB}")
-  set(Halide_WebGPU_NATIVE_LIB "$ENV{HL_WEBGPU_NATIVE_LIB}"
-      CACHE FILEPATH "")
+    set(Halide_WebGPU_NATIVE_LIB "$ENV{HL_WEBGPU_NATIVE_LIB}" CACHE FILEPATH "")
 endif ()
 
 # Try to find Dawn via vcpkg's CMake config first
