@@ -254,10 +254,10 @@ WEAK int halide_vulkan_device_sync(void *user_context, halide_buffer_t *) {
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    VkResult result = vkQueueWaitIdle(ctx.queue);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
+    int error_code = vk_wait_for_submissions(user_context, ctx.allocator);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to wait for submitted work!\n";
+        return error_code;
     }
 
 #ifdef DEBUG_RUNTIME
@@ -387,13 +387,17 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         return halide_error_code_internal_error;
     }
 
-    ScopedVulkanCommandBufferAndPool cmds(user_context, ctx.allocator, ctx.queue_family_index);
-    if (cmds.error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command buffer and pool for context!\n";
-        return cmds.error_code;
+    VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index);
+    if (submission == nullptr) {
+        error(user_context) << "Vulkan: Failed to begin a submission!\n";
+        return halide_error_code_device_malloc_failed;
     }
 
-    int error_code = vk_clear_device_buffer(user_context, ctx.allocator, cmds.command_buffer, ctx.queue, *device_buffer);
+    vk_clear_device_buffer(submission->command_buffer, *device_buffer);
+    int error_code = vk_end_submission(user_context, ctx.allocator, submission);
+    if (error_code == halide_error_code_success) {
+        error_code = vk_wait_for_submissions(user_context, ctx.allocator);
+    }
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to clear device buffer!\n";
     }
@@ -507,24 +511,9 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         << "  from halide buffer=" << halide_buffer << "\n";
 #endif
 
-    ScopedVulkanCommandBufferAndPool cmds(user_context, ctx.allocator, ctx.queue_family_index);
-    if (cmds.error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command buffer and pool!\n";
-        return cmds.error_code;
-    }
-
-    // begin the command buffer
-    VkCommandBufferBeginInfo command_buffer_begin_info =
-        {
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
-            nullptr,                                      // pointer to struct extending this
-            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
-            nullptr                                       // pointer to parent command buffer
-        };
-
-    VkResult result = vkBeginCommandBuffer(cmds.command_buffer, &command_buffer_begin_info);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
+    VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index);
+    if (submission == nullptr) {
+        error(user_context) << "Vulkan: Failed to begin a submission!\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
@@ -539,7 +528,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     copy_helper.dst = (uint64_t)(device_buffer);
 
     // enqueue the copy operation, using the allocated buffers
-    error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
+    error_code = vk_do_multidimensional_copy(user_context, submission->command_buffer, copy_helper,
                                              src_offset, dst_offset,
                                              halide_buffer->dimensions,
                                              from_host, to_host);
@@ -549,37 +538,13 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         return error_code;
     }
 
-    // end the command buffer
-    result = vkEndCommandBuffer(cmds.command_buffer);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_device_buffer_copy_failed;
+    // submit the copy, and wait for it to finish
+    error_code = vk_end_submission(user_context, ctx.allocator, submission);
+    if (error_code == halide_error_code_success) {
+        error_code = vk_wait_for_submissions(user_context, ctx.allocator);
     }
-
-    //// 13. Submit the command buffer to our command queue
-    VkSubmitInfo submit_info =
-        {
-            VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
-            nullptr,                        // pointer to struct extending this
-            0,                              // wait semaphore count
-            nullptr,                        // semaphores
-            nullptr,                        // pipeline stages where semaphore waits occur
-            1,                              // how many command buffers to execute
-            &(cmds.command_buffer),         // the command buffers
-            0,                              // number of semaphores to signal
-            nullptr                         // the semaphores to signal
-        };
-
-    result = vkQueueSubmit(ctx.queue, 1, &submit_info, VK_NULL_HANDLE);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_device_buffer_copy_failed;
-    }
-
-    //// 14. Wait until the queue is done with the command buffer
-    result = vkQueueWaitIdle(ctx.queue);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to submit the copy!\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
@@ -677,25 +642,10 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         << "  into halide buffer=" << halide_buffer << "\n";
 #endif
 
-    ScopedVulkanCommandBufferAndPool cmds(user_context, ctx.allocator, ctx.queue_family_index);
-    if (cmds.error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command buffer and pool!\n";
-        return cmds.error_code;
-    }
-
-    // begin the command buffer
-    VkCommandBufferBeginInfo command_buffer_begin_info =
-        {
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
-            nullptr,                                      // pointer to struct extending this
-            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
-            nullptr                                       // pointer to parent command buffer
-        };
-
-    VkResult result = vkBeginCommandBuffer(cmds.command_buffer, &command_buffer_begin_info);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_device_buffer_copy_failed;
+    VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index);
+    if (submission == nullptr) {
+        error(user_context) << "Vulkan: Failed to begin a submission!\n";
+        return halide_error_code_copy_to_host_failed;
     }
 
     // define the src and dst config
@@ -709,7 +659,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     copy_helper.dst = (uint64_t)(staging_buffer);
 
     // enqueue the copy operation, using the allocated buffers
-    int error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
+    int error_code = vk_do_multidimensional_copy(user_context, submission->command_buffer, copy_helper,
                                                  src_offset, dst_offset,
                                                  halide_buffer->dimensions,
                                                  from_host, to_host);
@@ -719,38 +669,14 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         return error_code;
     }
 
-    // end the command buffer
-    result = vkEndCommandBuffer(cmds.command_buffer);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return result;
+    // submit the copy, and wait for it (and everything before it) to finish
+    error_code = vk_end_submission(user_context, ctx.allocator, submission);
+    if (error_code == halide_error_code_success) {
+        error_code = vk_wait_for_submissions(user_context, ctx.allocator);
     }
-
-    //// 13. Submit the command buffer to our command queue
-    VkSubmitInfo submit_info =
-        {
-            VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
-            nullptr,                        // pointer to struct extending this
-            0,                              // wait semaphore count
-            nullptr,                        // semaphores
-            nullptr,                        // pipeline stages where semaphore waits occur
-            1,                              // how many command buffers to execute
-            &(cmds.command_buffer),         // the command buffers
-            0,                              // number of semaphores to signal
-            nullptr                         // the semaphores to signal
-        };
-
-    result = vkQueueSubmit(ctx.queue, 1, &submit_info, VK_NULL_HANDLE);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_copy_to_device_failed;
-    }
-
-    //// 14. Wait until the queue is done with the command buffer
-    result = vkQueueWaitIdle(ctx.queue);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_copy_to_device_failed;
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to submit the copy!\n";
+        return halide_error_code_copy_to_host_failed;
     }
 
     // map the staging region to a host ptr
@@ -841,9 +767,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         MemoryRegion *dst_buffer_region = nullptr;
 
         //// wait until the queue is done with the command buffer
-        VkResult wait_result = vkQueueWaitIdle(ctx.queue);
-        if (wait_result != VK_SUCCESS) {
-            error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(wait_result) << "\n";
+        int wait_result = vk_wait_for_submissions(user_context, ctx.allocator);
+        if (wait_result != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to wait for submitted work!\n";
             if (to_host) {
                 return halide_error_code_copy_to_host_failed;
             } else {
@@ -952,28 +878,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         VkBuffer *src_device_buffer = reinterpret_cast<VkBuffer *>(src_memory_region->handle);
         VkBuffer *dst_device_buffer = reinterpret_cast<VkBuffer *>(dst_memory_region->handle);
 
-        ScopedVulkanCommandBufferAndPool cmds(user_context, ctx.allocator, ctx.queue_family_index);
-        if (cmds.error_code != halide_error_code_success) {
-            error(user_context) << "Vulkan: Failed to create command buffer and pool!\n";
-            if (to_host) {
-                return halide_error_code_copy_to_host_failed;
-            } else {
-                return halide_error_code_copy_to_device_failed;
-            }
-        }
-
-        // begin the command buffer
-        VkCommandBufferBeginInfo command_buffer_begin_info =
-            {
-                VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
-                nullptr,                                      // pointer to struct extending this
-                VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
-                nullptr                                       // pointer to parent command buffer
-            };
-
-        VkResult result = vkBeginCommandBuffer(cmds.command_buffer, &command_buffer_begin_info);
-        if (result != VK_SUCCESS) {
-            error(user_context) << "Vulkan: vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index);
+        if (submission == nullptr) {
+            error(user_context) << "Vulkan: Failed to begin a submission!\n";
             if (to_host) {
                 return halide_error_code_copy_to_host_failed;
             } else {
@@ -993,7 +900,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         debug(user_context) << " dst region=" << (void *)dst_memory_region << " buffer=" << (void *)dst_device_buffer << " copy_offset=" << dst_offset << "\n";
 
         // enqueue the copy operation, using the allocated buffers
-        error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
+        error_code = vk_do_multidimensional_copy(user_context, submission->command_buffer, copy_helper,
                                                  src_offset, dst_offset,
                                                  src->dimensions,
                                                  from_host, to_host);
@@ -1003,42 +910,18 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             return error_code;
         }
 
-        // end the command buffer
-        result = vkEndCommandBuffer(cmds.command_buffer);
-        if (result != VK_SUCCESS) {
-            error(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        //// submit the copy, and wait for it to finish
+        error_code = vk_end_submission(user_context, ctx.allocator, submission);
+        if (error_code == halide_error_code_success) {
+            error_code = vk_wait_for_submissions(user_context, ctx.allocator);
+        }
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to submit the copy!\n";
             if (to_host) {
                 return halide_error_code_copy_to_host_failed;
             } else {
                 return halide_error_code_copy_to_device_failed;
             }
-        }
-
-        //// submit the command buffer to our command queue
-        VkSubmitInfo submit_info =
-            {
-                VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
-                nullptr,                        // pointer to struct extending this
-                0,                              // wait semaphore count
-                nullptr,                        // semaphores
-                nullptr,                        // pipeline stages where semaphore waits occur
-                1,                              // how many command buffers to execute
-                &(cmds.command_buffer),         // the command buffers
-                0,                              // number of semaphores to signal
-                nullptr                         // the semaphores to signal
-            };
-
-        result = vkQueueSubmit(ctx.queue, 1, &submit_info, VK_NULL_HANDLE);
-        if (result != VK_SUCCESS) {
-            error(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
-            return result;
-        }
-
-        //// wait until the queue is done with the command buffer
-        result = vkQueueWaitIdle(ctx.queue);
-        if (result != VK_SUCCESS) {
-            error(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
-            return result;
         }
 
         if (!from_host && to_host) {
@@ -1335,38 +1218,33 @@ WEAK int halide_vulkan_run(void *user_context,
         return error_code;
     }
 
-    // 4. Create a command buffer and pool
-    ScopedVulkanCommandBufferAndPool cmds(user_context, ctx.allocator, ctx.queue_family_index);
-    if (cmds.error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command buffer and pool!\n";
-        return cmds.error_code;
+    // 4. Begin a submission
+    VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index);
+    if (submission == nullptr) {
+        error(user_context) << "Vulkan: Failed to begin a submission!\n";
+        return halide_error_code_generic_error;
     }
 
     // 5. Fill the command buffer
-    error_code = vk_fill_command_buffer_with_dispatch_call(user_context,
-                                                           ctx.device, cmds.command_buffer,
-                                                           entry_point_binding->compute_pipeline,
-                                                           shader_module->pipeline_layout,
-                                                           entry_point_binding->descriptor_set,
-                                                           entry_point_index,
-                                                           blocksX, blocksY, blocksZ);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to fill command buffer with dispatch call!\n";
-        return error_code;
-    }
+    vk_record_dispatch_call(submission->command_buffer,
+                            entry_point_binding->compute_pipeline,
+                            shader_module->pipeline_layout,
+                            entry_point_binding->descriptor_set,
+                            entry_point_index,
+                            blocksX, blocksY, blocksZ);
 
     // 6. Submit the command buffer to our command queue
-    error_code = vk_submit_command_buffer(user_context, ctx.queue, cmds.command_buffer);
+    error_code = vk_end_submission(user_context, ctx.allocator, submission);
     if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to fill submit command buffer!\n";
+        error(user_context) << "Vulkan: Failed to submit command buffer!\n";
         return error_code;
     }
 
     // 7. Wait until the queue is done with the command buffer
-    VkResult result = vkQueueWaitIdle(ctx.queue);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
+    error_code = vk_wait_for_submissions(user_context, ctx.allocator);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to wait for the dispatch!\n";
+        return error_code;
     }
 
 #ifdef DEBUG_RUNTIME
