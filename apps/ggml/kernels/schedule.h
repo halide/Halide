@@ -1699,9 +1699,8 @@ inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, c
 // 32 x 32, 16 x 16, 16 x 8; steps of 64 values. On f16 operands at
 // 16 < M < 32 one 32 x 32 tile, guarded (decoding the weights once, not in
 // two shifted tiles): out reads it from a threadgroup copy (edge; a guarded
-// store from Tile memory doesn't lower), its stores predicated (guarded calls
-// would give every tile SkipStages flags); the rows past M it computes read
-// the last act row (the algorithm clamps them).
+// store from Tile memory doesn't lower), its stores guarded; the rows past M
+// it computes read the last act row (the algorithm clamps them).
 inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs) {
     if (fmt.block % 8 && fmt.block != 1) throw std::invalid_argument("metal_mm: flat, or blocks of a multiple of 8 values");
     const int t = 8;
@@ -1746,7 +1745,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
         Stage so = o.specialize(sh.cond.defined() ? sh.cond : Internal::const_true());
         if (sh.guard) {
             Var sw("mm_sw");
-            so.split(n, n, ni, bn, TailStrategy::ShiftInwards).split(m, m, mi, bm / sh.wn, TailStrategy::PredicateStores).split(m, m, sw, sh.wn, TailStrategy::RoundUp).reorder(ni, mi, sw, n, m);
+            so.split(n, n, ni, bn, TailStrategy::ShiftInwards).split(m, m, mi, bm / sh.wn, TailStrategy::GuardWithIf).split(m, m, sw, sh.wn, TailStrategy::RoundUp).reorder(ni, mi, sw, n, m);
             so.gpu_blocks(n, m).gpu_lanes(ni).gpu_threads(sw);
             edged = [=]() mutable {
                 edge.compute_at(out, n).store_in(MemoryType::GPUShared);

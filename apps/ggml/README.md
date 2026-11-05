@@ -433,18 +433,17 @@ memory per 64 values of K, multiplied by the simdgroups as 8 x 8
 acts, or by 56 where that computes fewer act rows past M (M = 1159: 1176 rows,
 not 1216). At 16 < M < 32 one 32-row tile decodes the weights once (not two
 shifted 16-row tiles): the spec clamps the act rows past M (computed, never
-stored), and out reads the tile through a copy in threadgroup memory with
-predicated stores (`PredicateStores`: a guarded call would give every tile
-SkipStages flags). Other shapes run `metal_rows` in the same kernel, on a clone
-of the dot (each branch's dot is stored apart). The rounding is per value, so
-the rows can no longer factor a block's scale out of its products: small M runs
-a few percent slower than the exact q4_0 rows (which GGML's mul_mv also is).
-`--check` declares it as `Precision::w_quant` (an f16 rounding of every decoded
-weight: half an ulp, 2^-25 at least). The exact blocked formats' Metal libraries
-(f32 or f16 acts) run the same `metal_mm` on f32 operands (their decoded weights
-and acts staged as f32, `simdgroup_float8x8` fragments) for M >= 16 and N >= 32:
-no rounding, and on the M3 Max about as fast as f16's (q4_0 at 4096 x 4096: M =
-16 98 us, M = 32 170; f16 operands 99 and 160). The two-level formats (K-quants,
+stored), and out reads the tile through a copy in threadgroup memory, its stores
+guarded. Other shapes run `metal_rows` in the same kernel, on a clone of the dot
+(each branch's dot is stored apart). The rounding is per value, so the rows can
+no longer factor a block's scale out of its products: small M runs a few percent
+slower than the exact q4_0 rows (which GGML's mul_mv also is). `--check`
+declares it as `Precision::w_quant` (an f16 rounding of every decoded weight:
+half an ulp, 2^-25 at least). The exact blocked formats' Metal libraries (f32 or
+f16 acts) run the same `metal_mm` on f32 operands (their decoded weights and
+acts staged as f32, `simdgroup_float8x8` fragments) for M >= 16 and N >= 32: no
+rounding, and on the M3 Max about as fast as f16's (q4_0 at 4096 x 4096: M = 16
+98 us, M = 32 170; f16 operands 99 and 160). The two-level formats (K-quants,
 iq4_xs) too: at 4096 x 4096 and M = 32..4231 their gemm takes 0.31-0.82x of
 their rows' time (f32, f16 or q8_K acts), about GGML's at M = 32 and 64
 (0.88-1.09x) and 1.2-1.9x slower from M = 256. `f16` weights with f16 acts
