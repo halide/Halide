@@ -920,8 +920,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         // Attempt to fold an inner loop. This will bail out if it encounters a
         // ProducerConsumer node for the func, or if it hits a sliding window
-        // marker.
+        // marker. A marker only stops the search within its own loop body.
+        bool old_found_sliding_marker = found_sliding_marker;
         body = mutate(body);
+        found_sliding_marker = old_found_sliding_marker;
 
         stmt = op->with(op->min, op->max, body);
 
