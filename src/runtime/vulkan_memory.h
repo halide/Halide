@@ -871,7 +871,10 @@ uint32_t VulkanMemoryAllocator::preferred_flags_for_memory_properties(
         preferred_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         break;
     case MemoryVisibility::DeviceToHost:
-        preferred_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        // The host reads this memory: it must be cached. Device-local host-visible
+        // memory (e.g. a resizable BAR window into VRAM) is uncached for the CPU,
+        // and reads from it crawl across the bus (~20 MB/s instead of ~10 GB/s).
+        preferred_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         break;
     case MemoryVisibility::HostToDevice:
     case MemoryVisibility::DefaultVisibility:
