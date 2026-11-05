@@ -99,6 +99,60 @@ int test_repeating_groups() {
     return 0;
 }
 
+int test_split_bits() {
+    Var x("x");
+    // In place: an int8 value is its low nibble plus a multiple of 16.
+    Func values("values");
+    values(x) = cast<int8_t>(x - 128);
+    Approximation split = SplitBits(Int(8), 4);
+    EncodeResult parts = split.encode({values});
+    if (parts.encoded[0].type() != UInt(8) || parts.encoded[1].type() != Int(8)) {
+        printf("SplitBits part types\n");
+        return 1;
+    }
+    Buffer<uint8_t> low = parts.encoded[0].realize({256});
+    Buffer<int8_t> high = parts.encoded[1].realize({256});
+    Buffer<int8_t> joined = split.decode(parts.encoded).decoded[0].realize({256});
+    for (int i = 0; i < 256; i++) {
+        int v = i - 128;
+        if (low(i) != (v & 15) || high(i) != (v & -16) || joined(i) != v) {
+            printf("SplitBits in place mismatch at %d\n", v);
+            return 1;
+        }
+    }
+
+    // Shifted: a 9-bit uint16 index is a byte and its top bit.
+    Func index("index");
+    index(x) = cast<uint16_t>(x * 37 % 512);
+    Approximation shifted = SplitBits(UInt(16), 8, true);
+    EncodeResult halves = shifted.encode({index});
+    if (halves.encoded[0].type() != UInt(8) || halves.encoded[1].type() != UInt(8)) {
+        printf("SplitBits shifted part types\n");
+        return 1;
+    }
+    Buffer<uint8_t> top = halves.encoded[1].realize({512});
+    Buffer<uint16_t> back = shifted.decode(halves.encoded).decoded[0].realize({512});
+    for (int i = 0; i < 512; i++) {
+        if (top(i) != (i * 37 % 512) >> 8 || back(i) != i * 37 % 512) {
+            printf("SplitBits shifted mismatch at %d\n", i);
+            return 1;
+        }
+    }
+
+    // The parts' ranges follow the value's.
+    ApproximationSignature sig = split.signature({{"codes", Int(8), 1, ApproximationRange(-32, 31)}});
+    if (!(sig.outputs[1].range->lo == -32 && sig.outputs[1].range->hi == 16)) {
+        printf("SplitBits high range\n");
+        return 1;
+    }
+    sig = shifted.signature({{"index", UInt(16), 1, ApproximationRange(0, 511)}});
+    if (!(sig.outputs[1].range->lo == 0 && sig.outputs[1].range->hi == 1)) {
+        printf("SplitBits shifted high range\n");
+        return 1;
+    }
+    return 0;
+}
+
 int test_invalid_shapes() {
     try {
         BitFields overlapping(UInt(16), {{"a", 4, 2, 0, 4}, {"b", 4, 1, 4}});
@@ -121,7 +175,7 @@ int test_invalid_shapes() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (test_multiple_fields() || test_repeating_groups() || test_invalid_shapes()) {
+    if (test_multiple_fields() || test_repeating_groups() || test_split_bits() || test_invalid_shapes()) {
         return 1;
     }
     printf("Success!\n");

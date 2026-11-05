@@ -1829,6 +1829,38 @@ struct PlanarFieldPack : BitFields {
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 };
 
+/** Split integers at a bit: `value <-> (low, high)`, `low` the bottom
+ * `low_bits` bits of the value, and `high` the rest, either in place (the
+ * value with its low bits cleared, of the value's type) or, if `shift`,
+ * shifted down by `low_bits`. Decode adds the two back together (so bounds
+ * inference can follow it). `low` is stored in the narrowest unsigned type
+ * that holds `low_bits` bits; a shifted `high` in the narrowest type of the
+ * value's signedness that holds the remaining bits. Shape-preserving: any
+ * dimensions pass through unchanged. For instance, the parts of a value
+ * stored in two different bit planes. */
+struct SplitBits {
+    /** Split values of `type`, an integer type, at bit `low_bits`. */
+    SplitBits(Type type, int low_bits, bool shift = false);
+
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    /** `value` <-> `low` and `high`. The dimensionality comes from the
+     * context, and is unknown without one; so does the value's range, from
+     * which the parts' ranges follow. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** Every bit of the value is kept. */
+    bool lossless() const {
+        return true;
+    }
+
+private:
+    Type type_, low_type_, high_type_;
+    int low_bits_;
+    bool shift_;
+};
+
 }  // namespace Halide
 
 #endif

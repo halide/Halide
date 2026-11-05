@@ -1901,6 +1901,15 @@ uint64_t low_bits_mask(int bits) {
     return bits >= 64 ? ~(uint64_t)0 : ((uint64_t)1 << bits) - 1;
 }
 
+// The narrowest integer type of t's signedness holding `bits` bits.
+Type narrowest_holding(Type t, int bits) {
+    int b = 8;
+    while (b < bits) {
+        b *= 2;
+    }
+    return t.with_bits(b);
+}
+
 }  // namespace
 
 BitFields::BitFields(Type word, std::vector<Field> fields)
@@ -2017,6 +2026,43 @@ ApproximationSignature PlanarFieldPack::signature(const ApproximationPorts &inpu
     std::optional<Type> type = inputs.size() == 1 ? inputs[0].type : std::nullopt;
     return {{{"fields", type, dims, ApproximationRange(0, (double)low_bits_mask(fields_[0].bits))}},
             {{"bytes", UInt(8), dims}}};
+}
+
+SplitBits::SplitBits(Type type, int low_bits, bool shift)
+    : type_(type), low_bits_(low_bits), shift_(shift) {
+    user_assert(type.is_int_or_uint() && type.is_scalar() && low_bits > 0 && low_bits < type.bits())
+        << "SplitBits requires a scalar integer type wider than its low bits\n";
+    low_type_ = narrowest_holding(UInt(8), low_bits);
+    high_type_ = shift ? narrowest_holding(type, type.bits() - low_bits) : type;
+}
+
+std::vector<Func> SplitBits::encode(const std::vector<Func> &inputs) const {
+    user_assert(inputs.size() == 1) << "SplitBits::encode requires one input\n";
+    Expr x = inputs[0](_);
+    Func low("low"), high("high");
+    low(_) = cast(low_type_, x) & make_const(low_type_, low_bits_mask(low_bits_));
+    high(_) = shift_ ? cast(high_type_, x >> make_const(type_, low_bits_)) : x & make_const(type_, (int64_t)~low_bits_mask(low_bits_));
+    return {low, high};
+}
+
+std::vector<Func> SplitBits::decode(const std::vector<Func> &encoded) const {
+    user_assert(encoded.size() == 2) << "SplitBits::decode requires (low, high)\n";
+    Expr low = cast(type_, encoded[0](_)), high = cast(type_, encoded[1](_));
+    Func value("joined_bits");
+    value(_) = shift_ ? low + (high << make_const(type_, low_bits_)) : high + low;
+    return {value};
+}
+
+ApproximationSignature SplitBits::signature(const ApproximationPorts &inputs) const {
+    std::optional<int> dims = context_dimensions(inputs);
+    std::optional<ApproximationRange> range = inputs.size() == 1 ? inputs[0].range : std::nullopt, high;
+    if (range) {
+        double unit = std::ldexp(1.0, low_bits_), scale = shift_ ? 1 : unit;
+        high = ApproximationRange(std::floor(range->lo / unit) * scale, std::floor(range->hi / unit) * scale);
+    }
+    return {{{"value", type_, dims, range}},
+            {{"low", low_type_, dims, ApproximationRange(0, (double)low_bits_mask(low_bits_))},
+             {"high", high_type_, dims, high}}};
 }
 
 const Derive *Approximation::as_derive() const {
