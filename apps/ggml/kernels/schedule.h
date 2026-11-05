@@ -1842,6 +1842,9 @@ inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, cons
     Func rows = dot.clone_in(pass);
     out.eager_inline(via, pass);
     metal_mm(mm, out, dot, edge, wh, xh, r, fmt, rs);
+    // the rows' luts, staged before metal_rows inlines the decoders (else
+    // its gemv inlines them: select trees)
+    metal_luts(out, rs);
     if (fmt.block > 1) {
         metal_rows(out, rows, r, rs, fmt.sub);
         return;
@@ -2008,7 +2011,6 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
             metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, staged);
-            metal_luts(out, rs);
             return;
         }
         if (fmt.block == 1) {
@@ -2017,7 +2019,6 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
         if (f32_operands(dots[0], rs, staged, fmt, wh, xh)) {
             metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 16);
-            metal_luts(out, rs);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
