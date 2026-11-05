@@ -303,7 +303,11 @@ protected:
     std::map<std::string, std::map<size_t, FuncInfo>> let_value_func_info;
 
     Stmt emit_defs(Stmt stmt) {
-        for (auto &p : func_info) {
+        return emit_defs(std::move(stmt), func_info);
+    }
+
+    Stmt emit_defs(Stmt stmt, const std::map<size_t, FuncInfo> &info) {
+        for (const auto &p : info) {
             stmt = LetStmt::make(used_var_name(p.first), simplify(p.second.used), stmt);
             stmt = LetStmt::make(loaded_var_name(p.first), simplify(p.second.loaded), stmt);
             need_uniquify |= !lets_emitted.insert(p.first).second;
@@ -529,10 +533,53 @@ protected:
         return op;
     }
 
-    Stmt mutate_conditional_stmt(const Stmt &s, const Expr &condition) {
+    Stmt mutate_conditional_stmt(const Stmt &s, const Expr &condition, bool is_branch = false) {
         std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         Stmt stmt = mutate(s);
+        if (is_branch && !in_vector_loop && !in_sliding_loop()) {
+            // The .used and .loaded vars of Funcs realized inside a branch are
+            // only read inside it, so define them at its top. Lifting them
+            // out instead would mean adding the branch condition to them
+            // (e.g. the negation of the other specializations' conditions),
+            // and merging them with the info from the Func's realizations
+            // elsewhere (e.g. in the other specializations, where it may be
+            // dead).
+            std::map<size_t, FuncInfo> inner;
+            std::map<std::string, Expr> inner_values;
+            for (auto it = func_info.begin(); it != func_info.end();) {
+                if (ids_in_realize.count(it->first)) {
+                    ++it;
+                } else {
+                    inner_values.emplace(used_var_name(it->first), it->second.used);
+                    inner_values.emplace(loaded_var_name(it->first), it->second.loaded);
+                    inner.insert(*it);
+                    it = func_info.erase(it);
+                }
+            }
+            if (!inner.empty()) {
+                stmt = emit_defs(stmt, inner);
+                // The remaining info may refer to the vars just defined (e.g.
+                // a Func realized outside the branch called by the producer
+                // of one realized inside it), so substitute in their values.
+                // They may refer to each other, but not cyclically.
+                for (auto &p : func_info) {
+                    for (Expr *e : {&p.second.used, &p.second.loaded}) {
+                        Expr orig = *e;
+                        for (size_t i = 0; i <= inner.size(); i++) {
+                            Expr next = substitute(inner_values, *e);
+                            if (next.same_as(*e)) {
+                                break;
+                            }
+                            *e = next;
+                        }
+                        if (!e->same_as(orig)) {
+                            *e = simplify(*e);
+                        }
+                    }
+                }
+            }
+        }
         merge_func_info(&old, func_info, condition, condition);
         old.swap(func_info);
         return stmt;
@@ -544,10 +591,10 @@ protected:
             return IRMutator::visit(op);
         }
 
-        Stmt then_case = mutate_conditional_stmt(op->then_case, op->condition);
+        Stmt then_case = mutate_conditional_stmt(op->then_case, op->condition, true);
         Stmt else_case;
         if (op->else_case.defined()) {
-            else_case = mutate_conditional_stmt(op->else_case, !op->condition);
+            else_case = mutate_conditional_stmt(op->else_case, !op->condition, true);
         }
         mutate(op->condition);
         if (then_case.same_as(op->then_case) &&
@@ -684,6 +731,15 @@ protected:
     Scope<> in_realize;
     Scope<> in_realize_and_produce_or_consume;
 
+    // The ids of the Funcs with a Realize node around the current Stmt.
+    std::multiset<size_t> ids_in_realize;
+
+    // Are we in a loop over a Func's realization outside its produce and
+    // consume nodes (a sliding window loop)?
+    bool in_sliding_loop() const {
+        return in_realize_and_produce_or_consume.size() < in_realize.size();
+    }
+
     Stmt visit(const ProducerConsumer *op) override {
         size_t id = analysis.func_id.at(op->name);
         const bool unconditionally_used = analysis.unconditionally_used_funcs.count(id);
@@ -737,7 +793,9 @@ protected:
         Stmt body;
         {
             ScopedBinding<> bind(in_realize, op->name);
+            auto pos = ids_in_realize.insert(id);
             body = mutate(op->body);
+            ids_in_realize.erase(pos);
         }
         Expr condition = mutate(op->condition);
         auto it = func_info.find(id);
@@ -769,10 +827,9 @@ protected:
         // There can't be calls in the min and extent, so no need to visit;
         // those.
 
-        const bool in_sliding_loop = in_realize_and_produce_or_consume.size() < in_realize.size();
         bool may_emit =
             !in_vector_loop &&
-            !in_sliding_loop &&
+            !in_sliding_loop() &&
             inner_unbound_use_of_used_or_loaded_vars;
 
         Stmt body_before = body;
