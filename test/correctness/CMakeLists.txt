@@ -293,6 +293,7 @@ tests(
     gpu_register_stored_by_one_thread.cpp
     gpu_register_stored_by_one_warp.cpp
     gpu_reuse_shared_memory.cpp
+    gpu_shared_alloc_loop_liveness.cpp
     gpu_shared_vector_codegen.cpp
     gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp

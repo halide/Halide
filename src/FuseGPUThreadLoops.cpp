@@ -490,7 +490,19 @@ protected:
         host_side_preamble = Stmt();
 
         // Find allocations inside the loop body
+        int loop_start_stage = barrier_stage;
         Stmt body = mutate(op->body);
+
+        if (!in_threads) {
+            // An allocation made outside a serial loop and used inside it is
+            // used again at the start of the next iteration, so it's live for
+            // all of the loop's stages, not just until its last use in the body.
+            for (auto &[name, alloc] : shared) {
+                if (alloc->liveness.max >= loop_start_stage) {
+                    alloc->liveness.max = barrier_stage;
+                }
+            }
+        }
 
         // Expand any new shared allocations found in the body using the loop bounds.
         Scope<Interval> scope;
