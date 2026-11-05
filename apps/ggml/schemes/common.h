@@ -313,23 +313,22 @@ inline ApproximationSignature codes_and_scale(int lo, int hi) {
     return {{{"blocks", Float(32)}}, {codes_port(lo, hi), param_port("scale", Float(32), tag::scale)}};
 }
 
+// The affine code maps (Pointwise::affine: codes a * u + b <-> fields u in
+// [0, n)), declared so a schedule can ask for a constant offset of the codes
+// (Pointwise::AffineMap::offset_term()) instead of matching their decode.
+
 // Codes in [0, 2^bits - 1] <-> the same unsigned fields (GGML's q4_1 nibbles).
 inline Approximation unsigned_codes(int bits) {
-    return Pointwise{"unsigned", [](const Expr &x) { return cast<uint8_t>(x); }, [](const Expr &x) { return cast<int8_t>(x); }}
-        .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(0, (1 << bits) - 1), ApproximationRange(0, (1 << bits) - 1))
-        .with_lossless();
+    return Pointwise::affine("unsigned", 1, 0, 1 << bits);
 }
 
 // Signed codes in [-bias, bias - 1] <-> unsigned fields in [0, 2 * bias - 1].
 // With `shift`, codes kept at 2^shift times their value (multiples of 2^shift).
+// Narrow: the offset inside the cast to int8, not a term of the codes (as
+// GGML's q4_0 kernels subtract 8 from each nibble, not 8 times the act's
+// block sum: no fold).
 inline Approximation offset(int bias, int shift = 0) {
-    int k = 1 << shift;
-    return Pointwise{"offset", [=](const Expr &x) { return cast<uint8_t>((shift ? x >> shift : x) + bias); },
-                     [=](const Expr &x) { return shift ? cast<int8_t>((x << shift) - cast<uint8_t>(bias * k)) : cast<int8_t>(cast<int>(x) - bias); }}
-        .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(-bias * k, (bias - 1) * k), ApproximationRange(0, 2 * bias - 1))
-        .with_lossless();
+    return Pointwise::affine("offset", 1 << shift, -(bias << shift), 2 * bias, Pointwise::AffineForm::Narrow);
 }
 
 // Signed codes in [-2^(bits-1), 2^(bits-1) - 1] <-> their two's-complement
@@ -345,13 +344,10 @@ inline Approximation twos(int bits, int shift = 0) {
         .with_lossless();
 }
 
-// The `n` codes lo + i * 2^shift <-> i, unsigned.
+// The `n` codes lo + i * 2^shift <-> i, unsigned; lo a term of the codes'
+// decode (a constant offset: tq2_0's -1, q6_K's -32).
 inline Approximation multiples(int shift, int lo, int n) {
-    return Pointwise{"multiples", [=](const Expr &x) { return cast<uint8_t>(x - cast<int8_t>(lo)) >> shift; },
-                     [=](const Expr &x) { return cast<int8_t>(x << shift) + cast<int8_t>(lo); }}
-        .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(lo, lo + (n - 1) * (1 << shift)), ApproximationRange(0, n - 1))
-        .with_lossless();
+    return Pointwise::affine("multiples", 1 << shift, lo, n);
 }
 
 // The values of a MiniFloat `f` with neither inf nor NaN (Specials::None),
@@ -785,10 +781,7 @@ struct SignSplit {
 
 // Signs +-1 <-> sign bits (1: negative).
 inline Approximation sign_bits() {
-    return Pointwise{"sign_bits", [](const Expr &x) { return cast<uint8_t>(x < 0); }, [](const Expr &x) { return cast<int8_t>(1) - (cast<int8_t>(x) << 1); }}
-        .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(-1, 1), ApproximationRange(0, 1))
-        .with_lossless();
+    return Pointwise::affine("sign_bits", -2, 1, 2);
 }
 
 // Each 8 bits of even parity <-> their first 7 (the 8th is their parity:
@@ -852,6 +845,12 @@ struct RunShift {
         return true;
     }
 };
+
+// Whether a's decode adds its inputs, each times a constant (SumSplit's,
+// RunShift's), so that a constant term of an input is one of the output.
+inline bool linear(const Approximation &a) {
+    return a.target<SumSplit>() || a.target<RunShift>();
+}
 
 // Unsigned indices <-> their low `low` bits ("low") and the rest, shifted
 // down ("high"), each a byte (GGML's grid indices: a byte of qs and the top

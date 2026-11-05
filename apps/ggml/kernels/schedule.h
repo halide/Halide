@@ -456,63 +456,22 @@ inline bool affine(const std::vector<ApproximationResult> &rs) {
     return std::any_of(ps.begin(), ps.end(), [](const ApproximationPort &p) { return p.tags && p.tags->count(tag::offset); });
 }
 
-// e as a sum of terms (Add and Sub nodes), each with its sign: its constant
-// terms summed into c, the rest into `terms`.
-inline void sum_terms(const Expr &e, int sign, std::vector<std::pair<Expr, int>> &terms, int64_t &c) {
-    if (const auto *a = e.as<Internal::Add>()) {
-        sum_terms(a->a, sign, terms, c);
-        sum_terms(a->b, sign, terms, c);
-    } else if (const auto *s = e.as<Internal::Sub>()) {
-        sum_terms(s->a, sign, terms, c);
-        sum_terms(s->b, -sign, terms, c);
-    } else if (auto k = Internal::as_const_int(e)) {
-        c += sign * *k;
-    } else if (auto k = Internal::as_const_uint(e)) {
-        c += sign * (int64_t)*k;
-    } else {
-        terms.emplace_back(e, sign);
-    }
-}
-
-// The weight's integer code decoders that add a constant (an offset: tq2_0's
-// field - 1, q6_K's high bits - 32).
-inline std::vector<Func> offset_decoders(const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> fs;
-    for (Func f : decoders(rs, only({tag::codes}), 0, 1)) {
-        const Internal::Function &fn = f.function();
-        if (fn.has_update_definition() || fn.outputs() != 1 || !fn.output_types()[0].is_int_or_uint()) continue;
-        std::vector<std::pair<Expr, int>> terms;
-        int64_t c = 0;
-        sum_terms(fn.definition().values()[0], 1, terms, c);
-        if (c && !terms.empty()) fs.push_back(f);
-    }
-    return fs;
-}
-
-// The offset decoders and the weight's code decoders that add their values
+// The weight's code decoders that add a constant code offset (an affine
+// map's offset_term(): tq2_0's field - 1, q6_K's high bits - 32; not q4_0's,
+// inside its narrowing cast) and the linear ones that add their values
 // (q6_K's codes), if the codes the dot reads are among them (not iq2_s's),
 // else none. Eager-inlined, each constant offset reaches the widening cast of
 // the codes' sum, which hoist_invariants() then splits where it is exact.
 inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> codes = decoders(rs, only({tag::codes}), 0, 1), path = offset_decoders(rs);
-    for (bool grew = !path.empty(); grew;) {
-        grew = false;
-        for (Func f : codes) {
-            if (has(path, f.name()) || f.function().has_update_definition()) continue;
-            std::vector<std::pair<Expr, int>> terms;
-            int64_t c = 0;
-            sum_terms(f.function().definition().values()[0], 1, terms, c);
-            if (std::any_of(terms.begin(), terms.end(), [&](const auto &t) {
-                    Expr e = t.first;
-                    while (const auto *k = e.as<Internal::Cast>()) {
-                        e = k->value;
-                    }
-                    const auto *call = e.as<Internal::Call>();
-                    return call && has(path, call->name);
-                })) {
-                path.push_back(f);
-                grew = true;
-            }
+    std::vector<Func> path;
+    for (Func f : decoders(rs, only({tag::codes}), 0, 1)) {
+        const ApproximationTraceNode *n = rs[0].defining_call(f);
+        const Pointwise *p = n ? n->stage.target<Pointwise>() : nullptr;
+        bool offset = p && p->affine_map() && p->affine_map()->offset_term();
+        // (decoders are in order: a stage's inputs precede it)
+        if (offset || (n && linear(n->stage) &&
+                       std::any_of(n->inputs.begin(), n->inputs.end(), [&](const Func &g) { return has(path, g.name()); }))) {
+            path.push_back(f);
         }
     }
     // the codes the dot reads

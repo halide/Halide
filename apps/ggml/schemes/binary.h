@@ -38,15 +38,11 @@ struct SignQuant {
     }
 };
 
-// The codes -1, 1 <-> bits 0, 1 (sign_bits()' opposite): multiples(1, -1, 2), its decode a select
+// The codes -1, 1 <-> bits 0, 1 (sign_bits()' opposite), decoded by a select
 // on the bit (a test and a select of two constants: cheaper than shifting
 // the bit into place).
 inline Approximation set_signs() {
-    return Pointwise{"set_signs", [](const Expr &x) { return cast<uint8_t>(x > cast<int8_t>(0)); },
-                     [](const Expr &x) { return select(x != cast<uint8_t>(0), cast<int8_t>(1), cast<int8_t>(-1)); }}
-        .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(-1, 1), ApproximationRange(0, 1))
-        .with_lossless();
+    return Pointwise::affine("set_signs", 2, -1, 2, Pointwise::AffineForm::Select);
 }
 
 // block_q1_0 {f16 d; u8 qs[16]}: bit j set for the code 1, least
