@@ -544,6 +544,7 @@ SOURCE_FILES = \
   LICM.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
+  LoadInvariantBits.cpp \
   LoopCarry.cpp \
   Lower.cpp \
   LowerParallelTasks.cpp \
@@ -757,6 +758,7 @@ HEADER_FILES = \
   LICM.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
+  LoadInvariantBits.h \
   LoopCarry.h \
   LoopPartitioningDirective.h \
   Lower.h \

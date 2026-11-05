@@ -377,6 +377,7 @@ tests(
     lerp_signed_weight.cpp
     let_in_rdom_bound.cpp
     likely.cpp
+    load_invariant_bits.cpp
     load_library.cpp
     logical.cpp
     loop_carry.cpp
