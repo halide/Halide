@@ -551,6 +551,7 @@ tests(
     split_store_compute.cpp
     stable_realization_order.cpp
     stack_allocations.cpp
+    stage_order_independent.cpp
     stage_strided_loads.cpp
     stage_value.cpp
     stencil_chain_in_update_definitions.cpp

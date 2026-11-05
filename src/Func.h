@@ -742,6 +742,20 @@ public:
     Stage &allow_race_conditions();
     Stage &atomic(bool override_associativity_test = false);
 
+    /** Can this stage run its reduction in any order? True if Halide can
+     * prove it associative and commutative (e.g. a sum, a max, an argmin; not
+     * a strict_float sum, which must keep its order), or if it doesn't read
+     * the value it updates (a pure definition, for one). This is what
+     * reordering its RVars, or vectorizing or parallelizing them with
+     * atomic(), requires, so a schedule can ask before it does so:
+     * \code
+     * if (f.update().is_order_independent()) {
+     *     f.update().atomic().vectorize(r.x);
+     * }
+     * \endcode
+     */
+    bool is_order_independent() const;
+
     /** Use non-temporal (streaming) stores for writes done by this Stage. On
      * targets that require it, Halide emits a fence immediately after this
      * Stage's production to ensure the streamed values are visible to

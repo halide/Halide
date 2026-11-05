@@ -435,6 +435,16 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
              rhs_checker.has_rvar);
 }
 
+// Whether an update may run its reduction in any order (see
+// Stage::is_order_independent()).
+bool can_reorder_reduction(const string &func_name, const vector<Expr> &args, const vector<Expr> &values) {
+    if (is_const_assignment(func_name, args, values)) {
+        return true;
+    }
+    const auto &prover_result = prove_associativity(func_name, args, values);
+    return prover_result.associative() && prover_result.commutative();
+}
+
 void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
     // Splits with a 'blend' tail strategy do a load and then a store of values
     // outside of the region to be computed, so for each split using a 'blend'
@@ -534,20 +544,9 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
                         // We only allow associative atomic operations
-                        const string &func_name = function.name();
-                        vector<Expr> &args = definition.args();
-                        vector<Expr> &values = definition.values();
-
-                        if (!is_const_assignment(func_name, args, values)) {
-                            // Check whether the operator is associative and determine the operator and
-                            // its identity for each value in the definition if it is a Tuple
-                            const auto &prover_result = prove_associativity(func_name, args, values);
-
-                            user_assert(prover_result.associative() && prover_result.commutative())
-                                << "Failed to call atomic() on " << name()
-                                << " since it can't prove associativity or commutativity of the operator.\n";
-                            internal_assert(prover_result.size() == values.size());
-                        }
+                        user_assert(is_order_independent())
+                            << "Failed to call atomic() on " << name()
+                            << " since it can't prove associativity or commutativity of the operator.\n";
                     }
                 }
                 user_assert(definition.schedule().allow_race_conditions() ||
@@ -3064,6 +3063,10 @@ Stage &Stage::allow_race_conditions() {
     return *this;
 }
 
+bool Stage::is_order_independent() const {
+    return can_reorder_reduction(function.name(), definition.args(), definition.values());
+}
+
 Stage &Stage::atomic(bool override_associativity_test) {
     definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
@@ -3341,9 +3344,7 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
             for (size_t j = i + 1; !safe_to_reorder && j < idx.size(); j++) {
                 if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
                     // Generate an error if the operator is not both associative and commutative.
-                    const auto &prover_result = prove_associativity(func_name, args, values);
-                    safe_to_reorder = prover_result.associative() &&
-                                      prover_result.commutative();
+                    safe_to_reorder = can_reorder_reduction(func_name, args, values);
                     if (!safe_to_reorder) {
                         user_error
                             << "In schedule for " << name()

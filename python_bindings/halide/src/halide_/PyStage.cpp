@@ -46,6 +46,8 @@ void define_stage(py::module_ &m) {
                  py::arg("preserved"))
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
+            .def("is_order_independent", &Stage::is_order_independent)
+
             .def("hoist_invariants", &hoist_invariants_of_funcs, py::arg("funcs"))
             .def("hoist_invariants", &hoist_invariants_of_groups, py::arg("groups"))
             .def("hoist_invariants", [](Stage &stage) {

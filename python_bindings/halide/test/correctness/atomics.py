@@ -9,6 +9,7 @@ def test_atomics():
     r = hl.RDom([(0, 100)])
     f[x] = 0
     f[hl.Expr(im[r])] += 1
+    assert f.update().is_order_independent()
     f.compute_root().update().atomic().parallel(r)
     b = f.realize([5])
 
