@@ -258,6 +258,29 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     map<string, Expr> replacements;
 
+    // The dimensions slid before the first copy of the producer was reached,
+    // and whether a later copy wanted a different slide.
+    set<int> slid_before;
+    bool copies_disagree = false;
+
+    static bool same_expr(const Expr &a, const Expr &b) {
+        return a.defined() == b.defined() && (!a.defined() || equal(a, b));
+    }
+
+    static bool same_decision(const SlideDecision &a, const SlideDecision &b) {
+        if (a.slid() != b.slid()) {
+            return false;
+        }
+        return !a.slid() ||
+               (a.dim_idx == b.dim_idx &&
+                a.slide_up == b.slide_up &&
+                same_expr(a.old_bounds.min, b.old_bounds.min) &&
+                same_expr(a.old_bounds.max, b.old_bounds.max) &&
+                same_expr(a.new_bounds.min, b.new_bounds.min) &&
+                same_expr(a.new_bounds.max, b.new_bounds.max) &&
+                same_expr(a.warmup_start, b.warmup_start));
+    }
+
     // Bounds inference emits a .min/.max let per enclosing loop level, and a
     // consumer staged at an outer level reads the outer one, so every one of
     // them enclosing the producer gets rewritten. Lets in sibling subtrees
@@ -300,7 +323,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // Decide what to do with this producer, using only the scopes gathered on
     // the way in. Makes no changes to the IR.
     SlideDecision plan_slide() {
-        SlideDecision result = decision;
+        SlideDecision result;
+        result.func_name = decision.func_name;
+        result.slide_over = decision.slide_over;
+        result.considered = true;
 
         // We're interested in the case where exactly one of the dimensions of
         // the buffer has a min/extent that depends on the loop_var.
@@ -540,11 +566,24 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (!(op->is_producer && op->name == func.name())) {
             return IRMutator::visit(op);
         }
-        internal_assert(!decision.slid()) << "Slid " << func.name()
-                                          << "'s producer twice\n";
-        decision = plan_slide();
-        decision.considered = true;
-        debug(2) << decision;
+        // The producer appears once per specialization of anything enclosing
+        // it. Each copy is planned against the dimensions slid before any of
+        // them were, and they have to agree, because the loop can only be
+        // rewound one way.
+        if (decision.considered) {
+            set<int> slid_after = slid_dimensions;
+            slid_dimensions = slid_before;
+            SlideDecision again = plan_slide();
+            slid_dimensions = slid_after;
+            if (!same_decision(again, decision)) {
+                copies_disagree = true;
+                return op;
+            }
+        } else {
+            slid_before = slid_dimensions;
+            decision = plan_slide();
+            debug(2) << decision;
+        }
 
         if (!decision.slid()) {
             return op;
@@ -671,6 +710,18 @@ public:
 
     // What we decided to do, filled in when we reach the producer.
     SlideDecision decision;
+
+    Stmt operator()(const Stmt &s) {
+        set<int> slid_on_entry = slid_dimensions;
+        Stmt result = mutate(s);
+        if (copies_disagree) {
+            slid_dimensions = slid_on_entry;
+            decision.reject("specializations of something it's computed in need different windows");
+            debug(2) << decision;
+            return s;
+        }
+        return result;
+    }
 
     // Slide in registers instead of in memory, by shifting values along an
     // unrolled array. Only valid once we've decided to slide.

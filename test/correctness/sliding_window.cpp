@@ -871,6 +871,39 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Specializing a consumer duplicates the producer computed inside
+        // it, and each copy has to slide the same way.
+        count = 0;
+        Func f, g, h;
+        Param<bool> p;
+        f(x, y) = call_counter(x, y) + x + y;
+        g(x, y) = f(x, y) + f(x, y + 1);
+        h(x, y) = g(x, y) * 2;
+        g.compute_at(h, y).specialize(p);
+        f.store_root().compute_at(g, x);
+        for (bool pv : {false, true}) {
+            count = 0;
+            p.set(pv);
+            Buffer<int> out = h.realize({8, 8});
+            for (int j = 0; j < 8; j++) {
+                for (int i = 0; i < 8; i++) {
+                    int correct = 2 * (2 * (i + j) + 1);
+                    if (out(i, j) != correct) {
+                        printf("Specialized consumer: out(%d, %d) = %d instead of %d\n",
+                               i, j, out(i, j), correct);
+                        return 1;
+                    }
+                }
+            }
+            if (count != 8 * 9) {
+                printf("Specialized consumer: f was called %d times instead of %d times\n",
+                       count, 8 * 9);
+                return 1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
