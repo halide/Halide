@@ -477,13 +477,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         new_loop_min_eq = simplify(new_loop_min_eq);
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
         // The constraints hold everywhere in the interval the solver returns,
-        // which is empty if they can't all be met. Nothing reads what an empty
-        // loop computes, so it may rewind regardless.
+        // which is empty if they can't all be met.
         bool solved = (solve_result.has_upper_bound() &&
                        (!solve_result.has_lower_bound() ||
-                        can_prove(loop_max < loop_min ||
-                                      solve_result.min <= solve_result.max,
-                                  bounds_scope)));
+                        can_prove(solve_result.min <= solve_result.max, bounds_scope)));
         if (solved &&
             !expr_uses_vars(solve_result.max, enclosing_loops) &&
             (!unrolled || is_const(simplify(loop_min - solve_result.max)))) {
