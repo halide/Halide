@@ -1346,20 +1346,8 @@ inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationRe
     return {};
 }
 
-// Whether f's update may be computed out of order (atomic()): not if it
-// accumulates by a strict_float add, subtract, multiply or fma, which must
-// keep its order (min and max may reorder).
-inline bool reassociable(const Func &f) {
-    using Internal::Call;
-    for (const Expr &v : f.function().update(0).values()) {
-        const Call *c = v.as<Call>();
-        if (c && (c->is_intrinsic(Call::strict_add) || c->is_intrinsic(Call::strict_sub) || c->is_intrinsic(Call::strict_mul) || c->is_intrinsic(Call::strict_fma))) return false;
-    }
-    return true;
-}
-
 // An encoder computed per record, vectorized: its per-value Funcs across
-// their elements, its reassociable reductions across the block (a
+// their elements, its order-independent reductions across the block (a
 // strict_float sum, q1_0's, stays in order). `vec`: e itself vectorized
 // (acts of values, not blocks).
 inline void encoder(Func e, const std::vector<ApproximationResult> &rs, int vec = 0) {
@@ -1372,7 +1360,7 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs, int vec 
             }
         } else if (f.has_update_definition()) {
             f.compute_at(e, e.args()[0]);
-            if (reassociable(f)) f.update().atomic().vectorize(f.rvars()[0]);
+            if (f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);  // (just checked)
         }
     }
     if (vec) e.vectorize(e.args()[0], vec, TailStrategy::GuardWithIf);
