@@ -118,6 +118,9 @@ struct MatrixUnit {
     bool (*fragment_type_supported)(Type t);
     // How many elements of a fragment each lane holds.
     int (*elements_per_lane)(Role role, const Shape &shape, Type t);
+    // Whether an operand's registers are laid out according to the layout of
+    // the matrix it was loaded from, which the multiply must then be told.
+    bool operand_registers_have_layout;
 };
 
 // The shape of the matrix each fragment is taken out of.
@@ -201,6 +204,7 @@ const MatrixUnit cuda_matrix_unit{
     cuda_types_supported,
     cuda_fragment_type_supported,
     cuda_elements_per_lane,
+    true,
 };
 
 const MatrixUnit metal_matrix_unit{
@@ -211,6 +215,8 @@ const MatrixUnit metal_matrix_unit{
     metal_types_supported,
     metal_fragment_type_supported,
     metal_elements_per_lane,
+    // simdgroup_load transposes a column-major matrix on the way in.
+    false,
 };
 
 const MatrixUnit *matrix_unit_for(DeviceAPI api) {
@@ -542,6 +548,11 @@ struct Fragment {
     // An allocation may hold several fragments as disjoint sub-tiles, each of
     // which becomes its own allocation.
     vector<MultiRamp> subtiles;
+    // The layout of the matrix each operand sub-tile was filled from, by name,
+    // on a unit whose operand registers have a layout. That need not be the
+    // layout of the allocation the operand is staged in. The second pass
+    // reaches a fill before the multiplies that read what it filled.
+    std::map<string, Layout> fill_layouts;
 
     Type value_type() const {
         return element_type.with_lanes(
@@ -646,17 +657,25 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     // The value a matrix multiply uses for one of its operands: the fragment it
-    // was staged in, or a load synthesized here if it wasn't staged.
+    // was staged in, or a load synthesized here if it wasn't staged. On entry
+    // the layout is the one the multiply indexes the operand in; on exit it is
+    // the one the operand's registers are in, which is what the multiply
+    // instruction has to be told. For a staged operand that's the layout of the
+    // matrix its fragment was filled from, not of the fragment's storage.
     Expr operand_value(const MatrixUnit &unit, const Operand &operand, Role role,
-                       const Shape &shape, Layout layout, const Expr &stride,
+                       const Shape &shape, Layout *layout, const Expr &stride,
                        const Expr &lane) {
         if (Fragment *f = find_fragment(operand.load->name)) {
             const int lanes = f->value_type().lanes();
             const string name =
-                operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
+                operand_subtile_name(f, operand.mr.base, role, shape, *layout, stride);
+            auto it = f->fill_layouts.find(name);
+            if (it != f->fill_layouts.end()) {
+                *layout = it->second;
+            }
             return Load::make(f->value_type(), name, Ramp::make(0, 1, lanes));
         }
-        return make_matrix_to_fragment(unit, role, shape, layout, operand.load,
+        return make_matrix_to_fragment(unit, role, shape, *layout, operand.load,
                                        operand.mr.base, stride, lane);
     }
 
@@ -709,9 +728,17 @@ class ExtractWMMAOperations : public IRMutator {
                 value = fail("The matrix loaded from is not a dense tile of the right "
                              "shape");
             } else {
-                value = make_matrix_to_fragment(
-                    *f->unit, f->role, f->shape, mem.row_major ? Layout::Row : Layout::Col,
-                    matrix, mem.base, mem.stride, lane);
+                const Layout layout = mem.row_major ? Layout::Row : Layout::Col;
+                if (f->role != Role::Accumulator && f->unit->operand_registers_have_layout) {
+                    auto [it, inserted] = f->fill_layouts.emplace(name, layout);
+                    user_assert(it->second == layout)
+                        << "The tensor core fragment " << f->name << " is filled from "
+                        << "both row-major and column-major matrices. Its registers can "
+                        << "only be in one layout.\n"
+                        << Stmt(op);
+                }
+                value = make_matrix_to_fragment(*f->unit, f->role, f->shape, layout,
+                                                matrix, mem.base, mem.stride, lane);
             }
         }
         return in_lane_loop(
@@ -721,8 +748,9 @@ class ExtractWMMAOperations : public IRMutator {
     Stmt convert_to_matmul(const Store *op, Fragment *f, const MatmulInfo &info) {
         Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
         const MatrixUnit &unit = *f->unit;
-        Expr a = operand_value(unit, info.lhs, Role::A, info.shape, info.lhs_layout, info.lda, lane);
-        Expr b = operand_value(unit, info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb, lane);
+        Layout a_layout = info.lhs_layout, b_layout = info.rhs_layout;
+        Expr a = operand_value(unit, info.lhs, Role::A, info.shape, &a_layout, info.lda, lane);
+        Expr b = operand_value(unit, info.rhs, Role::B, info.shape, &b_layout, info.ldb, lane);
 
         const int acc_lanes =
             unit.elements_per_lane(Role::Accumulator, info.shape, info.accumulator_type);
@@ -733,7 +761,7 @@ class ExtractWMMAOperations : public IRMutator {
 
         Expr mma = Call::make(acc_type, Call::wmma_mma,
                               {info.shape.M, info.shape.N, info.shape.K,
-                               (int)info.lhs_layout, (int)info.rhs_layout,
+                               (int)a_layout, (int)b_layout,
                                std::move(a), std::move(b), std::move(c), lane},
                               Call::Intrinsic);
 

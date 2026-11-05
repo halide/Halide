@@ -660,6 +660,7 @@ tests(
     vulkan_bool_scalar_abi.cpp
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
+    wmma_fragment_layout.cpp
     wmma_matmul.cpp
     wmma_row_max.cpp
     wrap_custom_after_shared.cpp
