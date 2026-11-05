@@ -6,7 +6,9 @@ def test_precompute():
 
     lut = Func("lut")
     lut[x] = x * x + 1
+    assert not lut.is_precomputed()
     lut.precompute()
+    assert lut.is_precomputed()
 
     output = Func("output")
     output[x] = lut[x % 4]

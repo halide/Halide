@@ -2878,6 +2878,11 @@ public:
      */
     Func &precompute();
 
+    /** Has precompute() been called on this Func? A schedule built in parts
+     * can ask before it schedules a Func something else may have
+     * precomputed. */
+    bool is_precomputed() const;
+
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the
      * production is complete. If this Func's store level is different

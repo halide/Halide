@@ -4159,6 +4159,10 @@ Func &Func::precompute() {
     return compute_root();
 }
 
+bool Func::is_precomputed() const {
+    return func.schedule().precomputed();
+}
+
 Func &Func::store_in(MemoryType t) {
     invalidate_cache();
     func.schedule().memory_type() = t;

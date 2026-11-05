@@ -113,7 +113,9 @@ int integer_lut() {
     g(x) = lut(x % 256) + lut((x * 3) % 256);
 
     Buffer<uint8_t> expected = g.realize({1000});
+    CHECK(!lut.is_precomputed());
     lut.precompute();
+    CHECK(lut.is_precomputed() && !g.is_precomputed());
     g.vectorize(x, 8);
     Buffer<uint8_t> actual = g.realize({1000});
     CHECK(check_equal(actual, expected) == 0);
