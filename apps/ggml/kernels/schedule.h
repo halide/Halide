@@ -1675,12 +1675,10 @@ inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::
 }
 
 // The f32 operands of a Metal gemm on exact weights (wh: the weights' decoded
-// values; xh: the acts dot multiplies them by), else false. Not two-level
-// formats: the gemm specialization's negation in the rows' SkipStages flags
-// makes M = 1 1.17-1.28x slower (q4_K, q2_K, iq4_xs; M3 Max).
+// values; xh: the acts dot multiplies them by), else false.
 inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
     using namespace Internal;
-    if (fmt.wcompute || !staged.empty() || rs.empty() || fmt.block % 8 || fmt.sub) return false;
+    if (fmt.wcompute || !staged.empty() || rs.empty() || fmt.block % 8) return false;
     wh = rs[0].replacement;
     const Add *sum = dot.update_value().as<Add>();
     const Mul *p = sum ? sum->b.as<Mul>() : nullptr;
