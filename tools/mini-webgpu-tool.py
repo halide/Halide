@@ -82,7 +82,8 @@ SCAN = ["src/runtime/webgpu.cpp", "test/common/gpu_context.h"]
 
 def dawn_pin():
     """The `dawn` version pinned in vcpkg.json's overrides."""
-    manifest = json.load(open(os.path.join(REPO, "vcpkg.json")))
+    with open(os.path.join(REPO, "vcpkg.json")) as fh:
+        manifest = json.load(fh)
     for o in manifest.get("overrides", []):
         if o["name"] == "dawn":
             return o["version"]
@@ -113,12 +114,13 @@ def resolve_one(pattern, required=True):
     hits = sorted(set(hits))
     if not hits:
         if required:
-            raise SystemExit("no file matched %r; pass an explicit path" % (pats,))
+            raise SystemExit(f"no file matched {pats!r}; pass an explicit path")
         return None
     if len(hits) > 1:
+        joined = "\n  ".join(hits)
         raise SystemExit(
-            "ambiguous: %d files matched %r:\n  %s\n"
-            "pass a more specific path" % (len(hits), pats, "\n  ".join(hits))
+            f"ambiguous: {len(hits)} files matched {pats!r}:\n  {joined}\n"
+            "pass a more specific path"
         )
     return hits[0]
 
@@ -126,16 +128,19 @@ def resolve_one(pattern, required=True):
 def entries(path):
     """Parse a C WebGPU header into (struct name -> field names,
     enumerator name -> value, set of declared wgpu* entry points)."""
-    s = open(path).read()
+    with open(path) as fh:
+        s = fh.read()
     structs = {
         m.group(1): [f.strip().split()[-1] for f in m.group(2).split(";") if f.strip()]
         for m in re.finditer(
-            r"typedef struct (\w+)(?::\s*\w+)?\s*\{(.*?)\}\s*\1(?:\s+\w+)?\s*;", s, re.S
+            r"typedef struct (\w+)(?::\s*\w+)?\s*\{(.*?)\}\s*\1(?:\s+\w+)?\s*;",
+            s,
+            re.DOTALL,
         )
     }
     enums = {}
     for m in re.finditer(
-        r"typedef enum(?:\s+\w+)?\s*\{(.*?)\}\s*\w+(?:\s+\w+)?\s*;", s, re.S
+        r"typedef enum(?:\s+\w+)?\s*\{(.*?)\}\s*\w+(?:\s+\w+)?\s*;", s, re.DOTALL
     ):
         for line in m.group(1).split(","):
             mm = re.match(r"\s*(WGPU\w+)\s*=\s*(-?\d+)", line)
@@ -149,11 +154,8 @@ def halide_calls(root=REPO):
     """wgpu* names referenced by the Halide runtime and test helper."""
     used = set()
     for p in SCAN:
-        used |= set(
-            re.findall(
-                r"\b(wgpu[A-Za-z0-9_]+)\s*\(", open(os.path.join(root, p)).read()
-            )
-        )
+        with open(os.path.join(root, p)) as fh:
+            used |= set(re.findall(r"\b(wgpu[A-Za-z0-9_]+)\s*\(", fh.read()))
     return {f for f in used if not any(f.startswith(h) for h in LOCAL_HELPERS)}
 
 
@@ -168,22 +170,26 @@ def check(root=REPO, build="build"):
     try:
         pin = dawn_pin()
     except SystemExit as e:
-        return 1, ["FAIL: %s" % e]
-    out.append("vcpkg.json pins dawn %s" % pin)
+        return 1, [f"FAIL: {e}"]
+    out.append(f"vcpkg.json pins dawn {pin}")
 
-    mini = open(os.path.join(root, MINI_REL)).read()
+    with open(os.path.join(root, MINI_REL)) as fh:
+        mini = fh.read()
     marked = re.search(re.escape(MARKER) + r' "([^"]+)"', mini)
     if not marked:
-        msg = "FAIL: %s not found in %s" % (MARKER, MINI_REL)
-        return 1, out + [msg]
+        msg = f"FAIL: {MARKER} not found in {MINI_REL}"
+        return 1, [*out, msg]
     if marked.group(1) != pin:
-        return 1, out + [
-            "FAIL: %s says Dawn %s, vcpkg.json pins %s."
-            % (MINI_REL, marked.group(1), pin),
+        resync = (
             "      Re-sync with: python3 tools/mini-webgpu-tool.py sync "
-            "<build>/vcpkg_installed/<triplet>/include/dawn/webgpu.h",
+            "<build>/vcpkg_installed/<triplet>/include/dawn/webgpu.h"
+        )
+        return 1, [
+            *out,
+            f"FAIL: {MINI_REL} says Dawn {marked.group(1)}, vcpkg.json pins {pin}.",
+            resync,
         ]
-    out.append("marker matches pin: %s" % marked.group(1))
+    out.append(f"marker matches pin: {marked.group(1)}")
 
     gen = glob.glob(
         os.path.join(root, build, "vcpkg_installed", "*", "include", "dawn", "webgpu.h")
@@ -197,66 +203,65 @@ def check(root=REPO, build="build"):
     ]
     if not gen:
         out.append(
-            "NOTE: no Dawn-generated webgpu.h under %s/ (not configured yet); "
-            "skipping struct/enum/decl comparison" % build
+            f"NOTE: no Dawn-generated webgpu.h under {build}/ (not configured yet); "
+            "skipping struct/enum/decl comparison"
         )
         return rc, out
 
     ms, me, mf = entries(os.path.join(root, MINI_REL))
     ds, de, df = entries(gen[0])
     out.append(
-        "mini: %d structs, %d enumerators, %d entry points"
-        % (len(ms), len(me), len(mf))
+        f"mini: {len(ms)} structs, {len(me)} enumerators, {len(mf)} entry points"
     )
 
     bad = [n for n in ms if n in ds and ms[n] != ds[n]]
-    out.append("struct layout mismatches: %d" % len(bad))
+    out.append(f"struct layout mismatches: {len(bad)}")
     for n in bad:
         rc = 1
-        out.append("  ! %s\n      mini : %s\n      dawn : %s" % (n, ms[n], ds[n]))
+        out.append(f"  ! {n}\n      mini : {ms[n]}\n      dawn : {ds[n]}")
 
     ev = [(k, me[k], de[k]) for k in me if k in de and me[k] != de[k]]
-    out.append("enum value mismatches: %d" % len(ev))
+    out.append(f"enum value mismatches: {len(ev)}")
     if ev:
         rc = 1
-        out.append("  ! %s" % ev[:10])
+        out.append(f"  ! {ev[:10]}")
 
     lost = sorted(df - mf)
-    out.append("declared upstream but missing from mini: %d" % len(lost))
+    out.append(f"declared upstream but missing from mini: {len(lost)}")
     if lost:
         rc = 1
-        out.append("  ! %s" % lost[:10])
+        out.append(f"  ! {lost[:10]}")
     extra = sorted(mf - df)
-    out.append("declared by mini but not upstream: %d" % len(extra))
+    out.append(f"declared by mini but not upstream: {len(extra)}")
     if extra:
         rc = 1
-        out.append("  ! %s" % extra[:10])
+        out.append(f"  ! {extra[:10]}")
 
     used = halide_calls(root) & df
     undeclared = sorted(used - mf)
     out.append(
-        "entry points used by Halide but not declared by mini: %d" % len(undeclared)
+        f"entry points used by Halide but not declared by mini: {len(undeclared)}"
     )
     if undeclared:
         rc = 1
-        out.append("  ! %s" % undeclared)
+        out.append(f"  ! {undeclared}")
 
     if libs:
         proc = subprocess.run(
             ["nm", "-gU", os.path.join(root, libs[0])], capture_output=True, text=True
         )
-        exported = {l.split()[-1] for l in proc.stdout.splitlines() if l.strip()}
-        missing = sorted(f for f in used if "_%s" % f not in exported)
+        exported = {tok.split()[-1] for tok in proc.stdout.splitlines() if tok.strip()}
+        missing = sorted(fn for fn in used if f"_{fn}" not in exported)
         out.append(
-            "Halide-called entry points absent from %s: %d"
-            % (os.path.basename(libs[0]), len(missing))
+            f"Halide-called entry points absent from {os.path.basename(libs[0])}: "
+            f"{len(missing)}"
         )
         if missing:
             rc = 1
-            out.append("  ! %s" % missing)
+            out.append(f"  ! {missing}")
     else:
         out.append(
-            "NOTE: no libwebgpu_dawn under %s/; skipped the export-table check" % build
+            f"NOTE: no libwebgpu_dawn under {build}/; skipped the export-table check"
         )
 
     return rc, out
@@ -285,46 +290,39 @@ def halide_block(lines, pin):
         if line.strip() == END:
             keep = False
     if not out:
-        raise SystemExit("Halide-specific block not found in %s" % MINI_REL)
+        raise SystemExit(f"Halide-specific block not found in {MINI_REL}")
     junk = ("The Dawn release this copy", "dawn override in vcpkg.json")
     body = []
-    for l in out:
-        s = l.strip()
+    for line in out:
+        s = line.strip()
         if s in (BEGIN, END):  # re-added verbatim below
             continue
-        if l.startswith(MARKER) or l.lstrip("#/ ").startswith(junk):
+        if line.startswith(MARKER) or line.lstrip("#/ ").startswith(junk):
             continue  # a previously stamped version marker
         if not s and body and not body[-1].strip():
             continue  # collapse runs of blank lines
-        body.append(l)
+        body.append(line)
     while body and not body[-1].strip():
         body.pop()
-    return (
-        [BEGIN]
-        + body
-        + [
-            "",
-            "// The Dawn release this copy was synced from. CI asserts this "
-            "matches the",
-            "// dawn override in vcpkg.json (see tools/mini-webgpu-tool.py check).",
-            '%s "%s"' % (MARKER, pin),
-            "",
-            END,
-        ]
-    )
+    stamp = [
+        "// The Dawn release this copy was synced from. CI asserts this matches the",
+        "// dawn override in vcpkg.json (see tools/mini-webgpu-tool.py check).",
+    ]
+    return [BEGIN, *body, "", *stamp, f'{MARKER} "{pin}"', "", END]
 
 
 def render(dawn_header_path, mini_text, pin):
     """Produce the vendored header text for a Dawn-generated header."""
-    dawn = open(dawn_header_path).read().splitlines()
+    with open(dawn_header_path) as fh:
+        dawn = fh.read().splitlines()
     # Guard against the 33-line forwarder shipped at include/webgpu/webgpu.h.
     if len(dawn) < 1000:
         raise SystemExit(
-            "source header has %d lines; that's the forwarder, not the "
-            "Dawn-generated dawn/webgpu.h" % len(dawn)
+            f"source header has {len(dawn)} lines; that's the forwarder, not the "
+            "Dawn-generated dawn/webgpu.h"
         )
 
-    idx = [i for i, l in enumerate(dawn) if l.strip() in INCLUDES]
+    idx = [i for i, line in enumerate(dawn) if line.strip() in INCLUDES]
     if len(idx) != 3 or idx != list(range(idx[0], idx[0] + 3)):
         raise SystemExit("expected the three libc includes together in the Dawn header")
 
@@ -334,16 +332,16 @@ def render(dawn_header_path, mini_text, pin):
     while tail and not tail[0].strip():
         tail.pop(0)
     text = (
-        "\n".join(head + [""] + halide_block(mini_text.splitlines(), pin) + [""] + tail)
+        "\n".join([*head, "", *halide_block(mini_text.splitlines(), pin), "", *tail])
         + "\n"
     )
 
     for line in text.splitlines():
         if line.strip().startswith("#include"):
-            raise SystemExit("libc include leaked into output: %s" % line)
+            raise SystemExit(f"libc include leaked into output: {line}")
     if text.count(MARKER) != 1:
         raise SystemExit(
-            "expected exactly one version marker, found %d" % text.count(MARKER)
+            f"expected exactly one version marker, found {text.count(MARKER)}"
         )
     return text
 
@@ -351,13 +349,17 @@ def render(dawn_header_path, mini_text, pin):
 def cmd_sync(args):
     pin = dawn_pin()
     src = resolve_one(args.dawn_header or GEN_GLOBS)
-    new = render(src, open(MINI).read(), pin)
+    with open(MINI) as fh:
+        old = fh.read()
+    new = render(src, old, pin)
 
-    if new == open(MINI).read():
-        print("%s already matches Dawn %s; nothing to do" % (MINI_REL, pin))
+    if new == old:
+        print(f"{MINI_REL} already matches Dawn {pin}; nothing to do")
         return 0
-    open(MINI, "w").write(new)
-    print("wrote %s (%d lines) from Dawn %s" % (MINI_REL, new.count("\n"), pin))
+    with open(MINI, "w") as fh:
+        fh.write(new)
+    nlines = new.count("\n")
+    print(f"wrote {MINI_REL} ({nlines} lines) from Dawn {pin}")
     if args.build_dir:
         build = args.build_dir
     else:
@@ -434,16 +436,18 @@ def selftest(gen, lib):
             shutil.copy(lib, os.path.join(lib_dir, os.path.basename(lib)))
 
         mini = os.path.join(tmp, MINI_REL)
-        text = open(mini).read()
-        old = '%s "20260624.223603"' % MARKER
-        assert old in text, "sample marker not found in %s" % MINI_REL
+        with open(mini) as fh:
+            text = fh.read()
+        old = f'{MARKER} "20260624.223603"'
+        assert old in text, f"sample marker not found in {MINI_REL}"
         if marker_ver:
-            text = text.replace(old, '%s "%s"' % (MARKER, marker_ver))
+            text = text.replace(old, f'{MARKER} "{marker_ver}"')
         else:
             text = text.replace(old + "\n", "")
         if corrupt:  # simulate a field Dawn inserted mid-struct
             text = text.replace(corrupt, corrupt + "\n    size_t insertedField;", 1)
-        open(mini, "w").write(text)
+        with open(mini, "w") as fh:
+            fh.write(text)
 
     for name, ver, corrupt, want in CASES:
         if corrupt and not gen:
@@ -459,9 +463,9 @@ def selftest(gen, lib):
             fixture(tmp, ver, corrupt, gen, lib)
             got, out = run(tmp, "build")
             key = [
-                l
-                for l in out.splitlines()
-                if l.startswith(("FAIL", "PASS", "struct layout"))
+                line
+                for line in out.splitlines()
+                if line.startswith(("FAIL", "PASS", "struct layout"))
             ]
             results.append((name, want, got, got == want, key[:2]))
         finally:
@@ -472,7 +476,7 @@ def selftest(gen, lib):
     try:
         fixture(tmp, "20260624.223603", None)
         got, out = run(tmp, "build")
-        key = [l for l in out.splitlines() if l.startswith("NOTE")]
+        key = [line for line in out.splitlines() if line.startswith("NOTE")]
         results.append(("no build tree", 0, got, got == 0, key[:1]))
     finally:
         shutil.rmtree(tmp)
@@ -481,7 +485,8 @@ def selftest(gen, lib):
     if gen:
         try:
             pin = dawn_pin()
-            first = render(gen, open(MINI).read(), pin)
+            with open(MINI) as fh:
+                first = render(gen, fh.read(), pin)
             second = render(gen, first, pin)
             ok = first == second
             results.append(
@@ -504,10 +509,8 @@ def selftest(gen, lib):
     for name, want, got, ok, detail in results:
         if not ok:
             rc = 1
-        print(
-            "%-14s expect %s, got %s  %s  %s"
-            % (name, want, got, "OK" if ok else "*** MISMATCH ***", detail)
-        )
+        status = "OK" if ok else "*** MISMATCH ***"
+        print(f"{name:<14} expect {want}, got {got}  {status}  {detail}")
     print("PASS" if rc == 0 else "FAIL")
     return rc
 
