@@ -52,6 +52,7 @@ Typical bump of the Dawn pin:
   3. python3 tools/mini-webgpu-tool.py sync            # finds the generated header
   4. ctest --test-dir build -L correctness
 """
+
 import argparse
 import glob
 import json
@@ -115,8 +116,10 @@ def resolve_one(pattern, required=True):
             raise SystemExit("no file matched %r; pass an explicit path" % (pats,))
         return None
     if len(hits) > 1:
-        raise SystemExit("ambiguous: %d files matched %r:\n  %s\n"
-                        "pass a more specific path" % (len(hits), pats, "\n  ".join(hits)))
+        raise SystemExit(
+            "ambiguous: %d files matched %r:\n  %s\n"
+            "pass a more specific path" % (len(hits), pats, "\n  ".join(hits))
+        )
     return hits[0]
 
 
@@ -124,18 +127,21 @@ def entries(path):
     """Parse a C WebGPU header into (struct name -> field names,
     enumerator name -> value, set of declared wgpu* entry points)."""
     s = open(path).read()
-    structs = {m.group(1): [f.strip().split()[-1]
-                           for f in m.group(2).split(';') if f.strip()]
-               for m in re.finditer(
-                   r'typedef struct (\w+)(?::\s*\w+)?\s*\{(.*?)\}\s*\1(?:\s+\w+)?\s*;',
-                   s, re.S)}
+    structs = {
+        m.group(1): [f.strip().split()[-1] for f in m.group(2).split(";") if f.strip()]
+        for m in re.finditer(
+            r"typedef struct (\w+)(?::\s*\w+)?\s*\{(.*?)\}\s*\1(?:\s+\w+)?\s*;", s, re.S
+        )
+    }
     enums = {}
-    for m in re.finditer(r'typedef enum(?:\s+\w+)?\s*\{(.*?)\}\s*\w+(?:\s+\w+)?\s*;', s, re.S):
-        for line in m.group(1).split(','):
-            mm = re.match(r'\s*(WGPU\w+)\s*=\s*(-?\d+)', line)
+    for m in re.finditer(
+        r"typedef enum(?:\s+\w+)?\s*\{(.*?)\}\s*\w+(?:\s+\w+)?\s*;", s, re.S
+    ):
+        for line in m.group(1).split(","):
+            mm = re.match(r"\s*(WGPU\w+)\s*=\s*(-?\d+)", line)
             if mm:
                 enums[mm.group(1)] = int(mm.group(2))
-    funcs = set(re.findall(r'\b(wgpu[A-Za-z0-9_]+)\s*\(', s))
+    funcs = set(re.findall(r"\b(wgpu[A-Za-z0-9_]+)\s*\(", s))
     return structs, enums, funcs
 
 
@@ -143,12 +149,16 @@ def halide_calls(root=REPO):
     """wgpu* names referenced by the Halide runtime and test helper."""
     used = set()
     for p in SCAN:
-        used |= set(re.findall(r'\b(wgpu[A-Za-z0-9_]+)\s*\(',
-                              open(os.path.join(root, p)).read()))
+        used |= set(
+            re.findall(
+                r"\b(wgpu[A-Za-z0-9_]+)\s*\(", open(os.path.join(root, p)).read()
+            )
+        )
     return {f for f in used if not any(f.startswith(h) for h in LOCAL_HELPERS)}
 
 
 # --------------------------------------------------------------------------- check
+
 
 def check(root=REPO, build="build"):
     """Return (exit code, output lines). See the `check` subcommand."""
@@ -168,24 +178,36 @@ def check(root=REPO, build="build"):
         return 1, out + [msg]
     if marked.group(1) != pin:
         return 1, out + [
-            "FAIL: %s says Dawn %s, vcpkg.json pins %s." % (MINI_REL, marked.group(1), pin),
+            "FAIL: %s says Dawn %s, vcpkg.json pins %s."
+            % (MINI_REL, marked.group(1), pin),
             "      Re-sync with: python3 tools/mini-webgpu-tool.py sync "
-            "<build>/vcpkg_installed/<triplet>/include/dawn/webgpu.h"]
+            "<build>/vcpkg_installed/<triplet>/include/dawn/webgpu.h",
+        ]
     out.append("marker matches pin: %s" % marked.group(1))
 
-    gen = glob.glob(os.path.join(root, build, "vcpkg_installed", "*", "include",
-                                "dawn", "webgpu.h"))
-    libs = [p for p in glob.glob(os.path.join(root, build, "vcpkg_installed", "*", "lib",
-                                              "libwebgpu_dawn.*")) if "debug" not in p]
+    gen = glob.glob(
+        os.path.join(root, build, "vcpkg_installed", "*", "include", "dawn", "webgpu.h")
+    )
+    libs = [
+        p
+        for p in glob.glob(
+            os.path.join(root, build, "vcpkg_installed", "*", "lib", "libwebgpu_dawn.*")
+        )
+        if "debug" not in p
+    ]
     if not gen:
-        out.append("NOTE: no Dawn-generated webgpu.h under %s/ (not configured yet); "
-                  "skipping struct/enum/decl comparison" % build)
+        out.append(
+            "NOTE: no Dawn-generated webgpu.h under %s/ (not configured yet); "
+            "skipping struct/enum/decl comparison" % build
+        )
         return rc, out
 
     ms, me, mf = entries(os.path.join(root, MINI_REL))
     ds, de, df = entries(gen[0])
-    out.append("mini: %d structs, %d enumerators, %d entry points" %
-               (len(ms), len(me), len(mf)))
+    out.append(
+        "mini: %d structs, %d enumerators, %d entry points"
+        % (len(ms), len(me), len(mf))
+    )
 
     bad = [n for n in ms if n in ds and ms[n] != ds[n]]
     out.append("struct layout mismatches: %d" % len(bad))
@@ -212,23 +234,30 @@ def check(root=REPO, build="build"):
 
     used = halide_calls(root) & df
     undeclared = sorted(used - mf)
-    out.append("entry points used by Halide but not declared by mini: %d" % len(undeclared))
+    out.append(
+        "entry points used by Halide but not declared by mini: %d" % len(undeclared)
+    )
     if undeclared:
         rc = 1
         out.append("  ! %s" % undeclared)
 
     if libs:
-        proc = subprocess.run(["nm", "-gU", os.path.join(root, libs[0])],
-                             capture_output=True, text=True)
+        proc = subprocess.run(
+            ["nm", "-gU", os.path.join(root, libs[0])], capture_output=True, text=True
+        )
         exported = {l.split()[-1] for l in proc.stdout.splitlines() if l.strip()}
         missing = sorted(f for f in used if "_%s" % f not in exported)
-        out.append("Halide-called entry points absent from %s: %d" %
-                   (os.path.basename(libs[0]), len(missing)))
+        out.append(
+            "Halide-called entry points absent from %s: %d"
+            % (os.path.basename(libs[0]), len(missing))
+        )
         if missing:
             rc = 1
             out.append("  ! %s" % missing)
     else:
-        out.append("NOTE: no libwebgpu_dawn under %s/; skipped the export-table check" % build)
+        out.append(
+            "NOTE: no libwebgpu_dawn under %s/; skipped the export-table check" % build
+        )
 
     return rc, out
 
@@ -241,6 +270,7 @@ def cmd_check(args):
 
 
 # ---------------------------------------------------------------------------- sync
+
 
 def halide_block(lines, pin):
     """The BEGIN/END Halide-specific block from the existing file, normalized: any
@@ -260,21 +290,28 @@ def halide_block(lines, pin):
     body = []
     for l in out:
         s = l.strip()
-        if s in (BEGIN, END):                 # re-added verbatim below
+        if s in (BEGIN, END):  # re-added verbatim below
             continue
         if l.startswith(MARKER) or l.lstrip("#/ ").startswith(junk):
-            continue                          # a previously stamped version marker
+            continue  # a previously stamped version marker
         if not s and body and not body[-1].strip():
-            continue                          # collapse runs of blank lines
+            continue  # collapse runs of blank lines
         body.append(l)
     while body and not body[-1].strip():
         body.pop()
-    return [BEGIN] + body + ["",
-                             "// The Dawn release this copy was synced from. CI asserts this "
-                             "matches the",
-                             "// dawn override in vcpkg.json (see tools/mini-webgpu-tool.py check).",
-                             '%s "%s"' % (MARKER, pin),
-                             "", END]
+    return (
+        [BEGIN]
+        + body
+        + [
+            "",
+            "// The Dawn release this copy was synced from. CI asserts this "
+            "matches the",
+            "// dawn override in vcpkg.json (see tools/mini-webgpu-tool.py check).",
+            '%s "%s"' % (MARKER, pin),
+            "",
+            END,
+        ]
+    )
 
 
 def render(dawn_header_path, mini_text, pin):
@@ -282,25 +319,32 @@ def render(dawn_header_path, mini_text, pin):
     dawn = open(dawn_header_path).read().splitlines()
     # Guard against the 33-line forwarder shipped at include/webgpu/webgpu.h.
     if len(dawn) < 1000:
-        raise SystemExit("source header has %d lines; that's the forwarder, not the "
-                         "Dawn-generated dawn/webgpu.h" % len(dawn))
+        raise SystemExit(
+            "source header has %d lines; that's the forwarder, not the "
+            "Dawn-generated dawn/webgpu.h" % len(dawn)
+        )
 
     idx = [i for i, l in enumerate(dawn) if l.strip() in INCLUDES]
     if len(idx) != 3 or idx != list(range(idx[0], idx[0] + 3)):
         raise SystemExit("expected the three libc includes together in the Dawn header")
 
-    head, tail = dawn[:idx[0]], dawn[idx[0] + 3:]
+    head, tail = dawn[: idx[0]], dawn[idx[0] + 3 :]
     while head and not head[-1].strip():
         head.pop()
     while tail and not tail[0].strip():
         tail.pop(0)
-    text = "\n".join(head + [""] + halide_block(mini_text.splitlines(), pin) + [""] + tail) + "\n"
+    text = (
+        "\n".join(head + [""] + halide_block(mini_text.splitlines(), pin) + [""] + tail)
+        + "\n"
+    )
 
     for line in text.splitlines():
         if line.strip().startswith("#include"):
             raise SystemExit("libc include leaked into output: %s" % line)
     if text.count(MARKER) != 1:
-        raise SystemExit("expected exactly one version marker, found %d" % text.count(MARKER))
+        raise SystemExit(
+            "expected exactly one version marker, found %d" % text.count(MARKER)
+        )
     return text
 
 
@@ -351,19 +395,35 @@ def selftest(gen, lib):
     results = []
 
     def run(tmp, build):
-        p = subprocess.run([sys.executable, os.path.join(tmp, "tools", "mini-webgpu-tool.py"),
-                           "check", build], capture_output=True, text=True)
+        p = subprocess.run(
+            [
+                sys.executable,
+                os.path.join(tmp, "tools", "mini-webgpu-tool.py"),
+                "check",
+                build,
+            ],
+            capture_output=True,
+            text=True,
+        )
         return p.returncode, p.stdout + p.stderr
 
     def fixture(tmp, marker_ver, corrupt, gen=None, lib=None):
         for d in ("src/runtime", "test/common", "tools"):
             os.makedirs(os.path.join(tmp, d), exist_ok=True)
-        for f in (MINI_REL, "src/runtime/webgpu.cpp", "test/common/gpu_context.h",
-                  "vcpkg.json"):
+        for f in (
+            MINI_REL,
+            "src/runtime/webgpu.cpp",
+            "test/common/gpu_context.h",
+            "vcpkg.json",
+        ):
             shutil.copy(os.path.join(REPO, f), os.path.join(tmp, f))
-        shutil.copy(os.path.abspath(__file__), os.path.join(tmp, "tools", "mini-webgpu-tool.py"))
+        shutil.copy(
+            os.path.abspath(__file__), os.path.join(tmp, "tools", "mini-webgpu-tool.py")
+        )
         if gen:
-            gen_dir = os.path.join(tmp, "build/vcpkg_installed/arm64-osx-halide/include/dawn")
+            gen_dir = os.path.join(
+                tmp, "build/vcpkg_installed/arm64-osx-halide/include/dawn"
+            )
             os.makedirs(gen_dir)
             shutil.copy(gen, os.path.join(gen_dir, "webgpu.h"))
 
@@ -379,7 +439,7 @@ def selftest(gen, lib):
             text = text.replace(old, '%s "%s"' % (MARKER, marker_ver))
         else:
             text = text.replace(old + "\n", "")
-        if corrupt:                      # simulate a field Dawn inserted mid-struct
+        if corrupt:  # simulate a field Dawn inserted mid-struct
             text = text.replace(corrupt, corrupt + "\n    size_t insertedField;", 1)
         open(mini, "w").write(text)
 
@@ -388,7 +448,11 @@ def selftest(gen, lib):
         try:
             fixture(tmp, ver, corrupt, gen, lib)
             got, out = run(tmp, "build")
-            key = [l for l in out.splitlines() if l.startswith(("FAIL", "PASS", "struct layout"))]
+            key = [
+                l
+                for l in out.splitlines()
+                if l.startswith(("FAIL", "PASS", "struct layout"))
+            ]
             results.append((name, want, got, got == want, key[:2]))
         finally:
             shutil.rmtree(tmp)
@@ -410,19 +474,30 @@ def selftest(gen, lib):
             first = render(gen, open(MINI).read(), pin)
             second = render(gen, first, pin)
             ok = first == second
-            results.append(("sync idempotent", True, ok, ok, ["render(render(x)) == render(x)"]))
+            results.append(
+                ("sync idempotent", True, ok, ok, ["render(render(x)) == render(x)"])
+            )
         except SystemExit as e:
             results.append(("sync idempotent", True, str(e), False, []))
     else:
-        results.append(("sync idempotent", "skip", "skipped", True,
-                       ["no Dawn-generated header available"]))
+        results.append(
+            (
+                "sync idempotent",
+                "skip",
+                "skipped",
+                True,
+                ["no Dawn-generated header available"],
+            )
+        )
 
     rc = 0
     for name, want, got, ok, detail in results:
         if not ok:
             rc = 1
-        print("%-14s expect %s, got %s  %s  %s" %
-              (name, want, got, "OK" if ok else "*** MISMATCH ***", detail))
+        print(
+            "%-14s expect %s, got %s  %s  %s"
+            % (name, want, got, "OK" if ok else "*** MISMATCH ***", detail)
+        )
     print("PASS" if rc == 0 else "FAIL")
     return rc
 
@@ -431,42 +506,68 @@ def cmd_selftest(args):
     gen = resolve_one(args.dawn_header, required=False)
     lib = resolve_one(args.lib, required=False) if gen else None
     if not gen:
-        print("NOTE: no Dawn-generated webgpu.h found; running the reduced selftest "
-              "(marker rules only). Pass --dawn-header <path> to exercise the "
-              "struct/enum/symbol paths.")
+        print(
+            "NOTE: no Dawn-generated webgpu.h found; running the reduced selftest "
+            "(marker rules only). Pass --dawn-header <path> to exercise the "
+            "struct/enum/symbol paths."
+        )
     return selftest(gen, lib)
 
 
 # ---------------------------------------------------------------------------- main
 
 
-
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    c = sub.add_parser("check", help="verify mini_webgpu.h matches the Dawn pin "
-                                    "(and the build tree, if present)")
-    c.add_argument("build_dir", nargs="?", default="build",
-                   help="CMake build dir to find vcpkg_installed in (default: build)")
+    c = sub.add_parser(
+        "check",
+        help="verify mini_webgpu.h matches the Dawn pin "
+        "(and the build tree, if present)",
+    )
+    c.add_argument(
+        "build_dir",
+        nargs="?",
+        default="build",
+        help="CMake build dir to find vcpkg_installed in (default: build)",
+    )
     c.set_defaults(func=cmd_check)
 
-    s = sub.add_parser("sync", help="rewrite mini_webgpu.h from a Dawn-generated header")
-    s.add_argument("dawn_header", nargs="?", default=None,
-                   help="path or glob for the Dawn-generated webgpu.h, e.g. "
-                        "build/vcpkg_installed/*/include/dawn/webgpu.h "
-                        "(default: search common build-dir layouts)")
-    s.add_argument("--build-dir", default=None,
-                   help="build dir to verify against (default: derive from the header path)")
+    s = sub.add_parser(
+        "sync", help="rewrite mini_webgpu.h from a Dawn-generated header"
+    )
+    s.add_argument(
+        "dawn_header",
+        nargs="?",
+        default=None,
+        help="path or glob for the Dawn-generated webgpu.h, e.g. "
+        "build/vcpkg_installed/*/include/dawn/webgpu.h "
+        "(default: search common build-dir layouts)",
+    )
+    s.add_argument(
+        "--build-dir",
+        default=None,
+        help="build dir to verify against (default: derive from the header path)",
+    )
     s.set_defaults(func=cmd_sync)
 
-    t = sub.add_parser("selftest", help="exercise check's pass/drift/broken paths "
-                                       "against temp fixtures")
-    t.add_argument("--dawn-header", default=GEN_GLOBS,
-                   help="Dawn-generated header (path or glob) for the fixture's upstream")
-    t.add_argument("--lib", default=LIB_GLOBS,
-                  help="built libwebgpu_dawn (path or glob) for the export-table fixture")
+    t = sub.add_parser(
+        "selftest",
+        help="exercise check's pass/drift/broken paths against temp fixtures",
+    )
+    t.add_argument(
+        "--dawn-header",
+        default=GEN_GLOBS,
+        help="Dawn-generated header (path or glob) for the fixture's upstream",
+    )
+    t.add_argument(
+        "--lib",
+        default=LIB_GLOBS,
+        help="built libwebgpu_dawn (path or glob) for the export-table fixture",
+    )
     t.set_defaults(func=cmd_selftest)
 
     args = ap.parse_args()

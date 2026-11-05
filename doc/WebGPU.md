@@ -128,8 +128,8 @@ HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node
 
 ## Setting up Dawn via vcpkg
 
-> _Tested with Dawn vcpkg port version 20260624.223603#1 on macOS (arm64); this is
-> the version `vcpkg.json` pins, and CI verifies it_
+> _Tested with Dawn vcpkg port version 20260624.223603#1 on macOS (arm64); this
+> is the version `vcpkg.json` pins, and CI verifies it_
 
 The Halide repository includes vcpkg support for automatically downloading and
 building Dawn as part of the CMake configure step. This is the easiest path for
@@ -177,8 +177,8 @@ those features depend on packages (`flatbuffers`, `pybind11`, `wabt`) that are
 not included in the `webgpu-native` manifest feature.
 
 Note that the CI preset (`ci-macos-arm-64-webgpu`) additionally selects the
-`developer` manifest feature, because the autoscheduler plugins used by some tests
-are only built when `WITH_DEVELOPER_MODE` is on:
+`developer` manifest feature, because the autoscheduler plugins used by some
+tests are only built when `WITH_DEVELOPER_MODE` is on:
 
 ```
 -DVCPKG_MANIFEST_FEATURES="developer;webgpu-native"
@@ -203,9 +203,9 @@ The same error appears locally when the vcpkg checkout is too old (Homebrew's
 
 **The one rule:** bumping `dawn` in `vcpkg.json` requires re-synchronizing
 `src/runtime/mini_webgpu.h` from that same Dawn release. Dawn's C ABI is not
-append-only -- it has inserted fields into the middle of descriptors -- so a header
-from a different release than the linked `libwebgpu_dawn` is silent memory
-corruption, not a compile error. CI enforces this pairing (see
+append-only -- it has inserted fields into the middle of descriptors -- so a
+header from a different release than the linked `libwebgpu_dawn` is silent
+memory corruption, not a compile error. CI enforces this pairing (see
 [`mini_webgpu.h`](#updating-mini_webgpuh)).
 
 ```sh
@@ -281,8 +281,8 @@ These paths can then be used for the `HL_WEBGPU_NODE_BINDINGS` and
 1. the `<stdint.h>/<stddef.h>/<math.h>` includes are replaced by a
    `BEGIN/END Halide-specific changes` block, because the Halide runtime cannot
    include libc headers; and
-2. a `HALIDE_MINI_WEBGPU_DAWN_VERSION` marker recording which Dawn release the copy
-   came from.
+2. a `HALIDE_MINI_WEBGPU_DAWN_VERSION` marker recording which Dawn release the
+   copy came from.
 
 Use the tool rather than editing the file by hand:
 
@@ -290,34 +290,35 @@ Use the tool rather than editing the file by hand:
 python3 tools/mini-webgpu-tool.py sync
 ```
 
-It locates the Dawn-generated header under the build directory (`sync` accepts an
-explicit path or glob too, e.g.
+It locates the Dawn-generated header under the build directory (`sync` accepts
+an explicit path or glob too, e.g.
 `sync 'build/vcpkg_installed/*/include/dawn/webgpu.h'`), preserves the
 Halide-specific block, stamps the `dawn` version pinned in `vcpkg.json` into the
-marker, and runs the verification pass afterwards. It is idempotent: re-running it
-when the header already matches prints `nothing to do`.
+marker, and runs the verification pass afterwards. It is idempotent: re-running
+it when the header already matches prints `nothing to do`.
 
 `check` performs the same verification without writing anything, and is what CI
-runs. It asserts the marker equals the `vcpkg.json` pin (this half needs no build
-tree, so it runs before Configure), and when a build tree is present it also
-compares struct layouts, enum values and declarations against the Dawn-generated
-header, and checks the `libwebgpu_dawn` export table against every entry point
-Halide calls. `selftest` exercises those failure paths against throwaway fixtures.
+runs. It asserts the marker equals the `vcpkg.json` pin (this half needs no
+build tree, so it runs before Configure), and when a build tree is present it
+also compares struct layouts, enum values and declarations against the
+Dawn-generated header, and checks the `libwebgpu_dawn` export table against
+every entry point Halide calls. `selftest` exercises those failure paths against
+throwaway fixtures.
 
 <details>
 <summary>Manual fallback (what the sync tool does)</summary>
 
 Copy `gen/include/dawn/webgpu.h` from the Dawn build directory (at vcpkg install
-time this is
-`<build_dir>/vcpkg_installed/<triplet>/include/dawn/webgpu.h`; note that the
-sibling `include/webgpu/webgpu.h` is only a 33-line forwarder to it, not the
-generated header), then:
+time this is `<build_dir>/vcpkg_installed/<triplet>/include/dawn/webgpu.h`; note
+that the sibling `include/webgpu/webgpu.h` is only a 33-line forwarder to it,
+not the generated header), then:
 
-- Replace the `#include <stdint.h>`, `#include <stddef.h>` and `#include <math.h>`
-  lines with the block below.
+- Replace the `#include <stdint.h>`, `#include <stddef.h>` and
+  `#include <math.h>` lines with the block below.
 - Add the version marker naming the Dawn release.
 
-The file is listed in `.clang-format-ignore`, so no formatting markers are needed.
+The file is listed in `.clang-format-ignore`, so no formatting markers are
+needed.
 
 ```
 // BEGIN Halide-specific changes
