@@ -1683,18 +1683,11 @@ inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::
 }
 
 // The f32 operands of a Metal gemm on exact weights (wh: the weights' decoded
-// values; xh: the acts dot multiplies them by), else false.
-inline bool f32_operands(Func dot, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
-    using namespace Internal;
+// values; xh: x, the acts dot multiplies them by), else false.
+inline bool f32_operands(Func dot, Func x, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
     if (fmt.wcompute || !staged.empty() || rs.empty() || fmt.block % 8) return false;
     wh = rs[0].replacement;
-    const Add *sum = dot.update_value().as<Add>();
-    const Mul *p = sum ? sum->b.as<Mul>() : nullptr;
-    const Call *u = p ? p->a.as<Call>() : nullptr, *v = p ? p->b.as<Call>() : nullptr;
-    if (!u || !v || u->call_type != Call::Halide || v->call_type != Call::Halide) return false;
-    if (v->name == wh.name()) std::swap(u, v);
-    if (u->name != wh.name()) return false;
-    xh = Func(Function(v->func));
+    xh = x;
     return dot.type() == Float(32) && wh.type() == Float(32) && xh.type() == Float(32);
 }
 
@@ -2006,9 +1999,9 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (single rows for N = 1, staged tables, or without `row_pairs`). Edge tiles
 // shift inwards. With act records of fmt.act_rows > 1 rows, out's first
 // update is the rows in whole records (dots[1]), its second M = 1's
-// (dots[0]).
+// (dots[0]). `x`: the act dots[0] reads (X or its round trip), unless staged.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
+                    const std::vector<Func> &staged, Func x, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
     luts(rs, !t.has_gpu_feature());
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
@@ -2022,7 +2015,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             metal_flat(out, dots[0], r, staged);
             return;
         }
-        if (f32_operands(dots[0], rs, staged, fmt, wh, xh)) {
+        if (f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
             metal_gemm(out, dots[0], wh, xh, r, fmt, rs, 16);
             return;
         }
