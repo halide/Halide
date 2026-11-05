@@ -123,14 +123,13 @@ inline std::vector<Func> callers(const Func &f, const std::vector<Func> &gs) {
     return cs;
 }
 
-// Per bit of the index of r.x's sub-blocks of `sub` values (a power of 2),
-// how many of dot's loads varying with r.x's bits below `low` (0: with any)
+// Per bit of the index of r.x's (a block's `block` values) sub-blocks of `sub`
+// values (a power of 2), how many of dot's loads varying with r.x's bits below `low` (0: with any)
 // it leaves in place: sub-blocks differing only in it read the same bytes
 // (sub = 1: q4_0's bit 4, a byte's two nibbles; q5_K's sub-blocks: qh's bits).
-inline std::vector<int> shared_bits(Func dot, const RDom &r, int sub = 1, int low = 0) {
-    auto bx = Internal::as_const_int(r.x.extent());
+inline std::vector<int> shared_bits(Func dot, const RDom &r, int block, int sub = 1, int low = 0) {
     int bits = 0, s = 0;
-    while (bx && (1 << bits) < *bx)
+    while ((1 << bits) < block)
         bits++;
     while ((1 << s) < sub)
         s++;
@@ -885,7 +884,7 @@ inline bool hoisted_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per,
 // iq2_xs) and gpr_scales (the sub-block scales decoded in GPRs, GGML's
 // q4_K), the bit fields' shifts deferred (hoisted_shifts()); else k's
 // index_words.
-inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
+inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
                     int sub = 0, int act_sub = 0, const Knobs &k = Knobs(), bool gemv = false) {
     bool sublanes = gemv && k.sublanes, gpr_scales = gemv && k.gpr_scales, defer = gemv, index_words = !gemv && k.index_words;
@@ -895,8 +894,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
-    std::optional<int64_t> bx = Internal::as_const_int(r.x.extent());
-    int nsub = sub && bx ? (int)*bx / sub : 0;
+    int nsub = sub ? block / sub : 0;
     if (nsub && integer && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {
         blocked_sub_lanes(out, st, s, dot.args()[0], dot.args()[1], r, ts, sub, nsub, vec, per, rs, t);
         return;
@@ -958,10 +956,9 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave).vectorize_all_stages(lane).unroll_all_stages(u, m);
         ts.nt > 1 ? rest.vectorize_all_stages(n) : rest.unroll_all_stages(n);
     }
-    std::optional<int64_t> nchunk = bx ? std::optional<int64_t>(*bx / vec) : std::nullopt;
     for (Func f : {codes, rest}) {
         if (!f.defined() || sub) continue;
-        if (f.name() == codes.name() && defer && nchunk && integer && hoisted_shifts(codes, rxc, (int)*nchunk, vec / per, per, LoopLevel(acc, ryo), ts.interleave, n, m)) continue;
+        if (f.name() == codes.name() && defer && integer && hoisted_shifts(codes, rxc, block / vec, vec / per, per, LoopLevel(acc, ryo), ts.interleave, n, m)) continue;
         f.update().atomic().vectorize(rxi).unroll(rxc);
     }
     // per block and sub-block, the tile's sub-block dots (inner), then their
@@ -1061,9 +1058,9 @@ inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 // of `sub` values, the codes' int32 dot across the rows times the sub-block's
 // scales, summed in int32, then times the block scales. An affine weight's
 // min term reads the act's sub-block sums (derived_sums()).
-inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
+inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block, int chunk,
                          const std::vector<ApproximationResult> &rs, int group = 0, int sub = 0, int act_sub = 0) {
-    std::vector<int> shared = sub ? shared_bits(dot, r, sub) : std::vector<int>{};  // (dot as defined)
+    std::vector<int> shared = sub ? shared_bits(dot, r, block, sub) : std::vector<int>{};  // (dot as defined)
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc"), mo("mog"), mi("mig");
     RVar ry = r.y, rx = r.x, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
@@ -1109,8 +1106,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         // codes' loads are scheduled early and spill); groups larger than pairs
         // where a bit field's position varies across pairs (constant shifts)
         RVar rxso("rxso"), rxsi("rxsi");
-        auto bx = as_const_int(r.x.extent());
-        int g = sharing_group(shared, 2, bx ? (int)*bx / sub : 2);
+        int g = sharing_group(shared, 2, block / sub);
         codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, g).unroll(rxsi);
         per_sub = LoopLevel(codes, rxsi);
         part.compute_at(per_sub).vectorize_all_stages(n).unroll_all_stages(v, u, m);
@@ -1170,11 +1166,11 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // registers. `records`: the weights in records of ts.nt rows. `act_records`:
 // the act too (q8_K.4x8). `per` > 1: weight blocks of `per` act blocks
 // (scale-only weights), the weight's scale once per weight block.
-inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
+inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block,
                          const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false, int sub = 0, int act_sub = 0, bool records = false, bool act_records = false,
                          int per = 1, const Knobs &k = Knobs()) {
     bool fold_offsets = k.fold == Fold::All, gpr_scales = k.gpr_scales, index_words = k.index_words;
-    std::vector<int> shared = sub ? shared_bits(dot, r, sub) : std::vector<int>{};  // (dot as defined)
+    std::vector<int> shared = sub ? shared_bits(dot, r, block, sub) : std::vector<int>{};  // (dot as defined)
     Stage s = tile_out(out, st, dot, cond, ts, r, records);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc"), w("w");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi"), ryw("ryw"), ryp("ryp");
@@ -1191,18 +1187,17 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // bit fields' positions repeat (sharing_group: q6_K's 128 values), if
     // within it a bit no load shares lies below one some do, so the loads
     // stay dense (split in sub-blocks first, the % 128 stays: gathers).
-    auto bx = as_const_int(r.x.extent());
     RVar rxp("rxp");
     Var vp("vp");
     int period = 0;
-    if (sub && act_records && bx) {
-        int g = sharing_group(shared, 2, (int)*bx / sub);
+    if (sub && act_records) {
+        int g = sharing_group(shared, 2, block / sub);
         bool zero = false, beneath = false;
         for (int b = 0; (1 << b) < g; b++) {
             beneath |= zero && shared[b];
             zero |= !shared[b];
         }
-        if (g < *bx / sub && beneath) period = g * sub;
+        if (g < block / sub && beneath) period = g * sub;
     }
     if (period) {
         RVar rxx("rxx");
@@ -1259,7 +1254,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         // unrolled spills: 4-7% slower), those reading the same bytes adjacent
         // (sharing_order); per period, bits sharing no load loop inside.
         Stage cu = codes.update();
-        int subs = bx ? (int)*bx / sub : 2;
+        int subs = block / sub;
         if (period) subs = period / sub;
         int group = act_records && !period ? sharing_group(shared, 2, subs) : subs;
         RVar rxso("rxso"), rxsi("rxsi"), g = rxs, at_sub;
@@ -1409,7 +1404,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true);
+    blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true);
 }
 
 // The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
@@ -1490,15 +1485,14 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // times its scale. The lanes reduce across the simdgroup (simd shuffles).
 // M > 1: rows x cols per simdgroup, a lane per value of every 32 (coalesced;
 // the gemv lanes there 0.5-1.4x), behind dot's specialization.
-inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int sub = 0) {
+inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
-    std::optional<int64_t> bx = Internal::as_const_int(r.x.extent());
     int bits = 0;
-    while (bx && (1 << bits) < *bx)
+    while ((1 << bits) < block)
         bits++;
-    if (!bx || *bx != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
+    if (block != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
     const int run = 3, vals = std::min(5, bits - 1);
     const int nr = std::max(1, 4 >> (vals - 4)), sg = 2;
     // the bits each kind: run, shared, the lane's
@@ -1509,7 +1503,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     for (int b = 0; b < run; b++) {
         kind[b] = Run;
     }
-    std::vector<int> count = shared_bits(dot, r, 1, run), order;
+    std::vector<int> count = shared_bits(dot, r, block, 1, run), order;
     for (int b = run; b < bits; b++) {
         if (count[b]) order.push_back(b);
     }
@@ -1863,7 +1857,7 @@ inline void metal_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, cons
     // its gemv inlines them: select trees)
     metal_luts(out, rs);
     if (fmt.block > 1) {
-        metal_rows(out, rows, r, rs, fmt.sub);
+        metal_rows(out, rows, r, fmt.block, rs, fmt.sub);
         return;
     }
     // the rows' own staged acts (their kernel skipped under the gemm, whose
@@ -2040,7 +2034,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
         metal_luts(out, rs);
-        metal_rows(out, dots[0], r, rs, fmt.sub);
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub);
         return;
     }
     if (fmt.rowwise) {
@@ -2106,7 +2100,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (whole && rmmla) {  // N a multiple of the records' rows
         dr.bound_extent(dr.args()[1], rm.mt);
     } else if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
-        blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, true}, r, integer, rs, t);
+        blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, true}, r, fmt.block, integer, rs, t);
         Expr mt = t12.mt;
         for (size_t i = tiles.size() - 1; i-- > 0;) {
             mt = select(tiles[i].first, tiles[i].second.mt, mt);
@@ -2115,19 +2109,19 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     if (whole && tiled && !rmmla) {
         for (auto [c, ts] : tiles) {
-            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs, t, false, 0, 0, false, false, fmt.sub ? 1 : fmt.per);
+            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.block, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, fmt.block, rs, t, false, 0, 0, false, false, fmt.sub ? 1 : fmt.per);
         }
     } else if (rmmla) {
         // whole records of rows (from 0 mod their rows: their addresses dense)
         // (dr's act is the last result: its derived ports, rs[1]'s for derived_sums)
         std::vector<ApproximationResult> rr = rs;
         if (whole) std::swap(rr[1], rr.back());
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, k);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, fmt.block, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, k);
     } else if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, k);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, fmt.block, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, k);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
-    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
+    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
     // The rows past Mr (with whole records, M = 1's): no tasks when there are none.
     Expr rest = whole ? M == 1 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
@@ -2135,7 +2129,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (a two-level record, 8 rows of q4_K: 1152 bytes, one per iteration)
         if (fmt.sub) {
             rt.interleave = 1;
-            blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs, 0, fmt.sub, fmt.act_sub);
+            blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.block, fmt.chunk, rs, 0, fmt.sub, fmt.act_sub);
             return;
         }
         // Codes decoded from a field: two records per tile where N allows
@@ -2147,9 +2141,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             r2.nt = 2 * fmt.rows;
             Expr two = N % r2.nt == 0;
             if (fmt.row_bytes.defined()) two = two && (two_streams(fmt.row_bytes) || threads() > 4);
-            blocked_rows(out, 2 * whole, dots[0], two, r2, r, fmt.chunk, rs);
+            blocked_rows(out, 2 * whole, dots[0], two, r2, r, fmt.block, fmt.chunk, rs);
         }
-        blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.chunk, rs);
+        blocked_rows(out, 2 * whole, dots[0], Expr(), rt, r, fmt.block, fmt.chunk, rs);
         return;
     }
     pairs.busy = rows.busy = rest;
@@ -2159,8 +2153,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // sharing the act at any row length.
     Expr paired = fits(pairs, 1);
     if (fmt.row_bytes.defined() && !decoded_codes(rs)) paired = paired && two_streams(fmt.row_bytes);
-    if (k.row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
+    if (k.row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, fmt.block, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, fmt.block, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
 }
 
 }  // namespace ggml
