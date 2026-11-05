@@ -71,6 +71,10 @@ enum class IRNodeType : uint8_t;
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, IRNodeType);
 
+/** Emit an Expr or Stmt held by an IRHandle on an output stream (such as
+ * std::cout) in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const IRHandle &);
+
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
 std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
