@@ -889,13 +889,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    // A struct-backed array (register or groupshared) is declared as a raw
-    // byte store (see the Allocate visitor); its element is always signed
-    // int8, emulated as a full 32-bit `int` regardless of SM level, per
-    // print_type_maybe_storage's bits()==8 case. So unlike the generic
-    // sub-32-bit groupshared promotion below (which native SM 6.2+ types make
-    // unnecessary), struct-backed storage always needs this bit-reinterpret,
-    // in any memory space.
+    // Struct-backed arrays use byte storage, with each byte emulated as a
+    // full 32-bit `int`; numeric reads reinterpret the stored bits, while bool
+    // reads convert the stored 0/1 value.
     const auto *struct_alloc = allocations.find(op->name);
     bool is_struct_backed = struct_alloc && struct_alloc->type.is_struct();
     if (is_struct_backed) {
@@ -1257,12 +1253,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     string promotion_str = "";
     const auto *alloc = allocations.find(op->name);
     // A struct-backed array (register or groupshared) is declared as a raw
-    // byte store (see the Allocate visitor); its element is always signed
-    // int8, emulated as a full 32-bit `int` regardless of SM level, per
-    // print_type_maybe_storage's bits()==8 case. So unlike the generic
-    // sub-32-bit groupshared promotion below (which native SM 6.2+ types make
-    // unnecessary), struct-backed storage always needs this bit-reinterpret,
-    // in any memory space.
+    // byte store, with each byte emulated as a full 32-bit `int`. Numeric
+    // values are bit-reinterpreted; bool values are converted to 0 or 1.
     bool is_struct_backed = alloc && alloc->type.is_struct();
     if (is_struct_backed || (groupshared_allocations.contains(op->name) && sm < 62)) {
         internal_assert(alloc);
@@ -1270,7 +1262,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
-            promotion_str = hlsl_reinterpret_name(promoted_type);
+            promotion_str = op->value.type().is_bool() ? print_type(promoted_type) : hlsl_reinterpret_name(promoted_type);
         }
     }
 
