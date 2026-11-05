@@ -708,6 +708,20 @@ private:
     }
 };
 
+// Codes x <-> their low k bits (packed by `low`) and the rest, one of the n
+// multiples lo + i * 2^k (as i, packed by `high`; through a table of each of
+// its bytes' values if `tabulate`, Tabulate's bits): GGML's codes and scales
+// stored as two bit fields apart (q5, q3_K, q6_K; six_bit_scales).
+inline Approximation split_bits(int k, int lo, int n, const Approximation &low, const Approximation &high, int tabulate = 0) {
+    Approximation h = Compose{multiples(k, lo, n), high};
+    return Compose{SumSplit{k}, Parallel{{"low", low}, {"high", tabulate ? Approximation(Tabulate{h, tabulate}) : h}}};
+}
+
+// 6-bit scales in [-32, 31]: their low nibbles by `low`, top two bits by `high`.
+inline Approximation six_bit_scales(const Approximation &low, const Approximation &high) {
+    return split_bits(4, -32, 4, low, high);
+}
+
 // A codebook (see codebook()) decoded through a lut (Tabulate's): its mux,
 // in a Func of its own, which a schedule inlines (CPUs: a register table
 // lookup) or computes into memory (GPUs, with no register table lookup: as

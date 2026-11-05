@@ -54,9 +54,12 @@ inline Expr iq4nl_code(const Expr &x) {
 // magnitude, max, d = -max / 32 (stored fp16), each sub-block's scale l =
 // nearest_int(scale / d) in [-32, 31] (an int8), and the codes again at
 // 1 / (d * l) (d in f32). Values = codes * scale (iq4_xs: codes * (d * l)).
-struct IQ4Quant {
-    static constexpr int n = QK, trials = 16;
+struct IQ4Quant : ScaledCodes {
+    static constexpr int trials = 16;
     int super;
+    IQ4Quant(int super)
+        : ScaledCodes{QK, -127, 113, -32, 31}, super(super) {
+    }
 
     int sub() const {
         return super / n;
@@ -68,9 +71,7 @@ struct IQ4Quant {
         Var j, s, c, b, k;
         RDom r(0, n), rk(1, trials - 1), rs(0, sub());
         Expr xr = x(s * n + r, b, _);
-        am(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f);
-        Expr gt = sf(abs(xr) > am(s, b, _)[0]);
-        am(s, b, _) = Tuple(select(gt, abs(xr), am(s, b, _)[0]), select(gt, xr, am(s, b, _)[1]));
+        strict_amax(am, x, xr, s, b);
         Expr mx = am(s, b, _)[1];
         // trial c's iscale: c = 0 the first, 1 / (max / 127); then itry = c - 8
         Expr id = select(c == 0, sf(1.0f / sf(mx / 127.0f)), sf(cast<float>(c - 135) / mx));
@@ -89,11 +90,8 @@ struct IQ4Quant {
             q(j, b, _) = iq4nl_code(sf(inverse(d(b, _)) * x(j, b, _)));
             return {q, d};
         }
-        // the first scale of the greatest magnitude (GGML's strict scan,
-        // order-free: NaN scales never are; 0 if all are 0)
-        mas(b, _) = maximum(sf(select(abs(sc(rs, b, _)) > 0.0f, abs(sc(rs, b, _)), 0.0f)));
-        first(b, _) = minimum(select(abs(sc(rs, b, _)) == mas(b, _), rs, sub() - 1));
-        Expr ms = select(sf(mas(b, _) > 0.0f), sc(clamp(first(b, _), 0, sub() - 1), b, _), 0.0f);
+        Expr ms = first_max_scale(mas, first, sc, b, rs, sub());
+        ms = select(sf(mas(b, _) > 0.0f), ms, 0.0f);
         d(b, _) = sf(-ms / 32.0f);
         six(k, b, _) = cast<int8_t>(clamp(nearest_int(sf(inverse(d(b, _)) * sc(k, b, _))), -32, 31));
         Expr dl = sf(d(b, _) * cast<float>(six(j / n, b, _)));
@@ -102,25 +100,15 @@ struct IQ4Quant {
     }
     std::vector<Func> decode(const std::vector<Func> &e) const {
         if (sub() == 1) return {dequant(e)};
-        Func v("values");
-        Var j, b;
-        v(j, b, _) = cast<float>(e[0](j, b, _)) * (e[2](b, _) * cast<float>(e[1](j / n, b, _)));
-        return {v};
+        return ScaledCodes::decode(e);
     }
     ApproximationSignature signature() const {
-        if (sub() == 1) return codes_and_scale(-127, 113);
-        return {{{"blocks", Float(32)}}, {codes_port(-127, 113), param_port("scales", Int(8), tag::scale, ApproximationRange(-32, 31)), param_port("scale", Float(32), tag::scale)}};
+        if (sub() == 1) return codes_and_scale(lo, hi);
+        return ScaledCodes::signature();
     }
-    // Codes nearest x / d1 (d1 the block's scale; iq4_xs: d * l) among
-    // kvalues_iq4nl, at most 24 apart: half that, or the distance past the
-    // codes' ends (d1 = 0: |x|).
+    // Codes nearest x / d1 among kvalues_iq4nl, at most 24 apart.
     Func error_bound(const std::vector<Func> &in, const std::vector<Func> &e) const {
-        Func f("bound");
-        Var j, b;
-        Expr d1 = sub() == 1 ? cast<double>(e[1](b, _)) : cast<double>(e[2](b, _)) * cast<double>(e[1](j / n, b, _));
-        Expr x = cast<double>(in[0](j, b, _)), lo = min(-127 * d1, 113 * d1), hi = max(-127 * d1, 113 * d1);
-        f(j, b, _) = max(Expr(12.0) * abs(d1), x - hi, lo - x) * Expr(1.0001) + (abs(x) + 127 * abs(d1)) * Expr(std::ldexp(1.0, -20));
-        return f;
+        return nearest_bound(in, e, 12.0);
     }
 };
 
@@ -146,7 +134,7 @@ inline Approximation iq4_nl(const std::string &lay, bool indexed = false) {
 inline Approximation iq4_xs(const std::string &lay, bool indexed = false) {
     return Compose{BlockReshape{QK_K, indexed}, IQ4Quant{QK_K}, Parallel{{"codes", iq4nl_codes()}},
                    Parallel{{"codes", Compose{BlockReshape{QK}, PlanarFieldPack{4, QK / 2}, Unblock{QK / 2}}},
-                            {"scales", Compose{SumSplit{4}, Parallel{{"low", BitPack{4}}, {"high", Compose{multiples(4, -32, 4), BitPack{2}}}}}},
+                            {"scales", six_bit_scales(BitPack{4}, BitPack{2})},
                             {"scale", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"scales_h", UInt(8), 2}, {"scales_l", UInt(8), QK_K / 64}, {"qs", UInt(8), QK_K / 2}},
                           {"qs", "scales_l", "scales_h", "d"})};

@@ -305,8 +305,8 @@ inline Approximation q5_K(const std::string &lay, bool indexed = false) {
     std::vector<std::string> logical = {"qs", "qh", "scales", "d", "dmin"};
     std::vector<StructField> fields = {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qh", UInt(8), QK_K / 8}, {"qs", UInt(8), QK_K / 2}};
     auto head = [&](const Approximation &scales) {
-        return Compose{BlockReshape{QK_K, indexed}, q5_K_quant(), Parallel{{"codes", SumSplit{4}}},
-                       Parallel{{"low", q4_K_nibbles()}, {"high", Compose{multiples(4, 0, 2), PlanarFieldPack{1, 32}}}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
+        return Compose{BlockReshape{QK_K, indexed}, q5_K_quant(),
+                       Parallel{{"codes", split_bits(4, 0, 2, q4_K_nibbles(), PlanarFieldPack{1, 32})}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
     };
     if (lay == "8x8") return Compose{head(Identity{}), kx8_layout(fields, logical)};
     if (lay != "aos" && lay != "soa") throw std::invalid_argument("q5_K: no " + lay + " layout (GGML's repacked one is 8x8)");
@@ -329,6 +329,57 @@ inline Approximation q2_K(const std::string &lay, bool indexed = false) {
                    layout(lay, {{"scales", UInt(8), QK_K / 16}, {"qs", UInt(8), QK_K / 4}, {"d", Float(16)}, {"dmin", Float(16)}}, {"qs", "scales", "d", "dmin"})};
 }
 
+// GGML's strict scan for the greatest |x| of each sub-block s (xr: its
+// elements x(s * n + r, b, ...)): am(s, b, ...) = (amax, max).
+inline void strict_amax(Func am, const Func &x, const Expr &xr, const Var &s, const Var &b) {
+    am(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f);
+    Expr gt = sf(abs(xr) > am(s, b, _)[0]);
+    am(s, b, _) = Tuple(select(gt, abs(xr), am(s, b, _)[0]), select(gt, xr, am(s, b, _)[1]));
+}
+
+// The first of the `sub` sub-block scales sc(rs, b, ...) of the greatest
+// magnitude (GGML's strict scan, order-free: NaN scales never are), mas(b,
+// ...) that magnitude (0 if all are 0), first(b, ...) its index.
+inline Expr first_max_scale(Func mas, Func first, const Func &sc, const Var &b, const RDom &rs, int sub) {
+    mas(b, _) = maximum(sf(select(abs(sc(rs, b, _)) > 0.0f, abs(sc(rs, b, _)), 0.0f)));
+    first(b, _) = minimum(select(abs(sc(rs, b, _)) == mas(b, _), rs, sub - 1));
+    return sc(clamp(first(b, _), 0, sub - 1), b, _);
+}
+
+// values = codes * (scale * scales(j / n)): int8 codes in [lo, hi], an int8
+// scale per sub-block of n in [scales_lo, scales_hi], an f32 scale per
+// block. The decode (and signature) of GGML's sub-block-scaled formats: the
+// quantizers' (Q6KQuant, Q3KQuant, IQ4Quant), and decode only, with an
+// encoder paired with it (TrustedInverse), the grids'.
+struct ScaledCodes {
+    int n, lo, hi, scales_lo, scales_hi;
+
+    std::vector<Func> encode(const std::vector<Func> &) const {
+        throw std::logic_error("ScaledCodes: decode only (an encoder pairs with it: TrustedInverse)");
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func v("values");
+        Var j, b;
+        v(j, b, _) = cast<float>(e[0](j, b, _)) * (e[2](b, _) * cast<float>(e[1](j / n, b, _)));
+        return {v};
+    }
+    ApproximationSignature signature() const {
+        return {{{"blocks", Float(32)}}, {codes_port(lo, hi), param_port("scales", Int(8), tag::scale, ApproximationRange(scales_lo, scales_hi)), param_port("scale", Float(32), tag::scale)}};
+    }
+    // The error of codes nearest x / d1 in [lo, hi] (d1: scale * scales, or
+    // the block's scale e.back() alone), at most `steps` steps from x / d1
+    // inside them: that, or the distance past their ends (d1 = 0: |x|).
+    Func nearest_bound(const std::vector<Func> &in, const std::vector<Func> &e, double steps) const {
+        Func f("bound");
+        Var j, b;
+        Expr d1 = cast<double>(e.back()(b, _)), x = cast<double>(in[0](j, b, _));
+        if (e.size() > 2) d1 = d1 * cast<double>(e[1](j / n, b, _));
+        Expr l = min(lo * d1, hi * d1), h = max(lo * d1, hi * d1);
+        f(j, b, _) = max(Expr(steps) * abs(d1), x - h, l - x) * Expr(1.0001) + (abs(x) + -lo * abs(d1)) * Expr(std::ldexp(1.0, -20));
+        return f;
+    }
+};
+
 // GGML's quantize_row_q6_K_ref. Per sub-block of 16: make_qx_quants(16, 32,
 // ..., rmse_type 1): codes nearest_int(iscale * x) in [-32, 31], for iscale
 // -32 / max (max the first value of the greatest |x|), then for each of 18
@@ -340,8 +391,11 @@ inline Approximation q2_K(const std::string &lay, bool indexed = false) {
 // scale)) (an int8), and the codes again, nearest_int(x / (d * sc)) in
 // [-32, 31] (where d * sc is 0, the search's); all zero for blocks whose
 // scales are below 1e-15. Values = codes * (d * sc).
-struct Q6KQuant {
-    static constexpr int n = 16, sub = QK_K / n, trials = 19;
+struct Q6KQuant : ScaledCodes {
+    static constexpr int sub = QK_K / 16, trials = 19;
+    Q6KQuant()
+        : ScaledCodes{16, -32, 31, -128, 127} {
+    }
 
     std::vector<Func> encode(const std::vector<Func> &in) const {
         Func x = in[0], am("sub_amax"), cand("qx_trials"), st("qx_search"), sc("sub_scales"), lq("qx_codes");
@@ -349,10 +403,7 @@ struct Q6KQuant {
         Var j, s, c, b, k;
         RDom r(0, n), rk(1, trials - 1), rs(0, sub);
         Expr xr = x(s * n + r, b, _);
-        // GGML's strict scan for the greatest |x|: (amax, max)
-        am(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f);
-        Expr gt = sf(abs(xr) > am(s, b, _)[0]);
-        am(s, b, _) = Tuple(select(gt, abs(xr), am(s, b, _)[0]), select(gt, xr, am(s, b, _)[1]));
+        strict_amax(am, x, xr, s, b);
         Expr mx = am(s, b, _)[1];
         // -nmax, then -(nmax + 0.1 is) for is = -9..9 but 0
         std::vector<Expr> nums{-32.0f};
@@ -375,34 +426,16 @@ struct Q6KQuant {
         sc(s, b, _) = select(sf(am(s, b, _)[0] < 1e-15f), 0.0f, st(s, b, _)[0]);
         Expr js = j / n;
         lq(j, b, _) = select(sf(am(js, b, _)[0] < 1e-15f), -32, codes(st(js, b, _)[2], x(j, b, _)));
-        // the first scale of the greatest magnitude (order-free; NaN scales never are)
-        mas(b, _) = maximum(sf(select(abs(sc(rs, b, _)) > 0.0f, abs(sc(rs, b, _)), 0.0f)));
-        first(b, _) = minimum(select(abs(sc(rs, b, _)) == mas(b, _), rs, sub - 1));
-        Expr zero = sf(mas(b, _) < 1e-15f), is = sf(-128.0f / sc(clamp(first(b, _), 0, sub - 1), b, _));
+        Expr ms = first_max_scale(mas, first, sc, b, rs, sub);
+        Expr zero = sf(mas(b, _) < 1e-15f), is = sf(-128.0f / ms);
         d(b, _) = select(zero, 0.0f, cast<float>(MiniFloat::binary16().encode(sf(1.0f / is))));
         six(k, b, _) = select(zero, cast<int8_t>(0), cast<int8_t>(min(nearest_int(sf(is * sc(k, b, _))), 127)));
         Expr d1 = sf(d(b, _) * cast<float>(six(js, b, _)));
         q(j, b, _) = cast<int8_t>(select(zero, -32, sf(d1 != 0.0f), clamp(nearest_int(sf(x(j, b, _) / d1)), -32, 31), lq(j, b, _)));
         return {q, six, d};
     }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        Func v("values");
-        Var j, b;
-        v(j, b, _) = cast<float>(e[0](j, b, _)) * (e[2](b, _) * cast<float>(e[1](j / n, b, _)));
-        return {v};
-    }
-    static ApproximationSignature signature() {
-        return {{{"blocks", Float(32)}}, {codes_port(-32, 31), param_port("scales", Int(8), tag::scale, ApproximationRange(-128, 127)), param_port("scale", Float(32), tag::scale)}};
-    }
-    // Codes nearest x / d1 in [-32, 31]: half a step, or the distance past
-    // the codes' ends (d1 = 0: |x|).
     Func error_bound(const std::vector<Func> &in, const std::vector<Func> &e) const {
-        Func f("bound");
-        Var j, b;
-        Expr d1 = cast<double>(e[2](b, _)) * cast<double>(e[1](j / n, b, _)), x = cast<double>(in[0](j, b, _));
-        Expr lo = min(-32 * d1, 31 * d1), hi = max(-32 * d1, 31 * d1);
-        f(j, b, _) = max(Expr(0.5) * abs(d1), x - hi, lo - x) * Expr(1.0001) + (abs(x) + 32 * abs(d1)) * Expr(std::ldexp(1.0, -20));
-        return f;
+        return nearest_bound(in, e, 0.5);
     }
 };
 
@@ -417,10 +450,8 @@ struct Q6KQuant {
 inline Approximation q6_K(const std::string &lay, bool indexed = false) {
     std::vector<std::string> logical = {"ql", "qh", "scales", "d"};
     std::vector<StructField> fields = {{"ql", UInt(8), QK_K / 2}, {"qh", UInt(8), QK_K / 4}, {"scales", Int(8), QK_K / 16}, {"d", Float(16)}};
-    Approximation head = Compose{BlockReshape{QK_K, indexed}, Q6KQuant{}, Parallel{{"codes", SumSplit{4}}},
-                                 Parallel{{"low", Compose{BlockReshape{128}, PlanarFieldPack{4, 64}, Unblock{64}}},
-                                          {"high", Compose{multiples(4, -32, 4), BlockReshape{128}, PlanarFieldPack{2, 32}, Unblock{32}}},
-                                          {"scale", fp16()}}};
+    Approximation head = Compose{BlockReshape{QK_K, indexed}, Q6KQuant{},
+                                 Parallel{{"codes", split_bits(4, -32, 4, Compose{BlockReshape{128}, PlanarFieldPack{4, 64}, Unblock{64}}, two_bit_planes())}, {"scale", fp16()}}};
     if (lay == "8x8") {
         const int rows = 8;
         std::vector<StructField> mem = {fields[3], fields[2], fields[0], fields[1]}, recs;
@@ -446,8 +477,11 @@ inline Approximation q6_K(const std::string &lay, bool indexed = false) {
 // scale) in [-32, 31] (all -32, d 0, if max is 0), and the codes again,
 // nearest_int(x / (d * sc)) in [-4, 3] (where d * sc is 0, the search's).
 // Values = codes * (d * sc).
-struct Q3KQuant {
-    static constexpr int n = 16, sub = QK_K / n, passes = 5;
+struct Q3KQuant : ScaledCodes {
+    static constexpr int sub = QK_K / 16, passes = 5;
+    Q3KQuant()
+        : ScaledCodes{16, -4, 3, -32, 31} {
+    }
 
     std::vector<Func> encode(const std::vector<Func> &in) const {
         Func x = in[0], am("sub_amax"), l0("q3_codes0"), sums0("q3_sums0"), st("q3_search"), sc("sub_scales"), lq("q3_codes");
@@ -455,9 +489,7 @@ struct Q3KQuant {
         Var j, s, t, b, k;
         RDom r(0, n), rt(0, passes * n), rs(0, sub);
         Expr xr = x(s * n + r, b, _);
-        am(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f);
-        Expr gt = sf(abs(xr) > am(s, b, _)[0]);
-        am(s, b, _) = Tuple(select(gt, abs(xr), am(s, b, _)[0]), select(gt, xr, am(s, b, _)[1]));
+        strict_amax(am, x, xr, s, b);
         auto codes = [](const Expr &v) { return clamp(nearest_int(v), -4, 3); };
         Expr iscale = sf(-4.0f / am(s, b, _)[1]);
         l0(s, j, b, _) = codes(sf(iscale * x(s * n + j, b, _)));
@@ -478,34 +510,16 @@ struct Q3KQuant {
         sc(s, b, _) = select(zs, 0.0f, sf(select(l2 > 0.0f, lx / l2, 0.0f)));
         Expr js = j / n;
         lq(j, b, _) = select(sf(am(js, b, _)[0] < 1e-15f), -4, st(js, (passes - 1) * n + j % n, b, _)[2]);
-        // the first scale of the greatest magnitude (order-free; NaN scales never are)
-        mas(b, _) = maximum(sf(select(abs(sc(rs, b, _)) > 0.0f, abs(sc(rs, b, _)), 0.0f)));
-        first(b, _) = minimum(select(abs(sc(rs, b, _)) == mas(b, _), rs, sub - 1));
-        Expr zero = sf(mas(b, _) == 0.0f), is = sf(-32.0f / sc(clamp(first(b, _), 0, sub - 1), b, _));
+        Expr ms = first_max_scale(mas, first, sc, b, rs, sub);
+        Expr zero = sf(mas(b, _) == 0.0f), is = sf(-32.0f / ms);
         d(b, _) = select(zero, 0.0f, cast<float>(MiniFloat::binary16().encode(sf(1.0f / is))));
         six(k, b, _) = select(zero, cast<int8_t>(-32), clamp(cast<int8_t>(nearest_int(sf(is * sc(k, b, _)))), cast<int8_t>(-32), cast<int8_t>(31)));
         Expr d1 = sf(d(b, _) * cast<float>(six(js, b, _)));
         q(j, b, _) = cast<int8_t>(select(sf(d1 != 0.0f), codes(sf(x(j, b, _) / d1)), lq(j, b, _)));
         return {q, six, d};
     }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        Func v("values");
-        Var j, b;
-        v(j, b, _) = cast<float>(e[0](j, b, _)) * (e[2](b, _) * cast<float>(e[1](j / n, b, _)));
-        return {v};
-    }
-    static ApproximationSignature signature() {
-        return {{{"blocks", Float(32)}}, {codes_port(-4, 3), param_port("scales", Int(8), tag::scale, ApproximationRange(-32, 31)), param_port("scale", Float(32), tag::scale)}};
-    }
-    // Codes nearest x / d1 in [-4, 3]: half a step, or the distance past the
-    // codes' ends (d1 = 0: |x|).
     Func error_bound(const std::vector<Func> &in, const std::vector<Func> &e) const {
-        Func f("bound");
-        Var j, b;
-        Expr d1 = cast<double>(e[2](b, _)) * cast<double>(e[1](j / n, b, _)), x = cast<double>(in[0](j, b, _));
-        Expr lo = min(-4 * d1, 3 * d1), hi = max(-4 * d1, 3 * d1);
-        f(j, b, _) = max(Expr(0.5) * abs(d1), x - hi, lo - x) * Expr(1.0001) + (abs(x) + 4 * abs(d1)) * Expr(std::ldexp(1.0, -20));
-        return f;
+        return nearest_bound(in, e, 0.5);
     }
 };
 
@@ -515,9 +529,8 @@ struct Q3KQuant {
 // i in nibble i / 8 of byte i % 8), their top two bits in bytes 8-11 (scale
 // i in bits 2 (i / 4) of byte 8 + i % 4).
 inline Approximation q3_K(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK_K, indexed}, Q3KQuant{}, Parallel{{"codes", SumSplit{2}}},
-                   Parallel{{"low", two_bit_planes()}, {"high", Compose{multiples(2, -4, 2), PlanarFieldPack{1, 32}}}},
-                   Parallel{{"scales", Compose{SumSplit{4}, Parallel{{"low", PlanarFieldPack{4, 8}}, {"high", Compose{multiples(4, -32, 4), PlanarFieldPack{2, 4}}}}}}, {"scale", fp16()}},
+    return Compose{BlockReshape{QK_K, indexed}, Q3KQuant{},
+                   Parallel{{"codes", split_bits(2, -4, 2, two_bit_planes(), PlanarFieldPack{1, 32})}, {"scales", six_bit_scales(PlanarFieldPack{4, 8}, PlanarFieldPack{2, 4})}, {"scale", fp16()}},
                    layout(lay, {{"hmask", UInt(8), QK_K / 8}, {"qs", UInt(8), QK_K / 4}, {"scales_lo", UInt(8), 8}, {"scales_hi", UInt(8), 4}, {"d", Float(16)}},
                           {"qs", "hmask", "scales_lo", "scales_hi", "d"})};
 }

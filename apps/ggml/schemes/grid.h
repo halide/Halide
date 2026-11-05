@@ -21,26 +21,6 @@
 
 namespace ggml {
 
-// values = codes * (scale * scales(j / n)): int8 codes, an int8 scale per
-// sub-block of n, an f32 scale per block (Q6KQuant's decode). Decode only:
-// pair it with an encoder (TrustedInverse).
-struct ScaledCodes {
-    int n, lo, hi, scales_lo, scales_hi;
-
-    std::vector<Func> encode(const std::vector<Func> &) const {
-        throw std::logic_error("ScaledCodes: decode only (an encoder pairs with it: TrustedInverse)");
-    }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        Func v("values");
-        Var j, b;
-        v(j, b, _) = cast<float>(e[0](j, b, _)) * (e[2](b, _) * cast<float>(e[1](j / n, b, _)));
-        return {v};
-    }
-    ApproximationSignature signature() const {
-        return {{{"blocks", Float(32)}}, {codes_port(lo, hi), param_port("scales", Int(8), tag::scale, ApproximationRange(scales_lo, scales_hi)), param_port("scale", Float(32), tag::scale)}};
-    }
-};
-
 // GGML's quantizer of `type` (ggml_quantize_chunk: with the harness's
 // importance matrix where GGML requires one), as an extern stage, Halide's
 // define_extern: values -> blocks of `block` values, GGML's `record`s.

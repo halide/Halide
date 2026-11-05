@@ -101,8 +101,8 @@ inline Approximation q4_1(const std::string &lay, bool indexed = false) {
 // bytes: bit j % 8 of byte j / 8 is code j's), decoded through a table of
 // each byte's rests (Tabulate: GGML's table_b2b_1, its offset folded in),
 // indexed by the bytes of qh.
-inline Approximation q5_rest(int lo) {
-    return Tabulate{Compose{multiples(4, lo, 2), BitPack{1}}, 8};
+inline Approximation q5_codes(int lo) {
+    return split_bits(4, lo, 2, PlanarFieldPack{4, QK / 2}, BitPack{1}, 8);
 }
 
 inline StructField q5_qh() {
@@ -110,14 +110,12 @@ inline StructField q5_qh() {
 }
 
 inline Approximation q5_0(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Type0Quant{5}, Parallel{{"codes", SumSplit{4}}},
-                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", q5_rest(-16)}, {"scale", fp16()}},
+    return Compose{BlockReshape{QK, indexed}, Type0Quant{5}, Parallel{{"codes", q5_codes(-16)}, {"scale", fp16()}},
                    layout(lay, {{"d", Float(16)}, q5_qh(), {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d"})};
 }
 
 inline Approximation q5_1(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Type1Quant{5}, Parallel{{"codes", SumSplit{4}}},
-                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", q5_rest(0)}, {"scale", fp16()}, {"min", fp16()}},
+    return Compose{BlockReshape{QK, indexed}, Type1Quant{5}, Parallel{{"codes", q5_codes(0)}, {"scale", fp16()}, {"min", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"m", Float(16)}, q5_qh(), {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d", "m"})};
 }
 
