@@ -104,15 +104,6 @@ inline bool calls(const Func &g, const Func &f) {
     return std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
 }
 
-// The defined Funcs of gs (each once) that call f.
-inline std::vector<Func> callers(const Func &f, const std::vector<Func> &gs) {
-    std::vector<Func> cs;
-    for (const Func &g : gs) {
-        if (g.defined() && !has(cs, g.name()) && calls(g, f)) cs.push_back(g);
-    }
-    return cs;
-}
-
 // Per bit of the index of r.x's (a block's `block` values) sub-blocks of `sub`
 // values (a power of 2), how many of dot's loads varying with r.x's bits below `low` (0: with any)
 // it leaves in place: sub-blocks differing only in it read the same bytes
@@ -474,13 +465,11 @@ inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
     return std::any_of(sc.begin(), sc.end(), [](const Func &f) { return f.type().is_float() && f.dimensions() == 3; });
 }
 
-// The weight's decoded per-sub-block scales (and mins): its scale decoders
-// with the values' dimensions that no other scale decoder reads.
+// The weight's decoded per-sub-block scales (and mins): its decoded scale
+// components with the values' dimensions.
 inline std::vector<Func> scale_decoders(const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> sc = decoders(rs, only({tag::scale}), 0, 1), fs;
-    for (Func f : sc) {
-        if (f.dimensions() == 3 && callers(f, sc).empty()) fs.push_back(f);
-    }
+    std::vector<Func> sc = rs[0].decoded_components(tag::scale), fs;
+    std::copy_if(sc.begin(), sc.end(), std::back_inserter(fs), [](const Func &f) { return f.dimensions() == 3; });
     return fs;
 }
 
