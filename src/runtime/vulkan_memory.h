@@ -504,6 +504,10 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
     if ((device == nullptr) || (physical_device == nullptr) || (block_allocator == nullptr)) {
         return false;
     }
+    // Released regions may still be in use by submitted work: wait for it to finish
+    // before freeing them. (Retiring the submissions would release their staging
+    // buffers, which must not happen here: this may be called from inside reserve().)
+    vk_wait_for_submissions(user_context, this, false);
     return block_allocator->collect(this);
 }
 
@@ -1386,6 +1390,8 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context,
 
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator) {
     if (allocator != nullptr) {
+        // Release what the submissions hold before collecting the unused regions
+        vk_destroy_submission_queue(user_context, allocator);
         allocator->collect(user_context);
         VulkanMemoryAllocator::destroy(user_context, allocator);
         allocator = nullptr;

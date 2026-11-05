@@ -105,8 +105,8 @@ int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocat
 
 // -- Submissions
 VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator *allocator, VkQueue queue, uint32_t queue_family_index);
-int vk_end_submission(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission);
-int vk_wait_for_submissions(void *user_context, VulkanMemoryAllocator *allocator);
+int vk_end_submission(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission, bool host_read = false);
+int vk_wait_for_submissions(void *user_context, VulkanMemoryAllocator *allocator, bool retire = true);
 int vk_destroy_submission_queue(void *user_context, VulkanMemoryAllocator *allocator);
 
 void vk_record_dispatch_call(VkCommandBuffer command_buffer,
