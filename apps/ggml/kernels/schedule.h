@@ -152,11 +152,6 @@ inline std::vector<Func> without(const std::vector<Func> &fs, const std::vector<
     return r;
 }
 
-// s specialized to c, or s if c is undefined.
-inline Stage when(Stage s, const Expr &c) {
-    return c.defined() ? s.specialize(c) : s;
-}
-
 // Does a definition of g call f?
 inline bool calls(const Func &g, const Func &f) {
     std::vector<Expr> vals = g.function().definition().values();
@@ -398,7 +393,7 @@ inline LoopLevel tile_at(Func out, int st) {
 inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n = false, bool guard_m = false) {
     VarOrRVar n = out.args()[0], m = row_var(out, st), mo = row_var(out, st, "mo"), mi = row_var(out, st, "mi"), mc = row_var(out, st, "mc"), t = row_var(out, st, "nc");
     Var no("no"), ni("ni"), nc("nc");
-    Stage o = st ? out.update(st - 1) : Stage(out), s = when(o, cond);
+    Stage o = st ? out.update(st - 1) : Stage(out), s = o.specialize(cond);
     // Updates: whole tiles in n (cond knows N % nt == 0); m an RVar.
     s.split(n, no, ni, ts.nt, st || whole_n ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
     s.split(m, mo, mi, ts.mt, st || guard_m ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
@@ -424,9 +419,9 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
         }
         s.split(no, nc, no, per, TailStrategy::GuardWithIf);
         if (ts.cols) s.reorder(ni, mi, mo, no, mc, nc).fuse(mc, nc, t);
-        when(s, ts.busy).parallel(ts.cols ? t : VarOrRVar(nc));
+        s.specialize(ts.busy).parallel(ts.cols ? t : VarOrRVar(nc));
     }
-    return when(dot.update(), cond);
+    return dot.update().specialize(cond);
 }
 
 // How a kernel reads its luts (Tabulate's): one that reads a Buffer (a
@@ -1988,8 +1983,8 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
             so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, t * sh.tn, t * sh.tm).tile(ni, mi, nt, mt, t, t);
             so.gpu_blocks(n, m).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
         }
-        tile(when(sd, sh.cond));
-        Stage u = when(su, sh.cond);
+        tile(sd.specialize(sh.cond));
+        Stage u = su.specialize(sh.cond);
         // ks: the steps of K; kb: their blocks (or, for blocks longer than a
         // step or flat, ko: the step's 8-value pieces)
         auto steps = [&](Stage st, int kstep) {
@@ -2016,7 +2011,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
         for (Func f : {ws, xs}) {
             std::vector<Var> a = f.args();
             Var l("l"), ln("ln"), lt("lt"), sw("sw"), jv("jv");
-            Stage s = when(f, sh.cond);
+            Stage s = f.specialize(sh.cond);
             s.split(a[0], l, jv, 4);
             for (size_t i = 1; i < a.size(); i++) {
                 Var fl("l" + std::to_string(i));
