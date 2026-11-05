@@ -1434,6 +1434,65 @@ Pointwise Pointwise::with_lossless(bool is_lossless) const {
     return copy;
 }
 
+Pointwise Pointwise::affine(const std::string &name, int a, int b, int n, AffineForm form, Type code_type,
+                            Type field_type) {
+    int s = 0;
+    while (s < 31 && (1 << s) < std::abs(a)) {
+        s++;
+    }
+    user_assert(a != 0 && (1 << s) == std::abs(a) && n >= 1)
+        << "Pointwise::affine(\"" << name << "\"): the step " << a
+        << " must be a power of two or its negation, and the field count " << n << " positive\n";
+    user_assert(code_type.is_int() && field_type.is_uint())
+        << "Pointwise::affine(\"" << name << "\"): codes must be signed and fields unsigned integers\n";
+    user_assert(form != AffineForm::Narrow || (a > 0 && b % a == 0))
+        << "Pointwise::affine(\"" << name << "\"): the Narrow form requires a positive step that divides the offset\n";
+    user_assert(form != AffineForm::Select || n == 2)
+        << "Pointwise::affine(\"" << name << "\"): the Select form requires two fields\n";
+    auto code = [=](const Expr &e) { return cast(code_type, e); };
+    auto field = [=](const Expr &e) { return cast(field_type, e); };
+    bool identity = a == 1 && b == 0;
+    ExprFn encode, decode;
+    switch (form) {
+    case AffineForm::Sum:
+        encode = [=](const Expr &c) {
+            return identity ? field(c) : field(a > 0 ? c - code(b) : code(b) - c) >> s;
+        };
+        decode = [=](const Expr &u) {
+            return identity ? code(u) : a > 0 ? code(u << s) + code(b) :
+                                                code(b) - (code(u) << s);
+        };
+        break;
+    case AffineForm::Narrow:
+        encode = [=](const Expr &c) {
+            Expr q = s ? c >> s : c;
+            return field(b < 0 ? q + -b / a : q - b / a);
+        };
+        decode = [=](const Expr &u) {
+            Expr w = s ? u << s : cast<int>(u);
+            Expr k = s ? field(std::abs(b)) : Expr(std::abs(b));
+            return code(b < 0 ? w - k : w + k);
+        };
+        break;
+    case AffineForm::Select:
+        encode = [=](const Expr &c) {
+            Expr mid = code(b + a / 2);
+            return field(a > 0 ? c > mid : c < mid);
+        };
+        decode = [=](const Expr &u) {
+            return select(u != field(0), code(a + b), code(b));
+        };
+        break;
+    }
+    int lo = std::min(b, b + a * (n - 1)), hi = std::max(b, b + a * (n - 1));
+    Pointwise p = Pointwise{name, std::move(encode), std::move(decode)}
+                      .with_types(code_type, field_type)
+                      .with_ranges(ApproximationRange(lo, hi), ApproximationRange(0, n - 1))
+                      .with_lossless();
+    p.affine_ = AffineMap{a, b, n, form};
+    return p;
+}
+
 ApproximationSignature Pointwise::signature(const ApproximationPorts &inputs) const {
     if (inputs.size() > 1) {
         return ApproximationSignature::unknown(inputs);

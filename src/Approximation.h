@@ -1365,6 +1365,64 @@ struct Pointwise {
     Pointwise(std::string encode_name, std::string decode_name, TupleFn encode_fn, TupleFn decode_fn,
               std::string var_prefix = "pw");
 
+    /** The Expr shapes of an affine map's decode and encode (see affine()),
+     * with `c` a code, `u` a field, `s` = log2 |a|, and `code(.)` and
+     * `field(.)` casts to the code and field types. */
+    enum class AffineForm {
+        /** The offset is a term of its own, so a consumer may split it off
+         * a sum of codes: decode `code(u << s) + code(b)` (a > 0) or
+         * `code(b) - (code(u) << s)` (a < 0), encode `field(c - code(b)) >>
+         * s` (a > 0) or `field(code(b) - c) >> s` (a < 0); both a plain
+         * cast if a == 1 and b == 0. */
+        Sum,
+        /** The offset is inside the cast that narrows to the code type, so
+         * no term of a code is constant: decode `code(int32(u) - |b|)` (a ==
+         * 1) or `code((u << s) - field(|b|))` (wrapping in the field type),
+         * encode `field((c >> s) + |b| / |a|)` (`+` and `-` swap for b > 0).
+         * Requires a > 0, dividing b. */
+        Narrow,
+        /** For n == 2, a select: decode `select(u != field(0), code(a + b),
+         * code(b))`, encode `field(c > code(b + a / 2))` (`<` for a < 0). */
+        Select,
+    };
+
+    /** The declaration of an affine map (see affine()). */
+    struct AffineMap {
+        int a, b, n;
+        AffineForm form;
+
+        /** The constant the decode adds to each code as a term of its own:
+         * b in Sum form, else 0 (in Narrow and Select form, b is not a
+         * term). */
+        int offset_term() const {
+            return form == AffineForm::Sum ? b : 0;
+        }
+    };
+
+    /** An affine map of integer codes, `c = a * u + b` <-> fields `u` in
+     * [0, n), for |a| a power of two. Named and typed as Pointwise (`name +
+     * "_encode"`, `name + "_decode"`), lossless, its signature declared:
+     * codes of type `code_type` in [min(b, b + a(n - 1)), max(b, b + a(n -
+     * 1))] in, fields of type `field_type` in [0, n - 1] out. `form` picks
+     * the Exprs (see AffineForm), which differ in what a consumer of the
+     * decode may split off or match; affine_map() returns the declaration,
+     * so a schedule can ask what a decode computes instead of matching its
+     * Exprs.
+     *
+     * \code
+     * // codes -1, 0, 1 <-> fields 0, 1, 2
+     * Approximation ternary = Pointwise::affine("ternary", 1, -1, 3);
+     * // codes -1, 1 <-> bits 0, 1, decoded by a select
+     * Approximation signs = Pointwise::affine("signs", 2, -1, 2, Pointwise::AffineForm::Select);
+     * \endcode */
+    static Pointwise affine(const std::string &name, int a, int b, int n, AffineForm form = AffineForm::Sum,
+                            Type code_type = Int(8), Type field_type = UInt(8));
+
+    /** The map declared by affine(), if this Pointwise was made by it. */
+    const std::optional<AffineMap> &affine_map() const {
+        return affine_;
+    }
+
     Func encode(const Func &input) const;
     Func decode(const Func &encoded) const;
 
@@ -1405,6 +1463,7 @@ private:
     std::optional<Type> input_type, output_type;
     std::optional<ApproximationRange> input_range, output_range;
     bool lossless_ = false;
+    std::optional<AffineMap> affine_;
 };
 
 /** Passes Funcs (and their port names) through unchanged in both directions. */
