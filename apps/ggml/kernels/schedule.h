@@ -46,7 +46,7 @@ inline const Tabulate *tabulate(const ApproximationResult &r, const Func &f, boo
     const ApproximationTraceNode *n = r.defining_call(f);
     const Tabulate *t = n ? n->stage.target<Tabulate>() : nullptr;
     if (!t || !has(lut ? n->intermediates : n->ports, f.name())) return nullptr;
-    return !precomputed || n->intermediates[0].function().schedule().precomputed() ? t : nullptr;
+    return !precomputed || n->intermediates[0].is_precomputed() ? t : nullptr;
 }
 inline const Tabulate *tabulate(const std::vector<ApproximationResult> &rs, const Func &f, bool lut) {
     for (const ApproximationResult &r : rs) {
@@ -373,7 +373,7 @@ inline int array_extent(Func f) {
 inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
     std::vector<Func> idx;
     for (Func f : callees(g)) {
-        if (!f.function().schedule().precomputed()) idx.push_back(f);  // (not its table)
+        if (!f.is_precomputed()) idx.push_back(f);  // (not its table)
     }
     if (idx.size() != 1) return;
     std::vector<std::pair<Func, Func>> staged;  // (Func read as is, its caller)
