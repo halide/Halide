@@ -155,7 +155,10 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # +-1 added to 8 times a grid value, a table's, of unknown bounds), no fold.
 # row_pairs=false (mul_mat's gemv on single rows, not row pairs): q6_K's
 # gemv 1.02-1.03x on one thread at K = 4096 (row pairs spill), even on ten
-# (retimed); q3_K's
+# (retimed); q5_K's with f32 acts 1.17-1.21x at any K on one thread,
+# 1.11-1.16x on ten (row pairs spill: their loop ~910 loads and ~780 stack
+# accesses, vs 2 x ~200 and ~230 in single rows; with f16 acts or q8_K's
+# they gain 8-21%); q3_K's
 # gemv, with interleave=1 (as GGML's vec_dot, a row at a time: a row's block
 # 232 instructions, 149 SIMD, the bound on M3; ~260 in row pairs), 0.94-0.98x
 # of GGML's to 1.01-1.03x on one thread, 1.04-1.13x on ten. An act of `*`:
@@ -171,6 +174,7 @@ set(GGML_SCHEDULE_PARAMS
     "q6_K mul_mat * fold_offsets=gemv"
     "q6_K mul_mat q8_K row_pairs=false"
     "q6_K mul_mat f32:q8_K row_pairs=false"
+    "q5_K mul_mat f32 row_pairs=false"
     "q3_K mul_mat q8_K interleave=1 row_pairs=false"
     "q3_K mul_mat f32:q8_K interleave=1 row_pairs=false"
     "q6_K.8x8 mul_mat * fold_offsets=gemv"
