@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <algorithm>
+#include <climits>
 #include <stdio.h>
 
 using namespace Halide;
@@ -14,6 +15,18 @@ HalideExtern_2(int, call_counter, int, int);
 extern "C" void *my_malloc(JITUserContext *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
     exit(1);
+}
+
+// The range of the first coordinate of the stores traced.
+int min_stored = 0, max_stored = 0;
+int record_stored_range(JITUserContext *, const halide_trace_event_t *e) {
+    if (e->event == halide_trace_store) {
+        for (int l = 0; l < e->lanes; l++) {
+            min_stored = std::min(min_stored, e->coordinates[l]);
+            max_stored = std::max(max_stored, e->coordinates[l]);
+        }
+    }
+    return 0;
 }
 
 // Reports the size of a producer's allocation, or 0 if it isn't constant.
@@ -814,6 +827,99 @@ int main(int argc, char **argv) {
         if (count != 35) {
             printf("f was called %d times instead of %d times\n", count, 35);
             return 1;
+        }
+    }
+
+    for (bool up : {true, false}) {
+        // Each iteration needs three values of f and two of them are new, so
+        // rewinding the loop by one iteration to warm up must only compute
+        // the one value of f the first real iteration lacks.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        Expr i = up ? 2 * x : 100 - 2 * x;
+        g(x) = f(i) + f(i + 1) + f(i + 2);
+        f.store_root().compute_at(g, x);
+        g.realize({10});
+        if (count != 21) {
+            printf("Sliding %s: f was called %d times instead of %d times\n",
+                   up ? "up" : "down", count, 21);
+            return 1;
+        }
+    }
+
+    for (bool up : {true, false}) {
+        // Rolling a window held in registers shifts values within the
+        // register array, which only works in one direction.
+        Func f, g;
+        f(x) = x;
+        Expr i = up ? x : 100 - x;
+        g(x) = f(i - 1) + f(i + 1);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out = g.realize({16});
+        for (int j = 0; j < 16; j++) {
+            int correct = up ? 2 * j : 200 - 2 * j;
+            if (out(j) != correct) {
+                printf("Rolling registers %s: out(%d) = %d instead of %d\n",
+                       up ? "up" : "down", j, out(j), correct);
+                return 1;
+            }
+        }
+    }
+
+    {
+        // A window rolled in registers must only evaluate the producer for the
+        // newly required values, even though the old ones are shifted along
+        // in the same store.
+        Func f, g, h;
+        Var yo, yi;
+        f(x, y) = x + y;
+        g(x, y) = f(x, y) * 2 + 1;
+        h(x, y) = g(x + 1, y + 2) + g(x, y + 1);
+        f.compute_root();
+        h.split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+        g.store_at(h, yi).compute_at(h, x).store_in(MemoryType::Register).trace_stores();
+        h.jit_handlers().custom_trace = record_stored_range;
+        min_stored = INT_MAX;
+        max_stored = INT_MIN;
+        h.realize({15, 15});
+        if (min_stored != 0 || max_stored != 15) {
+            printf("g was stored over x in [%d, %d] instead of [0, 15]\n",
+                   min_stored, max_stored);
+            return 1;
+        }
+    }
+
+    {
+        // Specializing a consumer duplicates the producer computed inside
+        // it, and each copy has to slide the same way.
+        count = 0;
+        Func f, g, h;
+        Param<bool> p;
+        f(x, y) = call_counter(x, y) + x + y;
+        g(x, y) = f(x, y) + f(x, y + 1);
+        h(x, y) = g(x, y) * 2;
+        g.compute_at(h, y).specialize(p);
+        f.store_root().compute_at(g, x);
+        for (bool pv : {false, true}) {
+            count = 0;
+            p.set(pv);
+            Buffer<int> out = h.realize({8, 8});
+            for (int j = 0; j < 8; j++) {
+                for (int i = 0; i < 8; i++) {
+                    int correct = 2 * (2 * (i + j) + 1);
+                    if (out(i, j) != correct) {
+                        printf("Specialized consumer: out(%d, %d) = %d instead of %d\n",
+                               i, j, out(i, j), correct);
+                        return 1;
+                    }
+                }
+            }
+            if (count != 8 * 9) {
+                printf("Specialized consumer: f was called %d times instead of %d times\n",
+                       count, 8 * 9);
+                return 1;
+            }
         }
     }
 

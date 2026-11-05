@@ -113,22 +113,26 @@ class RollFunc : public IRMutator {
             i = mutate(i);
         }
         bool sliding_up = old_bounds.max.same_as(new_bounds.max);
-        Expr is_new = sliding_up ? new_bounds.min <= args[dim] : args[dim] <= new_bounds.max;
+        Expr is_old = sliding_up ? args[dim] < new_bounds.min : new_bounds.max < args[dim];
         args[dim] -= old_bounds.min;
         vector<Expr> old_args = args;
         Expr old_arg_dim = expand_expr(old_args[dim], scope);
         old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_arg_dim);
+        vector<Expr> old_values(values.size());
         for (int i = 0; i < (int)values.size(); i++) {
-            Type t = values[i].type();
-            Expr old_value =
-                Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
-            values[i] = Call::make(values[i].type(), Call::if_then_else, {is_new, values[i], likely(old_value)}, Call::PureIntrinsic);
+            old_values[i] =
+                Call::make(values[i].type(), op->name, old_args, Call::Halide, func.get_contents(), i);
         }
         if (const Variable *v = op->args[dim].as<Variable>()) {
             // The subtractions above simplify more easily if the loop is rebased to 0.
             loops_to_rebase.insert(v->name);
         }
-        return Provide::make(func.name(), values, args, op->predicate);
+        // A branch rather than an if_then_else, because CSE would hoist lets
+        // in the new values, and the loads they contain, above an
+        // if_then_else's condition.
+        return IfThenElse::make(likely(is_old),
+                                Provide::make(func.name(), old_values, args, op->predicate),
+                                Provide::make(func.name(), values, args, op->predicate));
     }
 
     Expr visit(const Call *op) override {
@@ -285,6 +289,29 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     map<string, Expr> replacements;
 
+    // The dimensions slid before the first copy of the producer was reached,
+    // and whether a later copy wanted a different slide.
+    map<int, string> slid_before;
+    bool copies_disagree = false;
+
+    static bool same_expr(const Expr &a, const Expr &b) {
+        return a.defined() == b.defined() && (!a.defined() || equal(a, b));
+    }
+
+    static bool same_decision(const SlideDecision &a, const SlideDecision &b) {
+        if (a.slid() != b.slid()) {
+            return false;
+        }
+        return !a.slid() ||
+               (a.dim_idx == b.dim_idx &&
+                a.slide_up == b.slide_up &&
+                same_expr(a.old_bounds.min, b.old_bounds.min) &&
+                same_expr(a.old_bounds.max, b.old_bounds.max) &&
+                same_expr(a.new_bounds.min, b.new_bounds.min) &&
+                same_expr(a.new_bounds.max, b.new_bounds.max) &&
+                same_expr(a.warmup_start, b.warmup_start));
+    }
+
     // Bounds inference emits a .min/.max let per enclosing loop level, and a
     // consumer staged at an outer level reads the outer one, so every one of
     // them enclosing the producer gets rewritten. Lets in sibling subtrees
@@ -327,7 +354,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // Decide what to do with this producer, using only the scopes gathered on
     // the way in. Makes no changes to the IR.
     SlideDecision plan_slide() {
-        SlideDecision result = decision;
+        SlideDecision result;
+        result.func_name = decision.func_name;
+        result.slide_over = decision.slide_over;
+        result.considered = true;
 
         // We're interested in the case where exactly one of the dimensions of
         // the buffer has a min/extent that depends on the loop_var.
@@ -430,6 +460,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (!can_slide_up && !can_slide_down) {
             return result.reject("the region required doesn't move monotonically");
         }
+        if (!can_slide_up && func.schedule().memory_type() == MemoryType::Register) {
+            // Rolling a register array moves each value to the slot below it,
+            // which the producer's ascending loops haven't overwritten yet.
+            // Moving values up would read slots already overwritten.
+            return result.reject("a window in registers can only roll upwards");
+        }
         result.slide_up = can_slide_up;
 
         Expr loop_var_expr = Variable::make(Int(32), loop_var);
@@ -488,13 +524,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         new_loop_min_eq = simplify(new_loop_min_eq);
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
         // The constraints hold everywhere in the interval the solver returns,
-        // which is empty if they can't all be met. Nothing reads what an empty
-        // loop computes, so it may rewind regardless.
+        // which is empty if they can't all be met.
         bool solved = (solve_result.has_upper_bound() &&
                        (!solve_result.has_lower_bound() ||
-                        can_prove(loop_max < loop_min ||
-                                      solve_result.min <= solve_result.max,
-                                  bounds_scope)));
+                        can_prove(solve_result.min <= solve_result.max, bounds_scope)));
         if (solved &&
             !expr_uses_vars(solve_result.max, enclosing_loops) &&
             (!unrolled || is_const(simplify(loop_min - solve_result.max)))) {
@@ -589,11 +622,24 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             return op;
         }
 
-        internal_assert(!decision.slid()) << "Slid " << func.name()
-                                          << "'s producer twice\n";
-        decision = plan_slide();
-        decision.considered = true;
-        debug(2) << decision;
+        // The producer appears once per specialization of anything enclosing
+        // it. Each copy is planned against the dimensions slid before any of
+        // them were, and they have to agree, because the loop can only be
+        // rewound one way.
+        if (decision.considered) {
+            map<int, string> slid_after = slid_dimensions;
+            slid_dimensions = slid_before;
+            SlideDecision again = plan_slide();
+            slid_dimensions = slid_after;
+            if (!same_decision(again, decision)) {
+                copies_disagree = true;
+                return op;
+            }
+        } else {
+            slid_before = slid_dimensions;
+            decision = plan_slide();
+            debug(2) << decision;
+        }
 
         if (!decision.slid()) {
             return op;
@@ -760,6 +806,18 @@ public:
 
     // What we decided to do, filled in when we reach the producer.
     SlideDecision decision;
+
+    Stmt operator()(const Stmt &s) {
+        map<int, string> slid_on_entry = slid_dimensions;
+        Stmt result = mutate(s);
+        if (copies_disagree) {
+            slid_dimensions = slid_on_entry;
+            decision.reject("specializations of something it's computed in need different windows");
+            debug(2) << decision;
+            return s;
+        }
+        return result;
+    }
 
     // Slide in registers instead of in memory, by shifting values along an
     // unrolled array. Only valid once we've decided to slide.
