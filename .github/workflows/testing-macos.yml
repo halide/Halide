@@ -280,11 +280,26 @@ jobs:
       - name: Check vendored WebGPU header matches the Dawn pin
         run: python3 tools/mini-webgpu-tool.py check
 
-      - name: Test the vendored WebGPU header guard
-        run: python3 tools/mini-webgpu-tool.py selftest
-
       - name: Configure CMake
         run: cmake --preset ci-macos-arm-64-webgpu -DHalide_TARGET=host-webgpu
+
+      # The pre-Configure check above can only compare the version marker; the
+      # struct/enum/entry-point comparison needs the vcpkg-installed Dawn header,
+      # which only exists after Configure. That comparison is the one that catches
+      # the dangerous drift (Dawn inserting fields mid-descriptor), so run it here
+      # too and don't let it pass on an absent build tree.
+      - name: Check vendored WebGPU header against the configured Dawn
+        run: |
+          set -o pipefail
+          python3 tools/mini-webgpu-tool.py check build | tee /tmp/mini-webgpu-check.log
+          if grep -q 'no Dawn-generated webgpu.h' /tmp/mini-webgpu-check.log; then
+            echo "FAIL: struct/enum/symbol comparison did not run (no build tree?)"
+            exit 1
+          fi
+          grep -q '^PASS$' /tmp/mini-webgpu-check.log
+
+      - name: Test the vendored WebGPU header guard
+        run: python3 tools/mini-webgpu-tool.py selftest
 
       - name: Build
         run: cmake --build build

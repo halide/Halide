@@ -305,6 +305,12 @@ Dawn-generated header, and checks the `libwebgpu_dawn` export table against
 every entry point Halide calls. `selftest` exercises those failure paths against
 throwaway fixtures.
 
+Note that `check` exits `PASS` even when it only managed the marker comparison,
+so a build-tree-less invocation is not a real gate. CI therefore runs it twice:
+once before Configure for a cheap pin check, and once afterwards with the build
+dir passed explicitly (`check build`), where a "no Dawn-generated webgpu.h" note
+or a missing `PASS` fails the job.
+
 <details>
 <summary>Manual fallback (what the sync tool does)</summary>
 

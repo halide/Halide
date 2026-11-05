@@ -375,6 +375,8 @@ def cmd_sync(args):
 # ------------------------------------------------------------------------ selftest
 
 # (name, marker version or None to delete it, corrupt anchor, expected exit)
+# Cases with a corrupt anchor need a Dawn-generated header as the comparison
+# upstream, so they are skipped (not failed) when none is available.
 CASES = [
     ("pass", "20260624.223603", None, 0),
     ("drift", "20260911.162847", None, 1),
@@ -444,6 +446,14 @@ def selftest(gen, lib):
         open(mini, "w").write(text)
 
     for name, ver, corrupt, want in CASES:
+        if corrupt and not gen:
+            # check() legitimately has nothing to compare struct layouts against
+            # without a Dawn-generated header, so it cannot detect the drift this
+            # fixture injects. Record it as skipped, not as an expected failure.
+            results.append(
+                (name, "skip", "skipped", True, ["no Dawn-generated header available"])
+            )
+            continue
         tmp = tempfile.mkdtemp(prefix="miniwebgpu_")
         try:
             fixture(tmp, ver, corrupt, gen, lib)
