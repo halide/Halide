@@ -88,19 +88,6 @@ Alternatively, if you use macOS, you can install Halide via
 $ brew install halide
 ```
 
-## Binary tarballs
-
-The latest version of Halide can always be found on GitHub at
-https://github.com/halide/Halide/releases
-
-We provide binary releases for many popular platforms and architectures,
-including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM
-Ubuntu Linux.
-
-The Linux tarballs are built on a recent Ubuntu LTS; if your distribution is too
-old, it might not have the requisite glibc. The [pip wheels](#pip) are built for
-manylinux_2_28 and are more broadly compatible.
-
 ## Vcpkg
 
 If you use [vcpkg](https://github.com/microsoft/vcpkg) to manage dependencies,
