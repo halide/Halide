@@ -12,7 +12,7 @@
 // weight = "<storage>[:<compute>]" likewise: W's decoded values (its storage
 // scheme's round trip) are approximated again by the compute format (a float
 // of one value per record: e.g. q4_0:f16, each decoded weight rounded to f16,
-// as GGML's Metal gemm dequantizes to half; Metal only).
+// as GGML's Metal gemm dequantizes to half; GPU only).
 #include "kernels/schedule.h"
 #include "schemes/schemes.h"
 
@@ -46,7 +46,7 @@ public:
         an = an.substr(0, an.find(':'));
         std::string wn = weight, wc = wn.substr(wn.find(':') + 1);
         wn = wn.substr(0, wn.find(':'));
-        if (wc != wn && (op != "mul_mat" || !get_target().has_feature(Target::Metal))) throw std::invalid_argument("weight " + std::string(weight) + ": a compute format, for Metal's mul_mat only");
+        if (wc != wn && (op != "mul_mat" || !get_target().has_gpu_feature())) throw std::invalid_argument("weight " + std::string(weight) + ": a compute format, for a GPU's mul_mat only");
         // mul_mat on weight records of several rows takes their codes at 2^k
         // (an exact alternative, see Type0Quant): it shortens the gemv's decode
         bool scaled = op == "mul_mat" && ggml::format(wn).rows > 1;

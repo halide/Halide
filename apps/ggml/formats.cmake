@@ -37,7 +37,7 @@
 # paths do); its library is <type>_f32_to_q8_0_<op>. A compute type with a
 # layout (f32:q8_0.4x8, f32:q8_K.4x8) quantizes the whole groups of rows to
 # its records, as GGML's repacked gemm does, and the rest to the AoS type (its
-# gemv). A weight type may likewise be <storage>:<compute> (Metal mul_mat
+# gemv). A weight type may likewise be <storage>:<compute> (GPU mul_mat
 # only): q4_0:f16 (q8_0:f16) decodes q4_0 (q8_0) records and rounds each
 # decoded value to f16,
 # as GGML's Metal gemm (kernel_mul_mm) does; with f16 acts (f16, f32:f16) its
@@ -304,3 +304,30 @@ foreach (row IN LISTS GGML_FORMATS)
     endforeach ()
 endforeach ()
 file(CONFIGURE OUTPUT halide_kernels.inc CONTENT "${registry}")
+
+# Compile-only CUDA tensor-core gemm (-DGGML_HALIDE_CUDA=ON, off by default;
+# not GGML_CUDA, which find_package(ggml) sets): the Metal gemm's schedule
+# (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
+# (cuda_shapes), built for host-cuda-cuda_capability_80, never linked or run
+# (no NVIDIA hardware). Rows: `type act`, as GGML_FORMATS' mul_mat. Each
+# library's test checks that its PTX multiplies on the tensor cores.
+option(GGML_HALIDE_CUDA "Build the compile-only CUDA tensor-core gemm libraries" OFF)
+set(GGML_HALIDE_CUDA_FORMATS "f16 f16" "q4_0:f16 f16")
+set(GGML_HALIDE_CUDA_FEATURES cuda cuda_capability_80)
+if (GGML_HALIDE_CUDA)
+    foreach (row IN LISTS GGML_HALIDE_CUDA_FORMATS)
+        separate_arguments(row UNIX_COMMAND "${row}")
+        list(POP_FRONT row type act)
+        string(REPLACE ":" "_to_" name "${type}_${act}_mul_mat_cuda")
+        string(MAKE_C_IDENTIFIER "${name}" name)
+        add_halide_library(
+            ${name}
+            FROM ggml.generators
+            GENERATOR matmul
+            FEATURES ${GGML_HALIDE_CUDA_FEATURES}
+            PARAMS weight=${type} act=${act} op=mul_mat
+        )
+        add_test(NAME ${name}_ptx COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}>)
+        set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
+    endforeach ()
+endif ()

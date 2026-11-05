@@ -426,7 +426,7 @@ would otherwise reassociate the tree), and `--check` compares it bit-exact with
 GGML's f16 vec_dot where the CPU has fp16 arithmetic and K % 32 == 0 (GGML sums
 the rest in f64; ours in f16).
 
-Weights take a compute format too, `<storage>:<compute>` (Metal mul_mat only;
+Weights take a compute format too, `<storage>:<compute>` (GPU mul_mat only;
 `formats.cmake`): `q4_0:f16` is q4_0's round trip approximated again by the
 `binary16` `MiniFloat` (`approximate_by` on the first approximation's
 replacement, `kernels/matmul.cpp`), i.e. each decoded weight rounded to f16, as
@@ -471,6 +471,17 @@ its operand fragments per lane from the q4_0 codes in registers
 half) by f32 acts, and applies each block's scale to the accumulators;
 `MemoryType::Tile` fragments are only loaded from memory, take one element type,
 and can't be scaled, so that kernel has no Halide schedule yet.
+
+`-DGGML_HALIDE_CUDA=ON` (off by default) adds compile-only CUDA libraries
+(`GGML_HALIDE_CUDA_FORMATS`: `f16` and `q4_0:f16` weights on f16 acts, for
+`host-cuda-cuda_capability_80`): the same `gpu_staged` and `fragments` on wmma's
+16 x 16 x 16 fragments (`cuda_shapes`: tiles of 128 x 64, 32 x 32, 32 x 16).
+They aren't registered with the harness or run (there's no NVIDIA hardware
+here); their tests (`ctest -L ggml_cuda`) check that the PTX multiplies with
+`wmma.mma.sync`. Build them by name (`f16_f16_mul_mat_cuda`,
+`q4_0_to_f16_f16_mul_mat_cuda`). Their weights' shared copy is stored [row, k],
+as are its fragments: core's `ExtractWMMAOperations` gives `wmma.mma` the
+fragment's layout but `wmma.load` the copy's, so the two have to agree.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
