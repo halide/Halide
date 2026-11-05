@@ -133,8 +133,8 @@ inline Approximation iq4_nl(const std::string &lay, bool indexed = false) {
 // two bits in scales_h (bits 2i).
 inline Approximation iq4_xs(const std::string &lay, bool indexed = false) {
     return Compose{BlockReshape{QK_K, indexed}, IQ4Quant{QK_K}, Parallel{{"codes", iq4nl_codes()}},
-                   Parallel{{"codes", Compose{BlockReshape{QK}, PlanarFieldPack{4, QK / 2}, Unblock{QK / 2}}},
-                            {"scales", six_bit_scales(BitPack{4}, BitPack{2})},
+                   Parallel{{"codes", PlanarFieldPack{4, QK / 2}},
+                            {"scales", six_bit_scales(PlanarFieldPack{4, 1}, PlanarFieldPack{2, 1})},
                             {"scale", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"scales_h", UInt(8), 2}, {"scales_l", UInt(8), QK_K / 64}, {"qs", UInt(8), QK_K / 2}},
                           {"qs", "scales_l", "scales_h", "d"})};

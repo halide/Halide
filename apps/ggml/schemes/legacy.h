@@ -102,7 +102,7 @@ inline Approximation q4_1(const std::string &lay, bool indexed = false) {
 // each byte's rests (Tabulate: GGML's table_b2b_1, its offset folded in),
 // indexed by the bytes of qh.
 inline Approximation q5_codes(int lo) {
-    return split_bits(4, lo, 2, PlanarFieldPack{4, QK / 2}, BitPack{1}, 8);
+    return split_bits(4, lo, 2, PlanarFieldPack{4, QK / 2}, PlanarFieldPack{1, 1}, 8);
 }
 
 inline StructField q5_qh() {

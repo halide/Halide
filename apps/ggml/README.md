@@ -276,12 +276,12 @@ about a quarter of the blocks.
 
 q5_0 and q5_1 are q4_0's and q4_1's quantizers at 5 bits (`Type0Quant`,
 `Type1Quant`: GGML's "type-0" and "type-1"), each unsigned code split
-(`BitSplit`, `schemes/common.h`) into its low nibble, packed as q4's (`qs`), and
-its fifth bit, packed densely (`BitPack`: `qh`, 4 bytes, bit j % 8 of byte j / 8
-is code j's, decoded a byte at a time through a table, `Tabulate`). Their
-kernels are the same recipes; on CPUs each block's `qh` is staged as one 32-bit
-word in a general-purpose register (as GGML's `memcpy` to a `uint32_t`), each
-table index one shift and mask of it.
+(`split_bits`, `schemes/common.h`) into its low nibble, packed as q4's (`qs`),
+and its fifth bit, packed densely (`PlanarFieldPack{1, 1}`: `qh`, 4 bytes, bit j
+% 8 of byte j / 8 is code j's, decoded a byte at a time through a table,
+`Tabulate`). Their kernels are the same recipes; on CPUs each block's `qh` is
+staged as one 32-bit word in a general-purpose register (as GGML's `memcpy` to a
+`uint32_t`), each table index one shift and mask of it.
 
 mxfp4 (`schemes/mx.h`) is OCP MX's FP4 as GGML stores it: per block of 32, an
 e8m0 scale byte `e` and the e2m1 codes, packed as q4_0's. Its quantizer
@@ -307,7 +307,7 @@ iq4_nl and iq4_xs (`schemes/iq.h`) are `IQ4Quant`, GGML's search
 matrix, `ntry = 7`) step for step, with codes drawn from `kvalues_iq4nl` (a
 `codebook`, decoded by `tbl` as mxfp4's): iq4_nl a block of 32 under an fp16
 scale; iq4_xs a super-block of 256 whose sub-blocks of 32 have 6-bit scales
-(`SumSplit` into a low nibble and 2 high bits) under an fp16 one. nvfp4
+(`six_bit_scales`: a low nibble and 2 high bits) under an fp16 one. nvfp4
 (`schemes/mx.h`, `NVFP4Quant`) is a block of 64, each sub-block of 16 with a
 ue4m3 scale (a `MiniFloat` with GGML's quirks, `ue4m3_half`) and e2m1 codes as
 mxfp4's. tq2_0 and tq1_0 (`schemes/ternary.h`, `TernaryQuant`) are codes in {-1,
@@ -315,11 +315,11 @@ mxfp4's. tq2_0 and tq1_0 (`schemes/ternary.h`, `TernaryQuant`) are codes in {-1,
 `lroundf` as arm64's saturating `fcvtas`), stored as 2-bit fields (tq2_0) or
 five base-3 digits per byte (tq1_0: `Segments` splits the block into its `qs`
 and `qh` runs, `TritPack` packs each). q1_0 (`schemes/binary.h`, `SignQuant`) is
-the signs of 128 values (`BitPack{1}`) under their mean magnitude (GGML's
-sequential float sum, kept serial by the encoder schedule). All six codecs are
-bit-exact against GGML's quantizers and dequantizers; their kernels are the
-existing one-level and two-level recipes, the q8_0 acts of iq4_nl, nvfp4 and
-q1_0 a divisor of the weight's block (nvfp4: 2 per block, q1_0: 4) and float
+the signs of 128 values (`PlanarFieldPack{1, 1}`) under their mean magnitude
+(GGML's sequential float sum, kept serial by the encoder schedule). All six
+codecs are bit-exact against GGML's quantizers and dequantizers; their kernels
+are the existing one-level and two-level recipes, the q8_0 acts of iq4_nl, nvfp4
+and q1_0 a divisor of the weight's block (nvfp4: 2 per block, q1_0: 4) and float
 sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block. nvfp4's ue4m3
 scales decode through a table of each byte's (as clang compiles GGML's NEON
 vec_dot), and its vec_dot and gemv take GGML's lanes: one per (sub-block, act
@@ -339,9 +339,9 @@ it into a constant table, `Func::precompute()`), times signs (iq2_xxs, iq2_xs,
 iq3_xxs: 7 bits of even parity per 8 values, `EvenSigns`, GGML's `ksigns_iq2xs`;
 iq2_s, iq3_s: 8 raw bits) or, for iq1, plus a ±1/8 delta per run (`RunShift`,
 codes at 8 times their value). The indices' high bits, signs and scales are bit
-fields of GGML's structs (`BitFields`, `BitSplit`, `BitPack`); iq1_m's fp16
-scale is spread over the top nibbles of its 4 scale words (`fp16_bits`,
-`Inverse`). The encode is `TrustedInverse` (core): an extern stage
+fields of GGML's structs (core's `BitFields`, `SplitBits`, `PlanarFieldPack`);
+iq1_m's fp16 scale is spread over the top nibbles of its 4 scale words
+(`fp16_bits`, `Inverse`). The encode is `TrustedInverse` (core): an extern stage
 (`ExternQuantize`, `define_extern` of `ggml_trusted_quantize` in
 `harness/trusted.cpp`) calling `ggml_quantize_chunk`, paired with the native
 decode. GGML's grid quantizers are searches, not compositions: per group they

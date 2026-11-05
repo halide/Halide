@@ -53,7 +53,7 @@ struct TernaryQuant {
 // field 3, which GGML's quantizer never writes, decodes to 2).
 inline Approximation tq2_0(const std::string &lay, bool indexed = false) {
     return Compose{BlockReshape{QK_K, indexed}, TernaryQuant{}, Parallel{{"codes", multiples(0, -1, 4)}, {"scale", fp16()}},
-                   Parallel{{"codes", two_bit_planes()}},
+                   Parallel{{"codes", PlanarFieldPack{2, 32}}},
                    layout(lay, {{"qs", UInt(8), QK_K / 4}, {"d", Float(16)}}, {"qs", "d"})};
 }
 

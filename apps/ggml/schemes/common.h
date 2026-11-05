@@ -405,69 +405,6 @@ inline Approximation codebook(const std::string &name, const std::vector<int> &v
         .with_lossless();
 }
 
-// Codes x <-> their low `low` bits, unsigned ("low"), and the rest, a
-// multiple of 2^low ("high"): x = (x & ~m) + (x & m), so the decode is a sum
-// (GGML's q5 codes: a nibble and a fifth bit, stored apart; the sum lets a
-// table of the high parts fold in q5_0's offset). Shape-preserving.
-struct SumSplit {
-    int low;
-
-    std::vector<Func> encode(const std::vector<Func> &in) const {
-        Func l("low"), h("high");
-        l(_) = cast<uint8_t>(in[0](_)) & cast<uint8_t>((1 << low) - 1);
-        h(_) = in[0](_) & cast<int8_t>(-(1 << low));
-        return {l, h};
-    }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        Func f("codes");
-        f(_) = e[1](_) + cast<int8_t>(e[0](_));
-        return {f};
-    }
-    ApproximationSignature signature(const ApproximationPorts &in) const {
-        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
-        std::optional<ApproximationRange> r = in.empty() ? std::nullopt : in[0].range, hr;
-        if (r) hr = ApproximationRange(std::floor(r->lo / (1 << low)) * (1 << low), std::floor(r->hi / (1 << low)) * (1 << low));
-        return {{{"codes", Int(8), dims, r}},
-                {{"low", UInt(8), dims, ApproximationRange(0, (1 << low) - 1)}, {"high", Int(8), dims, hr}}};
-    }
-    bool lossless() const {
-        return true;
-    }
-};
-
-// `bits`-bit fields packed densely, least significant first: (element,
-// record, ...) <-> (byte, record, ...), 8 / bits fields per byte, so with
-// bits 1, bit j of the record's little-endian word is element j (GGML's qh).
-struct BitPack {
-    int bits;
-
-    std::vector<Func> encode(const std::vector<Func> &in) const {
-        int per = 8 / bits;
-        Func f("packed_bits");
-        Var p, b;
-        Expr e = cast<uint8_t>(0);
-        for (int i = 0; i < per; i++) {
-            e = e | cast<uint8_t>((in[0](p * per + i, b, _) & cast<uint8_t>((1 << bits) - 1)) << (i * bits));
-        }
-        f(p, b, _) = e;
-        return {f};
-    }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        int per = 8 / bits;
-        Func f("unpacked_bits");
-        Var j, b;
-        f(j, b, _) = (e[0](j / per, b, _) >> cast<uint8_t>(j % per * bits)) & cast<uint8_t>((1 << bits) - 1);
-        return {f};
-    }
-    ApproximationSignature signature(const ApproximationPorts &in) const {
-        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
-        return {{{"fields", UInt(8), dims, ApproximationRange(0, (1 << bits) - 1)}}, {{"bits", UInt(8), dims}}};
-    }
-    bool lossless() const {
-        return true;
-    }
-};
-
 // Records of n elements back to one flat dimension: (i, o, rest...) <->
 // (o * n + i, rest...), BlockReshape(n)'s inverse (e.g. a field's bytes
 // packed in pieces, then stored as one array).
@@ -614,7 +551,7 @@ struct TritPack {
 };
 
 // `inner`, a stage onto bytes whose decode's element j reads only byte
-// j / per (e.g. Compose{multiples, BitPack}), with an exact alternative
+// j / per (e.g. Compose{multiples, PlanarFieldPack{1, 1}}), with an exact alternative
 // decode: a lookup table of its decodes of each byte value (a row of `per`
 // per value; GGML's table_b2b_*). Or onto `entries` indices of type `index`
 // (e.g. a Lattice's: GGML's grids, rows of a table of 2048). The decode
@@ -711,10 +648,11 @@ private:
 // Codes x <-> their low k bits (packed by `low`) and the rest, one of the n
 // multiples lo + i * 2^k (as i, packed by `high`; through a table of each of
 // its bytes' values if `tabulate`, Tabulate's bits): GGML's codes and scales
-// stored as two bit fields apart (q5, q3_K, q6_K; six_bit_scales).
+// stored as two bit fields apart (q5, q3_K, q6_K; six_bit_scales). The decode
+// adds the parts, so a table of the high parts folds in q5_0's offset.
 inline Approximation split_bits(int k, int lo, int n, const Approximation &low, const Approximation &high, int tabulate = 0) {
     Approximation h = Compose{multiples(k, lo, n), high};
-    return Compose{SumSplit{k}, Parallel{{"low", low}, {"high", tabulate ? Approximation(Tabulate{h, tabulate}) : h}}};
+    return Compose{SplitBits{Int(8), k}, Parallel{{"low", low}, {"high", tabulate ? Approximation(Tabulate{h, tabulate}) : h}}};
 }
 
 // 6-bit scales in [-32, 31]: their low nibbles by `low`, top two bits by `high`.
@@ -735,7 +673,7 @@ inline Approximation codebook_lut(const std::string &name, const std::vector<int
 // ---------------------------------------------------------------------------
 
 // The other way round: a's decode as the encode, its encode as the decode
-// (e.g. Inverse{BitPack{4}}: bytes -> their nibbles). For units whose ports
+// (e.g. Inverse{PlanarFieldPack{4, 1}}: bytes -> their nibbles). For units whose ports
 // share their dimensionality.
 struct Inverse {
     Approximation a;
@@ -862,94 +800,11 @@ struct RunShift {
     }
 };
 
-// Whether a's decode adds its inputs, each times a constant (SumSplit's,
+// Whether a's decode adds its inputs, each times a constant (SplitBits',
 // RunShift's), so that a constant term of an input is one of the output.
 inline bool linear(const Approximation &a) {
-    return a.target<SumSplit>() || a.target<RunShift>();
+    return a.target<SplitBits>() || a.target<RunShift>();
 }
-
-// Unsigned indices <-> their low `low` bits ("low") and the rest, shifted
-// down ("high"), each a byte (GGML's grid indices: a byte of qs and the top
-// bits in qh). Shape-preserving.
-struct BitSplit {
-    int low;
-    Type index = UInt(16);
-
-    std::vector<Func> encode(const std::vector<Func> &in) const {
-        Func l("low"), h("high");
-        l(_) = cast<uint8_t>(in[0](_) & cast(index, (1 << low) - 1));
-        h(_) = cast<uint8_t>(in[0](_) >> cast(index, low));
-        return {l, h};
-    }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        Func f("index");
-        f(_) = cast(index, e[0](_)) + (cast(index, e[1](_)) << cast(index, low));  // (+: bounds inference follows it)
-        return {f};
-    }
-    ApproximationSignature signature(const ApproximationPorts &in) const {
-        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
-        std::optional<ApproximationRange> r = in.empty() ? std::nullopt : in[0].range, hr;
-        if (r) hr = ApproximationRange(0, std::floor(r->hi / (1 << low)));
-        return {{{"index", index, dims, r}},
-                {{"low", UInt(8), dims, ApproximationRange(0, (1 << low) - 1)}, {"high", UInt(8), dims, hr}}};
-    }
-    bool lossless() const {
-        return true;
-    }
-};
-
-// Bit fields packed into words of type `word`: each input (element, record,
-// ...) a field of `bits` bits, `count` of its elements per word (element g
-// in word g / count, at bit at + stride * (g % count)) <-> (word, record,
-// ...) (GGML's packed indices, signs and scales: iq2_xxs's 8 bytes per 32
-// values, iq1_s's qh). Lossless on fields that fit their bits.
-struct BitFields {
-    struct Field {
-        std::string name;
-        int bits, count = 1, at = 0, stride = 0;
-        Type type = UInt(8);
-    };
-    Type word;
-    std::vector<Field> fields;
-
-    std::vector<Func> encode(const std::vector<Func> &in) const {
-        Func f("bit_fields");
-        Var s, b;
-        Expr w = Internal::make_zero(word);
-        for (size_t i = 0; i < fields.size(); i++) {
-            const Field &fd = fields[i];
-            for (int l = 0; l < fd.count; l++) {
-                Expr v = cast(word, in[i](s * fd.count + l, b, _)) & Internal::make_const(word, (uint64_t)((1ull << fd.bits) - 1));
-                w = w | (v << Internal::make_const(word, fd.at + fd.stride * l));
-            }
-        }
-        f(s, b, _) = w;
-        return {f};
-    }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        std::vector<Func> out;
-        Var g, b;
-        for (const Field &fd : fields) {
-            Func f(fd.name);
-            Expr w = e[0](fd.count > 1 ? g / fd.count : Expr(g), b, _);
-            Expr at = fd.count > 1 ? fd.at + fd.stride * (g % fd.count) : Expr(fd.at);
-            f(g, b, _) = cast(fd.type, (w >> cast(word, at)) & Internal::make_const(word, (uint64_t)((1ull << fd.bits) - 1)));
-            out.push_back(f);
-        }
-        return out;
-    }
-    ApproximationSignature signature(const ApproximationPorts &in) const {
-        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
-        ApproximationPorts ins;
-        for (const Field &fd : fields) {
-            ins.push_back({fd.name, fd.type, dims, ApproximationRange(0, (double)((1ull << fd.bits) - 1))});
-        }
-        return {ins, {{"word", word, dims}}};
-    }
-    bool lossless() const {
-        return true;
-    }
-};
 
 // Points of a lattice of `per` digits of `bits` bits each, from a list of
 // them (each point a word, digit i in bits bits * i), as (digit, record,

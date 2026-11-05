@@ -49,7 +49,7 @@ inline Approximation set_signs() {
 // significant first.
 inline Approximation q1_0(const std::string &lay, bool indexed = false) {
     return Compose{BlockReshape{SignQuant::block, indexed}, SignQuant{}, Parallel{{"codes", set_signs()}, {"scale", fp16()}},
-                   Parallel{{"codes", BitPack{1}}},
+                   Parallel{{"codes", PlanarFieldPack{1, 1}}},
                    layout(lay, {{"d", Float(16)}, {"qs", UInt(8), SignQuant::block / 8}}, {"qs", "d"})};
 }
 

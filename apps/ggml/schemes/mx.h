@@ -188,7 +188,7 @@ struct NVFP4Quant {
 inline Approximation nvfp4(const std::string &lay, bool indexed = false) {
     const int n = NVFP4Quant::n, block = NVFP4Quant::block;
     return Compose{BlockReshape{block, indexed}, NVFP4Quant{}, Parallel{{"codes", e2m1_codes()}, {"scales", Tabulate{ue4m3_half(), 1}}},
-                   Parallel{{"codes", Compose{BlockReshape{n}, PlanarFieldPack{4, n / 2}, Unblock{n / 2}}}},
+                   Parallel{{"codes", PlanarFieldPack{4, n / 2}}},
                    layout(lay, {{"d", UInt(8), block / n}, {"qs", UInt(8), block / 2}}, {"qs", "d"})};
 }
 

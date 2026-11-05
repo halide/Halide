@@ -72,7 +72,7 @@ inline Approximation even_signs() {
 
 // Raw sign bits, 8 per byte (iq2_s, iq3_s).
 inline Approximation raw_signs() {
-    return Compose{sign_bits(), BitPack{1}};
+    return Compose{sign_bits(), PlanarFieldPack{1, 1}};
 }
 
 // The odd sub-block scales 2s + 1 <-> s.
@@ -110,9 +110,9 @@ inline Approximation iq2_xs(const std::string &lay, bool indexed = false) {
     return trusted("iq2_xs", lay, indexed, {{"d", Float(16)}, {"qs", UInt(16), QK_K / 8}, {"scales", UInt(8), QK_K / 32}}, {"qs", "scales", "d"},
                    {ScaledCodes{16, -43, 43, 1, 31},
                     Parallel{{"codes", Compose{SignSplit{}, Parallel{iq2_grid("kgrid_2bit_512", kgrid_2bit_512()), even_signs()}}},
-                             {"scales", Compose{odd_scales(4), BitPack{4}}},
+                             {"scales", Compose{odd_scales(4), PlanarFieldPack{4, 1}}},
                              {"scale", Compose{scale_by(8), fp16()}}},
-                    Parallel{BitFields{UInt(16), {{"grid", 9, 1, 0, 0, UInt(16)}, {"signs", 7, 1, 9}}}, Identity{}, Identity{}}});
+                    Parallel{BitFields{UInt(16), {{"grid", 9, 1, 0, 0, 1, UInt(16)}, {"signs", 7, 1, 9}}}, Identity{}, Identity{}}});
 }
 
 // block_iq2_s {f16 d; u8 qs[64]; u8 qh[8]; u8 scales[8]}: per 8 values the
@@ -122,8 +122,8 @@ inline Approximation iq2_s(const std::string &lay, bool indexed = false) {
     return trusted("iq2_s", lay, indexed, {{"d", Float(16)}, {"qs", UInt(8), QK_K / 8}, {"signs", UInt(8), QK_K / 8}, {"qh", UInt(8), QK_K / 32}, {"scales", UInt(8), QK_K / 32}},
                    {"qs", "qh", "signs", "scales", "d"},
                    {ScaledCodes{16, -43, 43, 1, 31},
-                    Parallel{{"codes", Compose{SignSplit{}, Parallel{Compose{iq2_grid("kgrid_2bit_1024", kgrid_2bit_1024()), BitSplit{8}, Parallel{Identity{}, BitPack{2}}}, raw_signs()}}},
-                             {"scales", Compose{odd_scales(4), BitPack{4}}},
+                    Parallel{{"codes", Compose{SignSplit{}, Parallel{Compose{iq2_grid("kgrid_2bit_1024", kgrid_2bit_1024()), SplitBits{UInt(16), 8, true}, Parallel{Identity{}, PlanarFieldPack{2, 1}}}, raw_signs()}}},
+                             {"scales", Compose{odd_scales(4), PlanarFieldPack{4, 1}}},
                              {"scale", Compose{scale_by(8), fp16()}}}});
 }
 
@@ -149,8 +149,8 @@ inline Approximation iq3_s(const std::string &lay, bool indexed = false) {
     return trusted("iq3_s", lay, indexed, {{"d", Float(16)}, {"qs", UInt(8), QK_K / 4}, {"qh", UInt(8), QK_K / 32}, {"signs", UInt(8), QK_K / 8}, {"scales", UInt(8), QK_K / 64}},
                    {"qs", "qh", "signs", "scales", "d"},
                    {ScaledCodes{32, -15, 15, 1, 31},
-                    Parallel{{"codes", Compose{SignSplit{}, Parallel{Compose{grid("kgrid_512", kgrid_512(), 3, 4, {1, 3, 5, 7, 9, 11, 13, 15}), BitSplit{8}, Parallel{Identity{}, BitPack{1}}}, raw_signs()}}},
-                             {"scales", Compose{odd_scales(4), BitPack{4}}},
+                    Parallel{{"codes", Compose{SignSplit{}, Parallel{Compose{grid("kgrid_512", kgrid_512(), 3, 4, {1, 3, 5, 7, 9, 11, 13, 15}), SplitBits{UInt(16), 8, true}, Parallel{Identity{}, PlanarFieldPack{1, 1}}}, raw_signs()}}},
+                             {"scales", Compose{odd_scales(4), PlanarFieldPack{4, 1}}},
                              {"scale", fp16()}}});
 }
 
@@ -158,7 +158,7 @@ inline Approximation iq3_s(const std::string &lay, bool indexed = false) {
 // value, shifted by +-1 (GGML's delta, +-1/8) per run of n: the grid index's
 // low byte, its top 3 bits, the shift's sign bit per run.
 inline Approximation iq1_codes(int n) {
-    return Compose{RunShift{n, 8}, Parallel{Compose{grid("kgrid_1bit_2048", kgrid_1bit_2048(), 2, 8, {-1, 0, 1}), BitSplit{8}}, sign_bits()}};
+    return Compose{RunShift{n, 8}, Parallel{Compose{grid("kgrid_1bit_2048", kgrid_1bit_2048(), 2, 8, {-1, 0, 1}), SplitBits{UInt(16), 8, true}}, sign_bits()}};
 }
 
 // block_iq1_s {f16 d; u8 qs[32]; u16 qh[8]}: per 8 values the grid index's
