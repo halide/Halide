@@ -1744,19 +1744,15 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
 // the matrix unit's (Metal's simdgroup_matrix: 8; CUDA's wmma: 16), and the
 // operand fragments of each frag values of K: xf's frag x frag * tm, wf's frag
 // * tn x frag (its storage [row, k]: a fragment's rows are the weight's).
-// ws_rows: ws's too (CUDA: wmma.mma's layout is the fragment's storage's, its
-// wmma.load's the copy's it reads; ExtractWMMAOperations has them agree).
-inline void fragments(const Staged &st, Func dot, int frag, bool ws_rows) {
+inline void fragments(const Staged &st, Func dot, int frag) {
     dot.store_in(MemoryType::Tile);
     for (Func f : {st.xf, st.wf}) {
         std::vector<Var> a = f.args();
         Var j = a[0], i = a.back(), jo("jo"), jt("jt"), io("io"), it("it");
         if (f.name() == st.wf.name()) {
-            for (Func g : ws_rows ? std::vector<Func>{f, st.ws} : std::vector<Func>{f}) {
-                if (a.size() == 3) g.reorder_storage(g.args().back(), g.args()[0], g.args()[1]);
-                else
-                    g.reorder_storage(g.args().back(), g.args()[0]);
-            }
+            if (a.size() == 3) f.reorder_storage(i, j, a[1]);
+            else
+                f.reorder_storage(i, j);
         }
         f.compute_at(dot, st.ko).store_in(MemoryType::Tile).split(j, jo, jt, frag).split(i, io, it, frag);
         if (a.size() == 3) {
@@ -1775,7 +1771,7 @@ inline void fragments(const Staged &st, Func dot, int frag, bool ws_rows) {
 // dot, one kernel but flat's staged acts. min_m on Metal: 8 on f16 (GGML's), 16 on f32 (below
 // it the f32 tiles lose on mxfp4, iq4_nl, q4_1).
 inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
-                     const std::vector<GemmShape> &shapes, int frag, bool ws_rows, const std::vector<Func> &staged = {}) {
+                     const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
     // once, reading edge (dot's copy, inlined unless guarded); then via reads
@@ -1787,7 +1783,7 @@ inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const 
     Func pass = edge.clone_in(via);
     Func rows = dot.clone_in(pass);
     out.eager_inline(via, pass);
-    fragments(gpu_staged(mm, out, dot, edge, wh, xh, r, fmt, rs, shapes, frag, 64), dot, frag, ws_rows);
+    fragments(gpu_staged(mm, out, dot, edge, wh, xh, r, fmt, rs, shapes, frag, 64), dot, frag);
     // the rows' luts, staged before metal_rows inlines the decoders (else
     // its gemv inlines them: select trees)
     metal_luts(out, rs);
@@ -1956,7 +1952,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, false, staged);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, staged);
             return;
         }
         if (fmt.block == 1) {
@@ -1964,7 +1960,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             return;
         }
         if (f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 16, metal_shapes(out, wh, fmt), 8, false);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 16, metal_shapes(out, wh, fmt), 8);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
@@ -1977,7 +1973,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // on wmma's 16 x 16 x 16 tensor core fragments
         Func wh, xh;
         if (acc.defined() || fmt.act_rows > 1 || fmt.rows > 1 || !f16_operands(rs, staged, fmt, wh, xh)) throw std::invalid_argument("cuda: f16 operands only");
-        gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 16, cuda_shapes(out), 16, true, staged);
+        gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 16, cuda_shapes(out), 16, staged);
         return;
     }
     if (fmt.rowwise) {

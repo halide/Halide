@@ -479,9 +479,9 @@ and can't be scaled, so that kernel has no Halide schedule yet.
 They aren't registered with the harness or run (there's no NVIDIA hardware
 here); their tests (`ctest -L ggml_cuda`) check that the PTX multiplies with
 `wmma.mma.sync`. Build them by name (`f16_f16_mul_mat_cuda`,
-`q4_0_to_f16_f16_mul_mat_cuda`). Their weights' shared copy is stored [row, k],
-as are its fragments: core's `ExtractWMMAOperations` gives `wmma.mma` the
-fragment's layout but `wmma.load` the copy's, so the two have to agree.
+`q4_0_to_f16_f16_mul_mat_cuda`). Their staging is Metal's: the weights' shared
+copy is K-dense, its fragments [row, k], so `wmma.load.b` reads it column-major
+and `wmma.mma` is told so (`row.col`).
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
