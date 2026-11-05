@@ -5041,6 +5041,48 @@ Func &Func::eager_inline(const std::vector<Func> &fs) {
     return *this;
 }
 
+Stage &Stage::eager_inline_all(const std::vector<Func> &except) {
+    // Funcs never to inline: the excluded ones, this stage's own Func, and
+    // those eager_inline() would reject. Each round inlines the calls that
+    // are new to the definition; inlining a Func exposes its callees to the
+    // next round, until no inlinable call remains.
+    std::set<string> kept{function.name()};
+    for (const Func &f : except) {
+        kept.insert(f.name());
+    }
+    while (true) {
+        vector<Func> fs;
+        std::set<string> found;
+        Internal::LambdaVisitor visitor{[&](auto *self, const Call *op) {
+            if (op->call_type == Call::Halide && op->func.defined() &&
+                !kept.count(op->name) && found.insert(op->name).second) {
+                Function g(op->func);
+                if (Internal::eager_inline_obstacle(g).empty()) {
+                    fs.emplace_back(g);
+                } else {
+                    kept.insert(op->name);
+                }
+            }
+            self->visit_base(op);
+        }};
+        definition.accept(&visitor);
+        if (fs.empty()) {
+            return *this;
+        }
+        eager_inline(fs);
+    }
+}
+
+Stage &Stage::eager_inline_all() {
+    return eager_inline_all(std::vector<Func>{});
+}
+
+Func &Func::eager_inline_all(const std::vector<Func> &except) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).eager_inline_all(except);
+    return *this;
+}
+
 // Helpers for change_type implementation
 namespace {
 

@@ -56,6 +56,7 @@ void define_stage(py::module_ &m) {
             .def("eager_inline", [](Stage &stage, const py::args &args) -> Stage & {
                 return stage.eager_inline(args_to_vector<Func>(args));
             })
+            .def("eager_inline_all", (Stage & (Stage::*)(const std::vector<Func> &)) & Stage::eager_inline_all, py::arg("except_") = std::vector<Func>{})
 
             .def("split_vars", [](const Stage &stage) -> py::list {
                 auto vars = stage.split_vars();

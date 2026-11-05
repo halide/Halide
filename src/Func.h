@@ -246,6 +246,35 @@ public:
     eager_inline(const Func &first, Args &&...args);
     // @}
 
+    /** Immediately inline into this stage's definition every Func it calls,
+     * transitively, except the Funcs in `except`: when an inlined Func's body
+     * calls another Func, that call is inlined in turn. Afterwards the
+     * definition calls only the excepted Funcs and those that cannot be
+     * inlined. A Func that eager_inline() would reject (one with an update or
+     * extern definition, specializations, or a schedule incompatible with
+     * inlining, e.g. compute_root()) is skipped rather than being an error:
+     * the call to it is kept, and the Funcs it calls are not inlined into it.
+     * Skipped Funcs, like the excepted ones, are left unchanged.
+     *
+     * For example, to inline everything but a lookup table that is computed
+     * at root:
+     \code
+     Func lut, index, decode, f;
+     lut(x) = ...;
+     index(x) = ...;
+     decode(x) = lut(index(x)) * 2;
+     f() = 0;
+     f() += decode(r);
+     lut.compute_root();
+     // f() = f() + lut(<index(r), inlined>) * 2
+     f.update().eager_inline_all();
+     \endcode
+     */
+    // @{
+    Stage &eager_inline_all();
+    Stage &eager_inline_all(const std::vector<Func> &except);
+    // @}
+
     /** Split a sum reduction into one reduction per group of Funcs, holding
      * the terms that call any Func of the group, plus one for the remaining
      * terms, and hoist the loop-invariant factors out of each. Like rfactor(),
@@ -3179,6 +3208,13 @@ public:
         return eager_inline(collected_args);
     }
     // @}
+
+    /** Immediately inline into this Func's initial (pure) definition every Func
+     * it calls, transitively, except the Funcs in `except`. Funcs that cannot be
+     * inlined are skipped, keeping the calls to them. To inline into an update
+     * definition, call eager_inline_all() on that stage, e.g.
+     * f.update(n).eager_inline_all(...). See \ref Stage::eager_inline_all. */
+    Func &eager_inline_all(const std::vector<Func> &except = {});
 
     /** Get a handle on an update step for the purposes of scheduling
      * it. */

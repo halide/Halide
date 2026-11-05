@@ -226,6 +226,7 @@ void define_func(py::module_ &m) {
             .def("eager_inline", [](Func &func, const py::args &args) -> Func & {
                 return func.eager_inline(args_to_vector<Func>(args));
             })
+            .def("eager_inline_all", &Func::eager_inline_all, py::arg("except_") = std::vector<Func>{})
             .def("change_type", &Func::change_type, py::arg("type"), py::arg("unsafe") = false)
             .def("vectorize_all_stages", (Func & (Func::*)(const std::vector<VarOrRVar> &)) & Func::vectorize_all_stages, py::arg("vars"))
             .def("vectorize_all_stages", [](Func &func, const py::args &args) -> Func & {

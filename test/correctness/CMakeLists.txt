@@ -191,6 +191,7 @@ tests(
     dynamic_allocation_in_gpu_kernel.cpp
     dynamic_reduction_bounds.cpp
     eager_inline.cpp
+    eager_inline_all.cpp
     early_out.cpp
     embed_bitcode.cpp
     erf.cpp
