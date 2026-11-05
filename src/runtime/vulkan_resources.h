@@ -51,6 +51,11 @@ struct VulkanShaderBinding {
     VulkanSpecializationConstant *specialization_constants = nullptr;
     VulkanSharedMemoryAllocation *shared_memory_allocations = nullptr;
     uint32_t bindings_count = 0;
+
+    // The specialization constants compute_pipeline was created with (if any)
+    uint32_t specialized_constant_count = 0;
+    uint32_t specialized_constant_ids[4] = {0};
+    uint32_t specialized_constant_values[4] = {0};
 };
 
 // Compiled shader module and associated bindings
@@ -1354,9 +1359,28 @@ int vk_setup_compute_pipeline(void *user_context,
         specialization_info.pMapEntries = specialization_map_entries;
         specialization_info.pData = dispatch_constant_values;
 
+        // Reuse the pipeline if it was created with the same constants
+        if (shader_bindings->compute_pipeline && (shader_bindings->specialized_constant_count == dispatch_constant_count)) {
+            bool same = true;
+            for (uint32_t dc = 0; dc < dispatch_constant_count; dc++) {
+                same = same &&
+                       (shader_bindings->specialized_constant_ids[dc] == dispatch_constant_ids[dc]) &&
+                       (shader_bindings->specialized_constant_values[dc] == dispatch_constant_values[dc]);
+            }
+            if (same) {
+                return halide_error_code_success;
+            }
+        }
+
         // Recreate the pipeline with the requested shared memory allocation
         if (shader_bindings->compute_pipeline) {
-            int error_code = vk_destroy_compute_pipeline(user_context, allocator, shader_bindings->compute_pipeline);
+            // Work still in flight may use the pipeline
+            int error_code = vk_wait_for_submissions(user_context, allocator);
+            if (error_code != halide_error_code_success) {
+                error(user_context) << "Vulkan: Failed to wait for submitted work!\n";
+                return error_code;
+            }
+            error_code = vk_destroy_compute_pipeline(user_context, allocator, shader_bindings->compute_pipeline);
             if (error_code != halide_error_code_success) {
                 error(user_context) << "Vulkan: Failed to destroy compute pipeline!\n";
                 return halide_error_code_generic_error;
@@ -1368,6 +1392,11 @@ int vk_setup_compute_pipeline(void *user_context,
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to create compute pipeline!\n";
             return error_code;
+        }
+        shader_bindings->specialized_constant_count = dispatch_constant_count;
+        for (uint32_t dc = 0; dc < dispatch_constant_count; dc++) {
+            shader_bindings->specialized_constant_ids[dc] = dispatch_constant_ids[dc];
+            shader_bindings->specialized_constant_values[dc] = dispatch_constant_values[dc];
         }
 
     } else {
