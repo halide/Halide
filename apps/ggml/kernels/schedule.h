@@ -849,32 +849,6 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
     }
 }
 
-// Eagerly inline into f's update every Func it calls but `kept`, transitively
-// (views, decoders): it then calls those directly. `pure`: only Funcs without
-// updates, extern definitions or specializations.
-inline void inline_callees(Func f, const std::vector<Func> &kept, bool pure = false) {
-    for (;;) {
-        std::vector<Func> fs;
-        std::set<std::string> seen{f.name()};
-        for (const Func &k : kept) {
-            seen.insert(k.name());
-        }
-        for (const Expr &v : f.update().values()) {
-            Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
-                if (c->call_type == Internal::Call::Halide && c->func.defined() && seen.insert(c->name).second) {
-                    Internal::Function g(c->func);
-                    if (!pure || (!g.has_update_definition() && !g.has_extern_definition() && g.definition().specializations().empty())) {
-                        fs.emplace_back(g);
-                    }
-                }
-                self->visit_base(c);
-            });
-        }
-        if (fs.empty()) return;
-        f.update().eager_inline(fs);
-    }
-}
-
 // s's sum as a tree of partial sums (GGML's accumulators): a chain of
 // rfactors, level i keeping levels[i]'s RVars as Vars (`outer` outside n and
 // m). With `acc` (an Accumulate), the first `narrow` levels' sums are acc's,
@@ -888,7 +862,7 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
     for (const Level &l : levels) {
         fs.push_back(s.rfactor(l));
     }
-    if (narrow) inline_callees(fs[0], kept, true);
+    if (narrow) fs[0].update().eager_inline_all(kept);
     for (int i = 0; i < narrow; i++) {
         ApproximationResult a = fs[i].approximate_by(acc, {fs[i + 1]});
         fs[i + 1].update().eager_inline({a.replacement});
@@ -1922,7 +1896,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
     std::vector<Shape> shapes{{M > 16 && M < 32 && h, 1, 4, 4, true}, {hb ? M >= 256 && N >= 64 && m56 : Internal::const_false(), 2, 7, 4}, {M >= 256 && N >= 64, 2, hb ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
     // dot reads wh and xh directly, through threadgroup copies (ws, xs) and
     // their fragments (wf, xf)
-    inline_callees(dot, {wh, xh});
+    dot.update().eager_inline_all({wh, xh});
     Func ws = wh.in(dot), xs = xh.in(dot), wf = ws.in(dot), xf = xs.in(dot);
     // the weights' luts the gemm's own, per threadgroup (iq4_nl/mxfp4 M = 16
     // 1.03-1.06x, M = 64..128 0.94-0.98x vs packed muxes; M3 Max)
