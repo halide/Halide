@@ -284,28 +284,6 @@ inline int bit_period(Func f, const RVar &x, int sub, int subs, const std::vecto
     return group < subs && bit_beneath(counts) ? group * sub : 0;
 }
 
-// Every stage of f in registers: `vec` vectorized, `unrolled` unrolled, each
-// where the stage has it.
-inline Func regs(Func f, const std::vector<VarOrRVar> &vec, const std::vector<VarOrRVar> &unrolled) {
-    for (int i = 0; i <= f.num_update_definitions(); i++) {
-        Stage s = i ? f.update(i - 1) : Stage(f);
-        auto has = [&](const VarOrRVar &v) {
-            const auto &ds = s.get_schedule().dims();
-            // as Func.cpp's var_name_match: a split's dims are "parent.name"
-            return std::any_of(ds.begin(), ds.end(), [&](const Internal::Dim &d) {
-                return d.var == v.name() || Internal::ends_with(d.var, "." + v.name());
-            });
-        };
-        for (const VarOrRVar &v : vec) {
-            if (has(v)) s.vectorize(v);
-        }
-        for (const VarOrRVar &v : unrolled) {
-            if (has(v)) s.unroll(v);
-        }
-    }
-    return f;
-}
-
 // The runtime's thread count.
 inline Expr threads() {
     return max(Internal::Call::make(Int(32), "halide_get_num_threads", {}, Internal::Call::PureExtern), 1);
@@ -548,9 +526,8 @@ inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
 // `consumers`, split by the table's rows (a row read is a dense load).
 inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at, const Target &t, bool nested = false) {
     for (Func f : staged_tables(rs)) {
-        std::vector<Func> cs = callers(f, consumers);
-        if (cs.empty()) continue;
-        Func g = f.clone_in(cs);
+        Func g = f.clone_in_callers(consumers);
+        if (!g.defined()) continue;
         Var j = g.args()[0], jo("jo"), ji("ji");
         g.compute_at(at).split(j, jo, ji, table_rows(f)).vectorize(ji).unroll(jo);
         for (size_t k = 1; k < g.args().size(); k++) {
@@ -810,21 +787,21 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
     if (gemm) {
         d.sums.vectorize(n).unroll(m);
         d.sums.update().reorder(n, m, ryi, ryo).vectorize(n).unroll(m).unroll(ryi).compute_with(acc.update(), ryo);
-        regs(d.blk, {n}, {u, m});
+        d.blk.vectorize_all_stages(n).unroll_all_stages(u, m);
     } else {
         Func spart = d.sums.update().rfactor(ryi, v);
         d.sums.update().unroll(ryi).unroll(n).unroll(m);
-        regs(spart.compute_at(tile), {}, {v, n, m});
+        spart.compute_at(tile).unroll_all_stages(v, n, m);
         spart.update().reorder(v, n, m, ryo).compute_with(acc.update(), ryo);
-        regs(d.blk, {}, {u, n, m});
+        d.blk.unroll_all_stages(u, n, m);
     }
     d.blk.compute_at(blocks).bound_storage(u, ts.interleave);
     if (d.part.defined() && across_rows) {
         Var t = d.part.args().back();
         RVar rxt("rxt");
-        regs(d.sum.compute_at(blocks), {n}, {u, m});
+        d.sum.compute_at(blocks).vectorize_all_stages(n).unroll_all_stages(u, m);
         d.sum.update().reorder(n, rxt).unroll(rxt);
-        regs(d.part.compute_at(blocks).reorder_storage(n, t, u, m), {n}, {t, u, m});
+        d.part.compute_at(blocks).reorder_storage(n, t, u, m).vectorize_all_stages(n).unroll_all_stages(t, u, m);
         if (d.pair.defined()) {
             // the act's sums per weight sub-block, one vector (pairwise adds
             // of its port's), each a lane: a by-element multiply-add
@@ -837,7 +814,7 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
                 d.pair.split(t, tg, tl, 2).reorder(tl, m, tg, n, u).vectorize(tl).vectorize(m).unroll(tg).unroll(n).unroll(u);
                 d.pair.update().split(t, tg, tl, 2).reorder(rxh, tl, m, tg, n, u).atomic().vectorize(rxh).vectorize(tl).vectorize(m).unroll(tg).unroll(n).unroll(u);
             } else {
-                regs(d.pair.compute_at(blocks).reorder_storage(t, n, u, m), {t}, {n, u, m});
+                d.pair.compute_at(blocks).reorder_storage(t, n, u, m).vectorize_all_stages(t).unroll_all_stages(n, u, m);
                 d.pair.update().reorder(t, rxh, n).unroll(rxh);
             }
         }
@@ -855,15 +832,15 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
             // vec_dot and one-thread gemv 5-6% slower on M3)
             d.part.split(t, to, ti, 8);
             d.part.update().split(t, to, ti, 8);
-            regs(d.part, {ti}, {to, u, n, m});
+            d.part.vectorize_all_stages(ti).unroll_all_stages(to, u, n, m);
         } else {
-            regs(d.part, {t}, {u, n, m});
+            d.part.vectorize_all_stages(t).unroll_all_stages(u, n, m);
         }
         if (d.pair.defined()) {
             // the act's sums per weight sub-block (pairwise adds of its
             // port's), vectorized across them as d.part
             RVar rxh("rxh");
-            regs(d.pair.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
+            d.pair.compute_at(blocks).reorder_storage(t, u, n, m).vectorize_all_stages(t).unroll_all_stages(u, n, m);
             d.pair.update().reorder(t, rxh).unroll(rxh);
         }
     } else if (d.sum.defined()) {  // no port matched: the act's block sums
@@ -933,7 +910,7 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
             l = f;
         }
         vec.insert(vec.end(), {n, m});
-        regs(fs[i].compute_at(at).reorder_storage(vec), {l}, unrolled);
+        fs[i].compute_at(at).reorder_storage(vec).vectorize_all_stages(l).unroll_all_stages(unrolled);
     }
     fs[0].update().reorder(n, m, outer);
     return fs;
@@ -1027,7 +1004,7 @@ inline bool hoisted_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per,
     Func in = ch.update().hoist_invariants()[0];
     for (Func f : {ch, in}) {
         f.compute_at(at).reorder_storage(lane, u, c, n, m).bound_storage(u, interleave);
-        regs(f, {lane}, {c, u, n, m});
+        f.vectorize_all_stages(lane).unroll_all_stages(c, u, n, m);
     }
     in.update().reorder(RVar("rxi"), lane, c, rcp, rco).atomic().vectorize(RVar("rxi")).unroll(rcp).unroll(rco);
     codes.update().unroll(rcg);
@@ -1110,12 +1087,12 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // rfactor put the lanes last in storage; bound_storage keeps the K
     // tail's blocks on the stack
     for (Func f : {blk, mid, codes}) {
-        if (f.defined()) regs(f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, n, m});
+        if (f.defined()) f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave).vectorize_all_stages(lane).unroll_all_stages(u, n, m);
     }
     if (rest.defined()) {
         // the act's block sum, once per act column (n a broadcast)
-        regs(rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, m});
-        ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
+        rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave).vectorize_all_stages(lane).unroll_all_stages(u, m);
+        ts.nt > 1 ? rest.vectorize_all_stages(n) : rest.unroll_all_stages(n);
     }
     std::optional<int64_t> nchunk = bx ? std::optional<int64_t>(*bx / vec) : std::nullopt;
     for (Func f : {codes, rest}) {
@@ -1130,14 +1107,14 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         readers.insert(readers.end(), {part, inner});
         f.update().reorder(lane, n, m, rxs, u).unroll(rxs);
         for (Func g : {part, inner}) {
-            regs(g.compute_at(f, rxs).reorder_storage(lane, n, m), {lane}, {v, u, n, m});
+            g.compute_at(f, rxs).reorder_storage(lane, n, m).vectorize_all_stages(lane).unroll_all_stages(v, u, n, m);
         }
         if (sl) {
             // per lane, its sub-block's sdots over its chunks (quads),
             // then summed across their lanes (pairwise adds)
             Var q("q"), ql("ql");
             Func quads = inner.update().rfactor(rxo, q);
-            regs(quads.compute_at(f, rxs).reorder_storage(q, lane, n, m), {}, {v, u, n, m});
+            quads.compute_at(f, rxs).reorder_storage(q, lane, n, m).unroll_all_stages(v, u, n, m);
             quads.fuse(q, lane, ql).vectorize(ql);
             quads.update().reorder(rxi, q, lane).fuse(q, lane, ql).atomic().vectorize(rxi).vectorize(ql).unroll(rxc);
             readers.push_back(quads);
@@ -1155,9 +1132,8 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         sum_readers.push_back(part);
     }
     for (Func k : gpr) {
-        std::vector<Func> cs = callers(k, sum_readers);
-        if (cs.empty()) continue;
-        Func w = k.in(cs);
+        Func w = k.in_callers(sum_readers);
+        if (!w.defined()) continue;
         Var kw("kw"), kb("kb");
         // (all unrolled: a loop here splits the block, and LLVM spills)
         w.compute_at(acc, ryo).split(w.args()[0], kw, kb, 4).unroll(kw).vectorize(kb, 4, VectorizeIn::SWAR);
@@ -1253,7 +1229,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     LoopLevel at(acc, grouped ? VarOrRVar(mo) : VarOrRVar(ryo)), per_sub;
     s.reorder(n, ryi).vectorize(n).unroll(ryi).unroll(m);
     for (Func f : {blk, codes}) {
-        regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
+        f.compute_at(at).bound_storage(u, ts.interleave).vectorize_all_stages(n).unroll_all_stages(m, u);
     }
     if (!sub) {
         cu.reorder(rq, n).atomic().vectorize(rq);
@@ -1262,7 +1238,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         Stage qu = quads.update();
         grouped ? qu.split(m, mo, mi, group).reorder(ri, q, n, mi, rp, mo, u) : qu.reorder(ri, q, n, rp, u, m);
         qu.atomic().vectorize(ri);
-        regs(quads.reorder_storage(q, n, m).compute_at(at).bound_storage(u, ts.interleave), {q, n}, {m, mi, mo, rp, u});
+        quads.reorder_storage(q, n, m).compute_at(at).bound_storage(u, ts.interleave).vectorize_all_stages(q, n).unroll_all_stages(m, mi, mo, rp, u);
     } else {
         // a loop over groups of sub-blocks, each unrolled (fully unrolled, the
         // codes' loads are scheduled early and spill); groups larger than pairs
@@ -1274,10 +1250,10 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             g *= 2;
         codes.update().reorder(n, m, rxs, u).split(rxs, rxso, rxsi, g).unroll(rxsi);
         per_sub = LoopLevel(codes, rxsi);
-        regs(part.compute_at(per_sub), {n}, {v, u, m});
-        regs(inner.compute_at(per_sub), {n}, {v, u, m});
+        part.compute_at(per_sub).vectorize_all_stages(n).unroll_all_stages(v, u, m);
+        inner.compute_at(per_sub).vectorize_all_stages(n).unroll_all_stages(v, u, m);
         cu.reorder(n, rq, v, u, m).unroll(rq);
-        regs(quads.reorder_storage(q, n, v, u, m).compute_at(per_sub), {q, n}, {v, u, m, rp});
+        quads.reorder_storage(q, n, v, u, m).compute_at(per_sub).vectorize_all_stages(q, n).unroll_all_stages(v, u, m, rp);
         quads.update().reorder(ri, q, n, rp, v, u, m).atomic().vectorize(ri);
     }
     // a piece's act codes then are a lane of a register: by-element sdot
@@ -1306,7 +1282,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     Stage au = acc.update();
     grouped ? au.split(m, mo, mi, group).reorder(n, bacc, mi, mo, ryo) : au.reorder(n, bacc, m, ryo);
-    regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m, mi, mo});
+    acc.compute_at(tile_at(out, st)).vectorize_all_stages(n).unroll_all_stages(bacc, m, mi, mo);
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, true);
 }
 
@@ -1484,16 +1460,15 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     sub_tiles((sub ? inner : codes).update(), n, m, co).unroll(rxc).unroll(u).atomic().vectorize(rxk);
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
-        regs(rest.compute_at(acc, ryo).bound_storage(u, ts.interleave), {n}, {m, u});
+        rest.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize_all_stages(n).unroll_all_stages(m, u);
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16, records, act_records);
     // a tile-local wrapper (k is shared with the other tiles), per block:
     // four scales per word, the rows unrolled (SIMD across rows: 3-4% slower)
     for (Func k0 : swar ? kept : std::vector<Func>{}) {
-        std::vector<Func> cs = callers(k0, {part, inner, codes, blk, mid, rest, d.sums, d.blk, d.sum, d.part, d.pair});
-        if (cs.empty()) continue;
-        Func k = k0.in(cs);
+        Func k = k0.in_callers({part, inner, codes, blk, mid, rest, d.sums, d.blk, d.sum, d.part, d.pair});
+        if (!k.defined()) continue;
         Var kw("kw"), kb("kb");
         k.compute_at(acc, ryo)
             .split(k.args()[0], kw, kb, 4)
@@ -2115,15 +2090,15 @@ inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         Func quads = cu.rfactor(rq, q);
         cu.reorder(rq, n).atomic().vectorize(rq);
         quads.update().reorder(ri, q, n, rp, ry, m).atomic().vectorize(ri);
-        regs(quads.reorder_storage(q, n, m).compute_at(tile), {q, n}, {m, rp});
+        quads.reorder_storage(q, n, m).compute_at(tile).vectorize_all_stages(q, n).unroll_all_stages(m, rp);
     } else {
         cu.split(rx, ro, ri, 4);
         Func lanes = cu.rfactor(ro, q);
         cu.reorder(ro, n).atomic().vectorize(ro);
         lanes.update().reorder(ri, q, n, ry, m).atomic().vectorize(ri);
-        regs(lanes.reorder_storage(q, n, m).compute_at(tile), {q}, {n, m});
+        lanes.reorder_storage(q, n, m).compute_at(tile).vectorize_all_stages(q).unroll_all_stages(n, m);
     }
-    regs(codes.compute_at(tile), {}, {n, m});
+    codes.compute_at(tile).unroll_all_stages(n, m);
 }
 
 // The rowwise gemm on i8mm smmla, as blocked_mmla with no per-block work.
