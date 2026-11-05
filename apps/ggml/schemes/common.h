@@ -630,12 +630,13 @@ struct Tabulate {
     Approximation inner;
     int per, entries;
     Type index;
+    bool data = false;  // whether inner's decode reads a Buffer (a Lattice's points)
 
     Tabulate(Approximation a, int per, int entries = 256, Type index = UInt(8))
         : inner(std::move(a)), per(per), entries(entries), index(index) {
         // inner reads as tabulated: its decode of element j = q * per + p
         // (p < per) reads only the index q (checked on its definition: the
-        // check runs no pipeline)
+        // check runs no pipeline), and whether it reads a Buffer
         Func e("index");
         Var q, p, b;
         e(q, b) = cast(index, q);
@@ -645,6 +646,7 @@ struct Tabulate {
         x = Internal::simplify(Internal::substitute_in_all_lets(x), in);
         bool other = false;
         x = Internal::mutate_with(x, [&](auto *self, const Internal::Call *c) -> Expr {
+            data |= c->call_type == Internal::Call::Image;
             if (c->name != e.name()) return self->visit_base(c);
             other |= !(Internal::equal(c->args[0], Expr(q)) && Internal::equal(c->args[1], Expr(b)));
             return i;

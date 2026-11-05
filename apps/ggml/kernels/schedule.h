@@ -21,22 +21,12 @@ inline bool has(const std::vector<Func> &fs, const std::string &name) {
     return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return f.name() == name; });
 }
 
-// The Funcs f's definitions call.
-inline std::vector<Func> callees(Func f) {
-    std::vector<Func> fs;
-    auto add = [&](const Expr &v) {
-        Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
-            if (c->call_type == Internal::Call::Halide &&
-                std::none_of(fs.begin(), fs.end(), [&](const Func &h) { return h.name() == c->name; })) {
-                fs.push_back(Func(Internal::Function(c->func)));
-            }
-            self->visit_base(c);
-        });
-    };
-    for (const Expr &v : f.function().definition().values()) {
-        add(v);
+// The call of rs's that defines f, if any.
+inline const ApproximationTraceNode *defining_call(const std::vector<ApproximationResult> &rs, const Func &f) {
+    for (const ApproximationResult &r : rs) {
+        if (const ApproximationTraceNode *n = r.defining_call(f)) return n;
     }
-    return fs;
+    return nullptr;
 }
 
 // The Tabulate (schemes/common.h) whose decode in r defines f: its lut (a
@@ -319,15 +309,9 @@ inline void luts(const std::vector<ApproximationResult> &rs, bool tables) {
     std::set<std::string> seen;
     for (const ApproximationResult &r : rs) {
         for (Func f : r.decode_funcs()) {
-            if (!tabulate(r, f, true) || !seen.insert(f.name()).second) continue;
-            bool data = false;
-            for (const Expr &v : f.function().definition().values()) {
-                Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
-                    data |= c->call_type == Internal::Call::Image;
-                    self->visit_base(c);
-                });
-            }
-            if (data || (tables && !register_lut(rs, f))) f.precompute();
+            const Tabulate *t = tabulate(r, f, true);
+            if (!t || !seen.insert(f.name()).second) continue;
+            if (t->data || (tables && !register_lut(rs, f))) f.precompute();
         }
     }
 }
@@ -342,54 +326,38 @@ inline std::vector<Func> staged_tables(const std::vector<ApproximationResult> &r
     return fs;
 }
 
-// Whether f reads an array's (unsigned integer) elements as they are, by
-// its first argument: a struct field's (not a scalar field, as q5_0's qh)
-// or a buffer's.
-inline bool plain_read(Func f) {
-    if (f.dimensions() == 0 || !f.type().is_uint() || f.function().has_update_definition()) return false;
-    const Internal::Call *read = f.function().definition().values()[0].as<Internal::Call>();
-    if (!read || read->args.empty()) return false;
-    const std::string k = f.args()[0].name();
-    if (read->is_intrinsic(Internal::Call::struct_field_read)) return Internal::expr_uses_var(read->args.back(), k);
-    return (read->call_type == Internal::Call::Halide || read->call_type == Internal::Call::Image) &&
-           Internal::expr_uses_var(read->args[0], k);
-}
-
-// The elements of the struct field array f reads (q5's qh: 4), 0 if f
-// reads none.
-inline int array_extent(Func f) {
-    if (f.function().has_update_definition()) return 0;
-    const Internal::Call *read = f.function().definition().values()[0].as<Internal::Call>();
-    if (!read || !read->is_intrinsic(Internal::Call::struct_field_read)) return 0;
-    const StructTypeInfo *s = read->args[0].type().struct_type();
-    auto i = Internal::as_const_int(read->args[1]);
-    return s && i ? s->fields[*i].array_extent.value_or(0) : 0;
-}
-
-// A table decode g's indices, if read as is (iq3_xxs's grid index bytes),
-// else, if `nested`, the bytes read as is that they are computed from (iq3_s's
-// qs): staged at `at`, a word per load, in GPRs (MemoryType::GPR), each index
-// a shift and a mask; in place, each is a load (iq3_xxs gemv 1.16-1.27x).
-inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
-    std::vector<Func> idx;
-    for (Func f : callees(g)) {
-        if (!f.is_precomputed()) idx.push_back(f);  // (not its table)
+// The elements of the unsigned struct field array that f reads as it is
+// (StructLayout's decode: iq3_xxs's grid index bytes, q5's qh: 4), else 0.
+inline int array_field(const std::vector<ApproximationResult> &rs, const Func &f) {
+    const ApproximationTraceNode *n = defining_call(rs, f);
+    const StructLayout *l = n ? n->stage.target<StructLayout>() : nullptr;
+    for (size_t i = 0; l && i < n->ports.size(); i++) {
+        if (n->ports[i].name() != f.name()) continue;
+        const StructField &s = l->port_field(i);
+        return s.type.is_uint() ? s.array_extent.value_or(0) : 0;
     }
-    if (idx.size() != 1) return;
+    return 0;
+}
+
+// A table decode g's `index` (its Tabulate's input), if read as is (iq3_xxs's
+// grid index bytes), else, if `nested`, the bytes read as is that it is
+// computed from (iq3_s's qs): staged at `at`, a word per load, in GPRs (MemoryType::GPR), each index
+// a shift and a mask; in place, each is a load (iq3_xxs gemv 1.16-1.27x).
+inline void staged_indices(const std::vector<ApproximationResult> &rs, Func g, Func index, LoopLevel at, const Target &t, bool nested) {
     std::vector<std::pair<Func, Func>> staged;  // (Func read as is, its caller)
-    if (plain_read(idx[0])) {
-        staged.emplace_back(idx[0], g);
-    } else if (nested) {
+    if (array_field(rs, index)) {
+        staged.emplace_back(index, g);
+    } else if (const ApproximationTraceNode *n = nested ? defining_call(rs, index) : nullptr) {
         // (g's own copy: the index is shared by the tables' copies for
         // other consumers, e.g. mul_mat's other tiles)
         std::vector<Func> fs;
-        for (Func f : callees(idx[0])) {
+        for (const Func &f : n->inputs) {
             // (bytes, a word of them per load; not iq3_xxs's u32 sign
             // words, two to a word: no fewer loads)
-            if (plain_read(f) && 4 * f.type().bits() <= t.bits) fs.push_back(f);
+            if (array_field(rs, f) && 4 * f.type().bits() <= t.bits) fs.push_back(f);
         }
         if (!fs.empty()) {
-            Func own = idx[0].clone_in(g);
+            Func own = index.clone_in(g);
             for (Func f : fs) {
                 staged.emplace_back(f, own);
             }
@@ -400,7 +368,7 @@ inline void staged_indices(Func g, LoopLevel at, const Target &t, bool nested) {
         // own, loaded at its offset: a GPR-wide word would shift inwards past
         // the buffer's start for the first block.
         int lanes = t.bits / f.type().bits();
-        if (int n = array_extent(f); n > 0 && n < lanes) {
+        if (int n = array_field(rs, f); n < lanes) {
             lanes = 1;
             while (lanes < n) {
                 lanes *= 2;
@@ -426,7 +394,7 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
         for (size_t k = 1; k < g.args().size(); k++) {
             g.unroll(g.args()[k]);
         }
-        staged_indices(g, at, t, nested);
+        staged_indices(rs, g, defining_call(rs, f)->inputs[0], at, t, nested);
     }
 }
 
