@@ -1,7 +1,9 @@
 #include "Halide.h"
 #include "fuzz_helpers.h"
 #include <array>
+#include <climits>
 #include <iostream>
+#include <map>
 #include <random>
 #include <sstream>
 
@@ -114,6 +116,34 @@ constexpr bool verbose = false;
 
 Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"};
 Param<int> scale_param{"scale_param"};
+
+// Check that sliding never computes a value outside the region the
+// compute_root reference computes, which a window that over-advances or fails
+// to clamp at the end of its loop would do.
+constexpr bool check_overcompute = true;
+
+// The bounding box of the stores to each Func, as [min, max] per dimension.
+using StoreBoxes = std::map<std::string, std::vector<std::pair<int, int>>>;
+StoreBoxes *current_store_boxes = nullptr;
+
+int32_t record_store_box(JITUserContext *, const halide_trace_event_t *e) {
+    if (e->event != halide_trace_store) {
+        return 0;
+    }
+    auto &box = (*current_store_boxes)[e->func];
+    int dims = e->dimensions / e->lanes;
+    if (box.empty()) {
+        box.resize(dims, {INT_MAX, INT_MIN});
+    }
+    for (int d = 0; d < dims; d++) {
+        for (int l = 0; l < e->lanes; l++) {
+            int c = e->coordinates[d * e->lanes + l];
+            box[d].first = std::min(box[d].first, c);
+            box[d].second = std::max(box[d].second, c);
+        }
+    }
+    return 0;
+}
 
 // Bend a coordinate into a monotonically increasing but non-affine function of
 // itself, so that the monotonicity analysis has to cope with something other
@@ -345,6 +375,11 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         // footprint being a constant size: non-affinely, or by a symbolic
         // amount.
         bool bent = false;
+        // A schedule placement aimed at a rarely reached path.
+        enum Goal { NoGoal,
+                    SlideY,
+                    SlideXY,
+                    Registers } goal = NoGoal;
 
         Node(const std::string &name)
             : f(name) {
@@ -534,6 +569,9 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             auto it = env.find(n.f.name());
             if (it != env.end()) {
                 Func(it->second).compute_root();
+                if (check_overcompute) {
+                    Func(it->second).trace_stores();
+                }
             }
         }
     }
@@ -584,6 +622,44 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             }
         }
         std::sort(levels.begin(), levels.end());
+        // Sometimes aim for a placement that a rarer path needs, and that a
+        // uniformly random one hardly ever produces: a slide directive over
+        // the output's y needs the stage computed at yi and stored outside
+        // yo, one over both dimensions needs it computed at x, and a window
+        // in registers needs it computed at x and stored at yo or yi.
+        // Draw unconditionally to keep the rng stream the same when these
+        // are turned off.
+        int goal_draw = fuzz() % 8;
+        int goal_store_draw = fuzz() % 2;
+        auto output_loop = [&](int var) {
+            for (int j = 0; j < (int)loc.size(); j++) {
+                if (loc[j] == Loop{num_stages - 1, var}) {
+                    return j;
+                }
+            }
+            return -1;
+        };
+        int goal_compute = -1, goal_store = -1;
+        if (goal_draw == 0 && generate_slide_directive) {
+            producer->goal = Node::SlideY;
+            goal_compute = output_loop(2);
+            goal_store = goal_store_draw ? 0 : output_loop(0);
+        } else if (goal_draw == 1 && generate_slide_directive) {
+            producer->goal = Node::SlideXY;
+            goal_compute = output_loop(3);
+            goal_store = goal_store_draw ? 0 : output_loop(0);
+        } else if (goal_draw == 2 && enable_registers) {
+            producer->goal = Node::Registers;
+            goal_compute = output_loop(3);
+            goal_store = output_loop(1 + goal_store_draw);
+        }
+        if (goal_compute >= 0 && goal_store >= 0) {
+            levels[2] = goal_compute;
+            levels[1] = goal_store;
+            levels[0] = std::min(levels[0], goal_store);
+        } else {
+            producer->goal = Node::NoGoal;
+        }
         producer->hoist_storage = loc[levels[0]];
         producer->store_at = loc[levels[1]];
         producer->compute_at = loc[levels[2]];
@@ -591,7 +667,7 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         // Slide in registers sometimes. Draw the rng value
         // unconditionally, so that turning this off doesn't change the
         // rest of the schedule.
-        bool want_registers = (fuzz() % 4) != 0;
+        bool want_registers = (fuzz() % 4) != 0 || producer->goal == Node::Registers;
 
         // A register allocation must have constant extent in every
         // dimension. That needs the func to be computed in the
@@ -749,11 +825,11 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         // split, so it's the only dimension that isn't a loop by the
         // time sliding window runs. Draw unconditionally to keep the
         // rng stream the same when this is turned off.
-        bool want_slide_directive = (fuzz() % 3) == 0;
+        bool want_slide_directive = (fuzz() % 3) == 0 || stages[i].goal == Node::SlideY;
         // Sometimes name x too. Unlike y it is still a loop by the
         // time sliding window runs, and naming both dimensions slides
         // the window along both at once.
-        bool want_slide_x = (fuzz() % 3) == 0;
+        bool want_slide_x = (fuzz() % 3) == 0 || stages[i].goal == Node::SlideXY;
         // Only legal if the storage lives across every loop y spans.
         // y is split into yo and yi, so the storage has to be outside
         // both of them.
@@ -796,10 +872,14 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                    stages[i].level >= stages.back().level &&
                    scale_mode != 1;
         };
-        // A consumer stored outside one of the loops y is built from and
-        // computed inside it may slide over that loop first, which makes the
-        // region required of this stage depend on that loop and not just on y.
-        auto consumer_slides_over_y_loops = [&]() {
+        // A consumer stored outside one of the given loops of the output
+        // (a bitmask over the output's vars) and computed inside it may slide
+        // over that loop first. For one of the loops y is built from, that
+        // makes the region required of this stage depend on that loop and not
+        // just on y. For x, the window it slides is monotonic only because
+        // each iteration starts where the last one ended, which the analysis
+        // can't see.
+        auto consumer_slides_over = [&](int loops) {
             std::set<const Node *> consumers{&stages[i]};
             for (int j = i; j < num_stages - 1; j++) {
                 if (!consumers.count(&stages[j])) {
@@ -816,7 +896,7 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                 const LoopNest &nest = stages[j].innermost;
                 bool inside_store = false;
                 for (const Loop &l : nest) {
-                    if (inside_store && l.func == num_stages - 1 && (l.var == 1 || l.var == 2)) {
+                    if (inside_store && l.func == num_stages - 1 && ((loops >> l.var) & 1)) {
                         return true;
                     }
                     if (l == stages[j].compute_at) {
@@ -830,7 +910,7 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         if (generate_slide_directive && want_slide_directive &&
             store_at != compute_at &&
             storage_outlives_y &&
-            !consumer_slides_over_y_loops() &&
+            !consumer_slides_over((1 << 1) | (1 << 2)) &&
             !compute_at.is_root() &&
             compute_at.func == num_stages - 1 &&
             // Computing further in than yi is only legal if the region
@@ -844,7 +924,7 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         } else if (generate_slide_directive && want_slide_x &&
                    store_at != compute_at &&
                    storage_outlives_y &&
-                   !consumer_slides_over_y_loops() &&
+                   !consumer_slides_over((1 << 1) | (1 << 2) | (1 << 3)) &&
                    !compute_at.is_root() &&
                    compute_at.func == num_stages - 1 &&
                    // Computed at the output's innermost loop, so both
@@ -912,8 +992,46 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
     }
     first_run = false;
 
+    // A PredicateStores split runs its producers for the predicated-off tail
+    // of the output, so it computes outside the region the reference does.
+    bool checking_overcompute =
+        check_overcompute && strat != TailStrategy::PredicateStores;
+    StoreBoxes reference_boxes, sliding_boxes;
+    if (checking_overcompute) {
+        // When a consumer slides by rewinding a loop, the extra iterations
+        // also compute what its producers' other consumers would need there,
+        // and a window in registers asks its producers for the whole window
+        // every iteration. Either way producers upstream of it compute a
+        // little outside the reference's box, so only check stages that
+        // reach the output through a chain of single consumers, none in
+        // registers.
+        std::vector<bool> exact(num_stages, false);
+        exact[num_stages - 1] = true;
+        for (int i = num_stages - 2; i >= 0; i--) {
+            std::set<const Node *> consumers;
+            for (const Node *c : stages[i].used_by) {
+                if (live_funcs.count(c)) {
+                    consumers.insert(c);
+                }
+            }
+            if (consumers.size() == 1) {
+                const Node *c = *consumers.begin();
+                int j = c - &stages[0];
+                exact[i] = exact[j] && !c->in_registers;
+            }
+            if (exact[i]) {
+                stages[i].f.trace_stores();
+            }
+        }
+        reference.jit_handlers().custom_trace = record_store_box;
+        stages.back().f.jit_handlers().custom_trace = record_store_box;
+    }
+
+    current_store_boxes = &reference_boxes;
     Buffer<uint8_t> correct_output = reference.realize({size, size});
+    current_store_boxes = &sliding_boxes;
     Buffer<uint8_t> sliding_output = stages.back().f.realize({size, size});
+    current_store_boxes = nullptr;
 
     bool ok = true;
     for (int y = 0; y < correct_output.height(); y++) {
@@ -924,6 +1042,22 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                     << (int)correct_output(x, y) << "\n"
                     << "sliding_output(" << x << ", " << y << ") = "
                     << (int)sliding_output(x, y) << "\n";
+                ok = false;
+            }
+        }
+    }
+    for (const auto &[name, box] : sliding_boxes) {
+        auto it = reference_boxes.find(name);
+        if (it == reference_boxes.end()) {
+            continue;
+        }
+        for (size_t d = 0; ok && d < box.size(); d++) {
+            if (box[d].first < it->second[d].first ||
+                box[d].second > it->second[d].second) {
+                std::cout << name << " was computed over [" << box[d].first << ", "
+                          << box[d].second << "] in dimension " << d
+                          << ", but only [" << it->second[d].first << ", "
+                          << it->second[d].second << "] is needed\n";
                 ok = false;
             }
         }
