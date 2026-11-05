@@ -5,6 +5,7 @@
 // the values per record of each operand, and the operands'
 // ApproximationResults.
 #include "Halide.h"
+#include "schemes/common.h"
 #include "schemes/tags.h"
 
 #include <functional>
@@ -15,25 +16,9 @@ namespace ggml {
 
 using namespace Halide;
 
-// Whether f is a function of its arguments alone: it reads no Funcs or
-// Params, but maybe Buffers it embeds (a Tabulate's lut).
-inline bool constant(Func f) {
-    const Internal::Function &fn = f.function();
-    if (!fn.has_pure_definition() || fn.has_update_definition() || fn.has_extern_definition()) return false;
-    bool reads = false;
-    for (const Expr &v : fn.definition().values()) {
-        Internal::visit_with(
-            v, [&](auto *self, const Internal::Call *c) {
-                reads |= c->call_type == Internal::Call::Halide || (c->call_type == Internal::Call::Image && !c->image.defined()) || c->param.defined();
-                self->visit_base(c); },
-            [&](auto *, const Internal::Variable *x) { reads |= x->param.defined() || x->reduction_domain.defined(); });
-    }
-    return !reads;
-}
-
-// A lut (Tabulate's): a constant of (element, index).
-inline bool is_lut(const Func &f) {
-    return constant(f) && f.dimensions() == 2;
+// Is a Func named `name` among fs?
+inline bool has(const std::vector<Func> &fs, const std::string &name) {
+    return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return f.name() == name; });
 }
 
 // The Funcs f's definitions call.
@@ -54,47 +39,20 @@ inline std::vector<Func> callees(Func f) {
     return fs;
 }
 
-// The calls to g in f's definition.
-inline std::vector<const Internal::Call *> calls_to(Func f, const Func &g) {
-    std::vector<const Internal::Call *> cs;
-    for (const Expr &v : f.function().definition().values()) {
-        Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
-            if (c->call_type == Internal::Call::Halide && c->name == g.name()) cs.push_back(c);
-            self->visit_base(c);
-        });
-    }
-    return cs;
+// The Tabulate (schemes/common.h) whose decode in r defines f: its lut (a
+// constant of (element, index)) if `lut`, else the decode reading it (with
+// `precomputed`, only if it reads it precomputed: Func::precompute()).
+inline const Tabulate *tabulate(const ApproximationResult &r, const Func &f, bool lut, bool precomputed = false) {
+    const ApproximationTraceNode *n = r.defining_call(f);
+    const Tabulate *t = n ? n->stage.target<Tabulate>() : nullptr;
+    if (!t || !has(lut ? n->intermediates : n->ports, f.name())) return nullptr;
+    return !precomputed || n->intermediates[0].function().schedule().precomputed() ? t : nullptr;
 }
-
-// The extent of a call's argument a over all values of the caller's
-// arguments; 0 if unbounded.
-inline int extent_of(const Expr &a) {
-    Internal::Scope<Internal::Interval> any;
-    Internal::visit_with(a, [&](auto *, const Internal::Variable *x) {
-        if (!any.contains(x->name)) any.push(x->name, Internal::Interval::everything());
-    });
-    Internal::Interval i = Internal::bounds_of_expr_in_scope(a, any);
-    auto lo = i.has_lower_bound() ? Internal::as_const_int(Internal::simplify(i.min)) : std::nullopt;
-    auto hi = i.has_upper_bound() ? Internal::as_const_int(Internal::simplify(i.max)) : std::nullopt;
-    return lo && hi ? (int)(*hi - *lo + 1) : 0;
-}
-
-// The precomputed lut (Func::precompute()) a decode Func reads, if any.
-inline Func table_of(Func f) {
-    for (Func g : callees(f)) {
-        if (g.function().schedule().precomputed()) return g;
+inline const Tabulate *tabulate(const std::vector<ApproximationResult> &rs, const Func &f, bool lut) {
+    for (const ApproximationResult &r : rs) {
+        if (const Tabulate *t = tabulate(r, f, lut)) return t;
     }
-    return Func();
-}
-
-// The values per index (a row) of the table decode f reads.
-inline int table_rows(Func f) {
-    Func t = table_of(f);
-    int rows = 0;
-    for (const Internal::Call *c : calls_to(f, t)) {
-        rows = std::max(rows, extent_of(c->args[0]));
-    }
-    return rows;
+    return nullptr;
 }
 
 // Which components' decode to pick, by their port tags (schemes/tags.h):
@@ -122,7 +80,7 @@ inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, co
     std::vector<Func> fs;
     for (size_t i = first; i < std::min(last, rs.size()); i++) {
         for (Func f : rs[i].decode_funcs()) {
-            if (pick(rs[i].tags_of(f)) && tables == table_of(f).defined()) fs.push_back(f);
+            if (pick(rs[i].tags_of(f)) && tables == (tabulate(rs[i], f, false, true) != nullptr)) fs.push_back(f);
         }
     }
     return fs;
@@ -136,11 +94,6 @@ inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
         self->visit_base(c);
     });
     return found;
-}
-
-// Is a Func named `name` among fs?
-inline bool has(const std::vector<Func> &fs, const std::string &name) {
-    return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return f.name() == name; });
 }
 
 // fs but those among `minus`.
@@ -410,23 +363,15 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 // units; q5_0 vec_dot 0.80x -> 1.01x GGML), else inlined. Call before any
 // other directive on rs's decode.
 inline bool register_lut(const std::vector<ApproximationResult> &rs, const Func &lut) {
-    int per = 0, entries = 0;
-    for (const ApproximationResult &r : rs) {
-        for (Func f : r.decode_funcs()) {
-            for (const Internal::Call *c : calls_to(f, lut)) {
-                per = std::max(per, extent_of(c->args[0]));
-                entries = std::max(entries, extent_of(c->args[1]));
-            }
-        }
-    }
-    return per && entries && per * entries * lut.type().bytes() <= 16;
+    const Tabulate *t = tabulate(rs, lut, true);
+    return t && t->per * t->entries * lut.type().bytes() <= 16;
 }
 
 inline void luts(const std::vector<ApproximationResult> &rs, bool tables) {
     std::set<std::string> seen;
     for (const ApproximationResult &r : rs) {
         for (Func f : r.decode_funcs()) {
-            if (!is_lut(f) || !seen.insert(f.name()).second) continue;
+            if (!tabulate(r, f, true) || !seen.insert(f.name()).second) continue;
             bool data = false;
             for (const Expr &v : f.function().definition().values()) {
                 Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
@@ -444,7 +389,7 @@ inline void luts(const std::vector<ApproximationResult> &rs, bool tables) {
 inline std::vector<Func> staged_tables(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> fs;
     for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
-        if (table_rows(f) != 1) fs.push_back(f);
+        if (tabulate(rs, f, false)->per != 1) fs.push_back(f);
     }
     return fs;
 }
@@ -529,7 +474,7 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
         Func g = f.clone_in_callers(consumers);
         if (!g.defined()) continue;
         Var j = g.args()[0], jo("jo"), ji("ji");
-        g.compute_at(at).split(j, jo, ji, table_rows(f)).vectorize(ji).unroll(jo);
+        g.compute_at(at).split(j, jo, ji, tabulate(rs, f, false)->per).vectorize(ji).unroll(jo);
         for (size_t k = 1; k < g.args().size(); k++) {
             g.unroll(g.args()[k]);
         }
@@ -622,9 +567,9 @@ inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs)
             }
         }
     }
-    // the codes the dot reads: those no other code decoder reads
-    for (Func f : codes) {
-        if (callers(f, without(codes, {f})).empty() && has(path, f.name())) return path;
+    // the codes the dot reads
+    for (Func f : rs[0].decoded_components(tag::codes)) {
+        if (has(path, f.name())) return path;
     }
     return {};
 }
@@ -650,12 +595,8 @@ inline bool invariant_factor(Func f) {
 
 // Has the weight a float scale per sub-block (nvfp4's)?
 inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
-    for (bool tables : {false, true}) {
-        for (Func f : decoders(rs, only({tag::scale}), 0, 1, tables)) {
-            if (f.type().is_float() && f.dimensions() == 3) return true;
-        }
-    }
-    return false;
+    std::vector<Func> sc = rs[0].decoded_components(tag::scale);
+    return std::any_of(sc.begin(), sc.end(), [](const Func &f) { return f.type().is_float() && f.dimensions() == 3; });
 }
 
 // The weight's decoded per-sub-block scales (and mins): its scale decoders
@@ -1600,7 +1541,7 @@ inline void metal_lut(Func f, Func out, const Var &at) {
 // select tree; M3 Max).
 inline void metal_luts(Func out, const std::vector<ApproximationResult> &rs) {
     for (Func f : decoders(rs)) {
-        if (is_lut(f) && register_lut(rs, f)) metal_lut(f, out, Var("no"));
+        if (register_lut(rs, f)) metal_lut(f, out, Var("no"));
     }
 }
 
@@ -1902,7 +1843,7 @@ inline void metal_mm(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, c
     // 1.03-1.06x, M = 64..128 0.94-0.98x vs packed muxes; M3 Max)
     std::set<std::string> staged;
     for (Func f : decoders(rs)) {
-        if (is_lut(f) && register_lut(rs, f)) staged.insert(f.name());
+        if (register_lut(rs, f)) staged.insert(f.name());
     }
     for (Func f : clone_paths(ws, [&](const Func &f) { return staged.count(f.name()) > 0; })) {
         metal_lut(f, out, n);
@@ -2296,9 +2237,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // Codes decoded from a field: two records per tile where N allows
         // (gemv 1.02-1.1x; q8_0's, not decoded, 1.02-1.11x slower on ten
         // threads at K = 14336), unless records over 11 KB on <= 4 threads.
-        std::vector<Func> cd = decoders(rs, only({tag::codes}), 0, 1);
-        cd.erase(std::remove_if(cd.begin(), cd.end(), constant), cd.end());  // (not a codebook's lut)
-        if (!cd.empty() && cd.front().type() != cd.back().type()) {
+        std::vector<Func> cc = rs[0].decoded_components(tag::codes), st = rs[0].stored_components(tag::codes);
+        if (cc.size() == 1 && std::any_of(st.begin(), st.end(), [&](const Func &f) { return f.type() != cc[0].type(); })) {
             Tiles r2 = rt;
             r2.nt = 2 * fmt.rows;
             Expr two = N % r2.nt == 0;
