@@ -1593,9 +1593,9 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     s.atomic().gpu_lanes(rl);
     acc.reorder(n, m, l).gpu_lanes(l).unroll(n);
     au.reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
-    // store_at: works around halide/Halide#9571; bound_storage: also in the K tail: registers
+    // bound_storage: also in the K tail: registers
     for (Func f : {blk, mid, codes, rest}) {
-        if (f.defined()) f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);
+        if (f.defined()) f.compute_at(acc, ryo).bound_storage(u, 1).unroll(f.args()[0]);
     }
     blk.update().unroll(blk.args()[0]);
     for (Func f : {codes, rest}) {
@@ -1620,7 +1620,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     }
     for (auto [f, part, inner] : subs) {
         for (Func g : {part, inner}) {
-            g.compute_at(f, sub_rs[0]).store_at(acc, l).bound_storage(u, 1);
+            g.compute_at(f, sub_rs[0]).bound_storage(u, 1);
             for (int i = 0; i <= g.num_update_definitions(); i++) {
                 Stage gs = i ? g.update(i - 1) : Stage(g);
                 for (const Var &v : g.args()) {
