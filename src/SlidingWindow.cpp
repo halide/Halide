@@ -113,22 +113,26 @@ class RollFunc : public IRMutator {
             i = mutate(i);
         }
         bool sliding_up = old_bounds.max.same_as(new_bounds.max);
-        Expr is_new = sliding_up ? new_bounds.min <= args[dim] : args[dim] <= new_bounds.max;
+        Expr is_old = sliding_up ? args[dim] < new_bounds.min : new_bounds.max < args[dim];
         args[dim] -= old_bounds.min;
         vector<Expr> old_args = args;
         Expr old_arg_dim = expand_expr(old_args[dim], scope);
         old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_arg_dim);
+        vector<Expr> old_values(values.size());
         for (int i = 0; i < (int)values.size(); i++) {
-            Type t = values[i].type();
-            Expr old_value =
-                Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
-            values[i] = Call::make(values[i].type(), Call::if_then_else, {is_new, values[i], likely(old_value)}, Call::PureIntrinsic);
+            old_values[i] =
+                Call::make(values[i].type(), op->name, old_args, Call::Halide, func.get_contents(), i);
         }
         if (const Variable *v = op->args[dim].as<Variable>()) {
             // The subtractions above simplify more easily if the loop is rebased to 0.
             loops_to_rebase.insert(v->name);
         }
-        return Provide::make(func.name(), values, args, op->predicate);
+        // A branch rather than an if_then_else, because CSE would hoist lets
+        // in the new values, and the loads they contain, above an
+        // if_then_else's condition.
+        return IfThenElse::make(likely(is_old),
+                                Provide::make(func.name(), old_values, args, op->predicate),
+                                Provide::make(func.name(), values, args, op->predicate));
     }
 
     Expr visit(const Call *op) override {
@@ -382,6 +386,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
         if (!can_slide_up && !can_slide_down) {
             return result.reject("the region required doesn't move monotonically");
+        }
+        if (!can_slide_up && func.schedule().memory_type() == MemoryType::Register) {
+            // Rolling a register array moves each value to the slot below it,
+            // which the producer's ascending loops haven't overwritten yet.
+            // Moving values up would read slots already overwritten.
+            return result.reject("a window in registers can only roll upwards");
         }
         result.slide_up = can_slide_up;
 
