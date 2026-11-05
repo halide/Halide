@@ -451,7 +451,9 @@ protected:
     Expr relax_over_var(const Expr &e, const std::string &var) {
         Scope<Interval> domain;
         domain.push(var, Interval::everything());
-        Interval in = bounds_of_expr_in_scope(e, domain);
+        // Merging used/loaded predicates can form shared DAGs. Bounds analysis
+        // visits trees, so introduce let bindings before eliminating the variable.
+        Interval in = bounds_of_expr_in_scope(common_subexpression_elimination(e), domain);
         if (!in.has_upper_bound()) {
             return const_true();
         } else {
