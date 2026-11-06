@@ -42,6 +42,10 @@ public:
     GeneratorParam<bool> gemm_index_words{"gemm_index_words", false};
 
     void configure() {
+        // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
+        // these commands, not the Metal source the runtime compiles at first load
+        const char *metal_cc = getenv("GGML_METAL_COMPILER"), *metal_ld = getenv("GGML_METAL_LINKER");
+        if (metal_cc && metal_ld && get_target().has_feature(Target::Metal)) set_metal_compiler_and_linker(metal_cc, metal_ld);
         std::string an = act, cn = an.substr(an.find(':') + 1);
         an = an.substr(0, an.find(':'));
         std::string wn = weight, wc = wn.substr(wn.find(':') + 1);

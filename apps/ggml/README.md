@@ -18,6 +18,14 @@ build/apps/ggml/ggml-quant-bench --types q4_0 --shapes llama3-8b-gemv >out.csv
 build/apps/ggml/ggml-quant-bench --help
 ```
 
+The Metal libraries embed a metallib compiled at build time by Apple's Metal
+toolchain (`xcrun metal`, `xcrun metallib`; Xcode's, or
+`xcodebuild -downloadComponent MetalToolchain`), not their Metal source: ~11x
+smaller, and a kernel's first call with an empty Metal shader cache takes 55-90
+ms instead of 0.4-2.3 s compiling the source (M3 Max).
+`-DGGML_HALIDE_METALLIB=OFF` embeds the source (the default where the toolchain
+isn't found).
+
 The vcpkg port (`apps/vcpkg/ports/ggml`) pins GGML v0.26.0 with `GGML_NATIVE`,
 CPU repack, KleidiAI (arm64) and Metal (macOS) on, and `GGML_LLAMAFILE` off, so
 the plain CPU path is GGML's own `vec_dot` loop.

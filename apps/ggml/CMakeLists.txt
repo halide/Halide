@@ -29,6 +29,38 @@ add_library(ggml_thread_pool OBJECT runtime/thread_pool.cpp)
 target_include_directories(ggml_thread_pool PUBLIC runtime)
 target_link_libraries(ggml_thread_pool PUBLIC Halide::Runtime)
 
+# The Metal libraries embed a metallib compiled at build time by Apple's
+# Metal toolchain (Xcode's, or `xcodebuild -downloadComponent MetalToolchain`)
+# instead of their Metal source, which the runtime would compile at first load.
+# -fno-fast-math as the runtime's source compile (setFastMathEnabled: NO); -w:
+# the generated source's unused-variable warnings.
+set(_ggml_metal_tools NO)
+if (APPLE)
+    execute_process(
+        COMMAND xcrun -sdk macosx metal --version
+        RESULT_VARIABLE _metal_rc
+        OUTPUT_QUIET ERROR_QUIET
+    )
+    execute_process(
+        COMMAND xcrun -sdk macosx -f metallib
+        RESULT_VARIABLE _metallib_rc
+        OUTPUT_QUIET ERROR_QUIET
+    )
+    if (_metal_rc EQUAL 0 AND _metallib_rc EQUAL 0)
+        set(_ggml_metal_tools YES)
+    endif ()
+endif ()
+option(GGML_HALIDE_METALLIB
+    "Embed compiled metallibs, not Metal source, in the Metal libraries" ${_ggml_metal_tools}
+)
+set(GGML_HALIDE_METAL_ENV "")
+if (GGML_HALIDE_METALLIB)
+    set(GGML_HALIDE_METAL_ENV
+        "GGML_METAL_COMPILER=xcrun -sdk macosx metal -fno-fast-math -w"
+        "GGML_METAL_LINKER=xcrun -sdk macosx metallib"
+    )
+endif ()
+
 include(formats.cmake)
 
 add_executable(
