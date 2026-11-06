@@ -708,6 +708,31 @@ void check_vectors() {
     check(ramp(x * 16 + 14, 1, 4) / broadcast(16, 4),
           ramp(x * 16 + 14, 1, 4) / broadcast(16, 4));
 
+    // The same holds when the base's alignment is only known from its
+    // ExprInfo, e.g. for a sum of products, or for a variable with known
+    // alignment.
+    check(ramp(x * 32 + y * 16, 1, 4) / broadcast(64, 4),
+          broadcast((x * 32 + y * 16) / 64, 4));
+    check(ramp(x * 32 + y * 16, 2, 8) / broadcast(64, 8),
+          broadcast((x * 32 + y * 16) / 64, 8));
+    check(ramp(x * 32 + y * 16 + 3, -1, 4) / broadcast(64, 4),
+          broadcast((x * 32 + y * 16 + 3) / 64, 4));
+    check(ramp(x * 32 + y * 16, 1, 4) / broadcast(-64, 4),
+          broadcast((x * 32 + y * 16) / -64, 4));
+    check(ramp(x * 64 + (y % 2) * 16 + ((y % 4) / 2) * 32, 1, 4) / broadcast(128, 4),
+          broadcast((((y % 4) / 2) * 32 + (x * 64 + (y % 2) * 16)) / 128, 4));
+    {
+        Scope<ModulusRemainder> alignment;
+        alignment.push("x", ModulusRemainder(16, 12));
+        check(ramp(x, 1, 4) / broadcast(16, 4), broadcast(x / 16, 4), alignment);
+        check(ramp(x, 1, 5) / broadcast(16, 5), ramp(x, 1, 5) / broadcast(16, 5), alignment);
+    }
+    // ... but not when some lane crosses into a neighboring multiple.
+    check(ramp(x * 32 + y * 16 + 1, -1, 4) / broadcast(64, 4),
+          ramp(x * 32 + y * 16 + 1, -1, 4) / broadcast(64, 4));
+    check(ramp(x * 32 + y * 16 + 13, 1, 4) / broadcast(64, 4),
+          ramp(x * 32 + y * 16 + 13, 1, 4) / broadcast(64, 4));
+
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
     std::mt19937 rng(0);
