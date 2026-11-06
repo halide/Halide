@@ -43,8 +43,6 @@ struct VulkanSharedMemoryAllocation {
 struct VulkanShaderBinding {
     char *entry_point_name = nullptr;
     VulkanDispatchData dispatch_data = {};
-    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
-    VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     VkPipeline compute_pipeline = VK_NULL_HANDLE;
     uint32_t uniform_buffer_count = 0;
     uint32_t storage_buffer_count = 0;
@@ -53,7 +51,11 @@ struct VulkanShaderBinding {
     VulkanSpecializationConstant *specialization_constants = nullptr;
     VulkanSharedMemoryAllocation *shared_memory_allocations = nullptr;
     uint32_t bindings_count = 0;
-    MemoryRegion *args_region = nullptr;
+
+    // The specialization constants compute_pipeline was created with (if any)
+    uint32_t specialized_constant_count = 0;
+    uint32_t specialized_constant_ids[4] = {0};
+    uint32_t specialized_constant_values[4] = {0};
 };
 
 // Compiled shader module and associated bindings
@@ -73,6 +75,41 @@ struct VulkanCompilationCacheEntry {
 };
 
 WEAK Halide::Internal::GPUCompilationCache<VkDevice, VulkanCompilationCacheEntry *> compilation_cache;
+
+// The ring of submissions of a device (see vk_begin_submission)
+static constexpr uint32_t vk_submission_count = 16;
+
+// Uploads wait for earlier work to finish rather than have more than this
+// many bytes of staging buffers in flight.
+static constexpr uint64_t vk_max_staging_bytes_in_flight = 64 * 1024 * 1024;
+
+struct VulkanSubmission {
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+    VkFence fence = VK_NULL_HANDLE;
+    VkQueue queue = VK_NULL_HANDLE;
+    bool in_flight = false;  // submitted, and not yet seen complete
+
+    // Holds the descriptor set of a kernel launch
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    uint32_t descriptor_pool_storage_buffer_count = 0;
+
+    // Holds the scalar arguments of a kernel launch
+    MemoryRegion *args_region = nullptr;
+    size_t args_region_size = 0;
+
+    // The staging buffer of an upload, released once it is done
+    MemoryRegion *staging_region = nullptr;
+    uint64_t staging_bytes = 0;
+};
+
+struct VulkanSubmissionQueue {
+    VkQueue queue = VK_NULL_HANDLE;
+    uint32_t queue_family_index = 0;
+    uint32_t next = 0;
+    uint64_t staging_bytes_in_flight = 0;
+    VulkanSubmission submissions[vk_submission_count];
+};
 
 // --------------------------------------------------------------------------
 
@@ -173,54 +210,233 @@ int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocat
     return halide_error_code_success;
 }
 
-// Struct for handling destruction of a transient command buffer ... gets destroyed when object goes out of scope
-struct ScopedVulkanCommandBufferAndPool {
-    void *user_context = nullptr;
-    VulkanMemoryAllocator *allocator = nullptr;
-    VkCommandPool command_pool = VK_NULL_HANDLE;
-    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
-    int error_code = halide_error_code_success;
+// --------------------------------------------------------------------------
+// Submissions
+//
+// Work is put on the queue through a ring of submissions, created once per
+// device, each with its own command pool, command buffer and fence. Once a
+// submission's fence has signaled, the next operation that lands on it resets
+// and reuses it, instead of creating and destroying a command pool and
+// buffer for every operation.
+//
+// Nothing waits for submitted work to finish, unless its result is needed on
+// the host (copies to the host, halide_vulkan_device_sync), or memory it may
+// still use is about to be freed. Like the work on a CUDA stream, each
+// submission runs after the previous ones have finished: a barrier at the
+// start of its command buffer waits for all work submitted to the queue before.
+//
+// What the GPU reads while the work runs (the descriptor set, the scalar
+// arguments of a kernel, the staging buffer of an upload) belongs to the
+// submission, and is only reused or released once its fence has signaled.
 
-    ScopedVulkanCommandBufferAndPool(void *uc, VulkanMemoryAllocator *vma, uint32_t queue_family_index)
-        : user_context(uc), allocator(vma) {
-        error_code = vk_create_command_pool(user_context, allocator, queue_family_index, &command_pool);
-        if (error_code == halide_error_code_success) {
-            error_code = vk_create_command_buffer(user_context, allocator, command_pool, &command_buffer);
+int vk_release_region(void *user_context, VulkanMemoryAllocator *allocator, MemoryRegion *region) {
+    if (halide_can_reuse_device_allocations(user_context)) {
+        return allocator->release(user_context, region);
+    } else {
+        return allocator->reclaim(user_context, region);
+    }
+}
+
+// Releases a staging buffer when it goes out of scope, unless it was taken.
+struct ScopedStagingRegion {
+    void *user_context;
+    VulkanMemoryAllocator *allocator;
+    MemoryRegion *region = nullptr;
+
+    ScopedStagingRegion(void *user_context, VulkanMemoryAllocator *allocator)
+        : user_context(user_context), allocator(allocator) {
+    }
+    ScopedStagingRegion(const ScopedStagingRegion &) = delete;
+    ScopedStagingRegion &operator=(const ScopedStagingRegion &) = delete;
+    ~ScopedStagingRegion() {
+        if (region != nullptr) {
+            vk_release_region(user_context, allocator, region);
         }
     }
-    ~ScopedVulkanCommandBufferAndPool() {
-        if ((allocator != nullptr) && (command_pool != VK_NULL_HANDLE)) {
-            if (command_buffer != VK_NULL_HANDLE) {
-                vk_destroy_command_buffer(user_context, allocator, command_pool, command_buffer);
-            }
-            vk_destroy_command_pool(user_context, allocator, command_pool);
-        }
-        user_context = nullptr;
-        allocator = nullptr;
-        command_pool = VK_NULL_HANDLE;
-        command_buffer = VK_NULL_HANDLE;
+    MemoryRegion *take() {
+        MemoryRegion *result = region;
+        region = nullptr;
+        return result;
     }
 };
 
-int vk_fill_command_buffer_with_dispatch_call(void *user_context,
-                                              VkDevice device,
-                                              VkCommandBuffer command_buffer,
-                                              VkPipeline compute_pipeline,
-                                              VkPipelineLayout pipeline_layout,
-                                              VkDescriptorSet descriptor_set,
-                                              uint32_t descriptor_set_index,
-                                              int blocksX, int blocksY, int blocksZ) {
+// Marks a submission whose fence has signaled as complete.
+int vk_retire_submission(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission) {
+    VkResult result = vkResetFences(allocator->current_device(), 1, &submission->fence);
+    if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vkResetFences returned " << vk_get_error_name(result) << "\n";
+        return halide_error_code_generic_error;
+    }
+    submission->in_flight = false;
 
-#ifdef DEBUG_RUNTIME
-    debug(user_context)
-        << " vk_fill_command_buffer_with_dispatch_call (user_context: " << user_context << ", "
-        << "device: " << (void *)device << ", "
-        << "command_buffer: " << (void *)command_buffer << ", "
-        << "pipeline_layout: " << (void *)pipeline_layout << ", "
-        << "descriptor_set: " << (void *)descriptor_set << ", "
-        << "descriptor_set_index: " << descriptor_set_index << ", "
-        << "blocks: " << blocksX << ", " << blocksY << ", " << blocksZ << ")\n";
-#endif
+    if (submission->staging_region != nullptr) {
+        allocator->submission_queue->staging_bytes_in_flight -= submission->staging_bytes;
+        int error_code = vk_release_region(user_context, allocator, submission->staging_region);
+        submission->staging_region = nullptr;
+        submission->staging_bytes = 0;
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to release a staging buffer!\n";
+            return error_code;
+        }
+    }
+    return halide_error_code_success;
+}
+
+int vk_create_submission_queue(void *user_context, VulkanMemoryAllocator *allocator, VkQueue queue, uint32_t queue_family_index) {
+    VulkanSubmissionQueue *submission_queue = (VulkanSubmissionQueue *)vk_host_malloc(user_context, sizeof(VulkanSubmissionQueue), 0,
+                                                                                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, allocator->callbacks());
+    if (submission_queue == nullptr) {
+        error(user_context) << "Vulkan: Failed to allocate the submission queue!\n";
+        return halide_error_code_out_of_memory;
+    }
+    memset((void *)submission_queue, 0, sizeof(VulkanSubmissionQueue));
+    submission_queue->queue = queue;
+    submission_queue->queue_family_index = queue_family_index;
+    allocator->submission_queue = submission_queue;
+
+    for (uint32_t n = 0; n < vk_submission_count; ++n) {
+        VulkanSubmission *submission = &submission_queue->submissions[n];
+        int error_code = vk_create_command_pool(user_context, allocator, queue_family_index, &submission->command_pool);
+        if (error_code == halide_error_code_success) {
+            error_code = vk_create_command_buffer(user_context, allocator, submission->command_pool, &submission->command_buffer);
+        }
+        if (error_code == halide_error_code_success) {
+            VkFenceCreateInfo fence_info = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0};
+            VkResult result = vkCreateFence(allocator->current_device(), &fence_info, allocator->callbacks(), &submission->fence);
+            if (result != VK_SUCCESS) {
+                error(user_context) << "Vulkan: vkCreateFence returned " << vk_get_error_name(result) << "\n";
+                error_code = halide_error_code_generic_error;
+            }
+        }
+        if (error_code != halide_error_code_success) {
+            vk_destroy_submission_queue(user_context, allocator);
+            return error_code;
+        }
+    }
+    return halide_error_code_success;
+}
+
+// Waits until all work submitted so far has completed. Unless asked not to retire
+// them, the submissions are then marked complete, which releases their staging
+// buffers.
+int vk_wait_for_submissions(void *user_context, VulkanMemoryAllocator *allocator, bool retire) {
+    if ((allocator == nullptr) || (allocator->submission_queue == nullptr)) {
+        return halide_error_code_success;
+    }
+    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+
+    VkFence fences[vk_submission_count];
+    uint32_t fence_count = 0;
+    for (uint32_t n = 0; n < vk_submission_count; ++n) {
+        if (submission_queue->submissions[n].in_flight) {
+            fences[fence_count++] = submission_queue->submissions[n].fence;
+        }
+    }
+    if (fence_count == 0) {
+        return halide_error_code_success;
+    }
+
+    VkResult result = vkWaitForFences(allocator->current_device(), fence_count, fences, VK_TRUE, uint64_t(-1));
+    if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vkWaitForFences returned " << vk_get_error_name(result) << "\n";
+        return halide_error_code_generic_error;
+    }
+    if (!retire) {
+        return halide_error_code_success;
+    }
+
+    for (uint32_t n = 0; n < vk_submission_count; ++n) {
+        VulkanSubmission *submission = &submission_queue->submissions[n];
+        if (submission->in_flight) {
+            int error_code = vk_retire_submission(user_context, allocator, submission);
+            if (error_code != halide_error_code_success) {
+                return error_code;
+            }
+        }
+    }
+    return halide_error_code_success;
+}
+
+int vk_destroy_submission_queue(void *user_context, VulkanMemoryAllocator *allocator) {
+    if ((allocator == nullptr) || (allocator->submission_queue == nullptr)) {
+        return halide_error_code_success;
+    }
+    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+
+    int error_code = vk_wait_for_submissions(user_context, allocator, true);
+    for (uint32_t n = 0; n < vk_submission_count; ++n) {
+        VulkanSubmission *submission = &submission_queue->submissions[n];
+        if (submission->args_region != nullptr) {
+            vk_destroy_scalar_uniform_buffer(user_context, allocator, submission->args_region);
+        }
+        if (submission->descriptor_pool != VK_NULL_HANDLE) {
+            vk_destroy_descriptor_pool(user_context, allocator, submission->descriptor_pool);
+        }
+        if (submission->fence != VK_NULL_HANDLE) {
+            vkDestroyFence(allocator->current_device(), submission->fence, allocator->callbacks());
+        }
+        if (submission->command_pool != VK_NULL_HANDLE) {
+            if (submission->command_buffer != VK_NULL_HANDLE) {
+                vk_destroy_command_buffer(user_context, allocator, submission->command_pool, submission->command_buffer);
+            }
+            vk_destroy_command_pool(user_context, allocator, submission->command_pool);
+        }
+    }
+    vk_host_free(user_context, submission_queue, allocator->callbacks());
+    allocator->submission_queue = nullptr;
+    return error_code;
+}
+
+// Returns the next submission of the ring, with its command buffer reset and begun.
+VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator *allocator, VkQueue queue, uint32_t queue_family_index) {
+    if (allocator->submission_queue == nullptr) {
+        int error_code = vk_create_submission_queue(user_context, allocator, queue, queue_family_index);
+        if (error_code != halide_error_code_success) {
+            return nullptr;
+        }
+    }
+
+    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+    if (submission_queue->queue_family_index != queue_family_index) {
+        error(user_context) << "Vulkan: The queue family changed for the same device!\n";
+        return nullptr;
+    }
+
+    // The barrier below only orders this submission after earlier work on the
+    // same queue: wait for the work on another queue to finish first.
+    if (submission_queue->queue != queue) {
+        if (vk_wait_for_submissions(user_context, allocator, true) != halide_error_code_success) {
+            return nullptr;
+        }
+        submission_queue->queue = queue;
+    }
+
+    VulkanSubmission *submission = &submission_queue->submissions[submission_queue->next];
+    submission_queue->next = (submission_queue->next + 1) % vk_submission_count;
+
+    if (submission->in_flight) {
+        VkResult result = vkWaitForFences(allocator->current_device(), 1, &submission->fence, VK_TRUE, uint64_t(-1));
+        if (result != VK_SUCCESS) {
+            error(user_context) << "Vulkan: vkWaitForFences returned " << vk_get_error_name(result) << "\n";
+            return nullptr;
+        }
+        if (vk_retire_submission(user_context, allocator, submission) != halide_error_code_success) {
+            return nullptr;
+        }
+    }
+
+    VkResult result = vkResetCommandPool(allocator->current_device(), submission->command_pool, 0);
+    if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vkResetCommandPool returned " << vk_get_error_name(result) << "\n";
+        return nullptr;
+    }
+    if (submission->descriptor_pool != VK_NULL_HANDLE) {
+        result = vkResetDescriptorPool(allocator->current_device(), submission->descriptor_pool, 0);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "Vulkan: vkResetDescriptorPool returned " << vk_get_error_name(result) << "\n";
+            return nullptr;
+        }
+    }
 
     VkCommandBufferBeginInfo command_buffer_begin_info = {
         VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
@@ -228,54 +444,144 @@ int vk_fill_command_buffer_with_dispatch_call(void *user_context,
         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
         nullptr                                       // pointer to parent command buffer
     };
-
-    VkResult result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+    result = vkBeginCommandBuffer(submission->command_buffer, &command_buffer_begin_info);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
+        error(user_context) << "Vulkan: vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        return nullptr;
     }
 
-    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
-    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout,
-                            descriptor_set_index, 1, &descriptor_set, 0, nullptr);
-    vkCmdDispatch(command_buffer, blocksX, blocksY, blocksZ);
+    // Run after all work submitted before (in submission order), and see what it wrote.
+    VkMemoryBarrier barrier = {
+        VK_STRUCTURE_TYPE_MEMORY_BARRIER,                         // struct type
+        nullptr,                                                  // pointer to struct extending this
+        VK_ACCESS_MEMORY_WRITE_BIT,                               // source access mask
+        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT};  // destination access mask
+    vkCmdPipelineBarrier(submission->command_buffer,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         0, 1, &barrier, 0, nullptr, 0, nullptr);
 
-    result = vkEndCommandBuffer(command_buffer);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    return halide_error_code_success;
+    submission->queue = queue;
+    return submission;
 }
 
-int vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer command_buffer) {
-#ifdef DEBUG_RUNTIME
-    debug(user_context)
-        << " vk_submit_command_buffer (user_context: " << user_context << ", "
-        << "queue: " << (void *)queue << ", "
-        << "command_buffer: " << (void *)command_buffer << ")\n";
-#endif
+// Ends the command buffer of the submission, and submits it to the queue. With
+// host_read, what it writes is made visible to reads on the host.
+int vk_end_submission(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission, bool host_read) {
+    if (host_read) {
+        VkMemoryBarrier barrier = {
+            VK_STRUCTURE_TYPE_MEMORY_BARRIER,  // struct type
+            nullptr,                           // pointer to struct extending this
+            VK_ACCESS_MEMORY_WRITE_BIT,        // source access mask
+            VK_ACCESS_HOST_READ_BIT};          // destination access mask
+        vkCmdPipelineBarrier(submission->command_buffer,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+                             0, 1, &barrier, 0, nullptr, 0, nullptr);
+    }
 
-    VkSubmitInfo submit_info =
-        {
-            VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
-            nullptr,                        // pointer to struct extending this
-            0,                              // wait semaphore count
-            nullptr,                        // semaphores
-            nullptr,                        // pipeline stages where semaphore waits occur
-            1,                              // how many command buffers to execute
-            &command_buffer,                // the command buffers
-            0,                              // number of semaphores to signal
-            nullptr                         // the semaphores to signal
-        };
+    VkResult result = vkEndCommandBuffer(submission->command_buffer);
+    if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        return halide_error_code_generic_error;
+    }
 
-    VkResult result = vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
+    VkSubmitInfo submit_info = {
+        VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
+        nullptr,                        // pointer to struct extending this
+        0,                              // wait semaphore count
+        nullptr,                        // semaphores
+        nullptr,                        // pipeline stages where semaphore waits occur
+        1,                              // how many command buffers to execute
+        &submission->command_buffer,    // the command buffers
+        0,                              // number of semaphores to signal
+        nullptr                         // the semaphores to signal
+    };
+    result = vkQueueSubmit(submission->queue, 1, &submit_info, submission->fence);
     if (result != VK_SUCCESS) {
         error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return halide_error_code_generic_error;
     }
+    submission->in_flight = true;
+    if (submission->staging_region != nullptr) {
+        allocator->submission_queue->staging_bytes_in_flight += submission->staging_bytes;
+    }
     return halide_error_code_success;
+}
+
+// Hands a staging buffer to a submission, which releases it once its work is done.
+void vk_attach_staging_region(VulkanSubmission *submission, MemoryRegion *staging_region, uint64_t size) {
+    submission->staging_region = staging_region;
+    submission->staging_bytes = size;
+}
+
+// Takes the staging buffer back from a submission that was not submitted.
+MemoryRegion *vk_detach_staging_region(VulkanSubmission *submission) {
+    MemoryRegion *staging_region = submission->staging_region;
+    submission->staging_region = nullptr;
+    submission->staging_bytes = 0;
+    return staging_region;
+}
+
+// Waits for earlier work rather than have too many bytes of staging buffers in flight.
+int vk_throttle_staging(void *user_context, VulkanMemoryAllocator *allocator, uint64_t size) {
+    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+    if ((submission_queue != nullptr) &&
+        (submission_queue->staging_bytes_in_flight > 0) &&
+        (submission_queue->staging_bytes_in_flight + size > vk_max_staging_bytes_in_flight)) {
+        return vk_wait_for_submissions(user_context, allocator, true);
+    }
+    return halide_error_code_success;
+}
+
+// Allocates a descriptor set for a kernel launch in the submission.
+int vk_create_submission_descriptor_set(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission,
+                                        VkDescriptorSetLayout descriptor_set_layout,
+                                        uint32_t uniform_buffer_count, uint32_t storage_buffer_count,
+                                        VkDescriptorSet *descriptor_set) {
+    // The submission is idle here: its descriptor pool can be replaced with a bigger one.
+    if ((submission->descriptor_pool == VK_NULL_HANDLE) || (storage_buffer_count > submission->descriptor_pool_storage_buffer_count)) {
+        if (submission->descriptor_pool != VK_NULL_HANDLE) {
+            vk_destroy_descriptor_pool(user_context, allocator, submission->descriptor_pool);
+            submission->descriptor_pool = VK_NULL_HANDLE;
+        }
+        uint32_t pool_storage_buffer_count = max(storage_buffer_count, (uint32_t)16);
+        int error_code = vk_create_descriptor_pool(user_context, allocator, 1, pool_storage_buffer_count, &submission->descriptor_pool);
+        if (error_code != halide_error_code_success) {
+            return error_code;
+        }
+        submission->descriptor_pool_storage_buffer_count = pool_storage_buffer_count;
+    }
+    (void)uniform_buffer_count;  // the pool always has room for the one uniform buffer
+    return vk_create_descriptor_set(user_context, allocator, descriptor_set_layout, submission->descriptor_pool, descriptor_set);
+}
+
+// Returns the uniform buffer of the submission, big enough for the scalar arguments.
+MemoryRegion *vk_submission_args_region(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission, size_t size) {
+    if ((submission->args_region == nullptr) || (size > submission->args_region_size)) {
+        if (submission->args_region != nullptr) {
+            vk_destroy_scalar_uniform_buffer(user_context, allocator, submission->args_region);
+            submission->args_region = nullptr;
+            submission->args_region_size = 0;
+        }
+        size_t region_size = max(size, (size_t)256);
+        submission->args_region = vk_create_scalar_uniform_buffer(user_context, allocator, region_size);
+        if (submission->args_region == nullptr) {
+            return nullptr;
+        }
+        submission->args_region_size = region_size;
+    }
+    return submission->args_region;
+}
+
+void vk_record_dispatch_call(VkCommandBuffer command_buffer,
+                             VkPipeline compute_pipeline,
+                             VkPipelineLayout pipeline_layout,
+                             VkDescriptorSet descriptor_set,
+                             uint32_t descriptor_set_index,
+                             int blocksX, int blocksY, int blocksZ) {
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout,
+                            descriptor_set_index, 1, &descriptor_set, 0, nullptr);
+    vkCmdDispatch(command_buffer, blocksX, blocksY, blocksZ);
 }
 
 // --
@@ -932,6 +1238,27 @@ int vk_create_compute_pipeline(void *user_context,
     return halide_error_code_success;
 }
 
+// Destroys the compute pipeline of a shader binding (if any), once the work in
+// flight that may use it has finished.
+int vk_drop_compute_pipeline(void *user_context, VulkanMemoryAllocator *allocator, VulkanShaderBinding *shader_bindings) {
+    if (shader_bindings->compute_pipeline == VK_NULL_HANDLE) {
+        return halide_error_code_success;
+    }
+    int error_code = vk_wait_for_submissions(user_context, allocator);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to wait for submitted work!\n";
+        return error_code;
+    }
+    error_code = vk_destroy_compute_pipeline(user_context, allocator, shader_bindings->compute_pipeline);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to destroy compute pipeline!\n";
+        return halide_error_code_generic_error;
+    }
+    shader_bindings->compute_pipeline = VK_NULL_HANDLE;
+    shader_bindings->specialized_constant_count = 0;
+    return halide_error_code_success;
+}
+
 int vk_setup_compute_pipeline(void *user_context,
                               VulkanMemoryAllocator *allocator,
                               VulkanShaderBinding *shader_bindings,
@@ -1093,23 +1420,45 @@ int vk_setup_compute_pipeline(void *user_context,
         specialization_info.pMapEntries = specialization_map_entries;
         specialization_info.pData = dispatch_constant_values;
 
-        // Recreate the pipeline with the requested shared memory allocation
-        if (shader_bindings->compute_pipeline) {
-            int error_code = vk_destroy_compute_pipeline(user_context, allocator, shader_bindings->compute_pipeline);
-            if (error_code != halide_error_code_success) {
-                error(user_context) << "Vulkan: Failed to destroy compute pipeline!\n";
-                return halide_error_code_generic_error;
+        // Reuse the pipeline if it was created with the same constants
+        if (shader_bindings->compute_pipeline && (shader_bindings->specialized_constant_count == dispatch_constant_count)) {
+            bool same = true;
+            for (uint32_t dc = 0; dc < dispatch_constant_count; dc++) {
+                same = same &&
+                       (shader_bindings->specialized_constant_ids[dc] == dispatch_constant_ids[dc]) &&
+                       (shader_bindings->specialized_constant_values[dc] == dispatch_constant_values[dc]);
             }
-            shader_bindings->compute_pipeline = VK_NULL_HANDLE;
+            if (same) {
+                return halide_error_code_success;
+            }
         }
 
-        int error_code = vk_create_compute_pipeline(user_context, allocator, entry_point_name, shader_module, pipeline_layout, &specialization_info, &(shader_bindings->compute_pipeline));
+        // Recreate the pipeline with the requested shared memory allocation
+        int error_code = vk_drop_compute_pipeline(user_context, allocator, shader_bindings);
+        if (error_code != halide_error_code_success) {
+            return error_code;
+        }
+
+        error_code = vk_create_compute_pipeline(user_context, allocator, entry_point_name, shader_module, pipeline_layout, &specialization_info, &(shader_bindings->compute_pipeline));
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to create compute pipeline!\n";
             return error_code;
         }
+        shader_bindings->specialized_constant_count = dispatch_constant_count;
+        for (uint32_t dc = 0; dc < dispatch_constant_count; dc++) {
+            shader_bindings->specialized_constant_ids[dc] = dispatch_constant_ids[dc];
+            shader_bindings->specialized_constant_values[dc] = dispatch_constant_values[dc];
+        }
 
     } else {
+
+        // Replace a pipeline that was specialized by an earlier dispatch
+        if (shader_bindings->specialized_constant_count != 0) {
+            int error_code = vk_drop_compute_pipeline(user_context, allocator, shader_bindings);
+            if (error_code != halide_error_code_success) {
+                return error_code;
+            }
+        }
 
         // Construct and re-use the fixed pipeline
         if (shader_bindings->compute_pipeline == VK_NULL_HANDLE) {
@@ -1693,16 +2042,6 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
                 shader_module->shader_bindings[n].entry_point_name = nullptr;
             } else {
                 debug(user_context) << "<unknown entry point>\n";
-            }
-            if (shader_module->shader_bindings[n].args_region) {
-                debug(user_context) << "  destroying shader binding args regions [" << n << "]\n";
-                vk_destroy_scalar_uniform_buffer(user_context, allocator, shader_module->shader_bindings[n].args_region);
-                shader_module->shader_bindings[n].args_region = nullptr;
-            }
-            if (shader_module->shader_bindings[n].descriptor_pool) {
-                debug(user_context) << "  destroying shader binding descriptor pool [" << n << "]\n";
-                vk_destroy_descriptor_pool(user_context, allocator, shader_module->shader_bindings[n].descriptor_pool);
-                shader_module->shader_bindings[n].descriptor_pool = VK_NULL_HANDLE;
             }
             if (shader_module->shader_bindings[n].specialization_constants) {
                 debug(user_context) << "  destroying shader binding specialization constants [" << n << "]\n";

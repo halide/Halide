@@ -26,6 +26,8 @@ class VulkanMemoryAllocator;
 struct VulkanShaderBinding;
 struct VulkanCompiledShaderModule;
 struct VulkanCompilationCacheEntry;
+struct VulkanSubmission;
+struct VulkanSubmissionQueue;
 
 // --------------------------------------------------------------------------
 
@@ -41,11 +43,7 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context, VkDevice d
                                                   const VkAllocationCallbacks *alloc_callbacks);
 
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator);
-int vk_clear_device_buffer(void *user_context,
-                           VulkanMemoryAllocator *allocator,
-                           VkCommandBuffer command_buffer,
-                           VkQueue command_queue,
-                           VkBuffer device_buffer);
+void vk_clear_device_buffer(VkCommandBuffer command_buffer, VkBuffer device_buffer);
 // --------------------------------------------------------------------------
 // Context
 // --------------------------------------------------------------------------
@@ -105,18 +103,18 @@ int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator
 int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
 int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
 
-struct ScopedVulkanCommandBufferAndPool;
+// -- Submissions
+VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator *allocator, VkQueue queue, uint32_t queue_family_index);
+int vk_end_submission(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission, bool host_read = false);
+int vk_wait_for_submissions(void *user_context, VulkanMemoryAllocator *allocator, bool retire = true);
+int vk_destroy_submission_queue(void *user_context, VulkanMemoryAllocator *allocator);
 
-int vk_fill_command_buffer_with_dispatch_call(void *user_context,
-                                              VkDevice device,
-                                              VkCommandBuffer command_buffer,
-                                              VkPipeline compute_pipeline,
-                                              VkPipelineLayout pipeline_layout,
-                                              VkDescriptorSet descriptor_set,
-                                              uint32_t descriptor_set_index,
-                                              int blocksX, int blocksY, int blocksZ);
-
-int vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer command_buffer);
+void vk_record_dispatch_call(VkCommandBuffer command_buffer,
+                             VkPipeline compute_pipeline,
+                             VkPipelineLayout pipeline_layout,
+                             VkDescriptorSet descriptor_set,
+                             uint32_t descriptor_set_index,
+                             int blocksX, int blocksY, int blocksZ);
 
 // -- Scalar Uniform Buffer
 bool vk_needs_scalar_uniform_buffer(void *user_context,

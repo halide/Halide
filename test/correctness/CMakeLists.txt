@@ -249,11 +249,13 @@ tests(
     gpu_condition_lifting.cpp
     gpu_cpu_simultaneous_read.cpp
     gpu_data_flows.cpp
+    gpu_device_release_idle.cpp
     gpu_different_blocks_threads_dimensions.cpp
     gpu_dynamic_and_register_realization.cpp
     gpu_dynamic_shared.cpp
     gpu_f16_intrinsics.cpp
     gpu_free_sync.cpp
+    gpu_free_while_in_flight.cpp
     gpu_give_input_buffers_device_allocations.cpp
     gpu_jit_explicit_copy_to_device.cpp
     gpu_lanes_reduction.cpp
