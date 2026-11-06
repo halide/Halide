@@ -266,6 +266,14 @@ int main(int argc, char **argv) {
         {"x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62"},
         {"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"},
         {"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"},
+        {"arm-64-ios-arm64e-arm_fp16", "arm-64-ios-arm64e", "arm-64-ios-arm64e"},
+        {"arm-64-ios-arm64e-armv84a", "arm-64-ios-arm64e", "arm-64-ios-arm64e"},
+        {"arm-64-ios-arm64e-armv85a", "arm-64-ios-arm64e-armv84a", "arm-64-ios-arm64e-armv84a"},
+        {"arm-64-ios-arm64e", "arm-64-ios", ""},
+        {"arm-64-ios-arm64e_x1-armv88a", "arm-64-ios-arm64e_x1", "arm-64-ios-arm64e_x1"},
+        {"arm-64-ios-arm64e_x1-armv89a", "arm-64-ios-arm64e_x1-armv88a", "arm-64-ios-arm64e_x1-armv88a"},
+        {"arm-64-ios-arm64e_x1", "arm-64-ios-arm64e", ""},
+        {"arm-64-ios-arm64e_x1", "arm-64-ios-arm64e-armv87a", ""},
     };
     for (const auto &test : gcd_tests) {
         Target result{};
@@ -283,6 +291,35 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
+
+    for (const char *s : {"arm-64-ios-arm64e", "arm-64-macos-arm64e",
+                          "arm-64-ios-arm64e_x1", "arm-64-macos-arm64e_x1"}) {
+        Target raw{s};
+        Target implied = raw.with_implied_features();
+        Target gcd{};
+        if (!raw.get_runtime_compatible_target(implied, gcd) || gcd != raw) {
+            printf("Expected gcd(%s, %s) == %s, got %s\n",
+                   raw.to_string().c_str(), implied.to_string().c_str(),
+                   raw.to_string().c_str(), gcd.to_string().c_str());
+            return 1;
+        }
+    }
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+    for (const char *bad_sim : {"arm-64-ios-arm64e-simulator",
+                                "arm-64-ios-arm64e_x1-simulator"}) {
+        bool threw = false;
+        try {
+            (void)Target(bad_sim);
+        } catch (const Halide::Error &) {
+            threw = true;
+        }
+        if (!threw) {
+            printf("Expected Target(\"%s\") to fail validation.\n", bad_sim);
+            return 1;
+        }
+    }
+#endif
 
     if (Target().vector_bits != 0) {
         printf("Default Target vector_bits not 0.\n");
@@ -365,6 +402,20 @@ int main(int argc, char **argv) {
         {"arm-64-osx",
          "arm-64-osx-armv8a-armv81a-armv82a-armv83a-armv84a",
          "arm-64-osx"},
+        // Apple arm64e implies ARM v8.3a and fp16 (plus v8.4a on macOS).
+        {"arm-64-ios-arm64e",
+         "arm-64-ios-armv8a-armv81a-armv82a-armv83a-arm_fp16-arm64e",
+         "arm-64-ios-arm64e"},
+        {"arm-64-macos-arm64e",
+         "arm-64-macos-armv8a-armv81a-armv82a-armv83a-armv84a-arm_fp16-arm64e",
+         "arm-64-macos-arm64e"},
+        // Apple arm64e.x1 implies arm64e, ARM v8.7a, fp16, and dotprod.
+        {"arm-64-ios-arm64e_x1",
+         "arm-64-ios-armv8a-armv81a-armv82a-armv83a-armv84a-armv85a-armv86a-armv87a-arm_fp16-arm_dot_prod-arm64e-arm64e_x1",
+         "arm-64-ios-arm64e_x1"},
+        {"arm-64-macos-arm64e_x1",
+         "arm-64-macos-armv8a-armv81a-armv82a-armv83a-armv84a-armv85a-armv86a-armv87a-arm_fp16-arm_dot_prod-arm64e-arm64e_x1",
+         "arm-64-macos-arm64e_x1"},
         // Tracing loads/stores implies tracing realizations.
         {"x86-64-linux-trace_loads",
          "x86-64-linux-trace_loads-trace_realizations",

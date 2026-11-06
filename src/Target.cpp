@@ -261,6 +261,13 @@ Target calculate_host_target() {
 
 #ifdef __APPLE__
     detection = CpuDetect::detect_arm_features(ops, host_arm_arch);
+#if defined(__arm64e__)
+#if defined(__arm64e_x1__) || (defined(__ARM_FEATURE_PAUTH_LR) && defined(__ARM_FEATURE_PAC_DEFAULT) && ((__ARM_FEATURE_PAC_DEFAULT & (1 << 3)) != 0))
+    initial_features.push_back(Target::ARM64eX1);
+#else
+    initial_features.push_back(Target::ARM64e);
+#endif
+#endif
 #endif  // __APPLE__
 
 #ifdef __linux__
@@ -663,6 +670,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"x86apx", Target::X86APX},
     {"simulator", Target::Simulator},
     {"no_metadata", Target::NoMetadata},
+    {"arm64e", Target::ARM64e},
+    {"arm64e_x1", Target::ARM64eX1},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -727,6 +736,13 @@ Target get_jit_target_from_environment() {
         t.set_feature(Target::JIT);
         user_assert((t.os == host.os && t.arch == host.arch && t.bits == host.bits) || Internal::WasmModule::can_jit_target(t))
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
+            << "HL_JIT_TARGET was " << target << ". "
+            << "Host is " << host.to_string() << ".\n";
+        auto pac_abi = [](const Target &x) {
+            return x.has_feature(Target::ARM64eX1) ? 2 : (x.has_feature(Target::ARM64e) ? 1 : 0);
+        };
+        user_assert(Internal::WasmModule::can_jit_target(t) || pac_abi(t) == pac_abi(host))
+            << "HL_JIT_TARGET must match the host arm64e pointer authentication ABI.\n"
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
         user_assert(!t.has_feature(Target::NoBoundsQuery))
@@ -909,6 +925,8 @@ void Target::validate_features() const {
     // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
     if (arch == X86) {
         do_check_bad(*this, {
+                                ARM64e,
+                                ARM64eX1,
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
@@ -956,6 +974,8 @@ void Target::validate_features() const {
                             });
     } else if (arch == WebAssembly) {
         do_check_bad(*this, {
+                                ARM64e,
+                                ARM64eX1,
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
@@ -1024,6 +1044,19 @@ void Target::validate_features() const {
         << "Target feature sme2 requires exactly one SME_SVL feature.\n";
     user_assert(has_feature(SME2) || num_sme_svl_features == 0)
         << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
+
+    if (has_feature(ARM64e)) {
+        user_assert(arch == ARM && bits == 64 && (os == IOS || os == MacOS))
+            << "Target feature arm64e requires 64-bit ARM on iOS or macOS. (" << *this << ")\n";
+        user_assert(!has_feature(Simulator))
+            << "Target feature arm64e cannot be combined with simulator. (" << *this << ")\n";
+    }
+    if (has_feature(ARM64eX1)) {
+        user_assert(arch == ARM && bits == 64 && (os == IOS || os == MacOS))
+            << "Target feature arm64e_x1 requires 64-bit ARM on iOS or macOS. (" << *this << ")\n";
+        user_assert(!has_feature(Simulator))
+            << "Target feature arm64e_x1 cannot be combined with simulator. (" << *this << ")\n";
+    }
 }
 
 Target::Target(const std::string &target) {
@@ -1220,6 +1253,14 @@ const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_
         {Target::AVX, Target::SSE41},
 
         // ARM
+        // Note: LLVM's Apple CPU models (e.g. apple-m5) use HasV8_7aOps rather than
+        // HasV8_8aOps/HasV8_9aOps because Apple cores do not implement FEAT_MOPS.
+        {Target::ARM64eX1, Target::ARM64e},
+        {Target::ARM64eX1, Target::ARMDotProd},
+        {Target::ARM64eX1, Target::ARMFp16},
+        {Target::ARM64eX1, Target::ARMv87a},
+        {Target::ARM64e, Target::ARMFp16},
+        {Target::ARM64e, Target::ARMv83a},
         {Target::SVE2, Target::ARMDotProd},
         {Target::SVE2, Target::ARMFp16},
         {Target::SVE, Target::ARMFp16},
@@ -1465,37 +1506,34 @@ int Target::get_d3d12compute_capability_lower_bound() const {
 }
 
 int Target::get_arm_v8_lower_bound() const {
+    int bound = -1;
     if (has_feature(Target::ARMv8a)) {
-        return 80;
+        bound = 80;
+    } else if (has_feature(Target::ARMv81a)) {
+        bound = 81;
+    } else if (has_feature(Target::ARMv82a)) {
+        bound = 82;
+    } else if (has_feature(Target::ARMv83a)) {
+        bound = 83;
+    } else if (has_feature(Target::ARMv84a)) {
+        bound = 84;
+    } else if (has_feature(Target::ARMv85a)) {
+        bound = 85;
+    } else if (has_feature(Target::ARMv86a)) {
+        bound = 86;
+    } else if (has_feature(Target::ARMv87a)) {
+        bound = 87;
+    } else if (has_feature(Target::ARMv88a)) {
+        bound = 88;
+    } else if (has_feature(Target::ARMv89a)) {
+        bound = 89;
     }
-    if (has_feature(Target::ARMv81a)) {
-        return 81;
+    if (has_feature(Target::ARM64eX1)) {
+        bound = std::max(bound, 87);
+    } else if (has_feature(Target::ARM64e)) {
+        bound = std::max(bound, 83);
     }
-    if (has_feature(Target::ARMv82a)) {
-        return 82;
-    }
-    if (has_feature(Target::ARMv83a)) {
-        return 83;
-    }
-    if (has_feature(Target::ARMv84a)) {
-        return 84;
-    }
-    if (has_feature(Target::ARMv85a)) {
-        return 85;
-    }
-    if (has_feature(Target::ARMv86a)) {
-        return 86;
-    }
-    if (has_feature(Target::ARMv87a)) {
-        return 87;
-    }
-    if (has_feature(Target::ARMv88a)) {
-        return 88;
-    }
-    if (has_feature(Target::ARMv89a)) {
-        return 89;
-    }
-    return -1;
+    return bound;
 }
 
 bool Target::supports_type(const Type &t) const {
@@ -1822,6 +1860,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }};
 
     const std::vector<Feature> matching_features = {{
+        ARM64e,
+        ARM64eX1,
         ASAN,
         Debug,
         EnableBacktraces,
@@ -1859,8 +1899,17 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         return false;
     }
 
-    if ((features & matching_mask) != (other.features & matching_mask)) {
-        debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
+    auto lhs_features = features;
+    auto rhs_features = other.features;
+    if (lhs_features[ARM64eX1]) {
+        lhs_features.set(ARM64e);
+    }
+    if (rhs_features[ARM64eX1]) {
+        rhs_features.set(ARM64e);
+    }
+
+    if ((lhs_features & matching_mask) != (rhs_features & matching_mask)) {
+        debug(1) << "runtime targets must agree on ARM64e, ARM64eX1, ASAN, Debug, EnableBacktraces, HexagonDma, HVX, MSAN, SoftFloatABI, TSAN, WasmThreads, SanitizerCoverage, Simulator\n"
                  << "  this:  " << *this << "\n"
                  << "  other: " << other << "\n";
         return false;
@@ -1870,7 +1919,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
     Target output = Target{os, arch, bits, processor_tune};
-    output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
+    output.features = ((lhs_features | rhs_features) & union_mask) | ((lhs_features | rhs_features) & matching_mask) | ((lhs_features & rhs_features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();
@@ -2027,6 +2076,22 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
     if (arm_v8_capability < 89) {
         output.features.reset(ARMv89a);
+    }
+    if (output.has_feature(ARM64eX1)) {
+        output.features.reset(ARM64e);
+        output.features.reset(ARMv8a);
+        output.features.reset(ARMv81a);
+        output.features.reset(ARMv82a);
+        output.features.reset(ARMv83a);
+        output.features.reset(ARMv84a);
+        output.features.reset(ARMv85a);
+        output.features.reset(ARMv86a);
+        output.features.reset(ARMv87a);
+    } else if (output.has_feature(ARM64e)) {
+        output.features.reset(ARMv8a);
+        output.features.reset(ARMv81a);
+        output.features.reset(ARMv82a);
+        output.features.reset(ARMv83a);
     }
 
     result = output;
