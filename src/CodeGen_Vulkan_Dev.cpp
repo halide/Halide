@@ -485,7 +485,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
         SpvId extracted_id = builder.current_id();
         SpvId composite_id = builder.reserve_id(SpvResultId);
         SpvFactory::Indices indices = {(uint32_t)i};
-        builder.append(SpvFactory::composite_insert(type_id, composite_id, extracted_id, value_id, indices));
+        builder.append(SpvFactory::composite_insert(type_id, composite_id, extracted_id, result_id, indices));
         result_id = composite_id;
     }
     builder.update_id(result_id);
@@ -1157,11 +1157,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         } else {
             // Generate Phi node if used as an expression.
             internal_assert(op->args.size() == 2 || op->args.size() == 3);
-            Expr else_expr;
-            if (op->args.size() == 3) {
-                else_expr = op->args[2];
-            }
-            SpvFactory::BlockVariables block_vars = emit_if_then_else(op->args[0], op->args[1], else_expr);
+            Expr else_expr = (op->args.size() == 3) ? op->args[2] : make_zero(op->type);
+            SpvFactory::BlockVariables block_vars = emit_if_then_else(cond, op->args[1], else_expr);
             SpvId type_id = builder.declare_type(op->type);
             SpvId result_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::phi(type_id, result_id, block_vars));
@@ -2190,7 +2187,7 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
         then_case.accept(this);
         SpvId then_id = builder.current_id();
         builder.append(SpvFactory::branch(merge_block_id));
-        block_vars.emplace_back(then_id, then_block_id);
+        block_vars.emplace_back(then_id, builder.current_block().id());
     }
     builder.leave_block();
 
@@ -2204,7 +2201,7 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
             else_case.accept(this);
             SpvId else_id = builder.current_id();
             builder.append(SpvFactory::branch(merge_block_id));
-            block_vars.emplace_back(else_id, else_block_id);
+            block_vars.emplace_back(else_id, builder.current_block().id());
         }
         builder.leave_block();
     }
