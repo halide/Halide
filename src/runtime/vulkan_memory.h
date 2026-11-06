@@ -859,6 +859,27 @@ uint32_t VulkanMemoryAllocator::required_flags_for_memory_properties(
                             << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
         return invalid_memory_type;
     };
+
+    // The runtime never flushes or invalidates mapped ranges, so a coherent request
+    // must get coherent memory, also from the fallback that only uses the required
+    // flags. Every device has a HOST_VISIBLE | HOST_COHERENT memory type (Vulkan spec).
+    switch (properties.caching) {
+    case MemoryCaching::CachedCoherent:
+    case MemoryCaching::UncachedCoherent:
+        if (required_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            required_flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        }
+        break;
+    case MemoryCaching::Cached:
+    case MemoryCaching::Uncached:
+    case MemoryCaching::DefaultCaching:
+        break;
+    case MemoryCaching::InvalidCaching:
+    default:
+        error(user_context) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory caching request!\n\t"
+                            << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
+        return invalid_memory_type;
+    };
     return required_flags;
 }
 
@@ -871,7 +892,13 @@ uint32_t VulkanMemoryAllocator::preferred_flags_for_memory_properties(
         preferred_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         break;
     case MemoryVisibility::DeviceToHost:
-        preferred_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        // The host reads this memory, so by default prefer it cached: device-local
+        // host-visible memory (e.g. a resizable BAR window into VRAM) is uncached for
+        // the CPU, and reads from it crawl across the bus (~20 MB/s instead of ~10 GB/s).
+        // An explicit caching request decides by itself (below).
+        if (properties.caching == MemoryCaching::DefaultCaching) {
+            preferred_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        }
         break;
     case MemoryVisibility::HostToDevice:
     case MemoryVisibility::DefaultVisibility:
