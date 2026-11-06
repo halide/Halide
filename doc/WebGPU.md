@@ -51,7 +51,7 @@ JIT compilation is not supported when using WebGPU with WASM.
 
 ## Running natively: `HL_TARGET=host-webgpu`
 
-> _Tested with Dawn release v20260624.223603_
+> _Tested with Dawn release v20260911.162847_
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
 [Dawn](https://dawn.googlesource.com/dawn/) or
@@ -128,7 +128,7 @@ HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node
 
 ## Setting up Dawn via vcpkg
 
-> _Tested with Dawn vcpkg port version 20260624.223603#1 on macOS (arm64); this
+> _Tested with Dawn vcpkg port version 20260911.162847#1 on macOS (arm64); this
 > is the version `vcpkg.json` pins, and CI verifies it_
 
 The Halide repository includes vcpkg support for automatically downloading and
@@ -322,13 +322,15 @@ between the pin and what the CI runners' vcpkg can actually install:
 python3 tools/mini-webgpu-tool.py pinstatus --remote
 ```
 
-```
+```text
 vcpkg.json pins dawn 20260624.223603#1
 asking vcpkg /path/to/vcpkg @ 15b12b99a227 (2026-10-27)
 that snapshot offers dawn 20260911.162847#1
 UPDATE AVAILABLE: ...
 PIN-UPDATE-AVAILABLE
 ```
+
+(example output, from a machine whose vcpkg snapshot had moved past the pin)
 
 It asks, in order, `--vcpkg-root`, `$VCPKG_INSTALLATION_ROOT`, `$VCPKG_ROOT`,
 then `vcpkg` on `PATH`, and reads `ports/dawn/vcpkg.json` from the first
@@ -364,6 +366,14 @@ python3 tools/mini-webgpu-tool.py sync   # rewrites + restamps, then checks
 `sync` re-emits the vendored header from the new Dawn, restamps the marker from
 the pin, and runs `check` itself -- so a layout change mid-descriptor surfaces
 as `struct layout mismatches` instead of as memory corruption at runtime.
+
+This is not hypothetical. The `20260624.223603` -> `20260911.162847` re-pin
+removed three fields (`loadDataFunction`, `storeDataFunction`,
+`functionUserdata`) from the *middle* of `WGPUDawnCacheDeviceDescriptor`, renamed
+`wgpuResourceTable{Insert,Remove}Binding` to `wgpuResourceTable{Insert,Remove}`
+and dropped five entry points while adding four -- while leaving every entry point
+Halide actually calls intact. A stale header against a newer `libwebgpu_dawn`
+would have parsed that descriptor at the wrong offsets, silently.
 
 <details>
 <summary>Manual fallback (what the sync tool does)</summary>
