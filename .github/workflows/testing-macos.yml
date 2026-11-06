@@ -280,6 +280,25 @@ jobs:
       - name: Check vendored WebGPU header matches the Dawn pin
         run: python3 tools/mini-webgpu-tool.py check
 
+      # Advisory signal, never a gate: says when this runner's own vcpkg snapshot
+      # offers a newer Dawn than our pin (so the pin can move), or when the pin is
+      # newer than the snapshot (which is what would break resolution here). The
+      # correctness gate is the check step below, after Configure.
+      - name: Report whether the Dawn pin can be updated
+        continue-on-error: true
+        run: |
+          out="${RUNNER_TEMP:-/tmp}/dawn-pinstatus.txt"
+          python3 tools/mini-webgpu-tool.py pinstatus --remote | tee "$out"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              echo '### Dawn pin availability'
+              echo
+              echo '```text'
+              cat "$out"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Configure CMake
         run: cmake --preset ci-macos-arm-64-webgpu -DHalide_TARGET=host-webgpu
 

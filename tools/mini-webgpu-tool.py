@@ -38,6 +38,12 @@ Subcommands
                          idempotency against throwaway fixtures in temp dirs. Never
                          touches the real tree. Degrades to the marker-only cases
                          when no Dawn-generated header is available.
+  pinstatus              Report whether a newer Dawn is available than the
+                         vcpkg.json pin, using the vcpkg instance the build would
+                         use (on CI runners, the image's own snapshot). Advisory
+                         only: exit 0 whatever it concludes, unless --strict is
+                         given. Also warns when the pin is NEWER than that
+                         snapshot, which is the case that breaks CI resolution.
 
 The Dawn-generated header sync takes is the one vcpkg installs for the pinned
 version, e.g.
@@ -62,6 +68,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MINI_REL = "src/runtime/mini_webgpu.h"
@@ -80,14 +88,19 @@ LOCAL_HELPERS = ("wgpu_sv_to_cstr",)
 SCAN = ["src/runtime/webgpu.cpp", "test/common/gpu_context.h"]
 
 
-def dawn_pin():
-    """The `dawn` version pinned in vcpkg.json's overrides."""
+def pin_info():
+    """(version, port-version) for the `dawn` override in vcpkg.json."""
     with open(os.path.join(REPO, "vcpkg.json")) as fh:
         manifest = json.load(fh)
     for o in manifest.get("overrides", []):
         if o["name"] == "dawn":
-            return o["version"]
+            return o["version"], int(o.get("port-version", 0))
     raise SystemExit("no `dawn` override in vcpkg.json")
+
+
+def dawn_pin():
+    """The `dawn` version pinned in vcpkg.json's overrides."""
+    return pin_info()[0]
 
 
 # Default fixtures for `selftest` / `sync`: any build dir with a configured WebGPU
@@ -274,6 +287,176 @@ def cmd_check(args):
     return rc
 
 
+# ----------------------------------------------------------------- pin availability
+
+# The newest `dawn` port on vcpkg master, for the --remote comparison.
+MASTER_PORT_URL = (
+    "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/dawn/vcpkg.json"
+)
+
+
+def vcpkg_roots(explicit=None):
+    """Candidate vcpkg instances, most authoritative first.
+
+    On GitHub-hosted runners VCPKG_INSTALLATION_ROOT is the checkout baked into
+    the image, so its registry snapshot *is* what CI can install -- which is what
+    constrains our pin, regardless of what a newer local vcpkg knows about.
+    """
+    cands = [explicit]
+    cands += [os.environ.get(v) for v in ("VCPKG_INSTALLATION_ROOT", "VCPKG_ROOT")]
+    exe = shutil.which("vcpkg")
+    if exe:
+        cands.append(os.path.dirname(os.path.realpath(exe)))
+    return [c for c in cands if c and os.path.isdir(os.path.join(c, "ports", "dawn"))]
+
+
+def port_json(path):
+    """(version, port-version) from a port's vcpkg.json, or None if unreadable."""
+    try:
+        with open(path) as fh:
+            j = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    v = j.get("version") or j.get("version-date") or j.get("version-semver")
+    if not v:
+        return None
+    return str(v), int(j.get("port-version", 0))
+
+
+def baseline(root):
+    """(short sha, commit date) of a vcpkg checkout, or (None, None)."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", root, "log", "-1", "--format=%H%x09%cd", "--date=short"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None, None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None, None
+    sha, _, date = proc.stdout.strip().partition("\t")
+    return sha[:12], date
+
+
+def version_key(v):
+    """Order Dawn versions (date.build.portversion); None when unparseable."""
+    if v is None:
+        return None
+    s, pv = v
+    m = re.match(r"^(\d{8})(?:\.(\d+))?$", s)
+    if not m:
+        return (0, int(s), pv) if s.isdigit() else None
+    return (int(m.group(1)), int(m.group(2) or 0), pv)
+
+
+def remote_dawn(timeout=10):
+    """(version, port-version) on vcpkg master, or (None, reason)."""
+    try:
+        req = urllib.request.Request(
+            MASTER_PORT_URL, headers={"User-Agent": "halide-mini-webgpu-tool"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            j = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
+        return None, f"{type(e).__name__}: {e}"
+    v = j.get("version") or j.get("version-date") or j.get("version-semver")
+    if not v:
+        return None, "no version field in the master port manifest"
+    return (str(v), int(j.get("port-version", 0))), None
+
+
+def pinstatus(explicit=None, remote=False):
+    """Compare the vcpkg.json Dawn pin with what a vcpkg instance can install.
+
+    Returns (verdict, lines). The verdict is one of PIN-UP-TO-DATE,
+    PIN-UPDATE-AVAILABLE, PIN-AHEAD-OF-REGISTRY or PIN-UNKNOWN; none of them is a
+    failure, this is a heads-up about an available update, not a correctness gate
+    (`check` is the gate).
+    """
+    out = []
+    try:
+        pin, pin_pv = pin_info()
+    except SystemExit as e:
+        return "PIN-UNKNOWN", [f"FAIL: {e}"]
+    out.append(f"vcpkg.json pins dawn {pin}#{pin_pv}")
+
+    roots = vcpkg_roots(explicit)
+    if not roots:
+        return "PIN-UNKNOWN", [
+            *out,
+            "NOTE: no vcpkg instance found (set VCPKG_INSTALLATION_ROOT or VCPKG_ROOT, "
+            "or pass --vcpkg-root); cannot say what is available",
+        ]
+    root = roots[0]
+    sha, date = baseline(root)
+    where = f"{root}" + (f" @ {sha} ({date})" if sha else " (baseline sha unknown)")
+    out.append(f"asking vcpkg {where}")
+    if len(roots) > 1:
+        out.append(f"  (also visible: {', '.join(roots[1:])})")
+
+    avail = port_json(os.path.join(root, "ports", "dawn", "vcpkg.json"))
+    if avail is None:
+        return "PIN-UNKNOWN", [*out, "NOTE: could not read ports/dawn/vcpkg.json"]
+    out.append(f"that snapshot offers dawn {avail[0]}#{avail[1]}")
+
+    kpin, kavail = version_key((pin, pin_pv)), version_key(avail)
+    if kpin is None or kavail is None:
+        return "PIN-UNKNOWN", [
+            *out,
+            "NOTE: unparseable version string; skipping the comparison",
+        ]
+
+    verdict = "PIN-UP-TO-DATE"
+    if kavail > kpin:
+        verdict = "PIN-UPDATE-AVAILABLE"
+        out.append(
+            f"UPDATE AVAILABLE: {avail[0]}#{avail[1]} is newer than the pin. Bump the "
+            "`dawn` override in vcpkg.json, then run sync + check so the vendored "
+            "header moves with it (struct layouts can change mid-descriptor)."
+        )
+    elif kavail < kpin:
+        verdict = "PIN-AHEAD-OF-REGISTRY"
+        out.append(
+            f"WARNING: the pin is newer than this vcpkg snapshot ({avail[0]}#{avail[1]}), "
+            "so a checkout of this registry cannot install it. CI images with the same "
+            "baseline will fail to resolve the manifest unless they use a newer "
+            "baseline or VCPKG_BASELINE."
+        )
+    else:
+        out.append("pin matches what this vcpkg offers")
+
+    if remote:
+        latest, why = remote_dawn()
+        if latest is None:
+            out.append(
+                f"NOTE: vcpkg master lookup failed ({why}); report is local-only"
+            )
+        else:
+            out.append(f"vcpkg master currently has dawn {latest[0]}#{latest[1]}")
+            kmaster = version_key(latest)
+            if kmaster and kmaster > max(kpin, kavail):
+                out.append(
+                    f"NOTE: master is newer than both the pin and this snapshot; "
+                    f"updating the local vcpkg checkout (or the runner image) would "
+                    f"expose {latest[0]}#{latest[1]}"
+                )
+
+    return verdict, out
+
+
+def cmd_pinstatus(args):
+    verdict, out = pinstatus(explicit=args.vcpkg_root, remote=args.remote)
+    print("\n".join(out))
+    print(verdict)
+    # Advisory by default: an available update must never break CI. --strict lets
+    # a maintainer cron job or local shell ask for a nonzero exit instead.
+    if args.strict and verdict == "PIN-UPDATE-AVAILABLE":
+        return 1
+    return 0
+
+
 # ---------------------------------------------------------------------------- sync
 
 
@@ -398,14 +581,9 @@ def selftest(gen, lib):
     """
     results = []
 
-    def run(tmp, build):
+    def run(tmp, argv):
         p = subprocess.run(
-            [
-                sys.executable,
-                os.path.join(tmp, "tools", "mini-webgpu-tool.py"),
-                "check",
-                build,
-            ],
+            [sys.executable, os.path.join(tmp, "tools", "mini-webgpu-tool.py"), *argv],
             capture_output=True,
             text=True,
         )
@@ -461,7 +639,7 @@ def selftest(gen, lib):
         tmp = tempfile.mkdtemp(prefix="miniwebgpu_")
         try:
             fixture(tmp, ver, corrupt, gen, lib)
-            got, out = run(tmp, "build")
+            got, out = run(tmp, ["check", "build"])
             key = [
                 line
                 for line in out.splitlines()
@@ -475,11 +653,38 @@ def selftest(gen, lib):
     tmp = tempfile.mkdtemp(prefix="miniwebgpu_notree_")
     try:
         fixture(tmp, "20260624.223603", None)
-        got, out = run(tmp, "build")
+        got, out = run(tmp, ["check", "build"])
         key = [line for line in out.splitlines() if line.startswith("NOTE")]
         results.append(("no build tree", 0, got, got == 0, key[:1]))
     finally:
         shutil.rmtree(tmp)
+
+    # pinstatus is advisory: neither an available update nor a missing vcpkg may
+    # fail CI; only --strict turns the signal into a nonzero exit. Fake vcpkg roots
+    # make the verdict independent of what this machine has installed.
+    # (name, version for the fake ports/dawn/vcpkg.json, strict, expected exit)
+    for name, ver, strict, want in (
+        ("pin newer", "29990101.1", False, 0),
+        ("pin newer strict", "29990101.1", True, 1),
+        ("pin older", "20200101.1", True, 0),
+        ("pin unreadable", None, True, 0),
+    ):
+        tmp = tempfile.mkdtemp(prefix="miniwebgpu_pin_")
+        try:
+            fixture(tmp, "20260624.223603", None)
+            root = os.path.join(tmp, "vcpkgroot")
+            os.makedirs(os.path.join(root, "ports", "dawn"))
+            if ver:
+                with open(os.path.join(root, "ports", "dawn", "vcpkg.json"), "w") as fh:
+                    json.dump({"name": "dawn", "version": ver, "port-version": 1}, fh)
+            argv = ["pinstatus", "--vcpkg-root", root]
+            if strict:
+                argv.append("--strict")
+            got, out = run(tmp, argv)
+            verdict = [line for line in out.splitlines() if line.startswith("PIN-")]
+            results.append((name, want, got, got == want, verdict[:1]))
+        finally:
+            shutil.rmtree(tmp)
 
     # sync must be idempotent: rendering twice yields identical text.
     if gen:
@@ -566,6 +771,30 @@ def main():
         help="build dir to verify against (default: derive from the header path)",
     )
     s.set_defaults(func=cmd_sync)
+
+    q = sub.add_parser(
+        "pinstatus",
+        help="report (advisory only) whether a newer Dawn is available than the pin",
+    )
+    q.add_argument(
+        "--vcpkg-root",
+        default=None,
+        help="vcpkg instance to ask; default is $VCPKG_INSTALLATION_ROOT, then "
+        "$VCPKG_ROOT, then `vcpkg` on PATH. On GitHub runners "
+        "$VCPKG_INSTALLATION_ROOT is the image's own snapshot, which is what "
+        "constrains the pin there.",
+    )
+    q.add_argument(
+        "--remote",
+        action="store_true",
+        help="also query vcpkg master on GitHub, to show what a newer baseline would offer",
+    )
+    q.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit 1 when an update is available (off by default so CI stays green)",
+    )
+    q.set_defaults(func=cmd_pinstatus)
 
     t = sub.add_parser(
         "selftest",

@@ -311,6 +311,60 @@ once before Configure for a cheap pin check, and once afterwards with the build
 dir passed explicitly (`check build`), where a "no Dawn-generated webgpu.h" note
 or a missing `PASS` fails the job.
 
+### Knowing when the pin can move
+
+`check` answers "is the header consistent with the pin?". It deliberately says
+nothing about whether the pin is *current*, because a pin can lag behind Dawn
+indefinitely without anything being wrong. The gap worth watching is the one
+between the pin and what the CI runners' vcpkg can actually install:
+
+```sh
+python3 tools/mini-webgpu-tool.py pinstatus --remote
+```
+
+```
+vcpkg.json pins dawn 20260624.223603#1
+asking vcpkg /path/to/vcpkg @ 15b12b99a227 (2026-10-27)
+that snapshot offers dawn 20260911.162847#1
+UPDATE AVAILABLE: ...
+PIN-UPDATE-AVAILABLE
+```
+
+It asks, in order, `--vcpkg-root`, `$VCPKG_INSTALLATION_ROOT`, `$VCPKG_ROOT`,
+then `vcpkg` on `PATH`, and reads `ports/dawn/vcpkg.json` from the first
+instance found. On GitHub-hosted runners `$VCPKG_INSTALLATION_ROOT` is the
+checkout baked into the image, so its registry snapshot *is* what CI can install
+-- which is what constrains the pin there, and it needs no network. `--remote`
+additionally fetches the `dawn` port from vcpkg master, showing what a newer
+baseline (or a refreshed runner image) would expose; if the network is
+unavailable it notes that and stays local.
+
+The verdict is one of four lines, and **none of them is a failure**: the exit
+code is always 0, and the CI step is additionally `continue-on-error`.
+
+| Verdict                 | Meaning                                                                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PIN-UP-TO-DATE`        | the snapshot offers exactly what is pinned                                                                                                               |
+| `PIN-UPDATE-AVAILABLE`  | the snapshot is newer, so the pin *can* move                                                                                                             |
+| `PIN-AHEAD-OF-REGISTRY` | the pin is newer than the snapshot, so a checkout of that registry cannot install it and a runner on the same baseline will fail to resolve the manifest |
+| `PIN-UNKNOWN`           | no vcpkg instance visible, or the port manifest was unreadable                                                                                           |
+
+`--strict` flips only `PIN-UPDATE-AVAILABLE` into exit 1, for a local cron or
+scheduled workflow that wants to be noisy about staleness. CI does not use it:
+staleness is maintenance, not breakage.
+
+Moving the pin is a two-file change, because the vendored header has to travel
+with it. Bump the `dawn` override in `vcpkg.json`, re-Configure so the new
+header lands in the build tree, then:
+
+```sh
+python3 tools/mini-webgpu-tool.py sync   # rewrites + restamps, then checks
+```
+
+`sync` re-emits the vendored header from the new Dawn, restamps the marker from
+the pin, and runs `check` itself -- so a layout change mid-descriptor surfaces
+as `struct layout mismatches` instead of as memory corruption at runtime.
+
 <details>
 <summary>Manual fallback (what the sync tool does)</summary>
 
