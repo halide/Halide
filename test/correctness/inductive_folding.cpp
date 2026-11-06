@@ -98,6 +98,92 @@ int box_filter_chained_inductive_fold() {
     });
 }
 
+int cascaded_second_order_fold4() {
+    // Clamping the reads of the previous section keeps each section's
+    // region pinned to the base case, so each one warms up on the first
+    // iteration rather than by rewinding the loop.
+    Var c("c"), n("n"), co("co"), ci("ci");
+    Func in("in");
+    in(c, n) = (c * 7 + n * 13) % 17;
+    Func prev = in;
+    std::vector<Func> sections;
+    for (int k = 0; k < 2; k++) {
+        Func s(Int(32), "s" + std::to_string(k));
+        s(c, n) = prev(c, max(n, 0)) +
+                  select(n < 1, 0, likely(prev(c, max(n - 1, 0)) - s(c, n - 1))) +
+                  select(n < 2, 0, likely(prev(c, max(n - 2, 0)) + s(c, n - 2)));
+        sections.push_back(s);
+        prev = s;
+    }
+    Func g("g");
+    g(c, n) = prev(c, n);
+    g.split(c, co, ci, 4).reorder(ci, co, n);
+    for (Func s : sections) {
+        s.store_root().compute_at(g, co).fold_storage(n, 4);
+    }
+    g.bound(c, 0, 8).bound(n, 0, 32);
+
+    Buffer<int> im = g.realize({8, 32});
+    return check_image(im, [](int c, int n) {
+        std::vector<int> u(n + 1), v(n + 1);
+        for (int i = 0; i <= n; i++) {
+            u[i] = (c * 7 + i * 13) % 17;
+        }
+        for (int k = 0; k < 2; k++) {
+            for (int i = 0; i <= n; i++) {
+                v[i] = u[i] +
+                       (i >= 1 ? u[i - 1] - v[i - 1] : 0) +
+                       (i >= 2 ? u[i - 2] + v[i - 2] : 0);
+            }
+            std::swap(u, v);
+        }
+        return u[n];
+    });
+}
+
+int cascaded_second_order_split_slide() {
+    // Sliding over a split dimension rewinds the outer loop, and each section
+    // must warm up a little earlier than the one it feeds. Each section only
+    // needs its own last two values, so all of them fold to 4.
+    Var c("c"), n("n"), no("no"), ni("ni");
+    Func in("in");
+    in(c, n) = (c * 7 + n * 13) % 17;
+    Func prev = BoundaryConditions::constant_exterior(in, 0, {{0, 8}, {0, 32}});
+    std::vector<Func> sections;
+    for (int k = 0; k < 6; k++) {
+        Func s(Int(32), "s" + std::to_string(k));
+        s(c, n) = prev(c, n) +
+                  select(n < 1, 0, prev(c, n - 1) - s(c, n - 1)) +
+                  select(n < 2, 0, prev(c, n - 2) + s(c, n - 2));
+        sections.push_back(s);
+        prev = s;
+    }
+    Func g("g");
+    g(c, n) = prev(c, n);
+    g.reorder(n, c).split(n, no, ni, 4, TailStrategy::RoundUp).unroll(ni);
+    for (Func s : sections) {
+        s.store_at(g, c).compute_at(g, ni).slide(g, n).fold_storage(n, 4);
+    }
+    g.bound(c, 0, 8);
+
+    Buffer<int> im = g.realize({8, 32});
+    return check_image(im, [](int c, int n) {
+        std::vector<int> u(n + 1), v(n + 1);
+        for (int i = 0; i <= n; i++) {
+            u[i] = (c * 7 + i * 13) % 17;
+        }
+        for (int k = 0; k < 6; k++) {
+            for (int i = 0; i <= n; i++) {
+                v[i] = u[i] +
+                       (i >= 1 ? u[i - 1] - v[i - 1] : 0) +
+                       (i >= 2 ? u[i - 2] + v[i - 2] : 0);
+            }
+            std::swap(u, v);
+        }
+        return u[n];
+    });
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -111,6 +197,8 @@ int main(int argc, char **argv) {
         {"loop-reordered recurrence, fold_storage 2", multi_inner_injective_fold1},
         {"strided non-fold consumer access, fold_storage 2", consumer_strided_nonfold_fold1},
         {"box filter, fold_storage 2", box_filter_chained_inductive_fold},
+        {"cascaded second-order recurrences, fold_storage 4", cascaded_second_order_fold4},
+        {"cascade sliding over a split dimension, fold_storage 4", cascaded_second_order_split_slide},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;

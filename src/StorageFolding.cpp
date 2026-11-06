@@ -643,8 +643,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // Take the difference before CSE, so that the terms the two ends
             // have in common cancel rather than being hidden behind lets.
             Expr diff = max - min;
+            Expr initial_diff = substitute(name, var_bounds.min,
+                                           substitute(steady_state, const_false(), diff));
             Expr extent_expr = (Max::make(substitute(steady_state, const_true(), diff),
-                                          substitute(steady_state, const_false(), diff)) +
+                                          initial_diff) +
                                 1);
             Expr extent = simplify(common_subexpression_elimination(extent_expr), bounds);
 
