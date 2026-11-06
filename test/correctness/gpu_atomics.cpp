@@ -26,9 +26,9 @@ Expr bin_of(const Expr &x) {
 
 template<typename T>
 Expr const_of(T v) {
-    if (std::is_floating_point<T>::value) {
+    if (std::is_floating_point_v<T>) {
         return Internal::make_const(type_of<T>(), (double)v);
-    } else if (std::is_signed<T>::value) {
+    } else if (std::is_signed_v<T>) {
         return Internal::make_const(type_of<T>(), (int64_t)v);
     } else {
         return Internal::make_const(type_of<T>(), (uint64_t)v);
@@ -48,18 +48,18 @@ int ref_bin_of(int x) {
 
 template<typename T>
 Expr value_of(const Expr &x) {
-    if (std::is_floating_point<T>::value) {
+    if (std::is_floating_point_v<T>) {
         return cast<T>((x * 37) % 1001) / 7;
     }
-    return cast<T>((x * 7919) % 100003 - (std::is_signed<T>::value ? 50000 : 0));
+    return cast<T>((x * 7919) % 100003 - (std::is_signed_v<T> ? 50000 : 0));
 }
 
 template<typename T>
 T ref_value_of(int x) {
-    if (std::is_floating_point<T>::value) {
+    if (std::is_floating_point_v<T>) {
         return (T)((x * 37) % 1001) / 7;
     }
-    return (T)((x * 7919) % 100003 - (std::is_signed<T>::value ? 50000 : 0));
+    return (T)((x * 7919) % 100003 - (std::is_signed_v<T> ? 50000 : 0));
 }
 
 enum class Op {
@@ -94,7 +94,7 @@ const char *op_name(Op op) {
 
 template<typename T>
 int test_scatter(Op op, const Target &target) {
-    const bool is_float = std::is_floating_point<T>::value;
+    const bool is_float = std::is_floating_point_v<T>;
     if (is_float && (op == Op::And || op == Op::Or || op == Op::Xor)) {
         return 0;
     }
@@ -246,6 +246,66 @@ int test_shared_histogram(const Target &target) {
     return 0;
 }
 
+// Updates whose index and value share subexpressions, which common
+// subexpression elimination lifts into lets.
+template<typename T>
+int test_shared_subexpressions(const Target &target) {
+    Var x;
+    RDom r(0, img_size);
+    Expr b = bin_of(r);
+    Expr v = value_of<T>(r);
+
+    // The value depends on the bin, and the update is vectorized.
+    Func f;
+    f(x) = cast<T>(0);
+    f(b) += cast<T>(b);
+    RVar ro, ri, rio, rii;
+    f.update()
+        .atomic()
+        .split(r, ro, ri, 80)
+        .split(ri, rio, rii, 4)
+        .gpu_blocks(ro)
+        .gpu_threads(rio)
+        .vectorize(rii);
+
+    // The operand of a min uses a value twice.
+    Func g;
+    g(x) = const_of<T>(std::numeric_limits<T>::max());
+    g(b) = min(g(b), v + min(v, const_of<T>(1000)));
+    g.update()
+        .atomic()
+        .split(r, ro, ri, 64)
+        .gpu_blocks(ro)
+        .gpu_threads(ri);
+
+    std::vector<T> ref_f(hist_size, T(0));
+    std::vector<T> ref_g(hist_size, std::numeric_limits<T>::max());
+    for (int i = 0; i < img_size; i++) {
+        int bin = ref_bin_of(i);
+        T val = ref_value_of<T>(i);
+        ref_f[bin] += T(bin);
+        ref_g[bin] = std::min(ref_g[bin], T(val + std::min(val, T(1000))));
+    }
+
+    for (int iter = 0; iter < 5; iter++) {
+        Buffer<T> out_f = f.realize({hist_size}, target);
+        Buffer<T> out_g = g.realize({hist_size}, target);
+        for (int i = 0; i < hist_size; i++) {
+            if (out_f(i) != ref_f[i]) {
+                printf("vectorized update of %s depending on the bin: out(%d) = %f instead of %f\n",
+                       type_name<T>().c_str(), i, (double)out_f(i), (double)ref_f[i]);
+                return 1;
+            }
+            if (std::abs((double)out_g(i) - (double)ref_g[i]) > 1e-3 * std::max(1.0, std::abs((double)ref_g[i]))) {
+                printf("min of %s with a repeated subexpression: out(%d) = %f instead of %f\n",
+                       type_name<T>().c_str(), i, (double)out_g(i), (double)ref_g[i]);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 template<typename T>
 int test_all(const Target &target) {
     for (Op op : {Op::Add, Op::Min, Op::Max, Op::And, Op::Or, Op::Xor, Op::Mul}) {
@@ -253,7 +313,8 @@ int test_all(const Target &target) {
             return 1;
         }
     }
-    return test_shared_histogram<T>(target);
+    return test_shared_subexpressions<T>(target) ||
+           test_shared_histogram<T>(target);
 }
 
 }  // namespace
@@ -264,10 +325,8 @@ int main(int argc, char **argv) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
-    if (target.has_feature(Target::Metal) ||
-        target.has_feature(Target::WebGPU) ||
-        target.has_feature(Target::D3D12Compute)) {
-        printf("[SKIP] These atomic updates are not supported in this GPU backend.\n");
+    if (!target.has_feature(Target::Vulkan)) {
+        printf("[SKIP] These atomic updates are only tested on Vulkan.\n");
         return 0;
     }
 
@@ -277,13 +336,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const bool has_64_bit_atomics =
-        target.has_feature(Target::CUDA) ||
-        target.has_feature(Target::CLAtomics64) ||
-        target.has_feature(Target::VulkanInt64);
-    if (has_64_bit_atomics) {
+    if (target.has_feature(Target::VulkanInt64)) {
         if (test_all<uint64_t>(target) ||
             test_all<int64_t>(target)) {
+            return 1;
+        }
+        if (target.has_feature(Target::VulkanFloat64) &&
+            test_all<double>(target)) {
             return 1;
         }
     }

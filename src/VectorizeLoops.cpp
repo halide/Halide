@@ -1610,10 +1610,16 @@ protected:
     using IRMutator::visit;
 
     Stmt visit(const Atomic *op) override {
+        // Substitute in the lets of the expressions, so that equal
+        // subexpressions (e.g. the index of a store and of the load of
+        // the same location) are lifted to the same variable.
+        Stmt body = mutate_with(op->body, [](auto *self, const Let *let) {
+            return substitute_in_all_lets(Expr(let));
+        });
         FindVectorizableExprsInAtomicNode finder(op->producer_name, env);
-        finder.mutate(op->body);
+        finder.mutate(body);
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
-        Stmt new_body = lifter.mutate(op->body);
+        Stmt new_body = lifter.mutate(body);
         new_body = op->with(new_body);
         return rewrap_all_lets(new_body, lifter.lifted);
     }

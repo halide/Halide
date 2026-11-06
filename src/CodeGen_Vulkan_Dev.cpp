@@ -21,6 +21,7 @@
 #include "Simplify.h"
 #include "SpirvIR.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Target.h"
 
 #ifdef WITH_SPIRV
@@ -1923,14 +1924,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::atomic_store_at_scalar_index(const Store
         return result_id;
     };
 
-    // Express the new value in terms of the current value at the location
+    // Express the new value in terms of the current value at the location.
+    // Lets are substituted in first, so that loads of the location can be
+    // matched against the index, and the operator of the update is exposed.
     const std::string old_name = unique_name("atomic_old");
     Expr old_var = Variable::make(value_type, old_name);
-    Expr new_value = ReplaceLoad(op->name, index, old_var).mutate(value);
+    Expr new_value = ReplaceLoad(op->name, substitute_in_all_lets(index), old_var).mutate(substitute_in_all_lets(value));
 
-    if (!expr_uses_var(new_value, old_name)) {
-        // The new value doesn't depend on the old one
-        new_value.accept(this);
+    bool loads_buffer = false;
+    visit_with(new_value, [&](auto *self, const Load *load) {
+        loads_buffer |= (load->name == op->name);
+        self->visit_base(load);
+    });
+
+    if (!expr_uses_var(new_value, old_name) && !loads_buffer) {
+        // The new value doesn't depend on the contents of the buffer
+        common_subexpression_elimination(new_value).accept(this);
         SpvId value_id = to_storage(builder.current_id());
         builder.append(SpvFactory::atomic_store(ptr_id, memory_scope_id, semantics_id, value_id));
         return;
@@ -1967,7 +1976,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::atomic_store_at_scalar_index(const Store
         }
 
         if (op_code != SpvOpNop) {
-            operand.accept(this);
+            common_subexpression_elimination(operand).accept(this);
             SpvId operand_id = builder.current_id();
             SpvId result_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::atomic_binary_op(op_code, storage_type_id, result_id, ptr_id, memory_scope_id, semantics_id, operand_id));
@@ -2020,7 +2029,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::atomic_store_at_scalar_index(const Store
         SpvId desired_id = SpvInvalidId;
         {
             ScopedSymbolBinding binding(symbol_table, old_name, {old_value_id, SpvStorageClassFunction});
-            new_value.accept(this);
+            common_subexpression_elimination(new_value).accept(this);
             desired_id = to_storage(builder.current_id());
         }
 
