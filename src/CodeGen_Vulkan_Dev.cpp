@@ -11,13 +11,17 @@
 #include "CodeGen_Vulkan_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
+#include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "SpirvIR.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Target.h"
 
 #ifdef WITH_SPIRV
@@ -164,6 +168,10 @@ protected:
         bool load_from_narrow_storage(const Load *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class);
         bool store_at_narrow_storage(const Store *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id);
 
+        // Atomic read-modify-write of a single element (used for stores inside an Atomic node)
+        void atomic_store(const Store *op);
+        void atomic_store_at_scalar_index(const Store *op, const Expr &index, const Expr &value, SpvId variable_id, Type storage_type, SpvStorageClass storage_class);
+
         SpvFactory::Components split_vector(Type type, SpvId value_id);
         SpvId join_vector(Type type, const SpvFactory::Components &value_components);
         SpvId fill_vector(Type type, SpvId value_id);
@@ -306,6 +314,17 @@ protected:
 
         // Target for codegen
         Target target;
+
+        // True while visiting the body of an Atomic node (without a mutex):
+        // stores in it are lowered to atomic operations.
+        bool emit_atomic_stores = false;
+
+        // Names of the buffers and shared allocations the current kernel
+        // updates atomically. They are declared with scalar elements, and
+        // floating-point ones with unsigned integer elements of the same size:
+        // SPIR-V only has integer compare-exchange, and pointers can't be
+        // bitcast in logical addressing.
+        std::unordered_set<std::string> atomic_buffers;
     };
 
     // Current target for codegen
@@ -424,6 +443,59 @@ private:
         lanes = op->value.type().lanes();
     }
 };
+
+// Find the names of all buffers and allocations that are stored to inside an
+// Atomic node (without a mutex), as these get updated with atomic operations.
+struct FindAtomicStores : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Atomic *op) override {
+        ScopedValue<bool> old_inside_atomic(inside_atomic, op->mutex_name.empty());
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        if (inside_atomic) {
+            names.insert(op->name);
+        }
+        IRVisitor::visit(op);
+    }
+
+    bool inside_atomic = false;
+    std::unordered_set<std::string> names;
+};
+
+// Replace the loads of a buffer at a given index by an expression (e.g. a
+// variable holding the value read atomically from that location).
+class ReplaceLoad : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Load *op) override {
+        if (op->name == name && op->type == replacement.type() && equal(op->index, index)) {
+            return replacement;
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    using IRMutator::mutate;
+
+    ReplaceLoad(std::string name, Expr index, Expr replacement)
+        : name(std::move(name)), index(std::move(index)), replacement(std::move(replacement)) {
+    }
+
+    std::string name;
+    Expr index;
+    Expr replacement;
+};
+
+// The element type an atomically updated buffer or allocation is declared
+// with. SPIR-V only has integer atomic compare-exchange (and pointers can't be
+// bitcast in logical addressing), so floats are stored as unsigned integers of
+// the same size, and reinterpreted on load and store.
+Type atomic_storage_type(Type t) {
+    return t.is_float() ? UInt(t.bits(), t.lanes()) : t;
+}
 
 struct FindWorkGroupSize : public IRVisitor {
     using IRVisitor::visit;
@@ -1566,7 +1638,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(const Load *op, S
 
     // if the value type doesn't match the base for the pointer type, cast it accordingly
     SpvId result_id = value_id;
-    if (storage_type != value_type) {
+    if (storage_type == atomic_storage_type(value_type) && storage_type != value_type) {
+        // floats stored as integers of the same size (see atomic_storage_type())
+        result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(builder.declare_type(value_type), result_id, value_id));
+    } else if (storage_type != value_type) {
         result_id = cast_type(value_type, storage_type, result_id);
     }
     builder.update_id(result_id);
@@ -1706,7 +1782,12 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(const Store *op, S
     SpvId dst_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, index_id, storage_class);
 
     // if the value type doesn't match the base for the pointer type, cast it accordingly
-    if (storage_type != value_type) {
+    if (storage_type == atomic_storage_type(value_type) && storage_type != value_type) {
+        // floats stored as integers of the same size (see atomic_storage_type())
+        SpvId bits_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(builder.declare_type(storage_type), bits_id, value_id));
+        value_id = bits_id;
+    } else if (storage_type != value_type) {
         value_id = cast_type(storage_type, value_type, value_id);
     }
 
@@ -1758,6 +1839,220 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(const Store *op, S
     }
 }
 
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::atomic_store(const Store *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::atomic_store(): " << op->name << "[" << op->index << "] = (" << op->value << ")\n";
+
+    const SymbolIdStorageClassPair *id_and_storage_class = symbol_table.find(op->name);
+    internal_assert(id_and_storage_class);
+    SpvId variable_id = id_and_storage_class->first;
+    SpvStorageClass storage_class = id_and_storage_class->second;
+    internal_assert(variable_id != SpvInvalidId);
+
+    if (storage_class == SpvStorageClassFunction) {
+        // Function-scope allocations are private to the thread:
+        // a regular store will do.
+        ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, false);
+        visit(op);
+        return;
+    }
+
+    Type value_type = op->value.type();
+    user_assert(value_type.bits() >= 32)
+        << "Vulkan: 8-bit or 16-bit atomics are not supported (atomic update of "
+        << op->name << " with type " << value_type << ").\n";
+    if (value_type.bits() == 64) {
+        user_assert(target.has_feature(Target::VulkanInt64))
+            << "Vulkan: 64-bit atomics require the vk_int64 target feature (atomic update of "
+            << op->name << " with type " << value_type << ").\n";
+        builder.require_capability(SpvCapabilityInt64Atomics);
+    }
+
+    Type storage_type = value_type.element_of();
+    StorageAccessMap::const_iterator it = storage_access_map.find(variable_id);
+    if (it != storage_access_map.end()) {
+        storage_type = it->second.storage_type;
+    }
+    internal_assert(storage_type == atomic_storage_type(value_type.element_of()))
+        << "Vulkan: atomic update of " << op->name << " with type " << value_type
+        << " doesn't match its storage type " << storage_type << "\n";
+
+    if (value_type.is_scalar()) {
+        atomic_store_at_scalar_index(op, op->index, op->value, variable_id, storage_type, storage_class);
+    } else {
+        // Scalarize: one atomic operation per lane
+        for (int i = 0; i < value_type.lanes(); i++) {
+            atomic_store_at_scalar_index(op, extract_lane(op->index, i), extract_lane(op->value, i),
+                                         variable_id, storage_type, storage_class);
+        }
+    }
+}
+
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::atomic_store_at_scalar_index(const Store *op, const Expr &index, const Expr &value,
+                                                                     SpvId variable_id, Type storage_type, SpvStorageClass storage_class) {
+    Type value_type = value.type();
+    internal_assert(value_type.is_scalar() && index.type().is_scalar());
+    internal_assert(storage_type.is_int_or_uint() && storage_type.bits() == value_type.bits());
+
+    // Relaxed atomics, like GLSL's atomicAdd() & co, and Halide's other backends.
+    uint32_t memory_scope = (storage_class == SpvStorageClassWorkgroup) ? SpvScopeWorkgroup : SpvScopeDevice;
+    uint32_t semantics = SpvMemorySemanticsMaskNone;
+    SpvId memory_scope_id = builder.declare_constant(UInt(32), &memory_scope);
+    SpvId semantics_id = builder.declare_constant(UInt(32), &semantics);
+
+    // Pointer to the element
+    index.accept(this);
+    SpvId index_id = builder.current_id();
+    SpvId storage_type_id = builder.declare_type(storage_type);
+    SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
+    SpvId ptr_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, index_id, storage_class);
+
+    // Reinterpret a value to the storage type and back (same size)
+    auto to_storage = [&](SpvId id) {
+        if (value_type == storage_type) {
+            return id;
+        }
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(storage_type_id, result_id, id));
+        return result_id;
+    };
+    auto from_storage = [&](SpvId id) {
+        if (value_type == storage_type) {
+            return id;
+        }
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(builder.declare_type(value_type), result_id, id));
+        return result_id;
+    };
+
+    // Express the new value in terms of the current value at the location.
+    // Lets are substituted in first, so that loads of the location can be
+    // matched against the index, and the operator of the update is exposed.
+    const std::string old_name = unique_name("atomic_old");
+    Expr old_var = Variable::make(value_type, old_name);
+    Expr new_value = ReplaceLoad(op->name, substitute_in_all_lets(index), old_var).mutate(substitute_in_all_lets(value));
+
+    bool loads_buffer = false;
+    visit_with(new_value, [&](auto *self, const Load *load) {
+        loads_buffer |= (load->name == op->name);
+        self->visit_base(load);
+    });
+
+    if (!expr_uses_var(new_value, old_name) && !loads_buffer) {
+        // The new value doesn't depend on the contents of the buffer
+        common_subexpression_elimination(new_value).accept(this);
+        SpvId value_id = to_storage(builder.current_id());
+        builder.append(SpvFactory::atomic_store(ptr_id, memory_scope_id, semantics_id, value_id));
+        return;
+    }
+
+    if (value_type.is_int_or_uint()) {
+        // Try to match a native atomic read-modify-write: op(old, operand)
+        SpvOp op_code = SpvOpNop;
+        Expr operand;
+        auto match_operand = [&](const Expr &a, const Expr &b) {
+            if (equal(a, old_var) && !expr_uses_var(b, old_name)) {
+                operand = b;
+            } else if (equal(b, old_var) && !expr_uses_var(a, old_name)) {
+                operand = a;
+            }
+            return operand.defined();
+        };
+
+        Expr delta = simplify(common_subexpression_elimination(new_value - old_var));
+        const Call *call = new_value.as<Call>();
+        if (!expr_uses_var(delta, old_name)) {
+            op_code = SpvOpAtomicIAdd;
+            operand = delta;
+        } else if (const Min *min_op = new_value.as<Min>(); min_op && match_operand(min_op->a, min_op->b)) {
+            op_code = value_type.is_int() ? SpvOpAtomicSMin : SpvOpAtomicUMin;
+        } else if (const Max *max_op = new_value.as<Max>(); max_op && match_operand(max_op->a, max_op->b)) {
+            op_code = value_type.is_int() ? SpvOpAtomicSMax : SpvOpAtomicUMax;
+        } else if (call && call->is_intrinsic(Call::bitwise_and) && match_operand(call->args[0], call->args[1])) {
+            op_code = SpvOpAtomicAnd;
+        } else if (call && call->is_intrinsic(Call::bitwise_or) && match_operand(call->args[0], call->args[1])) {
+            op_code = SpvOpAtomicOr;
+        } else if (call && call->is_intrinsic(Call::bitwise_xor) && match_operand(call->args[0], call->args[1])) {
+            op_code = SpvOpAtomicXor;
+        }
+
+        if (op_code != SpvOpNop) {
+            common_subexpression_elimination(operand).accept(this);
+            SpvId operand_id = builder.current_id();
+            SpvId result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::atomic_binary_op(op_code, storage_type_id, result_id, ptr_id, memory_scope_id, semantics_id, operand_id));
+            return;
+        }
+    }
+
+    // Fall back to a compare-and-swap loop:
+    //
+    //   expected = atomic_load(ptr)
+    //   do {
+    //     desired = value(old = expected)
+    //     current = atomic_compare_exchange(ptr, desired, expected)
+    //     done = (current == expected)
+    //     expected = current
+    //   } while (!done)
+    //
+    // The expected value lives in a function variable, so that the value
+    // expression is free to emit blocks of its own.
+    const std::string expected_name = unique_name(std::string("k") + std::to_string(kernel_index) + "_atomic_expected");
+    SpvId expected_ptr_type_id = builder.declare_pointer_type(storage_type_id, SpvStorageClassFunction);
+    SpvId expected_var_id = builder.declare_variable(expected_name, expected_ptr_type_id, SpvStorageClassFunction);
+
+    SpvId initial_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::atomic_load(storage_type_id, initial_id, ptr_id, memory_scope_id, semantics_id));
+    builder.append(SpvFactory::store(expected_var_id, initial_id));
+
+    SpvId header_block_id = builder.reserve_id(SpvBlockId);
+    SpvId body_block_id = builder.reserve_id(SpvBlockId);
+    SpvId continue_block_id = builder.reserve_id(SpvBlockId);
+    SpvId merge_block_id = builder.reserve_id(SpvBlockId);
+    builder.append(SpvFactory::branch(header_block_id));
+
+    SpvBlock header_block = builder.create_block(header_block_id);
+    builder.enter_block(header_block);
+    {
+        builder.append(SpvFactory::loop_merge(merge_block_id, continue_block_id, SpvLoopControlDontUnrollMask));
+        builder.append(SpvFactory::branch(body_block_id));
+    }
+    builder.leave_block();
+
+    SpvId done_id = builder.reserve_id(SpvResultId);
+    SpvBlock body_block = builder.create_block(body_block_id);
+    builder.enter_block(body_block);
+    {
+        SpvId expected_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::load(storage_type_id, expected_id, expected_var_id));
+        SpvId old_value_id = from_storage(expected_id);
+
+        SpvId desired_id = SpvInvalidId;
+        {
+            ScopedSymbolBinding binding(symbol_table, old_name, {old_value_id, SpvStorageClassFunction});
+            common_subexpression_elimination(new_value).accept(this);
+            desired_id = to_storage(builder.current_id());
+        }
+
+        SpvId current_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::atomic_compare_exchange(storage_type_id, current_id, ptr_id, memory_scope_id,
+                                                           semantics_id, semantics_id, desired_id, expected_id));
+        builder.append(SpvFactory::store(expected_var_id, current_id));
+        builder.append(SpvFactory::integer_equal(builder.declare_type(Bool()), done_id, current_id, expected_id));
+        builder.append(SpvFactory::branch(continue_block_id));
+    }
+    builder.leave_block();
+
+    SpvBlock continue_block = builder.create_block(continue_block_id);
+    builder.enter_block(continue_block);
+    {
+        builder.append(SpvFactory::conditional_branch(done_id, merge_block_id, header_block_id));
+    }
+    builder.leave_block();
+
+    SpvBlock merge_block = builder.create_block(merge_block_id);
+    builder.enter_block(merge_block);
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Load): " << op->type << " " << op->name << "[" << op->index << "]\n";
     user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by SPIR-V codegen\n";
@@ -1795,6 +2090,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Store): " << op->name << "[" << op->index << "] = (" << op->value << ")\n";
     user_assert(is_const_one(op->predicate)) << "Predicated stores not supported by SPIR-V codegen!\n";
+
+    if (emit_atomic_stores) {
+        atomic_store(op);
+        return;
+    }
 
     debug(2) << "    value_type=" << op->value.type() << " value=" << op->value << "\n";
     debug(2) << "    index_type=" << op->index.type() << " index=" << op->index << "\n";
@@ -2046,6 +2346,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
     // one byte at a time by LowerStructTypes), so its element type is UInt(8)
     // rather than the struct type itself.
     Type element_type = op->type.is_struct() ? UInt(8) : op->type;
+
+    // Atomic operations on shared memory need a pointer to an integer element
+    if (is_gpu_shared(op->memory_type) && !op->type.is_struct() && atomic_buffers.count(op->name)) {
+        element_type = atomic_storage_type(element_type);
+    }
 
     SpvId storage_type_id = builder.declare_type(element_type);
     SpvId array_type_id = SpvInvalidId;
@@ -2374,8 +2679,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Acquire *) {
     user_assert(false) << "Acquire is not supported inside Vulkan kernels";
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Atomic *) {
-    user_assert(false) << "Atomic updates are not supported inside Vulkan kernels";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Atomic *op) {
+    // The threads of a subgroup may execute in lockstep, so spinning on a
+    // mutex held by another thread of the same subgroup can deadlock.
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in Vulkan.\n";
+
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+    op->body.accept(this);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_unary_op(SpvOp op_code, Type t, const Expr &a) {
@@ -2462,6 +2773,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset() {
     storage_access_map.clear();
     storage_buffer_offset_map.clear();
     descriptor_set_table.clear();
+    atomic_buffers.clear();
     reset_workgroup_size();
 }
 
@@ -2949,8 +3261,15 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
             s.accept(&check_dense);
             int lanes = check_dense.are_all_dense ? check_dense.lanes : 1;
 
+            // Atomic operations need a pointer to a scalar integer element
+            Type element_type = arg.type;
+            if (atomic_buffers.count(arg.name)) {
+                lanes = 1;
+                element_type = atomic_storage_type(element_type);
+            }
+
             // Declare the runtime array (which maps directly to the Halide device buffer)
-            Type array_element_type = arg.type.with_lanes(lanes);
+            Type array_element_type = element_type.with_lanes(lanes);
             SpvId array_element_type_id = builder.declare_type(array_element_type);
             SpvId runtime_arr_type_id = builder.add_runtime_array(array_element_type_id);
 
@@ -3095,6 +3414,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     // Declare the entry point and input intrinsics for the kernel func
     declare_entry_point(s, kernel_func_id);
 
+    // Find the buffers and allocations that are updated atomically
+    FindAtomicStores find_atomic_stores;
+    s.accept(&find_atomic_stores);
+    atomic_buffers = std::move(find_atomic_stores.names);
+
     // Declare all parameters -- scalar args and device buffers
     declare_device_args(s, entry_point_index, kernel_name, args);
 
@@ -3114,6 +3438,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     builder.leave_block();
     builder.leave_function();
     storage_access_map.clear();
+    atomic_buffers.clear();
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::dump_spirv_module() const {

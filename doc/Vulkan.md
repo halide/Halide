@@ -306,6 +306,12 @@ Android platform support is currently being worked on.
 - Only one dynamically sized shared memory allocation can be used, but any
   number of fixed sized allocation are supported (up to the maximum amount
   allowed by the device)
+- Atomic updates (`Func::atomic()`) are supported for 32-bit types, and for
+  64-bit types with `vk_int64` (and `vk_float64` for doubles). Integer add, min,
+  max, and, or and xor use native atomics; anything else, including all
+  floating-point updates, uses a compare-and-swap loop. 8-bit and 16-bit
+  atomics, and atomic updates that need a mutex (e.g. of Tuples), are not
+  supported.
 
 ## Known TODO:
 
