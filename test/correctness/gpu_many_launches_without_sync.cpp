@@ -110,15 +110,21 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Buffers freed (and their memory reused) right after the launches that use them.
+    // Buffers freed (and their memory reused) right after the launches that use
+    // them. Their sizes vary, so that the freed regions get split and coalesced.
     {
+        const halide_device_interface_t *device = get_device_interface_for_device_api(DeviceAPI::Default_GPU, target);
         reset(a, 0);
         Buffer<int32_t> *src = &a, *dst = &b;
         const int iterations = 500;
         for (int i = 0; i < iterations; i++) {
-            Buffer<int32_t> tmp(W, H);
-            add_step(*src, one, tmp);
-            add_step(tmp, one, *dst);
+            Buffer<int32_t> tmp(W, H + (i % 3) * H / 2);
+            tmp.device_malloc(device);
+            {
+                Buffer<int32_t> view = tmp.cropped(1, 0, H);
+                add_step(*src, one, view);
+                add_step(view, one, *dst);
+            }
             tmp.device_free();
             std::swap(src, dst);
         }

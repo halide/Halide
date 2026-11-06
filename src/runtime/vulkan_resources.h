@@ -420,7 +420,7 @@ int vk_submit(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmis
 // Submits the submission being recorded (if any).
 // While a command is half recorded, the submission can't be submitted yet.
 int vk_flush_submissions(void *user_context, VulkanMemoryAllocator *allocator) {
-    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+    VulkanSubmissionQueue *submission_queue = (allocator != nullptr) ? allocator->submission_queue : nullptr;
     if ((submission_queue == nullptr) || (submission_queue->recording == nullptr) ||
         submission_queue->recording_command) {
         return halide_error_code_success;
@@ -538,6 +538,7 @@ VulkanSubmission *vk_start_submission(void *user_context, VulkanMemoryAllocator 
     if (submission->descriptor_pool == VK_NULL_HANDLE) {
         uint32_t pool_storage_buffer_count = max(max(storage_buffer_count, 2 * submission->descriptor_pool_storage_buffer_count),
                                                  vk_min_submission_storage_buffer_count);
+        submission->descriptor_pool_storage_buffer_count = 0;
         int error_code = vk_create_descriptor_pool(user_context, allocator, vk_max_commands_per_submission,
                                                    vk_max_commands_per_submission, pool_storage_buffer_count,
                                                    &submission->descriptor_pool);
@@ -602,6 +603,13 @@ VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator 
     }
 
     VulkanSubmission *submission = submission_queue->recording;
+    uint32_t pool_storage_buffer_count = storage_buffer_count;
+    if ((submission != nullptr) &&
+        (submission->storage_buffers_used + storage_buffer_count > submission->descriptor_pool_storage_buffer_count)) {
+        // The batch ran out of descriptors before it was full: give the next
+        // one a bigger pool, so that batches grow to full size.
+        pool_storage_buffer_count = max(storage_buffer_count, 2 * submission->descriptor_pool_storage_buffer_count);
+    }
     if ((submission != nullptr) &&
         ((submission->command_count >= vk_max_commands_per_submission) ||
          (submission->storage_buffers_used + storage_buffer_count > submission->descriptor_pool_storage_buffer_count))) {
@@ -611,7 +619,7 @@ VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator 
         submission = nullptr;
     }
     if (submission == nullptr) {
-        submission = vk_start_submission(user_context, allocator, queue, storage_buffer_count);
+        submission = vk_start_submission(user_context, allocator, queue, pool_storage_buffer_count);
         if (submission == nullptr) {
             return nullptr;
         }
@@ -644,7 +652,7 @@ bool vk_submission_is_done(VulkanMemoryAllocator *allocator, VulkanSubmission *s
 // work: at most one earlier submission is still running. Submissions complete in
 // order, so that is once the one before the last has finished.
 int vk_flush_submissions_if_gpu_needs_work(void *user_context, VulkanMemoryAllocator *allocator) {
-    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+    VulkanSubmissionQueue *submission_queue = (allocator != nullptr) ? allocator->submission_queue : nullptr;
     if ((submission_queue == nullptr) || (submission_queue->recording == nullptr) ||
         !vk_submission_is_done(allocator, submission_queue->previous_submitted)) {
         return halide_error_code_success;
@@ -683,7 +691,7 @@ void vk_attach_staging_region(VulkanSubmission *submission, MemoryRegion *stagin
 
 // Waits for earlier work rather than have too many bytes of staging buffers in flight.
 int vk_throttle_staging(void *user_context, VulkanMemoryAllocator *allocator, uint64_t size) {
-    VulkanSubmissionQueue *submission_queue = allocator->submission_queue;
+    VulkanSubmissionQueue *submission_queue = (allocator != nullptr) ? allocator->submission_queue : nullptr;
     if (submission_queue == nullptr) {
         return halide_error_code_success;
     }
