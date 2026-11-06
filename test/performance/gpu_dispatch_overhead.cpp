@@ -139,6 +139,7 @@ int main(int argc, char **argv) {
                                    tmp.device_malloc(api, target);
                                    tmp.device_free();
                                }
+                               tmp.device_sync();
                            }) /
                            launches;
 

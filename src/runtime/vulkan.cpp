@@ -297,7 +297,7 @@ WEAK int halide_vulkan_device_release(void *user_context) {
 
         // Destroy the context if we created it
         if ((instance == cached_instance) && (device == cached_device)) {
-            destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, queue, messenger);
+            int error_code = vk_destroy_context(user_context, allocator, instance, device, physical_device, queue, messenger);
             cached_allocator = nullptr;
             cached_device = VK_NULL_HANDLE;
             cached_physical_device = VK_NULL_HANDLE;
@@ -305,6 +305,9 @@ WEAK int halide_vulkan_device_release(void *user_context) {
             cached_queue_family_index = 0;
             cached_instance = VK_NULL_HANDLE;
             cached_messenger = VK_NULL_HANDLE;
+            if (destroy_status == halide_error_code_success) {
+                destroy_status = error_code;
+            }
         }
 
         halide_vulkan_release_context(user_context, instance, device, queue, messenger);
@@ -471,7 +474,9 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     request.properties.visibility = MemoryVisibility::HostToDevice;
 
     // allocate a new region
-    MemoryRegion *staging_region = ctx.allocator->reserve(user_context, request);
+    ScopedStagingRegion staging(user_context, ctx.allocator);
+    staging.region = ctx.allocator->reserve(user_context, request);
+    MemoryRegion *staging_region = staging.region;
     if ((staging_region == nullptr) || (staging_region->handle == nullptr)) {
         error(user_context) << "Vulkan: Failed to allocate device memory!\n";
         return halide_error_code_device_malloc_failed;
@@ -553,17 +558,15 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: vk_do_multidimensional_copy failed!\n";
-        vk_release_region(user_context, ctx.allocator, staging_region);
         return error_code;
     }
 
     // submit the copy: the submission releases the staging buffer once it is done
-    vk_attach_staging_region(submission, staging_region, request.size);
+    vk_attach_staging_region(submission, staging.take(), request.size);
     error_code = vk_end_submission(user_context, ctx.allocator, submission);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to submit the copy!\n";
-        submission->staging_region = nullptr;
-        vk_release_region(user_context, ctx.allocator, staging_region);
+        staging.region = vk_detach_staging_region(submission);
         return halide_error_code_device_buffer_copy_failed;
     }
 
@@ -614,7 +617,9 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     request.properties.visibility = MemoryVisibility::DeviceToHost;
 
     // allocate a new region for staging the transfer
-    MemoryRegion *staging_region = ctx.allocator->reserve(user_context, request);
+    ScopedStagingRegion staging(user_context, ctx.allocator);
+    staging.region = ctx.allocator->reserve(user_context, request);
+    MemoryRegion *staging_region = staging.region;
     if ((staging_region == nullptr) || (staging_region->handle == nullptr)) {
         error(user_context) << "Vulkan: Failed to allocate device memory!\n";
         return halide_error_code_device_malloc_failed;
@@ -703,17 +708,11 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     copy_helper.src = (uint64_t)(stage_host_ptr);
     copy_memory(copy_helper, user_context);
 
-    // unmap the pointer and reclaim the staging region
+    // unmap the pointer (the staging region is released when it goes out of scope)
     error_code = ctx.allocator->unmap(user_context, staging_region);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to umap staging region!\n";
         return error_code;
-    }
-
-    if (halide_can_reuse_device_allocations(user_context)) {
-        ctx.allocator->release(user_context, staging_region);
-    } else {
-        ctx.allocator->reclaim(user_context, staging_region);
     }
 
 #ifdef DEBUG_RUNTIME
@@ -774,7 +773,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
 #endif
-        MemoryRegion *staging_region = nullptr;
+        ScopedStagingRegion staging(user_context, ctx.allocator);
         MemoryRegion *src_buffer_region = nullptr;
         MemoryRegion *dst_buffer_region = nullptr;
 
@@ -801,15 +800,15 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             request.properties.visibility = MemoryVisibility::DeviceToHost;
 
             // allocate a new region
-            staging_region = ctx.allocator->reserve(user_context, request);
-            if ((staging_region == nullptr) || (staging_region->handle == nullptr)) {
+            staging.region = ctx.allocator->reserve(user_context, request);
+            if ((staging.region == nullptr) || (staging.region->handle == nullptr)) {
                 error(user_context) << "Vulkan: Failed to allocate device memory!\n";
                 return halide_error_code_device_malloc_failed;
             }
 
             // use the staging region and buffer from the copy destination
             src_buffer_region = reinterpret_cast<MemoryRegion *>(src->device);
-            dst_buffer_region = staging_region;
+            dst_buffer_region = staging.region;
 
         } else if (from_host && !to_host) {
             // Host to Device
@@ -824,15 +823,22 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             request.properties.caching = MemoryCaching::UncachedCoherent;
             request.properties.visibility = MemoryVisibility::HostToDevice;
 
+            // wait for earlier uploads rather than have too many staging buffers in flight
+            error_code = vk_throttle_staging(user_context, ctx.allocator, request.size);
+            if (error_code != halide_error_code_success) {
+                error(user_context) << "Vulkan: Failed to wait for submitted work!\n";
+                return error_code;
+            }
+
             // allocate a new region
-            staging_region = ctx.allocator->reserve(user_context, request);
-            if ((staging_region == nullptr) || (staging_region->handle == nullptr)) {
+            staging.region = ctx.allocator->reserve(user_context, request);
+            if ((staging.region == nullptr) || (staging.region->handle == nullptr)) {
                 error(user_context) << "Vulkan: Failed to allocate device memory!\n";
                 return halide_error_code_device_malloc_failed;
             }
 
             // map the region to a host ptr
-            uint8_t *stage_host_ptr = (uint8_t *)ctx.allocator->map(user_context, staging_region);
+            uint8_t *stage_host_ptr = (uint8_t *)ctx.allocator->map(user_context, staging.region);
             if (stage_host_ptr == nullptr) {
                 error(user_context) << "Vulkan: Failed to map host pointer to device memory!\n";
                 return halide_error_code_copy_to_device_failed;
@@ -845,14 +851,14 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             copy_helper.dst = copy_dst_ptr;
 
             // unmap the pointer
-            error_code = ctx.allocator->unmap(user_context, staging_region);
+            error_code = ctx.allocator->unmap(user_context, staging.region);
             if (error_code != halide_error_code_success) {
                 error(user_context) << "Vulkan: Failed to unmap staging region!\n";
                 return halide_error_code_copy_to_device_failed;
             }
 
             // use the staging region and buffer from the copy source
-            src_buffer_region = staging_region;
+            src_buffer_region = staging.region;
             dst_buffer_region = reinterpret_cast<MemoryRegion *>(dst->device);
 
         } else if (from_host && to_host) {
@@ -914,10 +920,12 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         //// submit the copy. An upload's staging buffer is released by the submission
         //// once it is done; a download waits for it.
         if (from_host && !to_host) {
-            vk_attach_staging_region(submission, staging_region, src->size_in_bytes());
-            staging_region = nullptr;
+            vk_attach_staging_region(submission, staging.take(), src->size_in_bytes());
         }
         error_code = vk_end_submission(user_context, ctx.allocator, submission, to_host);
+        if ((error_code != halide_error_code_success) && from_host && !to_host) {
+            staging.region = vk_detach_staging_region(submission);
+        }
         if ((error_code == halide_error_code_success) && to_host) {
             error_code = vk_wait_for_submissions(user_context, ctx.allocator);
         }
@@ -932,7 +940,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
         if (!from_host && to_host) {
             // map the staging region to a host ptr
-            uint8_t *stage_host_ptr = (uint8_t *)ctx.allocator->map(user_context, staging_region);
+            uint8_t *stage_host_ptr = (uint8_t *)ctx.allocator->map(user_context, staging.region);
             if (stage_host_ptr == nullptr) {
                 error(user_context) << "Vulkan: Failed to map host pointer to device memory!\n";
                 return halide_error_code_internal_error;
@@ -944,19 +952,15 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             copy_memory(copy_helper, user_context);
 
             // unmap the pointer and reclaim the staging region
-            error_code = ctx.allocator->unmap(user_context, staging_region);
+            error_code = ctx.allocator->unmap(user_context, staging.region);
             if (error_code != halide_error_code_success) {
                 error(user_context) << "Vulkan: Failed to unmap pointer for staging region!\n";
                 return error_code;
             }
         }
 
-        if (staging_region) {
-            if (halide_can_reuse_device_allocations(user_context)) {
-                error_code = ctx.allocator->release(user_context, staging_region);
-            } else {
-                error_code = ctx.allocator->reclaim(user_context, staging_region);
-            }
+        if (staging.region) {
+            error_code = vk_release_region(user_context, ctx.allocator, staging.take());
         }
 
         if (error_code != halide_error_code_success) {

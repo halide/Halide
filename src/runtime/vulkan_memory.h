@@ -1239,6 +1239,15 @@ int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *r
         return halide_error_code_internal_error;
     }
 
+    // A released region may still be in use by submitted work, when it is split
+    // or coalesced to serve a new request. (Retiring the submissions would release
+    // their staging buffers, which must not happen here: this is called from
+    // inside reserve().)
+    int wait_status = vk_wait_for_submissions(user_context, instance, false);
+    if (wait_status != halide_error_code_success) {
+        error(user_context) << "VulkanRegionAllocator: Failed to wait for submitted work!\n";
+        return wait_status;
+    }
     vkDestroyBuffer(instance->device, *buffer, instance->alloc_callbacks);
 #ifdef DEBUG_RUNTIME
     debug(nullptr) << "vkDestroyBuffer: Destroyed buffer for device region (" << (uint64_t)region->allocation.size << " bytes) ...\n";
