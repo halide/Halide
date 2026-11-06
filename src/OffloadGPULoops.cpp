@@ -98,6 +98,9 @@ protected:
     const Target &target;
     const std::map<std::string, Function> &env;
 
+    /** The buffers allocated by the pipeline itself, in scope. */
+    Scope<> allocations;
+
     Expr get_state_var(const string &name) {
         // Expr v = Variable::make(type_of<void *>(), name);
         state_needed[name] = true;
@@ -121,6 +124,39 @@ protected:
     }
 
     using IRMutator::visit;
+
+    Stmt visit(const Allocate *op) override {
+        ScopedBinding<> bind(allocations, op->name);
+        return IRMutator::visit(op);
+    }
+
+    // Tell the device code generators how aligned the first element of each
+    // buffer argument is: see DeviceArgument::base_alignment.
+    void set_base_alignments(const Stmt &kernel, vector<DeviceArgument> &args) {
+        map<string, int> host_alignment;
+        auto record = [&](const string &name, const Parameter &param) {
+            if (param.defined()) {
+                host_alignment[name] = param.host_alignment();
+            }
+        };
+        visit_with(
+            kernel,
+            [&](auto *self, const Load *op) {
+                record(op->name, op->param);
+                self->visit_base(op);
+            },
+            [&](auto *self, const Store *op) {
+                record(op->name, op->param);
+                self->visit_base(op);
+            });
+        for (DeviceArgument &arg : args) {
+            if (!arg.is_buffer || allocations.contains(arg.name)) {
+                continue;
+            }
+            auto it = host_alignment.find(arg.name);
+            arg.base_alignment = it != host_alignment.end() ? it->second : arg.type.bytes();
+        }
+    }
 
     Stmt visit(const For *loop) override {
         if (!is_gpu(loop->for_type)) {
@@ -169,6 +205,8 @@ protected:
                      return a.is_buffer > b.is_buffer;
                  }
              });
+
+        set_base_alignments(loop, closure_args);
 
         // compile the kernel
         string kernel_name = c_print_name(unique_name("kernel_" + loop->name));
