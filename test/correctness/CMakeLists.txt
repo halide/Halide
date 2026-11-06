@@ -495,6 +495,7 @@ tests(
     sliding_reduction.cpp
     sliding_window.cpp
     sliding_window_cascade.cpp
+    sliding_window_in_registers.cpp
     sme_streaming.cpp
     sme_streaming_without_target_feature.cpp
     solve.cpp
@@ -797,6 +798,7 @@ set_target_properties(
     correctness_sliding_over_guard_with_if
     correctness_sliding_reduction
     correctness_sliding_window
+    correctness_sliding_window_in_registers
     correctness_stage_strided_loads
     correctness_storage_folding
     # keep-sorted end

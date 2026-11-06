@@ -62,14 +62,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
+    {
         count = 0;
         Func f, g;
 
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x - 1);
 
-        f.store_root().compute_at(g, x).store_in(store_in);
+        f.store_root().compute_at(g, x);
 
         // Test that sliding window works when specializing.
         g.specialize(g.output_buffer().dim(0).min() == 0);
@@ -115,9 +115,8 @@ int main(int argc, char **argv) {
         g.store_root().compute_at(h, x).store_in(store_in);
 
         Buffer<int> im = h.realize({100});
-        int correct = store_in == MemoryType::Register ? 103 : 102;
-        if (count != correct) {
-            printf("f was called %d times instead of %d times\n", count, correct);
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
             return 1;
         }
     }
@@ -331,24 +330,18 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding with a vectorized producer and consumer, trying to rotate
-        // cleanly in registers.
+        // Sliding with a vectorized producer and consumer, in registers.
         count = 0;
         Func f, g;
         f(x) = call_counter(x, 0);
         g(x) = f(x + 1) + f(x - 1);
 
-        // This currently requires a trick to get everything to be aligned
-        // nicely. This exploits the fact that ShiftInwards splits are
-        // aligned to the end of the original loop (and extending before the
-        // min if necessary).
-        Var xi("xi");
-        f.store_root().compute_at(g, x).store_in(MemoryType::Register).split(x, x, xi, 8).vectorize(xi, 4).unroll(xi);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register).vectorize(x, 4);
         g.vectorize(x, 4, TailStrategy::RoundUp);
 
         Buffer<int> im = g.realize({100});
-        if (count != 102) {
-            printf("f was called %d times instead of %d times\n", count, 102);
+        if (count != 104) {
+            printf("f was called %d times instead of %d times\n", count, 104);
             return 1;
         }
     }
@@ -433,11 +426,9 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding in registers over two loops at once. A rolled register array
-        // only carries values across the innermost loop it lives in, so f can
-        // roll over x but not also over yi. If it tries to do both, the values
-        // it expects to still be there from the previous yi were overwritten
-        // by the sweep of the x loop.
+        // Sliding in registers over two loops at once. A window in registers
+        // can't span a loop of non-constant extent, so f can slide over x but
+        // not also over yi.
         Var yo, yi;
         Func f, g;
         f(x, y) = x * 3 + y;
@@ -830,8 +821,7 @@ int main(int argc, char **argv) {
     }
 
     for (bool up : {true, false}) {
-        // Rolling a window held in registers shifts values within the
-        // register array, which only works in one direction.
+        // A window held in registers can slide in either direction.
         Func f, g;
         f(x) = x;
         Expr i = up ? x : 100 - x;
@@ -841,7 +831,7 @@ int main(int argc, char **argv) {
         for (int j = 0; j < 16; j++) {
             int correct = up ? 2 * j : 200 - 2 * j;
             if (out(j) != correct) {
-                printf("Rolling registers %s: out(%d) = %d instead of %d\n",
+                printf("Sliding in registers %s: out(%d) = %d instead of %d\n",
                        up ? "up" : "down", j, out(j), correct);
                 return 1;
             }
@@ -849,9 +839,8 @@ int main(int argc, char **argv) {
     }
 
     {
-        // A window rolled in registers must only evaluate the producer for the
-        // newly required values, even though the old ones are shifted along
-        // in the same store.
+        // A window slid in registers must only evaluate the producer for the
+        // newly required values.
         Func f, g, h;
         Var yo, yi;
         f(x, y) = x + y;
