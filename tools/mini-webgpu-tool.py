@@ -561,13 +561,21 @@ def cmd_sync(args):
 
 # (name, marker version or None to delete it, corrupt anchor, expected exit)
 # Cases with a corrupt anchor need a Dawn-generated header as the comparison
-# upstream, so they are skipped (not failed) when none is available.
-CASES = [
-    ("pass", "20260624.223603", None, 0),
-    ("drift", "20260911.162847", None, 1),
-    ("no marker", None, None, 1),
-    ("layout", "20260624.223603", "WGPUBool initialized;", 1),
-]
+# upstream, so they are skipped (not failed) when none is available. The marker
+# versions derive from the repo's current pin, so the fixtures keep working when
+# Dawn is re-pinned; DRIFT_VERSION only has to differ from any real pin.
+DRIFT_VERSION = "20991231.235959"
+
+
+def cases():
+    pin = dawn_pin()
+    assert pin != DRIFT_VERSION, "the drift fixture must not match a real pin"
+    return [
+        ("pass", pin, None, 0),
+        ("drift", DRIFT_VERSION, None, 1),
+        ("no marker", None, None, 1),
+        ("layout", pin, "WGPUBool initialized;", 1),
+    ]
 
 
 def selftest(gen, lib):
@@ -616,8 +624,9 @@ def selftest(gen, lib):
         mini = os.path.join(tmp, MINI_REL)
         with open(mini) as fh:
             text = fh.read()
-        old = f'{MARKER} "20260624.223603"'
-        assert old in text, f"sample marker not found in {MINI_REL}"
+        marked = re.search(re.escape(MARKER) + r' "([^"]+)"', text)
+        assert marked, f"no {MARKER} found in {MINI_REL}"
+        old = marked.group(0)
         if marker_ver:
             text = text.replace(old, f'{MARKER} "{marker_ver}"')
         else:
@@ -627,7 +636,7 @@ def selftest(gen, lib):
         with open(mini, "w") as fh:
             fh.write(text)
 
-    for name, ver, corrupt, want in CASES:
+    for name, ver, corrupt, want in cases():
         if corrupt and not gen:
             # check() legitimately has nothing to compare struct layouts against
             # without a Dawn-generated header, so it cannot detect the drift this
@@ -652,7 +661,7 @@ def selftest(gen, lib):
     # `check` before Configure: marker rule must still pass with no build tree.
     tmp = tempfile.mkdtemp(prefix="miniwebgpu_notree_")
     try:
-        fixture(tmp, "20260624.223603", None)
+        fixture(tmp, dawn_pin(), None)
         got, out = run(tmp, ["check", "build"])
         key = [line for line in out.splitlines() if line.startswith("NOTE")]
         results.append(("no build tree", 0, got, got == 0, key[:1]))
@@ -671,7 +680,7 @@ def selftest(gen, lib):
     ):
         tmp = tempfile.mkdtemp(prefix="miniwebgpu_pin_")
         try:
-            fixture(tmp, "20260624.223603", None)
+            fixture(tmp, dawn_pin(), None)
             root = os.path.join(tmp, "vcpkgroot")
             os.makedirs(os.path.join(root, "ports", "dawn"))
             if ver:
