@@ -62,6 +62,7 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
+#include "RotateRegisters.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "Simplify.h"
@@ -313,6 +314,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
     log("Lowering after bounding small realizations:", s);
+
+    debug(1) << "Rotating folded realizations in registers...\n";
+    s = rotate_registers(s);
+    log("Lowering after rotating folded realizations in registers:", s);
 
     // After storage folding, which can make two threads touch the same part of
     // an allocation, and before storage flattening, which makes the check much
