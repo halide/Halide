@@ -620,6 +620,7 @@ tests(
     vectorized_initialization.cpp
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
+    vulkan_bool_equality.cpp
     vulkan_bool_scalar_abi.cpp
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
@@ -752,6 +753,7 @@ target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
 target_include_directories(correctness_vulkan_bool_minmax PRIVATE "${Halide_SOURCE_DIR}/src")
 target_link_libraries(correctness_vulkan_bool_minmax PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_vulkan_bool_minmax PRIVATE WITH_SPIRV)
+target_link_libraries(correctness_vulkan_bool_equality PRIVATE SPIRV-Headers::SPIRV-Headers)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(
