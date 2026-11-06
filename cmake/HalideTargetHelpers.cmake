@@ -50,7 +50,10 @@ function(_Halide_host_target OUTVAR)
     set(host_processor "${CMAKE_HOST_SYSTEM_PROCESSOR}")
     if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_CROSSCOMPILING)
         list(LENGTH CMAKE_OSX_ARCHITECTURES num_osx_archs)
-        if (num_osx_archs EQUAL 1 AND CMAKE_OSX_ARCHITECTURES MATCHES "^[Aa][Rr][Mm]64[Ee]([._][Xx]1)?$")
+        if (
+            num_osx_archs EQUAL 1
+            AND CMAKE_OSX_ARCHITECTURES MATCHES "^[Aa][Rr][Mm]64[Ee]([._][Xx]1)?$"
+        )
             set(host_processor "${CMAKE_OSX_ARCHITECTURES}")
         endif ()
     endif ()

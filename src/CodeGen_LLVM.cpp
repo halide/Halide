@@ -265,7 +265,7 @@ void CodeGen_LLVM::initialize_llvm() {
         auto &llvm_opts = cl::getRegisteredOptions();
         if (auto it = llvm_opts.find("aarch64-use-featcpa-codegen"); it != llvm_opts.end()) {
             if (it->second->getNumOccurrences() == 0) {
-                static_cast<cl::opt<bool> *>(it->second)->setValue(true);
+                it->second->addOccurrence(1, "aarch64-use-featcpa-codegen", "true");
             }
         } else {
             // In LLVM 24+, target backend flags migrated from cl::opt to
