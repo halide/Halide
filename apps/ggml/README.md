@@ -455,20 +455,28 @@ rounding, and on the M3 Max about as fast as f16's (q4_0 at 4096 x 4096: M = 16
 98 us, M = 32 170; f16 operands 99 and 160). The two-level formats (K-quants,
 iq4_xs) too: at 4096 x 4096 and M = 32..4231 their gemm takes 0.31-0.82x of
 their rows' time (f32, f16 or q8_K acts), about GGML's at M = 32 and 64
-(0.88-1.09x) and 1.2-1.9x slower from M = 256. `f16` weights with f16 acts
-(`f16`, `f32:f16`) run the gemm too, K in steps of 64 (or 32) values, for M >=
-8, N >= 32, K % 32 == 0 and M * N >= 2^16, and `flat`'s rows otherwise.
+(0.88-1.09x). On the tiles of M >= 256 each lane stages 16 consecutive values of
+their weights (as GGML's `dequantize_q4_K` etc.), so a sub-block's scale is
+decoded once per 16 values, not 4; from M = 256 their exact (f32 operand) gemm
+is still 0.7-0.86x of GGML's, which runs on half operands: their `<type>:f16`
+libraries (`q4_K:f16`, `q5_K:f16`, `q6_K:f16`, `q2_K:f16`, `q3_K:f16`,
+`iq4_xs:f16`) run it on f16 operands, as GGML does (0.85-1.07x at M =
+256..1024). Blocked f16 operands take 64 x 32 tiles where 64 x 64 would give
+fewer than 512 tiles (M x N < 2^21): too few to load the GPU's cores evenly.
+`f16` weights with f16 acts (`f16`, `f32:f16`) run the gemm too, K in steps of
+64 (or 32) values, for M >= 8, N >= 32, K % 32 == 0 and M * N >= 2^16, and
+`flat`'s rows otherwise.
 
 GGML picks its Metal kernel by M: mul_mv (exact; `kernel_mul_mv_mma_*` for M =
 2..16 on q4_0) up to 16, then `kernel_mul_mm` (f16 weights). The Halide
-counterpart is two libraries, the exact one and `q4_0:f16` (or `q8_0:f16`),
-picked by M on the host: `halide-by-m-<name>` in the harness reports that (the
-exact library for M \<= 16), next to `ggml-metal`, and an integration (`llama/`;
-Metal isn't wired up there yet) would dispatch the same way. Each library is
-correct for every M. GGML's mv_mma, at M = 8 about 1.4x faster than ours, builds
-its operand fragments per lane from the q4_0 codes in registers
-(`thread_elements()`, no threadgroup memory), multiplies the codes (exact in
-half) by f32 acts, and applies each block's scale to the accumulators;
+counterpart is two libraries, the exact one and `q4_0:f16` (or `q8_0:f16`,
+`q4_K:f16`, ...), picked by M on the host: `halide-by-m-<name>` in the harness
+reports that (the exact library for M \<= 16), next to `ggml-metal`, and an
+integration (`llama/`; Metal isn't wired up there yet) would dispatch the same
+way. Each library is correct for every M. GGML's mv_mma, at M = 8 about 1.4x
+faster than ours, builds its operand fragments per lane from the q4_0 codes in
+registers (`thread_elements()`, no threadgroup memory), multiplies the codes
+(exact in half) by f32 acts, and applies each block's scale to the accumulators;
 `MemoryType::Tile` fragments are only loaded from memory, take one element type,
 and can't be scaled, so that kernel has no Halide schedule yet.
 
