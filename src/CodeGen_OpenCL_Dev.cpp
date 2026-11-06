@@ -113,7 +113,15 @@ protected:
 
         std::string get_memory_space(const std::string &);
 
+        // Whether a dense vector access of type t to the buffer 'name', at an
+        // index with the given alignment, may go through a pointer to an
+        // OpenCL vector type, which must be aligned to the vector's size.
+        bool is_vector_aligned(const std::string &name, Type t, const ModulusRemainder &alignment);
+
         std::string shared_name;
+
+        // The DeviceArgument::base_alignment of the kernel's buffer arguments.
+        std::map<std::string, int> base_alignment;
 
         void visit(const For *) override;
         void visit(const Ramp *op) override;
@@ -512,6 +520,26 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &na
     return rhs.str();
 }
 
+bool CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::is_vector_aligned(const string &name, Type t,
+                                                             const ModulusRemainder &alignment) {
+    // OpenCL C pads a 3-component vector to the size and alignment of a
+    // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
+    // elements. Packed 3-lane data must go through vload3/vstore3.
+    if (t.lanes() == 3) {
+        return false;
+    }
+    // The alignment of the index is relative to the first element of the
+    // buffer. Buffer arguments can be crops starting at any element (see
+    // add_kernel), so add what's known about the alignment of their first
+    // element.
+    ModulusRemainder a = alignment;
+    auto it = base_alignment.find(name);
+    if (it != base_alignment.end() && it->second != 0) {
+        a = a + ModulusRemainder(std::max(1, it->second / t.bytes()), 0);
+    }
+    return (a.modulus % t.lanes() == 0) && (a.remainder % t.lanes() == 0);
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
 
@@ -521,12 +549,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         internal_assert(op->type.is_vector());
 
         ostringstream rhs;
-        // OpenCL C pads a 3-component vector to the size and alignment of a
-        // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
-        // elements. Packed 3-lane data must go through vload3.
-        if (op->type.lanes() != 3 &&
-            (op->alignment.modulus % op->type.lanes() == 0) &&
-            (op->alignment.remainder % op->type.lanes() == 0)) {
+        if (is_vector_aligned(op->name, op->type, op->alignment)) {
             // Get the rhs just for the cache.
             string id_ramp_base = print_expr(ramp_base / op->type.lanes());
             string array_indexing = print_array_access(op->name, op->type, id_ramp_base);
@@ -692,12 +715,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
 
-        // OpenCL C pads a 3-component vector to the size and alignment of a
-        // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
-        // elements. Packed 3-lane data must go through vstore3.
-        if (op->value.type().lanes() != 3 &&
-            (op->alignment.modulus % op->value.type().lanes() == 0) &&
-            (op->alignment.remainder % op->value.type().lanes() == 0)) {
+        if (is_vector_aligned(op->name, t, op->alignment)) {
             string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
             string array_indexing = print_array_access(op->name, t, id_ramp_base);
             stream << get_indent() << array_indexing << " = " << id_value << ";\n";
@@ -1046,15 +1064,21 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                    << " is neither read nor write";
                 }
                 stream << "image" << dims << "d_t ";
+                stream << print_name(args[i].name);
             } else {
+                // A crop is passed as its parent's cl_mem and the byte
+                // offset of the crop in it, which the kernel adds below:
+                // a sub-buffer would have to start at a multiple of
+                // CL_DEVICE_MEM_BASE_ADDR_ALIGN.
                 stream << " " << get_memory_space(args[i].name) << " ";
                 if (!args[i].write) {
                     stream << "const ";
                 }
                 stream << print_type(args[i].type) << " *"
-                       << "restrict ";
+                       << "restrict " << print_name(args[i].name + "$raw") << ",\n"
+                       << " const ulong " << print_name(args[i].name + "$offset");
+                base_alignment[args[i].name] = args[i].base_alignment;
             }
-            stream << print_name(args[i].name);
             Allocation alloc;
             alloc.type = args[i].type;
             allocations.push(args[i].name, alloc);
@@ -1101,6 +1125,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     open_scope();
 
+    // Offset the buffer arguments to the first element of their crops.
+    for (const auto &arg : args) {
+        if (arg.is_buffer && arg.memory_type != MemoryType::GPUTexture) {
+            string ptr_type = get_memory_space(arg.name) + (arg.write ? " " : " const ");
+            stream << get_indent() << ptr_type << print_type(arg.type) << " *restrict "
+                   << print_name(arg.name) << " = (" << ptr_type << print_type(arg.type) << " *)(("
+                   << ptr_type << "char *)" << print_name(arg.name + "$raw") << " + "
+                   << print_name(arg.name + "$offset") << ");\n";
+        }
+    }
+
     // Reinterpret half args passed as uint16 back to half
     for (const auto &arg : args) {
         if (!arg.is_buffer &&
@@ -1121,6 +1156,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
             allocations.pop(arg.name);
         }
     }
+    base_alignment.clear();
 
     // Undef all the buffer address spaces, in case they're different in another kernel.
     for (const auto &arg : args) {
