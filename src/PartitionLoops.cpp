@@ -92,6 +92,12 @@ protected:
         result |= scope.contains(op->name);
     }
 
+    // A likely in a Load index says nothing about the loaded value, and a
+    // likely in the predicate is captured by the Load itself (see
+    // FindSimplifications::visit(const Load *)).
+    void visit(const Load *op) override {
+    }
+
     const Scope<> &scope;
 
 public:
