@@ -555,8 +555,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Stmt stmt;
         Stmt body = orig_body;
 
-        Box provided = box_provided(body, func.name());
-        Box required = box_required(body, func.name());
+        // A footprint that depends on a condition on the loop variable or the
+        // digits, such as a sliding window's warm-up guard, can't be folded,
+        // so take the union of both sides of any such condition.
+        Stmt unconditional = mutate_with(body, [&](auto *self, const IfThenElse *op) {
+            Stmt then_case = self->mutate(op->then_case);
+            Stmt else_case = self->mutate(op->else_case);
+            if (!expr_uses_var(op->condition, name) && !expr_uses_vars(op->condition, digits)) {
+                return IfThenElse::make(op->condition, then_case, else_case);
+            }
+            return else_case.defined() ? Block::make(then_case, else_case) : then_case;
+        });
+
+        Box provided = box_provided(unconditional, func.name());
+        Box required = box_required(unconditional, func.name());
         // For storage folding, we don't care about conditional reads.
         required.used = Expr();
         Box box = box_union(provided, required);
@@ -803,10 +815,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr max_extent = find_constant_bound(extent, Direction::Upper, scope);
                 scope.pop(name);
 
+                // A power of two makes the modulus cheap. A fold in registers
+                // is indexed by constants instead, so rounding up would only
+                // waste registers.
+                bool exact = func.schedule().memory_type() == MemoryType::Register;
                 const int max_fold = 1024;
                 auto const_max_extent = as_const_int(max_extent);
                 if (const_max_extent && *const_max_extent <= max_fold) {
-                    factor = static_cast<int>(next_power_of_two(*const_max_extent));
+                    factor = exact ? static_cast<int>(*const_max_extent) :
+                                     static_cast<int>(next_power_of_two(*const_max_extent));
                 } else {
                     // Try a little harder to find a bounding power of two
                     int e = max_fold * 2;
@@ -814,6 +831,17 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     while (e > 0 && can_prove(extent <= e / 2)) {
                         success = true;
                         e /= 2;
+                    }
+                    if (success && exact) {
+                        int lo = e / 2 + 1;
+                        while (lo < e) {
+                            int mid = (lo + e) / 2;
+                            if (can_prove(extent <= mid)) {
+                                e = mid;
+                            } else {
+                                lo = mid + 1;
+                            }
+                        }
                     }
                     if (success) {
                         factor = e;
@@ -829,7 +857,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             internal_assert(factor.defined());
 
-            if (!explicit_factor.defined()) {
+            // Folded registers get rotated so that every access has constant
+            // indices, so a vectorized access doesn't become a gather.
+            if (!explicit_factor.defined() &&
+                func.schedule().memory_type() != MemoryType::Register) {
                 VectorAccessOfFoldedDim vector_access_of_folded_dim{func.name(), dim};
                 body.accept(&vector_access_of_folded_dim);
                 if (vector_access_of_folded_dim.result) {

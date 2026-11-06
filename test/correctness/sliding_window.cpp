@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <algorithm>
+#include <climits>
 #include <stdio.h>
 
 using namespace Halide;
@@ -14,6 +15,18 @@ HalideExtern_2(int, call_counter, int, int);
 extern "C" void *my_malloc(JITUserContext *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
     exit(1);
+}
+
+// The range of the first coordinate of the stores traced.
+int min_stored = 0, max_stored = 0;
+int record_stored_range(JITUserContext *, const halide_trace_event_t *e) {
+    if (e->event == halide_trace_store) {
+        for (int l = 0; l < e->lanes; l++) {
+            min_stored = std::min(min_stored, e->coordinates[l]);
+            max_stored = std::max(max_stored, e->coordinates[l]);
+        }
+    }
+    return 0;
 }
 
 // Reports the size of a producer's allocation, or 0 if it isn't constant.
@@ -49,14 +62,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
+    {
         count = 0;
         Func f, g;
 
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x - 1);
 
-        f.store_root().compute_at(g, x).store_in(store_in);
+        f.store_root().compute_at(g, x);
 
         // Test that sliding window works when specializing.
         g.specialize(g.output_buffer().dim(0).min() == 0);
@@ -102,9 +115,8 @@ int main(int argc, char **argv) {
         g.store_root().compute_at(h, x).store_in(store_in);
 
         Buffer<int> im = h.realize({100});
-        int correct = store_in == MemoryType::Register ? 103 : 102;
-        if (count != correct) {
-            printf("f was called %d times instead of %d times\n", count, correct);
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
             return 1;
         }
     }
@@ -318,24 +330,18 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding with a vectorized producer and consumer, trying to rotate
-        // cleanly in registers.
+        // Sliding with a vectorized producer and consumer, in registers.
         count = 0;
         Func f, g;
         f(x) = call_counter(x, 0);
         g(x) = f(x + 1) + f(x - 1);
 
-        // This currently requires a trick to get everything to be aligned
-        // nicely. This exploits the fact that ShiftInwards splits are
-        // aligned to the end of the original loop (and extending before the
-        // min if necessary).
-        Var xi("xi");
-        f.store_root().compute_at(g, x).store_in(MemoryType::Register).split(x, x, xi, 8).vectorize(xi, 4).unroll(xi);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register).vectorize(x, 4);
         g.vectorize(x, 4, TailStrategy::RoundUp);
 
         Buffer<int> im = g.realize({100});
-        if (count != 102) {
-            printf("f was called %d times instead of %d times\n", count, 102);
+        if (count != 104) {
+            printf("f was called %d times instead of %d times\n", count, 104);
             return 1;
         }
     }
@@ -420,11 +426,9 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding in registers over two loops at once. A rolled register array
-        // only carries values across the innermost loop it lives in, so f can
-        // roll over x but not also over yi. If it tries to do both, the values
-        // it expects to still be there from the previous yi were overwritten
-        // by the sweep of the x loop.
+        // Sliding in registers over two loops at once. A window in registers
+        // can't span a loop of non-constant extent, so f can slide over x but
+        // not also over yi.
         Var yo, yi;
         Func f, g;
         f(x, y) = x * 3 + y;
@@ -814,6 +818,100 @@ int main(int argc, char **argv) {
         if (count != 35) {
             printf("f was called %d times instead of %d times\n", count, 35);
             return 1;
+        }
+    }
+
+    for (bool up : {true, false}) {
+        // Each iteration needs three values of f and two of them are new, so
+        // rewinding the loop by one iteration to warm up must only compute
+        // the one value of f the first real iteration lacks.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        Expr i = up ? 2 * x : 100 - 2 * x;
+        g(x) = f(i) + f(i + 1) + f(i + 2);
+        f.store_root().compute_at(g, x);
+        g.realize({10});
+        if (count != 21) {
+            printf("Sliding %s: f was called %d times instead of %d times\n",
+                   up ? "up" : "down", count, 21);
+            return 1;
+        }
+    }
+
+    for (bool up : {true, false}) {
+        // A window held in registers can slide in either direction.
+        Func f, g;
+        f(x) = x;
+        Expr i = up ? x : 100 - x;
+        g(x) = f(i - 1) + f(i + 1);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out = g.realize({16});
+        for (int j = 0; j < 16; j++) {
+            int correct = up ? 2 * j : 200 - 2 * j;
+            if (out(j) != correct) {
+                printf("Sliding in registers %s: out(%d) = %d instead of %d\n",
+                       up ? "up" : "down", j, out(j), correct);
+                return 1;
+            }
+        }
+    }
+
+    {
+        // A window slid in registers must only evaluate the producer for the
+        // newly required values.
+        Func f, g, h;
+        Var yo, yi;
+        f(x, y) = x + y;
+        g(x, y) = f(x, y) * 2 + 1;
+        h(x, y) = g(x + 1, y + 2) + g(x, y + 1);
+        f.compute_root();
+        h.split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+        g.store_at(h, yi).compute_at(h, x).store_in(MemoryType::Register).trace_stores();
+        h.jit_handlers().custom_trace = record_stored_range;
+        min_stored = INT_MAX;
+        max_stored = INT_MIN;
+        h.realize({15, 15});
+        if (min_stored != 0 || max_stored != 15) {
+            printf("g was stored over x in [%d, %d] instead of [0, 15]\n",
+                   min_stored, max_stored);
+            return 1;
+        }
+    }
+
+    for (bool named : {false, true}) {
+        // Specializing a consumer duplicates the producer computed inside
+        // it, and each copy has to slide the same way.
+        count = 0;
+        Func f, g, h;
+        Param<bool> p;
+        f(x, y) = call_counter(x, y) + x + y;
+        g(x, y) = f(x, y) + f(x, y + 1);
+        h(x, y) = g(x, y) * 2;
+        g.compute_at(h, y).specialize(p);
+        f.store_root().compute_at(g, x);
+        if (named) {
+            f.slide(h, y);
+        }
+        for (bool pv : {false, true}) {
+            count = 0;
+            p.set(pv);
+            Buffer<int> out = h.realize({8, 8});
+            for (int j = 0; j < 8; j++) {
+                for (int i = 0; i < 8; i++) {
+                    int correct = 2 * (2 * (i + j) + 1);
+                    if (out(i, j) != correct) {
+                        printf("Specialized consumer: out(%d, %d) = %d instead of %d\n",
+                               i, j, out(i, j), correct);
+                        return 1;
+                    }
+                }
+            }
+            if (count != 8 * 9) {
+                printf("Specialized consumer: f was called %d times instead of %d times\n",
+                       count, 8 * 9);
+                return 1;
+            }
         }
     }
 
