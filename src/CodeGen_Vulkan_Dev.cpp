@@ -598,8 +598,8 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
     const int true_value = 1;
     const int false_value = 0;
 
-    std::vector<uint8_t> true_data(target_type.bytes(), (uint8_t)0);
-    std::vector<uint8_t> false_data(target_type.bytes(), (uint8_t)0);
+    std::vector<uint8_t> true_data(target_type.bytes() * target_type.lanes(), (uint8_t)0);
+    std::vector<uint8_t> false_data(target_type.bytes() * target_type.lanes(), (uint8_t)0);
 
     if (target_type.is_int_or_uint() && target_type.bits() == 8) {
         fill_bytes_with_value<int8_t>(&true_data[0], target_type.lanes(), true_value);
