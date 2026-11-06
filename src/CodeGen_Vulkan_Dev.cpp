@@ -151,7 +151,7 @@ protected:
         // Common operator visitors
         void visit_unary_op(SpvOp op_code, Type t, const Expr &a);
         void visit_binary_op(SpvOp op_code, Type t, const Expr &a, const Expr &b);
-        void visit_mul_extended_high(Type t, const Expr &a, const Expr &b, int q);
+        void visit_mul_extended_high(Type t, const Expr &a, const Expr &b);
         void visit_glsl_op(SpvId glsl_op_code, Type t, const std::vector<Expr> &args);
 
         void load_from_scalar_index(const Load *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class);
@@ -1204,12 +1204,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        if (op->type.is_uint()) {
-            visit_binary_op(SpvOpShiftRightLogical, op->type, op->args[0], op->args[1]);
-        } else if (op->args[1].type().is_uint()) {
-            // A signed value shifted by an unsigned amount must still
-            // replicate the sign bit.
-            visit_binary_op(SpvOpShiftRightArithmetic, op->type, op->args[0], op->args[1]);
+        if (op->args[1].type().is_uint()) {
+            // A signed value must replicate the sign bit.
+            SpvOp op_code = op->type.is_int() ? SpvOpShiftRightArithmetic : SpvOpShiftRightLogical;
+            visit_binary_op(op_code, op->type, op->args[0], op->args[1]);
         } else {
             Expr e = lower_signed_shift_right(op->args[0], op->args[1]);
             e.accept(this);
@@ -1276,15 +1274,15 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::mul_shift_right) &&
                op->type.is_int_or_uint() && op->type.bits() == 32 &&
-               as_const_uint(op->args[2]).value_or(0) >= 32 &&
-               as_const_uint(op->args[2]).value_or(0) < 64) {
+               is_const(op->args[2], 32)) {
         // Integer division by a constant is lowered to a multiply by a magic
         // number keeping the high half of the product: a mul_shift_right with
         // q >= 32. The generic lowering widens that to a 64-bit multiply,
         // which needs the Int64 capability. SPIR-V has 32x32 -> 64 multiplies
         // that return the low and high halves as a struct of two 32-bit
-        // values, so use those and shift the high half.
-        visit_mul_extended_high(op->type, op->args[0], op->args[1], (int)*as_const_uint(op->args[2]));
+        // values, so use those. Larger q is lowered to q == 32 followed by a
+        // shift_right by lower_intrinsic below.
+        visit_mul_extended_high(op->type, op->args[0], op->args[1]);
 
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
@@ -2417,13 +2415,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_binary_op(SpvOp op_code, Type t, c
     builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_mul_extended_high(Type t, const Expr &a, const Expr &b, int q) {
-    // Computes (widening_mul(a, b) >> q) for 32 <= q < 64, without 64-bit
-    // integers: OpUMulExtended/OpSMulExtended return the low and the high
-    // half of the full product in a struct, and the result is the high half
-    // shifted right by (q - 32), which always fits in t.
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_mul_extended_high(Type t, const Expr &a, const Expr &b) {
+    // Computes (widening_mul(a, b) >> 32) without 64-bit integers:
+    // OpUMulExtended/OpSMulExtended return the low and the high half of the
+    // full product in a struct, and the result is the high half.
     internal_assert(t.is_int_or_uint() && t.bits() == 32 && a.type() == t && b.type() == t);
-    internal_assert(q >= 32 && q < 64);
     SpvId type_id = builder.declare_type(t);
 
     // OpTypeStruct isn't unique per member types, so find ours by name.
@@ -2443,17 +2439,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_mul_extended_high(Type t, const Ex
     builder.append(SpvFactory::multiply_extended(struct_type_id, product_id, src_a_id, src_b_id, t.is_int()));
     SpvId high_id = builder.reserve_id(SpvResultId);
     builder.append(SpvFactory::composite_extract(type_id, high_id, product_id, {1}));
-
-    if (q > 32) {
-        // The shift amount must have as many lanes as the value shifted.
-        Expr shift = make_const(UInt(32, t.lanes()), q - 32);
-        shift.accept(this);
-        SpvId shift_id = builder.current_id();
-        SpvId shifted_id = builder.reserve_id(SpvResultId);
-        SpvOp shift_op = t.is_int() ? SpvOpShiftRightArithmetic : SpvOpShiftRightLogical;
-        builder.append(SpvFactory::binary_op(shift_op, type_id, shifted_id, high_id, shift_id));
-        high_id = shifted_id;
-    }
     builder.update_id(high_id);
 }
 
