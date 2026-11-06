@@ -190,7 +190,7 @@ void check_spirv_and_run(const std::string &name,
                          const Buffer<float> &powers_buf,
                          const std::function<float(float, float)> &ref_fn) {
     for (const auto &entry : fs::directory_iterator(".")) {
-        const fs::path path = entry.path();
+        const fs::path &path = entry.path();
         if (path.extension() == ".spv" && path.filename().string().rfind(name + "_k", 0) == 0) {
             fs::remove(path);
         }
@@ -202,7 +202,7 @@ void check_spirv_and_run(const std::string &name,
     int modules = 0;
     int total_phis = 0;
     for (const auto &entry : fs::directory_iterator(".")) {
-        const fs::path path = entry.path();
+        const fs::path &path = entry.path();
         if (path.extension() != ".spv" || path.filename().string().rfind(name + "_k", 0) != 0) {
             continue;
         }
@@ -223,7 +223,7 @@ void check_spirv_and_run(const std::string &name,
         for (int i = 0; i < floats_buf.width(); ++i) {
             float expected = ref_fn(floats_buf(i), powers_buf(i));
             float actual = result(i);
-            internal_assert( std::fabs(actual - expected) <= 1e-5f )
+            internal_assert(std::fabs(actual - expected) <= 1e-5f)
                 << "Mismatch in " << name << " at index " << i
                 << ": actual=" << actual << " expected=" << expected << "\n";
         }
@@ -253,8 +253,8 @@ int main(int argc, char **argv) {
         Func output("nested_else");
         Expr v = floats(x), p = powers(x);
         output(x) = lazy_if_then_else(p == 2.0f, v * v,
-                    lazy_if_then_else(p == 0.5f, sqrt(v),
-                    lazy_if_then_else(p == 1.0f, v, pow(v, p))));
+                                      lazy_if_then_else(p == 0.5f, sqrt(v),
+                                                        lazy_if_then_else(p == 1.0f, v, pow(v, p))));
         output.gpu_tile(x, block, thread, 32, TailStrategy::GuardWithIf);
 
         check_spirv_and_run("nested_else", output, {floats, powers}, 3, floats_buf, powers_buf,
@@ -297,11 +297,9 @@ int main(int argc, char **argv) {
         check_spirv_and_run("nested_both_arms", output, {floats, powers}, 7, floats_buf, powers_buf,
                             [](float v, float p) {
                                 if (p <= 1.5f) {
-                                    return p < 1.0f ? (p == 0.5f ? std::sqrt(v) : v + 1.0f)
-                                                    : (p == 1.0f ? v : v * 2.0f);
+                                    return p < 1.0f ? (p == 0.5f ? std::sqrt(v) : v + 1.0f) : (p == 1.0f ? v : v * 2.0f);
                                 } else {
-                                    return p > 2.0f ? (p == 3.0f ? v * v * v : v * 3.0f)
-                                                    : (p == 2.0f ? v * v : v - 1.0f);
+                                    return p > 2.0f ? (p == 3.0f ? v * v * v : v * 3.0f) : (p == 2.0f ? v * v : v - 1.0f);
                                 }
                             });
     }
