@@ -1376,11 +1376,14 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // 0.65-0.9x of 2, M3 Max). Two-level weights: per sub-block, the codes' dot
 // times its scale. The lanes reduce across the simdgroup (simd shuffles).
 // M > 1: rows x cols per simdgroup, a lane per value of every 32 (coalesced;
-// the gemv lanes there 0.5-1.4x), behind dot's specialization.
-inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0) {
+// the gemv lanes there 0.5-1.4x), behind dot's specialization. `on_codes`:
+// whether dot reads rs[0]'s codes (not a weight compute format's values,
+// e.g. q4_K:f16's), from which the scales and offsets hoist.
+inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
+    if (!on_codes) sub = 0;
     int bits = 0;
     while ((1 << bits) < block)
         bits++;
@@ -1464,7 +1467,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     }
     lane_vars.emplace_back(ry, u);
     Func blk = s.rfactor(lane_vars), rest, mid;
-    Func codes = block_dot(blk, rs, false, rest, mid, affine(rs));
+    Func codes = block_dot(blk, rs, false, rest, mid, on_codes && affine(rs));
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
@@ -1599,17 +1602,24 @@ struct GemmShape {
 };
 
 // Metal's shapes, of 8 x 8 fragments, by M: 64 x 64 on blocked f16 operands
-// (or 64 x 56), else 64 x 32 (M >= 256, N >= 64), 32 x 32, 16 x 16, 16 x 8.
-// On f16 operands at 16 < M < 32 one 32 x 32 tile, guarded (decoding the
-// weights once, not in two shifted tiles).
+// (or 64 x 56) on grids of >= 512 of them, else 64 x 32 (M >= 256, N >= 64),
+// 32 x 32, 16 x 16, 16 x 8. On f16 operands at 16 < M < 32 one 32 x 32
+// tile, guarded (decoding the weights once, not in two shifted tiles).
 inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     const bool h = wh.type() == Float(16), hb = h && fmt.block > 1;
-    // (64 x 56 where it computes fewer rows past M than 64 x 64). The guarded
-    // tile only on f16 operands, 64 x 56 on blocked ones.
-    Expr m56 = (M + 55) / 56 * 56 < (M + 63) / 64 * 64;
-    std::vector<GemmShape> shapes{{M > 16 && M < 32, 1, 4, 4, true}, {M >= 256 && N >= 64 && m56, 2, 7, 4}, {M >= 256 && N >= 64, 2, hb ? 8 : 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}};
-    shapes.erase(shapes.begin() + h + hb, shapes.begin() + 2);
+    std::vector<GemmShape> shapes;
+    if (h) shapes.push_back({M > 16 && M < 32, 1, 4, 4, true});
+    if (hb) {
+        // (64 x 56 where it computes fewer rows past M than 64 x 64; fewer
+        // than 512 tiles of 64 x 64 load the GPU's cores unevenly: 4096 x
+        // 4096 x 256 0.92-0.94 -> 0.95-0.96x of GGML's on 64 x 32, but 4096
+        // x 4096 x 512 1.01 -> 0.95x; M3 Max)
+        Expr big = M >= 256 && N >= 64 && cast<int64_t>(M) * N >= (1 << 21);
+        shapes.push_back({big && (M + 55) / 56 * 56 < (M + 63) / 64 * 64, 2, 7, 4});
+        shapes.push_back({big, 2, 8, 4});
+    }
+    shapes.insert(shapes.end(), {{M >= 256 && N >= 64, 2, 4, 4}, {M >= 32, 1, 4, 4}, {M >= 16, 1, 2, 2}, {Expr(), 1, 1, 2}});
     return shapes;
 }
 
@@ -1706,12 +1716,20 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
         }
         // each lane 4 values of K of a row of the step's weights or acts
         // (blocked (j, b, i) or flat (k, i)), unrolled (f32 acts on 64 x 56
-        // 0.92 -> 1.0x of GGML's)
+        // 0.92 -> 1.0x of GGML's); two-level weights on the M >= 256 tiles
+        // 16, as GGML's dequantize_q4_K etc., decoding a sub-block's scale
+        // once per 16 values (q4_K/q5_K/q3_K 1.15-1.3x, q6_K 1.1x; on the
+        // smaller tiles 0.88-1.0x)
         for (Func f : {ws, xs}) {
             std::vector<Var> a = f.args();
             Var l("l"), ln("ln"), lt("lt"), sw("sw"), jv("jv");
             Stage s = f.specialize(sh.cond);
-            s.split(a[0], l, jv, 4);
+            if (f.name() == ws.name() && fmt.sub && sh.tn > 1) {
+                Var ju("ju"), jh("jh");
+                s.split(a[0], l, jv, 32).split(jv, jh, jv, 16).split(jv, ju, jv, 4).fuse(jh, l, l).unroll(ju);
+            } else {
+                s.split(a[0], l, jv, 4);
+            }
             for (size_t i = 1; i < a.size(); i++) {
                 Var fl("l" + std::to_string(i));
                 s.fuse(l, a[i], fl);
@@ -1777,7 +1795,7 @@ inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const 
     // its gemv inlines them: select trees)
     metal_luts(out, rs);
     if (fmt.block > 1) {
-        metal_rows(out, rows, r, fmt.block, rs, fmt.sub);
+        metal_rows(out, rows, r, fmt.block, rs, fmt.sub, !fmt.wcompute);
         return;
     }
     // the rows' own staged acts (their kernel skipped under the gemm, whose
