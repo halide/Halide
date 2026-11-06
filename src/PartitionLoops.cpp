@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <map>
+#include <set>
 #include <type_traits>
 #include <utility>
 
@@ -253,6 +254,93 @@ bool expr_uses_invalid_buffers(const Expr &e, const Scope<> &invalid_buffers) {
     ExprUsesInvalidBuffers uses(invalid_buffers);
     e.accept(&uses);
     return uses.invalid;
+}
+
+class ExprUsesVarOutsideLoads : public IRGraphVisitor {
+    // The var, plus any let vars that depend on it outside of a Load.
+    Scope<> vars;
+
+    // Exprs are DAGs, so memoize the result for each node.
+    std::map<const IRNode *, bool> memo;
+
+    using IRGraphVisitor::visit;
+
+    void visit(const Load *op) override {
+    }
+
+    void visit(const Variable *op) override {
+        result = result || vars.contains(op->name);
+    }
+
+    void visit(const Let *op) override {
+        // Walk let chains iteratively, as they can be very long.
+        vector<ScopedBinding<>> bindings;
+        Expr e = op;
+        while (const Let *let = e.as<Let>()) {
+            const bool outer_result = result;
+            result = false;
+            include(let->value);
+            bindings.emplace_back(result, vars, let->name);
+            result = outer_result;
+            e = let->body;
+        }
+        include(e);
+        while (!bindings.empty()) {
+            bindings.pop_back();
+        }
+    }
+
+public:
+    using IRGraphVisitor::include;
+    void include(const Expr &e) override {
+        auto it = memo.find(e.get());
+        if (it == memo.end()) {
+            const bool outer_result = result;
+            result = false;
+            e.accept(this);
+            it = memo.emplace(e.get(), result).first;
+            result = outer_result;
+        }
+        result = result || it->second;
+    }
+
+    ExprUsesVarOutsideLoads(const string &v) {
+        vars.push(v);
+    }
+    bool result = false;
+};
+
+/** Check if an expression depends on a var other than through the index or
+ * predicate of a Load. */
+bool expr_uses_var_outside_loads(const Expr &e, const string &var) {
+    ExprUsesVarOutsideLoads uses(var);
+    uses.include(e);
+    return uses.result;
+}
+
+class CountUniqueNodes : public IRGraphVisitor {
+    std::set<const IRNode *> seen;
+
+public:
+    using IRGraphVisitor::include;
+    void include(const Expr &e) override {
+        if (remaining > 0 && seen.insert(e.get()).second) {
+            remaining--;
+            e.accept(this);
+        }
+    }
+
+    int remaining;
+    CountUniqueNodes(int limit)
+        : remaining(limit) {
+    }
+};
+
+/** Check if an expression has more than the given number of unique IR nodes. */
+bool expr_is_larger_than(const Expr &e, int limit) {
+    CountUniqueNodes counter(limit + 1);
+    counter.include(e);
+    return counter.remaining == 0;
 }
 
 // Then we define the mutator that hunts for them. Each node a
@@ -651,6 +739,20 @@ class PartitionLoops : public IRMutator {
         for (auto &[node, s] : finder.simplifications) {
 
             // Devectorize the condition
+            if (s.condition.type().is_vector() &&
+                expr_is_larger_than(s.condition, 1000) &&
+                !expr_uses_var_outside_loads(s.condition, op->name)) {
+                // The condition depends on the loop var only through
+                // loaded values, which the solver can't see through, so
+                // the only interval it can yield is everything or
+                // nothing. Simplifying it first, as below, sometimes
+                // proves it true, but the condition is wrapped in every
+                // let it depends on, so in large loop bodies that work is
+                // quadratic in the body size. Past a size limit, just
+                // bound it directly.
+                s.condition = and_condition_over_domain(s.condition, Scope<Interval>::empty_scope());
+                s.tight = false;
+            }
             while (s.condition.type().is_vector()) {
                 s.condition = simplify(s.condition);
                 if (const Broadcast *b = s.condition.as<Broadcast>()) {
