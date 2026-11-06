@@ -262,6 +262,7 @@ tests(
     gpu_lanes_reduction_codegen.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
+    gpu_many_launches_without_sync.cpp
     gpu_max_registers.cpp
     gpu_metal_completion_handler_error_check.cpp
     gpu_mixed_dimensionality.cpp

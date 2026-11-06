@@ -504,6 +504,11 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
     if ((device == nullptr) || (physical_device == nullptr) || (block_allocator == nullptr)) {
         return false;
     }
+    // Released regions may be used by recorded work that can't be submitted
+    // while a command is half recorded: leave them for a later collection.
+    if (vk_is_recording_command(this)) {
+        return false;
+    }
     // Released regions may still be in use by submitted work: wait for it to finish
     // before freeing them. (Retiring the submissions would release their staging
     // buffers, which must not happen here: this may be called from inside reserve().)

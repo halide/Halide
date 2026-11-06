@@ -104,9 +104,13 @@ int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocato
 int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
 
 // -- Submissions
-VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator *allocator, VkQueue queue, uint32_t queue_family_index);
+VulkanSubmission *vk_begin_submission(void *user_context, VulkanMemoryAllocator *allocator, VkQueue queue, uint32_t queue_family_index,
+                                      uint32_t storage_buffer_count = 0);
 int vk_end_submission(void *user_context, VulkanMemoryAllocator *allocator, VulkanSubmission *submission, bool host_read = false);
+int vk_flush_submissions(void *user_context, VulkanMemoryAllocator *allocator);
+int vk_flush_submissions_if_gpu_needs_work(void *user_context, VulkanMemoryAllocator *allocator);
 int vk_wait_for_submissions(void *user_context, VulkanMemoryAllocator *allocator, bool retire = true);
+bool vk_is_recording_command(VulkanMemoryAllocator *allocator);
 int vk_destroy_submission_queue(void *user_context, VulkanMemoryAllocator *allocator);
 
 void vk_record_dispatch_call(VkCommandBuffer command_buffer,
@@ -143,6 +147,7 @@ int vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *
 // -- Descriptor Pool
 int vk_create_descriptor_pool(void *user_context,
                               VulkanMemoryAllocator *allocator,
+                              uint32_t max_sets,
                               uint32_t uniform_buffer_count,
                               uint32_t storage_buffer_count,
                               VkDescriptorPool *descriptor_pool);
