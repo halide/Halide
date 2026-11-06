@@ -1233,6 +1233,34 @@ void check_bounds() {
     // The condition c0 == c1 + c2 is necessary; these must not fire.
     check(min(max(x, 3), max(y, -1) + 5), min(max(x, 3), max(y, -1) + 5));
     check(max(min(x, 3), min(y, -1) + 5), max(min(x, 3), min(y, -1) + 5));
+
+    // A min or max with one side of a select that is offset from the other
+    // operand is known on that side.
+    check(min(x, select(y < z, x + -2, w)), select(y < z, x + -2, min(w, x)));
+    check(min(x, select(y < z, x + 2, w)), select(y < z, x, min(w, x)));
+    check(max(x, select(y < z, x + -2, w)), select(y < z, x, max(w, x)));
+    check(max(x, select(y < z, x + 2, w)), select(y < z, x + 2, max(w, x)));
+
+    // Nested mins and maxes where one term is an offset of another
+    check(min(min(x + -2, y), x), min(x + -2, y));
+    check(min(min(x + 2, y), x), min(x, y));
+    check(max(max(x + 2, y), x), max(x + 2, y));
+    check(max(max(x + -2, y), x), max(x, y));
+
+    // A min of two maxes, one of which is never greater than the other
+    check(min(max(x + -2, y), max(x, y) + 1), max(x + -2, y));
+    check(min(max(x + -4, y), max(x + -2, y) + 1), max(x + -4, y));
+    check(min(max(x + 2, y), max(x, y) + -1), max(x, y) + -1);
+    check(max(min(x + 2, y), min(x, y) + -1), min(x + 2, y));
+    check(max(min(x + 4, y), min(x + 2, y) + -1), min(x + 4, y));
+    check(max(min(x + -2, y), min(x, y) + 1), min(x, y) + 1);
+    // Neither max dominates; these must not fire.
+    check(min(max(x + 2, y), max(x, y) + 1), min(max(x + 2, y), max(x, y) + 1));
+    check(max(min(x + -2, y), min(x, y) + -1), max(min(x + -2, y), min(x, y) + -1));
+
+    // A comparison against a select whose sides give the same answer
+    check(select(w < z, y, min(y, x)) < x + -2, y < x + -2);
+    check(x + 2 < select(w < z, y, max(y, x)), x < y + -2);
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
     check(max(x + 1, y) - max(y - 1, x), 1);
