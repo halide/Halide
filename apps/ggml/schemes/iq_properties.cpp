@@ -1,12 +1,18 @@
 // Properties of iq4_nl and iq4_xs (schemes/iq.h), without their layouts:
 // the round trip is within the declared error bound, the codes (and iq4_xs's
 // sub-block scales) are within their declared ranges, and every stage is
-// closed. (Not idempotent: requantizing the decoded values, the search may
-// fit another scale.) The blocks are drawn to reach the search's corners:
+// closed. Not idempotent (enc dec enc != enc), with normal scales too: the
+// search (16 trial scales, each refit by weighted least squares to the
+// non-uniform, asymmetric kvalues grid) on the decoded values may settle on
+// another trial, or the refit on another scale; counted per block by the
+// class of its fp16 scale, with a small block for each. (A scale of 0, the
+// block's max below 1e-15, keeps it.) The blocks are drawn to reach the
+// search's corners:
 // binades of every size, one-signed blocks, blocks dominated by one value,
 // constants and zeros.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
+#include "schemes/idempotence.h"
 #include "schemes/iq.h"
 
 #include <iostream>
@@ -55,6 +61,23 @@ int main() {
                 failures += !r.passed;
             }
         }
+    }
+
+    // enc dec enc = enc, per block: changes with normal scales
+    for (const auto &[scheme, q, a] : schemes) {
+        ggml::TallyOver t = ggml::requantize_tally_over(a, "scale", {dists[0]}, n, 1);
+        std::cout << scheme << ": requantizing: " << t.tally.str() << "\n";
+        bool ok = t.error.empty() && t.tally.changed_in(ggml::ScaleClass::Normal) > 0 && !t.tally.changed_in(ggml::ScaleClass::Zero);
+        if (!ok) std::cout << t.error << scheme << ": FAILED: expected requantizing to change blocks of normal scale (and none of scale 0)\n";
+        failures += !ok;
+    }
+    // a small block (three values; the rest 0), expected to fail: a code changes
+    for (const auto &[scheme, q, a] : schemes) {
+        std::vector<float> x(ggml::QK_K, 0.0f);
+        x[4] = 1.94175363f, x[11] = 1.79283834f, x[28] = -1.73056149f;
+        PropertyResult r = ggml::check_on(a, idempotent_requantize(0), x);
+        std::cout << scheme << " {x4 = 1.9418, x11 = 1.7928, x28 = -1.7306}, expected to fail: " << r;
+        failures += r.passed;
     }
 
     if (failures) {

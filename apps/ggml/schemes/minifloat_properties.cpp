@@ -4,7 +4,9 @@
 // every f32, and its generic decode against theirs on every code; GGML's e8m0
 // decode (ggml_e8m0_to_fp32) on every code; on every f32 and code, the
 // rounding, overflow and specials of fp8/fp6/fp4/e8m0-like formats (to
-// nearest, and every rounding); and units within their declared bounds.
+// nearest, and every rounding); requantizing idempotent (enc dec enc = enc)
+// on every f32, for each; and units within their declared bounds and
+// requantizing idempotent on samples.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/common.h"
@@ -127,6 +129,17 @@ int64_t generic(const MF &mf) {
         Expr inf = mf.specials == MF::Specials::IEEE && mf.overflow == MF::Overflow::Saturate ? (c & u32(mags)) == u32(emax << mf.man) : Internal::const_false();
         return !nan_code(c & u32(mags)) && !inf && cast<uint32_t>(mf.encode_bits(mf.decode_bits(cast(ft, c)))) != c;
     });
+    // and requantizing is idempotent, on every f32: enc dec enc = enc (NaNs
+    // too: the code of a NaN, decoded, encodes to it again), by a table of
+    // the codes that re-encode to themselves (over the field type's values:
+    // past the codes, none)
+    Var cv;
+    Func same("same");
+    same(cv) = cast<uint8_t>(cv < (1 << mf.bits()) && cast<int>(mf.encode_bits(mf.decode_bits(cast(ft, cv)))) == cv);
+    Buffer<uint8_t> fixed = same.realize({1 << ft.bits()});
+    n += count(mf.name() + " requantize: enc dec enc = enc", 32, [&](Expr u) {
+        return fixed(cast<int>(mf.encode_bits(reinterpret<float>(u)))) == 0;
+    });
     return n;
 }
 
@@ -197,7 +210,7 @@ int main() {
     for (auto [name, a] : {std::pair{"fp16", ggml::fp16()}, {"bf16", ggml::bf16()}, {"e4m3", Approximation(MF{4, 3, 7, true, S::NaNOnly, O::Saturate})}, {"e5m2", Approximation(MF{5, 2, 15, true, S::IEEE, O::Infinity, R::TowardZero})}}) {
         for (const auto &[dn, dist] : dists) {
             if (dn == "wide" && name[0] == 'e') continue;
-            for (const Property &p : {within_declared_bound(), closed()}) {
+            for (const Property &p : {within_declared_bound(), idempotent_requantize(0), closed()}) {
                 PropertyResult r = check_property(a, p, dist, Float(32), {4096}, 8, 1);
                 std::cout << name << " (" << dn << "): " << r;
                 failures += !r.passed;

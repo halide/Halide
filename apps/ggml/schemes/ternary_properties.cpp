@@ -4,9 +4,22 @@
 // their declared range, and every stage is closed. The blocks are drawn to
 // reach the quantizer's corners: binades of every size, one-signed blocks,
 // blocks dominated by one value, constants and zeros.
+//
+// And where requantizing is idempotent (enc dec enc = enc), block by block.
+// tq1_0, tq2_0: in exactly the blocks whose fp16 scale (the block's max
+// |x|) is finite and not 0, normal or subnormal: the max's code is +-1, so
+// the decoded max is the stored scale D, the scale again, and the codes
+// round(c D / D) = c. It fails where the scale underflows to 0 (codes from
+// the unrounded scale, decoded 0, requantized 0) or overflows to inf (inf *
+// 0 = NaN). q1_0: in every block whose scale (mean |x|) is not 0, inf
+// included (the decoded block is +-D, its mean |x| D: 128 multiples of an
+// fp16 are exact in f32), and in no block whose scale underflows to 0 with
+// a negative value: its code -1 decodes to -0, and requantizes to 1 (x >= 0).
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/binary.h"
+#include "schemes/idempotence.h"
+#include "schemes/schemes.h"
 #include "schemes/ternary.h"
 
 #include <iostream>
@@ -53,6 +66,40 @@ int main() {
                 failures += !r.passed;
             }
         }
+    }
+
+    // enc dec enc = enc per block, by its fp16 scale
+    std::vector<std::pair<std::string, Distribution>> domains = dists;
+    domains.emplace_back("subnormal scales", Distribution::normal(0, 1e-5));
+    domains.emplace_back("overflowing scales", Distribution::normal(0, 1e5));
+    using SC = ggml::ScaleClass;
+    for (const auto &[scheme, q, a] : schemes) {
+        ggml::TallyOver t = ggml::requantize_tally_over(a, "scale", domains, n, 1);
+        const ggml::RequantizeTally &k = t.tally;
+        std::cout << scheme << ": requantizing: " << k.str() << "\n";
+        bool covered = k.blocks_in(SC::Subnormal) && k.blocks_in(SC::Underflow) && k.blocks_in(SC::NonFinite);
+        bool ok = scheme == "q1_0" ? !k.changed_in(SC::Zero) && !k.changed_in(SC::Subnormal) && !k.changed_in(SC::Normal) &&
+                                         !k.changed_in(SC::NonFinite) && k.changed_in(SC::Underflow) :
+                                     k.holds_where_scale_finite_nonzero();
+        if (!t.error.empty() || !covered || !ok) std::cout << t.error << scheme << ": FAILED: requantizing not idempotent where expected\n";
+        failures += !t.error.empty() || !covered || !ok;
+    }
+    // q1_0, its scale underflowing: {2^-30, 0, ...} holds (codes 1), {-2^-30,
+    // 0, ...} not (code -1 decodes to -0)
+    Approximation q1 = std::get<2>(schemes[0]);
+    for (float v : {0x1p-30f, -0x1p-30f}) {
+        PropertyResult r = ggml::check_on(q1, idempotent_requantize(0), ggml::blocks_of(ggml::SignQuant::block, {{v}}));
+        std::cout << "q1_0 {" << v << ", 0, ...}" << (v < 0 ? ", expected to fail: " : ": ") << r;
+        failures += r.passed == (v < 0);
+    }
+    // the layout's Interleave (lossless) keeps it, on rows x blocks
+    {
+        ggml::Format fm = ggml::format("q1_0.4x1");
+        std::vector<Approximation> stages = ggml::pre_layout(fm.scheme);
+        stages.push_back(fm.scheme.target<Compose>()->stages.back().target<Compose>()->stages[0]);
+        PropertyResult r = check_property(Compose{stages}, idempotent_requantize(0), Distribution::normal(0, 1), Float(32), {fm.block * 8, fm.rows * 8}, 2, 1);
+        std::cout << "q1_0.4x1 (interleaved): " << r;
+        failures += !r.passed;
     }
 
     if (failures) {

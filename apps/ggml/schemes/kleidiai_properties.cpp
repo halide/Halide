@@ -5,6 +5,11 @@
 // ranges, qsi8cx's derived row sum holds, and every stage is closed. The
 // rows are drawn to reach the bounds' corners: one-signed rows (the zero
 // point at a range end), rows dominated by one value, constants and zeros.
+// And requantizing (enc dec enc = enc): qsi8cx keeps it exactly (its f32
+// scale, amax / 127, from the decoded max, 127 times it, is the same);
+// qai8dx within 2^-22, relative (codes and zero point the same): its f32
+// scale, (rmax - rmin) / 255, recomputed from the decoded range, rounds
+// up to two ulps off.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/kleidiai.h"
@@ -33,17 +38,39 @@ int main() {
         Approximation w = Compose{BlockReshape{ggml::QK}, wq, ggml::row_sum(blocks), ggml::row_codes_layout(lay)};
         Approximation a = Compose{BlockReshape{ggml::QK}, aq, ggml::row_codes_layout(lay)};
         for (const auto &[name, dist] : dists) {
-            for (const Property &p : {within_declared_bound().at(wq), outputs_within_declared_ranges(), derived_ports_hold(), closed()}) {
+            for (const Property &p : {within_declared_bound().at(wq), outputs_within_declared_ranges(), derived_ports_hold(), idempotent_requantize(0), closed()}) {
                 PropertyResult r = check_property(w, p, dist, Float(32), {ggml::QK * blocks, rows}, trials, 1);
                 std::cout << "qsi8cx (" << lay << ", " << name << "): " << r;
                 failures += !r.passed;
             }
-            for (const Property &p : {within_declared_bound().at(aq), outputs_within_declared_ranges(), closed()}) {
+            for (const Property &p : {within_declared_bound().at(aq), outputs_within_declared_ranges(), idempotent_requantize(0x1p-22), closed()}) {
                 PropertyResult r = check_property(a, p, dist, Float(32), {ggml::QK * blocks, rows}, trials, 1);
                 std::cout << "qai8dx (" << lay << ", " << name << "): " << r;
                 failures += !r.passed;
             }
         }
+    }
+
+    // requantizing (without the layouts), over the rows above and rows of
+    // every scale
+    std::vector<std::pair<std::string, Distribution>> wide = dists;
+    wide.emplace_back("big", Distribution::normal(0, 1e30));
+    wide.emplace_back("tiny", Distribution::normal(0, 1e-30));
+    {
+        Approximation w = Compose{BlockReshape{ggml::QK}, ggml::Qsi8cxQuant{blocks}, ggml::row_sum(blocks)};
+        Approximation a = Compose{BlockReshape{ggml::QK}, ggml::Qai8dxQuant{blocks}};
+        for (const auto &[name, dist] : wide) {
+            PropertyResult r = check_property(w, idempotent_requantize(0), dist, Float(32), {ggml::QK * blocks, rows}, trials, 1);
+            std::cout << "qsi8cx (" << name << "), exactly: " << r;
+            failures += !r.passed;
+            r = check_property(a, idempotent_requantize(0x1p-22), dist, Float(32), {ggml::QK * blocks, rows}, trials, 1);
+            std::cout << "qai8dx (" << name << "), within 2^-22: " << r;
+            failures += !r.passed;
+        }
+        // qai8dx's scale, requantized, not exactly the same (expected to fail)
+        PropertyResult r = check_property(a, idempotent_requantize(0), dists[0].second, Float(32), {ggml::QK * blocks, rows}, trials, 1);
+        std::cout << "qai8dx (normal), exactly, expected to fail: " << r;
+        failures += r.passed;
     }
 
     if (failures) {

@@ -11,13 +11,25 @@
 //   the nearest-point search is what GGML's quantizer does, trusted), is
 //   lossless over all of its indices, through the Tabulate table and without
 //   it.
+// - Requantizing (enc dec enc = enc), on GGML's own quantizer and
+//   dequantizer (the struct-typed blocks can't be read back through the
+//   Approximation), on normal(0, 1) super-blocks: it does not hold for any
+//   (some super-blocks' bytes change: expected): GGML's quantizers search
+//   the scale and each group's grid point (nearest to the scaled values,
+//   and for iq1 the shift), and on the decoded values, refit, the search
+//   may settle elsewhere.
 // GGML's exactness (encode and decode bit-exact against quantize_iq* and
 // dequantize_row_iq*) is the harness's codec check.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
+#include "harness.h"
 #include "schemes/grid.h"
 
+#include "ggml.h"
+
+#include <cstring>
 #include <iostream>
+#include <random>
 
 using namespace Halide;
 using namespace Halide::ApproximationTesting;
@@ -60,6 +72,37 @@ int main() {
                 return 1;
             }
         }
+    }
+
+    // requantized by GGML: the super-blocks whose bytes change
+    const std::vector<std::pair<std::string, ggml_type>> types = {
+        {"iq2_xxs", GGML_TYPE_IQ2_XXS},
+        {"iq2_xs", GGML_TYPE_IQ2_XS},
+        {"iq2_s", GGML_TYPE_IQ2_S},
+        {"iq3_xxs", GGML_TYPE_IQ3_XXS},
+        {"iq3_s", GGML_TYPE_IQ3_S},
+        {"iq1_s", GGML_TYPE_IQ1_S},
+        {"iq1_m", GGML_TYPE_IQ1_M},
+    };
+    std::mt19937 rng(1);
+    std::normal_distribution<float> normal(0.0f, 1.0f);
+    std::vector<float> x(n), y(n);
+    for (float &v : x) {
+        v = normal(rng);
+    }
+    for (const auto &[name, t] : types) {
+        const size_t bytes = ggml_row_size(t, n), per = ggml_type_size(t);
+        std::vector<uint8_t> q(bytes), q2(bytes);
+        const float *w = gq::importance(t, n);
+        ggml_quantize_chunk(t, x.data(), q.data(), 0, 1, n, w);
+        ggml_get_type_traits(t)->to_float(q.data(), y.data(), n);
+        ggml_quantize_chunk(t, y.data(), q2.data(), 0, 1, n, w);
+        int changed = 0;
+        for (size_t b = 0; b < bytes / per; b++) {
+            changed += memcmp(q.data() + b * per, q2.data() + b * per, per) != 0;
+        }
+        printf("%s: requantizing changes %d of %d super-blocks (expected some)\n", name.c_str(), changed, (int)(bytes / per));
+        failures += !changed;
     }
 
     // index -> codes -> index, over every index (16 uniform draws per entry

@@ -3,9 +3,23 @@
 // the derived block sum holds, and every stage is closed. Also measured: with
 // s derived GGML's way, from the unrounded scale, requantizing is not
 // idempotent, and in how many blocks it is not.
+//
+// Then, for every legacy format (q4_0, with its other code encodings and
+// scaled codes, q4_1, q5_0, q5_1, q8_0, q8_1; and the layouts' Interleave),
+// where requantizing is idempotent (enc dec enc = enc), block by block: in
+// exactly the blocks whose fp16 scale is finite and not 0, normal or
+// subnormal. The extreme value's code is the extreme code (type-0: -2^(b-1),
+// or +-127; type-1: 0 and 2^b - 1), so the decoded block's extreme is that
+// code times the stored scale D, exactly, and the scale fit to it is D again.
+// It fails in every block whose scale underflows to 0 (the codes were
+// computed from the unrounded scale, the decoded block is 0, or type-1's
+// min, and requantizes to codes 0, or 2^(b-1)) or overflows to inf. For
+// q4_0: blocks of max |x| <= 2^-22 underflow (d = 2^-25 rounds to 0), and of
+// max |x| >= 524160 overflow (d = 65520 rounds to inf).
 #include "Halide.h"
 #include "halide_approximation_testing.h"
-#include "schemes/legacy.h"
+#include "schemes/idempotence.h"
+#include "schemes/schemes.h"
 
 #include <iostream>
 #include <memory>
@@ -66,6 +80,93 @@ int main() {
                ggml_sum ? ", s from the unrounded scale (GGML's)" : "", (long long)changes->changed,
                (long long)changes->total, 100.0 * changes->changed / changes->total);
         failures += ggml_sum ? changes->changed == 0 : changes->changed != 0;
+    }
+
+    // enc dec enc = enc per block, by its scale: every legacy format
+    const std::vector<std::pair<std::string, Distribution>> domains = {
+        {"normal", normal},
+        {"positive", Distribution::uniform(0.5, 2)},
+        {"negative", Distribution::uniform(-3, -1e-3)},
+        {"offset", Distribution::uniform(1000, 1000.02)},
+        {"outliers", Distribution::outliers(Distribution::normal(0, 1e-3), 32, 1e2)},
+        {"constant", Distribution::constant(100)},
+        {"zeros", Distribution::zeros()},
+        {"big", Distribution::normal(0, 1e4)},
+        {"subnormal scales", Distribution::normal(0, 1e-5)},
+        {"underflowing scales", Distribution::normal(0, 1e-8)},
+        {"overflowing scales", Distribution::normal(0, 1e6)},
+    };
+    std::vector<std::pair<std::string, Approximation>> legacy;
+    for (const char *f : {"q4_0", "q4_0.i4", "q4_1", "q5_0", "q5_1", "q8_0", "q8_1"}) {
+        legacy.emplace_back(f, Compose{ggml::pre_layout(ggml::format(f).scheme)});
+    }
+    legacy.emplace_back("q4_0 (scaled codes)", Compose{ggml::pre_layout(ggml::format("q4_0", false, true).scheme)});
+    for (const auto &[name, a] : legacy) {
+        ggml::TallyOver t = ggml::requantize_tally_over(a, "scale", domains, ggml::QK * 256, 2);
+        std::cout << name << ": requantizing: " << t.tally.str() << "\n";
+        bool ok = t.error.empty() && t.tally.holds_where_scale_finite_nonzero() &&
+                  t.tally.blocks_in(ggml::ScaleClass::Subnormal) && t.tally.blocks_in(ggml::ScaleClass::Underflow);
+        if (!ok) std::cout << t.error << name << ": FAILED: not idempotent exactly where the scale is finite and not 0\n";
+        failures += !ok;
+    }
+
+    // q4_0's edges: max |x| = 2^-22 (d = 2^-25: fp16 0), just above it (the
+    // least subnormal), just below 524160 (65504) and at it (d = 65520: inf)
+    const Approximation &q4_0 = legacy[0].second;
+    auto edges = std::make_shared<ggml::RequantizeTally>();
+    r = ggml::check_on(q4_0, ggml::requantize_tally("scale", edges),
+                       ggml::blocks_of(ggml::QK, {{0x1p-22f}, {std::nextafter(0x1p-22f, 1.0f)}, {std::nextafter(524160.0f, 0.0f)}, {524160.0f}}));
+    std::cout << "q4_0 at its scale's edges: " << edges->str() << "\n";
+    using SC = ggml::ScaleClass;
+    bool ok = r.passed && edges->blocks_in(SC::Underflow) == 1 && edges->blocks_in(SC::Subnormal) == 1 && edges->blocks_in(SC::Normal) == 1 &&
+              edges->blocks_in(SC::NonFinite) == 1 && edges->holds_where_scale_finite_nonzero();
+    failures += !ok;
+
+    // Two blocks that decode alike, both 0 (their d, -2^-26, fp16 -0), but
+    // are encoded differently (codes -8, and -8 then -4s): requantizing
+    // cannot return both. Neither is a fixed point.
+    std::vector<float> a(ggml::QK, 0x1p-23f), b(ggml::QK, 0x1p-24f);
+    b[0] = 0x1p-23f;
+    a.insert(a.end(), b.begin(), b.end());
+    r = ggml::check_on(q4_0, Property("same decode, other encoding", [](const PropertyContext &c) {
+                           const Buffer<> &d = c.decoded()[0];
+                           bool zero = true, differ = false;
+                           Detail::for_each_coord(d, [&](const int *pos) { zero = zero && Detail::get(d, pos) == 0; });
+                           for (const Buffer<> &e : c.encoded()) {
+                               Detail::for_each_coord(e, [&](const int *pos) {
+                                   std::vector<int> other(pos, pos + e.dimensions());
+                                   other.back() = 1 - other.back();
+                                   differ = differ || Detail::get(e, pos) != Detail::get(e, other.data());
+                               });
+                           }
+                           return zero && differ ? PropertyOutcome() : Detail::fail("decoded not 0, or encoded alike");
+                       }),
+                       a);
+    std::cout << "q4_0 {2^-23 x 32} and {2^-23, 2^-24 x 31}: " << r;
+    failures += !r.passed;
+    r = ggml::check_on(q4_0, idempotent_requantize(0), a);
+    std::cout << "q4_0 {2^-23 x 32} and {2^-23, 2^-24 x 31}, expected to fail: " << r;
+    failures += r.passed;
+
+    // q4_1's scale underflows with no small values: {1 + 2^-23, 1, ...}, d =
+    // 2^-23 / 15 (fp16 0), codes 15 and 0, decoded all 1, requantized codes 0
+    std::vector<float> ones(ggml::QK, 1.0f);
+    ones[0] = 1.0f + 0x1p-23f;
+    r = ggml::check_on(legacy[2].second, idempotent_requantize(0), ones);
+    std::cout << "q4_1 {1 + 2^-23, 1, ...}, expected to fail: " << r;
+    failures += r.passed;
+
+    // The layouts' Interleave (lossless) keeps it, on 2-D input: rows x
+    // blocks of each record
+    for (const char *f : {"q8_0.4x4", "q8_0.4x8", "q4_0.i4.4x4", "q4_0.i4.4x8", "q4_0.i4.8x8"}) {
+        ggml::Format fm = ggml::format(f);
+        std::vector<Approximation> stages = ggml::pre_layout(fm.scheme);
+        stages.push_back(fm.scheme.target<Compose>()->stages.back().target<Compose>()->stages[0]);
+        for (const auto &[dn, dist] : {domains[0], domains[8]}) {
+            r = check_property(Compose{stages}, idempotent_requantize(0), dist, Float(32), {ggml::QK * 32, fm.rows * 8}, 2, 1);
+            std::cout << f << " (interleaved, " << dn << "): " << r;
+            failures += !r.passed;
+        }
     }
 
     if (failures) {
