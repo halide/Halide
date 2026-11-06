@@ -1775,8 +1775,9 @@ inline void fragments(const Staged &st, Func dot, int frag) {
 // fragments() where M >= min_m and N >= 32 (flat:
 // K % 32 == 0 and M * N >= 2^16; below it flat's rows win, 1.2-2.6x at M =
 // 8..32, N = 512..2048), else metal_rows (flat: metal_flat) on a clone of
-// dot, one kernel but flat's staged acts. min_m on Metal: 8 on f16 (GGML's), 16 on f32 (below
-// it the f32 tiles lose on mxfp4, iq4_nl, q4_1).
+// dot, one kernel but flat's staged acts. min_m on Metal: 8 (GGML's; on f32
+// at M = 8..15 the gemm takes 0.59-1.0x of the rows' time, iq4_nl's at M =
+// 8 1.04x; M3 Max).
 inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
                      const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -1967,7 +1968,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             return;
         }
         if (f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 16, metal_shapes(out, wh, fmt), 8);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");

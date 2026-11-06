@@ -38,7 +38,7 @@
 # layout (f32:q8_0.4x8, f32:q8_K.4x8) quantizes the whole groups of rows to
 # its records, as GGML's repacked gemm does, and the rest to the AoS type (its
 # gemv). A weight type may likewise be <storage>:<compute> (GPU mul_mat
-# only): q4_0:f16 (q8_0:f16, and likewise the K-quants' and iq4_xs's)
+# only): q4_0:f16 (q8_0:f16, and likewise every blocked Metal format's)
 # decodes q4_0 (q8_0) records and rounds each decoded value to f16,
 # as GGML's Metal gemm (kernel_mul_mm) does; with f16 acts (f16, f32:f16) its
 # library runs that gemm on the GPU's matrix unit for M >= 8 and N >= 32 (and
@@ -122,6 +122,11 @@ set(GGML_FORMATS
     "q2_K:f16 mul_mat f32:f16,f16 metal"
     "q3_K:f16 mul_mat f32:f16,f16 metal"
     "iq4_xs:f16 mul_mat f32:f16,f16 metal"
+    "q4_1:f16 mul_mat f32:f16,f16 metal"
+    "q5_0:f16 mul_mat f32:f16,f16 metal"
+    "q5_1:f16 mul_mat f32:f16,f16 metal"
+    "mxfp4:f16 mul_mat f32:f16,f16 metal"
+    "iq4_nl:f16 mul_mat f32:f16,f16 metal"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 

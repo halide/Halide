@@ -450,7 +450,7 @@ few percent slower than the exact q4_0 rows (which GGML's mul_mv also is).
 `--check` declares it as `Precision::w_quant` (an f16 rounding of every decoded
 weight: half an ulp, 2^-25 at least). The exact blocked formats' Metal libraries
 (f32 or f16 acts) run the same gemm on f32 operands (their decoded weights and
-acts staged as f32, `simdgroup_float8x8` fragments) for M >= 16 and N >= 32: no
+acts staged as f32, `simdgroup_float8x8` fragments) for M >= 8 and N >= 32: no
 rounding, and on the M3 Max about as fast as f16's (q4_0 at 4096 x 4096: M = 16
 98 us, M = 32 170; f16 operands 99 and 160). The two-level formats (K-quants,
 iq4_xs) too: at 4096 x 4096 and M = 32..4231 their gemm takes 0.31-0.82x of
@@ -461,11 +461,12 @@ decoded once per 16 values, not 4; from M = 256 their exact (f32 operand) gemm
 is still 0.7-0.86x of GGML's, which runs on half operands: their `<type>:f16`
 libraries (`q4_K:f16`, `q5_K:f16`, `q6_K:f16`, `q2_K:f16`, `q3_K:f16`,
 `iq4_xs:f16`) run it on f16 operands, as GGML does (0.85-1.07x at M =
-256..1024). Blocked f16 operands take 64 x 32 tiles where 64 x 64 would give
-fewer than 512 tiles (M x N < 2^21): too few to load the GPU's cores evenly.
-`f16` weights with f16 acts (`f16`, `f32:f16`) run the gemm too, K in steps of
-64 (or 32) values, for M >= 8, N >= 32, K % 32 == 0 and M * N >= 2^16, and
-`flat`'s rows otherwise.
+256..1024); likewise the single-level formats' (`q4_1:f16`, `q5_0:f16`,
+`q5_1:f16`, `mxfp4:f16`, `iq4_nl:f16`: 0.93-1.06x, their exact gemm 0.74-0.86x).
+Blocked f16 operands take 64 x 32 tiles where 64 x 64 would give fewer than 512
+tiles (M x N < 2^21): too few to load the GPU's cores evenly. `f16` weights with
+f16 acts (`f16`, `f32:f16`) run the gemm too, K in steps of 64 (or 32) values,
+for M >= 8, N >= 32, K % 32 == 0 and M * N >= 2^16, and `flat`'s rows otherwise.
 
 GGML picks its Metal kernel by M: mul_mv (exact; `kernel_mul_mv_mma_*` for M =
 2..16 on q4_0) up to 16, then `kernel_mul_mm` (f16 weights). The Halide
