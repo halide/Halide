@@ -971,13 +971,137 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
+
+// A rectangular copy (clEnqueue{Read,Write,Copy}BufferRect) of the innermost
+// d (at most 2) dimensions of a copy, plus its contiguous chunk: one enqueue
+// instead of one per chunk, of which there can be thousands (one per row of
+// a crop), each paying the full overhead of an enqueue.
+struct opencl_rect_copy {
+    size_t region[3];
+    size_t src_row_pitch, src_slice_pitch;
+    size_t dst_row_pitch, dst_slice_pitch;
+};
+
+// The row and slice pitch of the innermost d (at most 2) dimensions of the
+// copy, given their strides. Returns false if the strides can't be expressed
+// as pitches the OpenCL spec accepts.
+WEAK bool opencl_rect_pitches(const device_copy &c, const uint64_t *stride_bytes, int d,
+                              size_t *row_pitch, size_t *slice_pitch) {
+    // A dimension of extent 1 never steps: pick the smallest valid pitch.
+    uint64_t row = (d >= 1 && c.extent[0] > 1) ? stride_bytes[0] : c.chunk_size;
+    uint64_t rows = (d >= 1) ? c.extent[0] : 1;
+    uint64_t slice = (d >= 2 && c.extent[1] > 1) ? stride_bytes[1] : rows * row;
+    if (row < c.chunk_size || slice < rows * row || slice % row != 0) {
+        return false;
+    }
+    *row_pitch = (size_t)row;
+    *slice_pitch = (size_t)slice;
+    return true;
+}
+
+WEAK bool opencl_make_rect_copy(const device_copy &c, int d, bool from_host, bool to_host,
+                                opencl_rect_copy *r) {
+    if (d < 1 || d > 2 || (from_host && to_host)) {
+        return false;
+    }
+    if (c.extent[0] <= 1 && (d < 2 || c.extent[1] <= 1)) {
+        // A single contiguous chunk: the plain copy does it.
+        return false;
+    }
+    if (!opencl_rect_pitches(c, c.src_stride_bytes, d, &r->src_row_pitch, &r->src_slice_pitch) ||
+        !opencl_rect_pitches(c, c.dst_stride_bytes, d, &r->dst_row_pitch, &r->dst_slice_pitch)) {
+        return false;
+    }
+    r->region[0] = (size_t)c.chunk_size;
+    r->region[1] = (size_t)c.extent[0];
+    r->region[2] = (size_t)(d >= 2 ? c.extent[1] : 1);
+    return true;
+}
+
+// Whether the rectangle starting at byte offset origin of the cl_mem lies in
+// it, counting the padding after its last row and slice: drivers check the
+// bounds of a rectangle that way (NVIDIA rejects a rectangle whose last slice
+// ends at the end of the buffer but whose slice pitch reaches past it).
+WEAK bool opencl_rect_in_bounds(const opencl_rect_copy &r, uint64_t c_mem, uint64_t origin,
+                                size_t slice_pitch) {
+    size_t mem_size = 0;
+    cl_int err = clGetMemObjectInfo(((device_handle *)c_mem)->mem, CL_MEM_SIZE, sizeof(size_t), &mem_size, nullptr);
+    return err == CL_SUCCESS && origin + r.region[2] * slice_pitch <= mem_size;
+}
+
+WEAK cl_int opencl_enqueue_rect_copy(void *user_context, ClContext &ctx, const device_copy &c,
+                                     const opencl_rect_copy &r, uint64_t src_off, uint64_t dst_off,
+                                     bool from_host, bool to_host) {
+    debug(user_context) << "    rect copy from " << (from_host ? "host" : "device")
+                        << " to " << (to_host ? "host" : "device") << ", "
+                        << (void *)c.src << " + " << src_off
+                        << " -> " << (void *)c.dst << " + " << dst_off
+                        << ", " << (uint64_t)r.region[0] << " x " << (uint64_t)r.region[1]
+                        << " x " << (uint64_t)r.region[2] << " bytes\n";
+    // The spec computes a buffer's offset as origin[2] * slice_pitch +
+    // origin[1] * row_pitch + origin[0] and only requires the rectangle to lie
+    // in the buffer, so the whole byte offset goes in origin[0]. On the host
+    // side it goes in the pointer.
+    size_t zero[3] = {0, 0, 0};
+    if (!from_host && to_host) {
+        size_t src_origin[3] = {(size_t)src_off, 0, 0};
+        return clEnqueueReadBufferRect(ctx.cmd_queue, ((device_handle *)c.src)->mem, CL_FALSE,
+                                       src_origin, zero, r.region,
+                                       r.src_row_pitch, r.src_slice_pitch, r.dst_row_pitch, r.dst_slice_pitch,
+                                       (void *)(c.dst + dst_off), 0, nullptr, nullptr);
+    } else if (from_host && !to_host) {
+        size_t dst_origin[3] = {(size_t)dst_off, 0, 0};
+        return clEnqueueWriteBufferRect(ctx.cmd_queue, ((device_handle *)c.dst)->mem, CL_FALSE,
+                                        dst_origin, zero, r.region,
+                                        r.dst_row_pitch, r.dst_slice_pitch, r.src_row_pitch, r.src_slice_pitch,
+                                        (const void *)(c.src + src_off), 0, nullptr, nullptr);
+    } else {
+        size_t src_origin[3] = {(size_t)src_off, 0, 0};
+        size_t dst_origin[3] = {(size_t)dst_off, 0, 0};
+        return clEnqueueCopyBufferRect(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
+                                       src_origin, dst_origin, r.region,
+                                       r.src_row_pitch, r.src_slice_pitch, r.dst_row_pitch, r.dst_slice_pitch,
+                                       0, nullptr, nullptr);
+    }
+}
+
 WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
                                          const device_copy &c,
                                          int64_t src_idx, int64_t dst_idx,
                                          int d, bool from_host, bool to_host) {
+    opencl_rect_copy rect;
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU";
         return halide_error_code_bad_dimensions;
+    } else if (opencl_make_rect_copy(c, d, from_host, to_host, &rect)) {
+        uint64_t src_off = from_host ? src_idx : src_idx + ((device_handle *)c.src)->offset;
+        uint64_t dst_off = to_host ? dst_idx : dst_idx + ((device_handle *)c.dst)->offset;
+        bool in_bounds = (from_host || opencl_rect_in_bounds(rect, c.src, src_off, rect.src_slice_pitch)) &&
+                         (to_host || opencl_rect_in_bounds(rect, c.dst, dst_off, rect.dst_slice_pitch));
+        if (!in_bounds) {
+            // The padding after the last row or slice reaches past the end of
+            // the buffer: copy all but the outermost dimension's last index as
+            // a rectangle (which ends before the last one starts), and the last
+            // one as a copy of one dimension less.
+            int outer = d - 1;
+            if (c.extent[outer] > 1) {
+                device_copy head = c;
+                head.extent[outer] -= 1;
+                auto result = opencl_do_multidimensional_copy(user_context, ctx, head, src_idx, dst_idx,
+                                                              d, from_host, to_host);
+                if (result) {
+                    return result;
+                }
+            }
+            return opencl_do_multidimensional_copy(user_context, ctx, c,
+                                                   src_idx + (c.extent[outer] - 1) * c.src_stride_bytes[outer],
+                                                   dst_idx + (c.extent[outer] - 1) * c.dst_stride_bytes[outer],
+                                                   outer, from_host, to_host);
+        }
+        cl_int err = opencl_enqueue_rect_copy(user_context, ctx, c, rect, src_off, dst_off, from_host, to_host);
+        if (err) {
+            return error_opencl(user_context, err, "rectangular buffer copy failed");
+        }
     } else if (d == 0) {
         cl_int err = 0;
 
