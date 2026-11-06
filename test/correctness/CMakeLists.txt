@@ -621,6 +621,7 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     vulkan_bool_scalar_abi.cpp
+    vulkan_div_mod_no_int64.cpp
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
     wmma_matmul.cpp
