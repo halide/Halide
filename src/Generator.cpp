@@ -1245,11 +1245,13 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
+            const bool for_html_outputs = output_files.count(OutputFileType::stmt_html) ||
+                                          output_files.count(OutputFileType::conceptual_stmt_html);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
                 auto gen = generator_factory(function_name, target);
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :
-                           gen->build_module(function_name);
+                           gen->build_module(function_name, for_html_outputs);
             };
 
             warn_if_cache_requested_without_serialization();

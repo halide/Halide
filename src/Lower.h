@@ -28,7 +28,9 @@ class IRMutator;
  * on. Some stages of lowering may be target-specific. The Module may
  * contain submodules for computation offloaded to another execution
  * engine or API as well as buffers that are used in the passed in
- * Stmt. */
+ * Stmt. If for_html_outputs is set, the Module will be compiled to the
+ * stmt_html or conceptual_stmt_html outputs, which, like the debug symbols
+ * target features, need each IR node to be printed in one place only. */
 Module lower(const std::vector<Function> &output_funcs,
              const std::string &pipeline_name,
              const Target &t,
@@ -36,7 +38,8 @@ Module lower(const std::vector<Function> &output_funcs,
              LinkageType linkage_type,
              const std::vector<Stmt> &requirements = std::vector<Stmt>(),
              bool trace_pipeline = false,
-             const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());
+             const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>(),
+             bool for_html_outputs = false);
 
 /** Given a halide function with a schedule, create a statement that
  * evaluates it. Automatically pulls in all the functions f depends
