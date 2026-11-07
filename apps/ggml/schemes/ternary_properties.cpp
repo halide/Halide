@@ -15,6 +15,8 @@
 // included (the decoded block is +-D, its mean |x| D: 128 multiples of an
 // fp16 are exact in f32), and in no block whose scale underflows to 0 with
 // a negative value: its code -1 decodes to -0, and requantizes to 1 (x >= 0).
+// Both hold over blocks of a large offset and a small spread
+// (ggml::offset_blocks, where type-1 fails): no offset to round.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/binary.h"
@@ -100,6 +102,16 @@ int main() {
         PropertyResult r = check_property(Compose{stages}, idempotent_requantize(0), Distribution::normal(0, 1), Float(32), {fm.block * 8, fm.rows * 8}, 2, 1);
         std::cout << "q1_0.4x1 (interleaved): " << r;
         failures += !r.passed;
+    }
+
+    // Large offsets, small spreads (ggml::offset_blocks: type-1's failures):
+    // no offset to round, every block holds
+    for (const auto &[scheme, q, a] : schemes) {
+        std::string example;
+        std::vector<float> x = ggml::offset_blocks(ggml::format(scheme).block, scheme == "q1_0" ? 1 : 4);
+        int64_t changed = ggml::requantize_changed_count(a, x, &example);
+        std::cout << scheme << ": requantizing large offsets, small spreads: " << changed << " blocks changed " << example << "\n";
+        failures += changed != 0;
     }
 
     if (failures) {

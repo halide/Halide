@@ -29,6 +29,8 @@
 //   tie goes to the lesser code (decoded 1792 or 0: another scale). The
 //   sampled distributions reach only the last (the "huge" ones: expected
 //   to fail).
+// Both hold over blocks of a large offset and a small spread
+// (ggml::offset_blocks, where type-1 fails): no offset to round.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/idempotence.h"
@@ -151,6 +153,15 @@ int main() {
         PropertyResult r = check_property(Compose{stages}, idempotent_requantize(0), Distribution::normal(0, 1), Float(32), {fm.block * 32, fm.rows * 8}, 2, 1);
         std::cout << "mxfp4.4x4 (interleaved): " << r;
         failures += !r.passed;
+    }
+
+    // Large offsets, small spreads (ggml::offset_blocks: type-1's failures):
+    // no offset to round, every block holds
+    for (const auto &[name, f] : {std::pair{"mxfp4", a}, {"nvfp4", nv}}) {
+        std::string example;
+        int64_t changed = ggml::requantize_changed_count(f, ggml::offset_blocks(ggml::format(name).block), &example);
+        std::cout << name << ": requantizing large offsets, small spreads: " << changed << " blocks changed " << example << "\n";
+        failures += changed != 0;
     }
 
     if (failures) {

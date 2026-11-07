@@ -9,9 +9,12 @@
 // scale, amax / 127, from the decoded max, 127 times it, is the same);
 // qai8dx within 2^-22, relative (codes and zero point the same): its f32
 // scale, (rmax - rmin) / 255, recomputed from the decoded range, rounds
-// up to two ulps off.
+// up to two ulps off. Both also over rows of a large offset and a small
+// spread (ggml::offset_blocks, where q4_1 fails): qai8dx's offset is an
+// integer zero point, its range includes 0; nothing rounds an offset.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
+#include "schemes/idempotence.h"
 #include "schemes/kleidiai.h"
 
 #include <iostream>
@@ -71,6 +74,24 @@ int main() {
         PropertyResult r = check_property(a, idempotent_requantize(0), dists[0].second, Float(32), {ggml::QK * blocks, rows}, trials, 1);
         std::cout << "qai8dx (normal), exactly, expected to fail: " << r;
         failures += r.passed;
+    }
+
+    // Rows of a large offset and a small spread (ggml::offset_blocks: where
+    // q4_1 fails): qai8dx's integer offset (its range includes 0) rounds
+    // nothing, both hold as above
+    {
+        std::vector<float> x = ggml::offset_blocks(ggml::QK);
+        Buffer<float> in(ggml::QK, (int)x.size() / ggml::QK);
+        std::copy(x.begin(), x.end(), in.begin());
+        auto input = [=](uint64_t) { return std::vector<Buffer<>>{in}; };
+        Approximation w = Compose{BlockReshape{ggml::QK}, ggml::Qsi8cxQuant{1}, ggml::row_sum(1)};
+        Approximation a = Compose{BlockReshape{ggml::QK}, ggml::Qai8dxQuant{1}};
+        PropertyResult r = check_property(w, idempotent_requantize(0), input, 1, 0);
+        std::cout << "qsi8cx (large offsets, small spreads), exactly: " << r;
+        failures += !r.passed;
+        r = check_property(a, idempotent_requantize(0x1p-22), input, 1, 0);
+        std::cout << "qai8dx (large offsets, small spreads), within 2^-22: " << r;
+        failures += !r.passed;
     }
 
     if (failures) {

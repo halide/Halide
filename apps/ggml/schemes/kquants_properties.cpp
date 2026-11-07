@@ -22,6 +22,8 @@
 // the other sign, before the max, has the max's code magnitude (127), the
 // decoded block's first max is that value: codes and d negate (decoding
 // alike).
+// Over blocks of a large offset and a small spread (ggml::offset_blocks,
+// where q4_1 and q5_1 fail), q2_K, q4_K and q5_K (with mins) fail too.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/idempotence.h"
@@ -153,6 +155,17 @@ int main() {
     PropertyResult r = ggml::check_on(q8k_quant, idempotent_requantize(0), x);
     std::cout << "q8_K {-0.999, 1, 0, ...}, expected to fail: " << r;
     failures += r.passed;
+
+    // Large offsets, small spreads (ggml::offset_blocks, of every 8th: where
+    // q4_1's and q5_1's offsets fail): q2_K, q4_K and q5_K, with mins, fail
+    // there too (as anywhere)
+    for (const auto &[scheme, q, a] : schemes) {
+        if (scheme == "q8_K") continue;
+        std::string example;
+        int64_t changed = ggml::requantize_changed_count(a, ggml::offset_blocks(ggml::QK_K, 8), &example);
+        std::cout << scheme << ": requantizing large offsets, small spreads: " << changed << " of 1980 blocks changed " << example << "\n";
+        failures += changed < 0 || ((scheme == "q2_K" || scheme == "q4_K" || scheme == "q5_K") && changed == 0);
+    }
 
     if (failures) {
         printf("%d failures\n", failures);

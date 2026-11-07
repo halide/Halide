@@ -16,6 +16,13 @@
 // min, and requantizes to codes 0, or 2^(b-1)) or overflows to inf. For
 // q4_0: blocks of max |x| <= 2^-22 underflow (d = 2^-25 rounds to 0), and of
 // max |x| >= 524160 overflow (d = 65520 rounds to inf).
+//
+// Except type-1 (q4_1, q5_1): its decoded values, q d + m, are rounded to
+// f32, and where d is below a few f32 ulps of the block (a large offset, a
+// small spread; or m rounding up across a binade), requantizing them can
+// change the codes and d. It holds where every q d + m is a float, or d is
+// at least 2^9 f32 ulps of the largest; tested over adversarial blocks
+// (ggml::offset_blocks), with type-0 as a control.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
 #include "schemes/idempotence.h"
@@ -23,6 +30,8 @@
 
 #include <iostream>
 #include <memory>
+#include <string>
+#include <tuple>
 
 using namespace Halide;
 using namespace Halide::ApproximationTesting;
@@ -167,6 +176,44 @@ int main() {
             std::cout << f << " (interleaved, " << dn << "): " << r;
             failures += !r.passed;
         }
+    }
+
+    // Type-1's decoded values, q d + m, rounded to f32: with a large offset
+    // and a small spread, d below a few f32 ulps of the block, they need not
+    // be q d + m, and requantizing them can change the codes, and d.
+    // (A reviewer's block: codes 0, 4, 15 decode to 4096, 4096 + 2^-11,
+    // 4096 + 2^-10, requantized to codes 0, 7, 15.)
+    std::vector<float> offset(ggml::QK, 4095.9990234375f);
+    offset[1] = 4095.999267578125f;
+    offset[2] = 4096.0f;
+    r = ggml::check_on(legacy[2].second, idempotent_requantize(0), offset);
+    std::cout << "q4_1 {4096 - 2^-10, 4096 - 3 2^-12, 4096, 4096 - 2^-10, ...}, expected to fail: " << r;
+    failures += r.passed;
+    // Over blocks of large offsets and small spreads (ggml::offset_blocks,
+    // random_offset_blocks): it holds in every block whose fp16 d is finite
+    // and not 0 and that decodes exactly (every q d + m a float), or whose d
+    // is at least 2^9 f32 ulps of its largest decoded value (the rounding
+    // then moves d by under half an fp16 ulp, and the codes by under 1/2);
+    // fails in some of the others, with d up to 2^7 ulps (q4_1: d moves by
+    // up to ulp/30, half an fp16 ulp being d 2^-12 to 2^-11).
+    std::vector<float> offsets = ggml::offset_blocks(ggml::QK), random_offsets = ggml::random_offset_blocks(ggml::QK, 20000);
+    offsets.insert(offsets.end(), random_offsets.begin(), random_offsets.end());
+    for (const auto &[name, a, top] : {std::tuple{"q4_1", legacy[2].second, 15}, {"q5_1", legacy[4].second, 31}}) {
+        using T = ggml::AffineTally;
+        T t = ggml::affine_requantize_tally(a, top, ggml::QK, offsets);
+        std::cout << name << ": requantizing large offsets, small spreads: " << t.str() << "\n";
+        bool ok = t.error.empty() && !t.changed[T::exact] && !t.changed[T::inexact_far] && t.blocks[T::inexact_far] && t.changed[T::inexact] &&
+                  t.changed[T::zero] == t.blocks[T::zero] && t.changed[T::non_finite] == t.blocks[T::non_finite];
+        if (!ok) std::cout << t.error << name << ": FAILED: not idempotent exactly where expected\n";
+        failures += !ok;
+    }
+    // Type-0 (no offset: q d, exact) is unaffected
+    for (const auto &[name, a] : legacy) {
+        if (name == "q4_1" || name == "q5_1") continue;
+        std::string example;
+        int64_t changed = ggml::requantize_changed_count(a, offsets, &example);
+        std::cout << name << ": requantizing large offsets, small spreads: " << changed << "/" << offsets.size() / ggml::QK << " blocks changed " << example << "\n";
+        failures += changed != 0;
     }
 
     if (failures) {
