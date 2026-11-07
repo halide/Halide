@@ -38,6 +38,12 @@ public:
         CPlusPlusFunctionInfoHeader,
     };
 
+    /** While recording where Stmts are printed (see IRPrinter), have a Stmt
+     * that a rewrite of original made be recorded as the Stmt it replaces:
+     * those in the same place in both, if they are made of the same kinds of
+     * Stmts there. */
+    void remember_replaced(const Stmt &original, const Stmt &replacement);
+
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &dest,
@@ -111,6 +117,12 @@ protected:
 
     /** Emit a statement */
     void print_stmt(const Stmt &);
+
+    /** While recording where Stmts are printed: the Stmts that replace others,
+     * with the Stmts they replace. The former are kept alive, so that their
+     * addresses stay theirs. */
+    std::vector<std::pair<Stmt, Stmt>> replaced;
+    std::map<const IRNode *, const IRNode *> replaced_by;
 
     void create_assertion(const std::string &id_cond, const Expr &message);
     void create_assertion(const Expr &cond, const Expr &message);

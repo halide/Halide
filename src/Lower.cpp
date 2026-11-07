@@ -2,6 +2,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -541,7 +542,8 @@ void lower_impl(const vector<Function> &output_funcs,
     // The html outputs and the debug symbols say where code came from by the
     // IR node of the stmt it was made from, which must then be printed in one
     // place only.
-    if (for_html_outputs || t.has_feature(Target::DebugSymbols) || t.has_feature(Target::DebugSymbolsConceptual)) {
+    if (for_html_outputs || t.has_feature(Target::DebugSymbols) || t.has_feature(Target::DebugSymbolsConceptual) ||
+        t.has_feature(Target::GPUDebugSymbols)) {
         s = copy_shared_nodes(s);
         log("Lowering after copying shared IR nodes:", s);
     }
@@ -562,7 +564,26 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t, any_strict_float, env);
+        // The html outputs show which line of the conceptual stmt, which still
+        // has the code of the kernels, each line of device code came from.
+        // The device code itself only says so with gpu_debug_symbols.
+        const bool line_info_in_code = t.has_feature(Target::GPUDebugSymbols);
+        const bool device_code_lines = line_info_in_code || for_html_outputs;
+        // Line information in device code compiled with LLVM points into the
+        // printing of the conceptual stmt.
+        std::optional<StmtSourceMap> conceptual_source;
+        if (device_code_lines && (line_info_in_code || t.has_feature(Target::CUDA))) {
+            conceptual_source = print_with_source_map(result_module.get_conceptual_stmt());
+            conceptual_source->path = pipeline_name + ".conceptual.stmt";
+        }
+        std::vector<DeviceCodeLines> lines;
+        s = inject_gpu_offload(s, t, any_strict_float, env,
+                               device_code_lines ? result_module.get_conceptual_stmt() : Stmt(),
+                               conceptual_source ? &*conceptual_source : nullptr,
+                               line_info_in_code, &lines);
+        for (auto &l : lines) {
+            result_module.append_device_code_lines(std::move(l));
+        }
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {

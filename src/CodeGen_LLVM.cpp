@@ -204,6 +204,9 @@ struct CodeGen_LLVM::DebugInfo {
     std::vector<std::pair<Type, DIType *>> types;
     DIType *buffer_ptr_type = nullptr;
 
+    // Only describe which code came from where, not the values in it.
+    bool line_tables_only = false;
+
     struct Saved {
         DILocation *location = nullptr;
         uint32_t start = 0;
@@ -269,9 +272,10 @@ struct CodeGen_LLVM::DebugInfo {
     // Stmt. Printings that are null are made from input.
     static std::unique_ptr<DebugInfo> make(llvm::Module &m, const Module *input, const Target &target,
                                            const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
-                                           bool conceptual,
+                                           bool conceptual, bool line_tables_only,
                                            StructType *buffer_t, StructType *type_t, StructType *dimension_t) {
         auto d = std::make_unique<DebugInfo>();
+        d->line_tables_only = line_tables_only;
         if (source) {
             d->source = source;
         } else {
@@ -334,8 +338,9 @@ struct CodeGen_LLVM::DebugInfo {
         } else if (!m.getModuleFlag("Dwarf Version")) {
             // Version 5 could carry the text of the .stmt in the object, but
             // LLVM then describes many optimized variables with typed DWARF
-            // expressions that gdb can't evaluate.
-            m.addModuleFlag(llvm::Module::Max, "Dwarf Version", 4);
+            // expressions that gdb can't evaluate. Line tables need no more
+            // than version 2, which is what the CUDA tools expect.
+            m.addModuleFlag(llvm::Module::Max, "Dwarf Version", line_tables_only ? 2 : 4);
         }
 
         SmallString<256> path(d->source->path);
@@ -351,8 +356,11 @@ struct CodeGen_LLVM::DebugInfo {
         d->builder = std::make_unique<DIBuilder>(m);
         d->file = d->builder->createFile(sys::path::filename(path), sys::path::parent_path(path),
                                          DIFile::ChecksumInfo<StringRef>(DIFile::CSK_MD5, checksum));
+        // Just the .loc directives is all that GPU device code can take
+        // without the CUDA tools turning optimization off.
         d->unit = d->builder->createCompileUnit(dwarf::DW_LANG_C99, d->file, "Halide",
-                                                /* isOptimized */ true, "", 0, "");
+                                                /* isOptimized */ true, "", 0, "",
+                                                line_tables_only ? DICompileUnit::DebugDirectivesOnly : DICompileUnit::FullDebug);
         d->pointer_bits = target.bits;
 
         // Describe halide_buffer_t, so that the debugger can show buffers.
@@ -951,7 +959,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         << "or into the conceptual stmt (debug_symbols_conceptual), but not both.\n";
     if (debug_source || target.has_feature(Target::DebugSymbols) || target.has_feature(Target::DebugSymbolsConceptual)) {
         init_debug_info(debug_source, debug_conceptual_source, &input,
-                        target.has_feature(Target::DebugSymbolsConceptual));
+                        target.has_feature(Target::DebugSymbolsConceptual), false);
     }
 
     // Generate the code for this module.
@@ -1202,8 +1210,8 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
 }
 
 void CodeGen_LLVM::init_debug_info(const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
-                                   const Module *input, bool conceptual) {
-    debug_info = DebugInfo::make(*module, input, target, source, conceptual_source, conceptual,
+                                   const Module *input, bool conceptual, bool line_tables_only) {
+    debug_info = DebugInfo::make(*module, input, target, source, conceptual_source, conceptual, line_tables_only,
                                  halide_buffer_t_type, type_t_type, dimension_t_type);
 }
 
@@ -1839,7 +1847,7 @@ void CodeGen_LLVM::sym_pop(const string &name) {
 }
 
 void CodeGen_LLVM::add_debug_variable(const string &name, const Type &type, llvm::Value *value, unsigned arg_no) {
-    if (!debug_info || !debug_info->scope || !value || !builder->GetInsertBlock()) {
+    if (!debug_info || debug_info->line_tables_only || !debug_info->scope || !value || !builder->GetInsertBlock()) {
         return;
     }
     DebugInfo &d = *debug_info;

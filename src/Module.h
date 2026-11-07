@@ -163,6 +163,21 @@ using RuntimeNamespaceMap = std::map<RuntimeLinkage, std::string>;
 
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
+namespace Internal {
+/** The device code of the kernels of a GPU API, for the html outputs: as it
+ * is shown, with where its lines came from in the conceptual Stmt. */
+struct DeviceCodeLines {
+    /** The name of the Buffer that holds the device code. */
+    std::string name;
+    /** The device code. */
+    std::string text;
+    /** For each line of text, the IR node of the conceptual Stmt it was made
+     * from, or null. Empty if text says so itself, with .loc directives that
+     * point into the printing of the conceptual Stmt. */
+    std::vector<const IRNode *> line_nodes;
+};
+}  // namespace Internal
+
 class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
@@ -252,6 +267,13 @@ public:
 
     /** Get the remembered conceptual Stmt, remembered before device-specific offloading. */
     const Internal::Stmt &get_conceptual_stmt() const;
+
+    /** Remember the device code of the kernels of a GPU API, with where its
+     * lines came from in the conceptual Stmt, for the html outputs. */
+    void append_device_code_lines(Internal::DeviceCodeLines lines);
+
+    /** Get the remembered device code. */
+    const std::vector<Internal::DeviceCodeLines> &get_device_code_lines() const;
 };
 
 /** Link a set of modules together into one module. */
