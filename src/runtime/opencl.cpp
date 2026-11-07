@@ -983,16 +983,16 @@ WEAK bool opencl_rect_in_bounds(uint64_t c_mem, uint64_t origin, uint64_t slices
     return err == CL_SUCCESS && origin + slices * slice_pitch <= mem_size;
 }
 
-// Copy one task of the copy: a contiguous chunk if rect_dims is 0, or a
-// rectangle of chunks spanning rect_dims (at most 2) dimensions of the given
-// extents, with one clEnqueue{Read,Write,Copy}BufferRect.
+// Copy one task of the copy: a contiguous chunk if rect_dims is 1, or a 2D or
+// 3D rectangle of chunks of the given extents if rect_dims is 2 or 3, with one
+// clEnqueue{Read,Write,Copy}BufferRect.
 WEAK int opencl_copy_task(void *user_context, ClContext &ctx, const device_copy &c,
                           int rect_dims, const uint64_t *rect_extent,
                           int64_t src_idx, int64_t dst_idx, bool from_host, bool to_host) {
-    if (rect_dims > 0 && from_host && to_host) {
-        int outer = rect_dims - 1;
+    if (rect_dims > 1 && from_host && to_host) {
+        int outer = rect_dims - 2;
         for (uint64_t i = 0; i < rect_extent[outer]; i++) {
-            auto result = opencl_copy_task(user_context, ctx, c, outer, rect_extent,
+            auto result = opencl_copy_task(user_context, ctx, c, rect_dims - 1, rect_extent,
                                            src_idx + i * c.src_rect_pitch[outer],
                                            dst_idx + i * c.dst_rect_pitch[outer],
                                            from_host, to_host);
@@ -1000,13 +1000,13 @@ WEAK int opencl_copy_task(void *user_context, ClContext &ctx, const device_copy 
                 return result;
             }
         }
-    } else if (rect_dims > 0) {
+    } else if (rect_dims > 1) {
         size_t region[3] = {(size_t)c.chunk_size, (size_t)rect_extent[0],
-                            (size_t)(rect_dims == 2 ? rect_extent[1] : 1)};
+                            (size_t)(rect_dims == 3 ? rect_extent[1] : 1)};
         size_t src_row_pitch = c.src_rect_pitch[0];
         size_t dst_row_pitch = c.dst_rect_pitch[0];
-        size_t src_slice_pitch = rect_dims == 2 ? c.src_rect_pitch[1] : region[1] * src_row_pitch;
-        size_t dst_slice_pitch = rect_dims == 2 ? c.dst_rect_pitch[1] : region[1] * dst_row_pitch;
+        size_t src_slice_pitch = rect_dims == 3 ? c.src_rect_pitch[1] : region[1] * src_row_pitch;
+        size_t dst_slice_pitch = rect_dims == 3 ? c.dst_rect_pitch[1] : region[1] * dst_row_pitch;
         uint64_t src_off = from_host ? src_idx : src_idx + ((device_handle *)c.src)->offset;
         uint64_t dst_off = to_host ? dst_idx : dst_idx + ((device_handle *)c.dst)->offset;
 
@@ -1017,7 +1017,7 @@ WEAK int opencl_copy_task(void *user_context, ClContext &ctx, const device_copy 
             // the buffer: copy all but the last row or slice as a rectangle
             // (which ends where the last one starts), and the last one as a
             // rectangle of one dimension less.
-            int outer = rect_dims - 1;
+            int outer = rect_dims - 2;
             uint64_t last = rect_extent[outer] - 1;
             if (last > 0) {
                 uint64_t head_extent[2] = {rect_extent[0], rect_extent[1]};
@@ -1028,7 +1028,7 @@ WEAK int opencl_copy_task(void *user_context, ClContext &ctx, const device_copy 
                     return result;
                 }
             }
-            return opencl_copy_task(user_context, ctx, c, outer, rect_extent,
+            return opencl_copy_task(user_context, ctx, c, rect_dims - 1, rect_extent,
                                     src_idx + last * c.src_rect_pitch[outer],
                                     dst_idx + last * c.dst_rect_pitch[outer],
                                     from_host, to_host);
@@ -1150,7 +1150,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host, /*max_rect_dims*/ 2);
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host, /*max_rect_dims*/ 3);
 
     {
         ClContext ctx(user_context);

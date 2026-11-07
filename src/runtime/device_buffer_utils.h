@@ -42,13 +42,14 @@ struct device_copy {
     uint64_t dst_stride_bytes[MAX_COPY_DIMS];
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
-    // The number of dimensions (at most 2) each task spans beyond its
-    // contiguous chunk, for runtimes that can copy a rectangle in one
-    // operation. A task is then rect_extent[1] slices of rect_extent[0] rows
-    // of chunk_size bytes, with rows {src,dst}_rect_pitch[0] bytes apart and
-    // slices {src,dst}_rect_pitch[1] bytes apart. Each pitch is at least the
-    // size of what it steps over, and the slice pitch is a multiple of the
-    // row pitch. Unused entries have extent 1.
+    // The number of dimensions each task spans, counting its contiguous
+    // chunk: 1 for just the chunk, or 2 or 3 for a 2D or 3D rectangle, for
+    // runtimes that can copy one in a single operation. A task is
+    // rect_extent[1] slices of rect_extent[0] rows of chunk_size bytes, with
+    // rows {src,dst}_rect_pitch[0] bytes apart and slices
+    // {src,dst}_rect_pitch[1] bytes apart. Each pitch is at least the size of
+    // what it steps over, and the slice pitch is a multiple of the row pitch.
+    // Dimensions a task doesn't span have extent 1.
     int rect_dims;
     uint64_t rect_extent[2];
     uint64_t src_rect_pitch[2], dst_rect_pitch[2];
@@ -103,7 +104,8 @@ ALWAYS_INLINE void erase_innermost_dim(device_copy &c) {
     c.dst_stride_bytes[MAX_COPY_DIMS - 1] = 0;
 }
 
-// Whether stride (in bytes) can be the pitch of rect dimension k of the copy.
+// Whether stride (in bytes) can be the row pitch (k = 0) or slice pitch
+// (k = 1) of the copy's tasks, given the pitches before it.
 ALWAYS_INLINE bool valid_rect_pitch(const device_copy &c, int k, uint64_t stride,
                                     const uint64_t *pitch) {
     if ((int64_t)stride <= 0) {
@@ -123,11 +125,11 @@ ALWAYS_INLINE bool valid_rect_pitch(const device_copy &c, int k, uint64_t stride
 //  3) Copy only the overlapping region between two buffers, from src to dst.
 //
 // A runtime that can copy a 2D (or 3D) rectangle in one operation passes
-// max_rect_dims = 1 (or 2) to have up to that many dimensions beyond the
-// contiguous chunk described as rect dimensions instead (see device_copy).
+// max_rect_dims = 2 (or 3) to have each task span up to that many
+// dimensions (see device_copy).
 WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
                                   const halide_buffer_t *dst, bool dst_host,
-                                  int max_rect_dims = 0) {
+                                  int max_rect_dims = 1) {
     // Make a copy job representing copying the first pixel only.
     device_copy c;
     c.src = src_host ? (uint64_t)src->host : src->device;
@@ -138,7 +140,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         c.src_stride_bytes[i] = 0;
         c.dst_stride_bytes[i] = 0;
     }
-    c.rect_dims = 0;
+    c.rect_dims = 1;
     for (int i = 0; i < 2; i++) {
         c.rect_extent[i] = 1;
         c.src_rect_pitch[i] = 0;
@@ -225,13 +227,13 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
 
     // Move the innermost remaining dimensions into the rect dimensions, as
     // long as their strides are valid pitches.
-    while (c.rect_dims < max_rect_dims && c.rect_dims < 2 &&
+    while (c.rect_dims < max_rect_dims && c.rect_dims < 3 &&
            c.extent[0] > 1 &&
-           valid_rect_pitch(c, c.rect_dims, c.src_stride_bytes[0], c.src_rect_pitch) &&
-           valid_rect_pitch(c, c.rect_dims, c.dst_stride_bytes[0], c.dst_rect_pitch)) {
-        c.rect_extent[c.rect_dims] = c.extent[0];
-        c.src_rect_pitch[c.rect_dims] = c.src_stride_bytes[0];
-        c.dst_rect_pitch[c.rect_dims] = c.dst_stride_bytes[0];
+           valid_rect_pitch(c, c.rect_dims - 1, c.src_stride_bytes[0], c.src_rect_pitch) &&
+           valid_rect_pitch(c, c.rect_dims - 1, c.dst_stride_bytes[0], c.dst_rect_pitch)) {
+        c.rect_extent[c.rect_dims - 1] = c.extent[0];
+        c.src_rect_pitch[c.rect_dims - 1] = c.src_stride_bytes[0];
+        c.dst_rect_pitch[c.rect_dims - 1] = c.dst_stride_bytes[0];
         c.rect_dims++;
         erase_innermost_dim(c);
     }

@@ -927,14 +927,14 @@ WEAK int cuda_copy_chunk(void *user_context, const device_copy &c,
     return halide_error_code_success;
 }
 
-// Copy one task of the copy: a contiguous chunk, or a rectangle of chunks
-// spanning c.rect_dims dimensions with one cuMemcpy3D.
+// Copy one task of the copy: a contiguous chunk, or a 2D or 3D rectangle of
+// chunks with one cuMemcpy3D.
 WEAK int cuda_copy_task(void *user_context, const device_copy &c,
                         uint64_t src, uint64_t dst, bool from_host, bool to_host,
                         CUstream stream) {
     // The largest CU_DEVICE_ATTRIBUTE_MAX_PITCH of any device.
     const uint64_t max_pitch = 0x7fffffff;
-    if (c.rect_dims == 0 || (from_host && to_host) ||
+    if (c.rect_dims <= 1 || (from_host && to_host) ||
         c.src_rect_pitch[0] > max_pitch || c.dst_rect_pitch[0] > max_pitch) {
         for (uint64_t z = 0; z < c.rect_extent[1]; z++) {
             for (uint64_t y = 0; y < c.rect_extent[0]; y++) {
@@ -958,7 +958,7 @@ WEAK int cuda_copy_task(void *user_context, const device_copy &c,
         p.srcDevice = (CUdeviceptr)src;
     }
     p.srcPitch = c.src_rect_pitch[0];
-    p.srcHeight = c.rect_dims == 2 ? c.src_rect_pitch[1] / c.src_rect_pitch[0] : c.rect_extent[0];
+    p.srcHeight = c.rect_dims == 3 ? c.src_rect_pitch[1] / c.src_rect_pitch[0] : c.rect_extent[0];
     p.dstMemoryType = to_host ? CU_MEMORYTYPE_HOST : CU_MEMORYTYPE_DEVICE;
     if (to_host) {
         p.dstHost = (void *)dst;
@@ -966,7 +966,7 @@ WEAK int cuda_copy_task(void *user_context, const device_copy &c,
         p.dstDevice = (CUdeviceptr)dst;
     }
     p.dstPitch = c.dst_rect_pitch[0];
-    p.dstHeight = c.rect_dims == 2 ? c.dst_rect_pitch[1] / c.dst_rect_pitch[0] : c.rect_extent[0];
+    p.dstHeight = c.rect_dims == 3 ? c.dst_rect_pitch[1] / c.dst_rect_pitch[0] : c.rect_extent[0];
     p.WidthInBytes = c.chunk_size;
     p.Height = c.rect_extent[0];
     p.Depth = c.rect_extent[1];
@@ -1027,7 +1027,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host, /*max_rect_dims*/ 2);
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host, /*max_rect_dims*/ 3);
 
     {
         Context ctx(user_context);
