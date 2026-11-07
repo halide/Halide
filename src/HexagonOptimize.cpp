@@ -390,13 +390,49 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
     return lossless_cast(ty, x);
 }
 
+// The bounds of an integer expression as if its arithmetic never wrapped.
+// Casts between types of the same width are reinterprets in two's complement,
+// and arithmetic at one width holds the exact result modulo that width, so
+// the exact value is recoverable from such a tower as long as it fits the
+// type at the top. Steps that change width (widening casts, widening
+// intrinsics' narrower operands) use the actual bounds of what they widen.
+ConstantInterval exact_integer_bounds(const Expr &e) {
+    if (const Cast *cast = e.as<Cast>()) {
+        if (cast->type.is_int_or_uint() && cast->value.type().is_int_or_uint() &&
+            cast->type.bits() == cast->value.type().bits()) {
+            return exact_integer_bounds(cast->value);
+        }
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return exact_integer_bounds(b->value);
+    } else if (const Add *add = e.as<Add>()) {
+        return exact_integer_bounds(add->a) + exact_integer_bounds(add->b);
+    } else if (const Sub *sub = e.as<Sub>()) {
+        return exact_integer_bounds(sub->a) - exact_integer_bounds(sub->b);
+    } else if (const Mul *mul = e.as<Mul>()) {
+        return exact_integer_bounds(mul->a) * exact_integer_bounds(mul->b);
+    } else if (const Call *c = Call::as_intrinsic(e, {Call::widen_right_add})) {
+        return exact_integer_bounds(c->args[0]) + constant_integer_bounds(c->args[1]);
+    } else if (const Call *c = Call::as_intrinsic(e, {Call::widen_right_sub})) {
+        return exact_integer_bounds(c->args[0]) - constant_integer_bounds(c->args[1]);
+    } else if (const Call *c = Call::as_intrinsic(e, {Call::widen_right_mul})) {
+        return exact_integer_bounds(c->args[0]) * constant_integer_bounds(c->args[1]);
+    }
+    return constant_integer_bounds(e);
+}
+
 // Try to extract a list of multiplies of the form a_ty*b_ty added
 // together, such that op is equivalent to the sum of the
 // multiplies in 'mpys', added to 'rest'.
 // Difference in mpys.size() - return indicates the number of
 // expressions where we pretend the op to be multiplied by 1.
+//
+// With 'exact', an enclosing cast has shown that the exact value of op fits
+// op's type, so op's arithmetic may wrap at that width without changing the
+// result (see exact_integer_bounds) and no overflow checks are needed at
+// that width. This lets sums be found through the signedness casts that
+// find_intrinsics introduces around a wrapping intermediate.
 int find_mpy_ops(const Expr &op, Type result_ty, Type a_ty, Type b_ty, int max_mpy_count,
-                 vector<MulExpr> &mpys, Expr &rest) {
+                 vector<MulExpr> &mpys, Expr &rest, bool exact = false) {
 
     auto add_to_rest = [&](const Expr &a) {
         if (rest.defined()) {
@@ -433,38 +469,52 @@ int find_mpy_ops(const Expr &op, Type result_ty, Type a_ty, Type b_ty, int max_m
     };
 
     if (const Mul *mul = op.as<Mul>()) {
-        bool no_overflow = mul->type.can_represent(constant_integer_bounds(mul->a) *
+        bool no_overflow = exact ||
+                           mul->type.can_represent(constant_integer_bounds(mul->a) *
                                                    constant_integer_bounds(mul->b));
         if (no_overflow && handle_mul(mul->a, mul->b)) {
             return 1;
         }
     } else if (const Call *mul = Call::as_intrinsic(op, {Call::widening_mul, Call::widen_right_mul})) {
-        bool no_overflow = (mul->is_intrinsic(Call::widening_mul) ||
+        bool no_overflow = (exact ||
+                            mul->is_intrinsic(Call::widening_mul) ||
                             mul->type.can_represent(constant_integer_bounds(mul->args[0]) *
                                                     constant_integer_bounds(mul->args[1])));
         if (no_overflow && handle_mul(mul->args[0], mul->args[1])) {
             return 1;
         }
     } else if (const Add *add = op.as<Add>()) {
-        bool no_overflow = (add->type == result_ty ||
+        bool no_overflow = (exact ||
+                            add->type == result_ty ||
                             add->type.can_represent(constant_integer_bounds(add->a) +
                                                     constant_integer_bounds(add->b)));
         if (no_overflow) {
-            return (find_mpy_ops(add->a, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest) +
-                    find_mpy_ops(add->b, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest));
+            return (find_mpy_ops(add->a, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest, exact) +
+                    find_mpy_ops(add->b, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest, exact));
         }
     } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add, Call::widen_right_add})) {
-        bool no_overflow = (add->type == result_ty ||
+        bool no_overflow = (exact ||
+                            add->type == result_ty ||
                             add->is_intrinsic(Call::widening_add) ||
                             add->type.can_represent(constant_integer_bounds(add->args[0]) +
                                                     constant_integer_bounds(add->args[1])));
         if (no_overflow) {
-            return (find_mpy_ops(add->args[0], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest) +
+            // Only the operand of op's own width shares op's modular
+            // arithmetic; a narrower one is widened, so it must be exact.
+            bool exact_a = exact && add->is_intrinsic(Call::widen_right_add);
+            return (find_mpy_ops(add->args[0], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest, exact_a) +
                     find_mpy_ops(add->args[1], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest));
         }
     } else if (const Cast *cast = op.as<Cast>()) {
-        bool cast_is_lossless = cast->type.can_represent(constant_integer_bounds(cast->value));
-        if (cast_is_lossless) {
+        bool same_width = (cast->type.is_int_or_uint() && cast->value.type().is_int_or_uint() &&
+                           cast->type.bits() == cast->value.type().bits());
+        if (same_width) {
+            // A reinterpret. Its value is the exact value of the sum below
+            // it when that fits, however the arithmetic below wrapped.
+            if (exact || cast->type.can_represent(exact_integer_bounds(cast->value))) {
+                return find_mpy_ops(cast->value, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest, true);
+            }
+        } else if (cast->type.can_represent(constant_integer_bounds(cast->value))) {
             return find_mpy_ops(cast->value, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest);
         }
     }
