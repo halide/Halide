@@ -1584,11 +1584,14 @@ inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::
 }
 
 // The f32 operands of a Metal gemm on exact weights (wh: the weights' decoded
-// values; xh: x, the acts dot multiplies them by), else false.
+// values; xh: x, the acts dot multiplies them by; flat: the act's decoded
+// values, e.g. f32:bf16's), else false. (bf16 weights: Metal C has no bfloat
+// fragments; on f32 ones the gemm takes 0.11-0.5x flat's rows' time at M =
+// 32..512; M3 Max)
 inline bool f32_operands(Func dot, Func x, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
-    if (fmt.wcompute || !staged.empty() || rs.empty() || fmt.block % 8) return false;
+    if (fmt.wcompute || rs.empty() || (fmt.block % 8 || !staged.empty()) && fmt.block != 1) return false;
     wh = rs[0].replacement;
-    xh = x;
+    xh = fmt.block == 1 && rs.size() > 1 ? rs.back().replacement : x;
     return dot.type() == Float(32) && wh.type() == Float(32) && xh.type() == Float(32);
 }
 
@@ -1963,12 +1966,12 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, staged);
             return;
         }
-        if (fmt.block == 1) {
-            metal_flat(out, dots[0], r, staged);
+        if (f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, staged);
             return;
         }
-        if (f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8);
+        if (fmt.block == 1) {
+            metal_flat(out, dots[0], r, staged);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");

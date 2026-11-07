@@ -466,7 +466,11 @@ libraries (`q4_K:f16`, `q5_K:f16`, `q6_K:f16`, `q2_K:f16`, `q3_K:f16`,
 Blocked f16 operands take 64 x 32 tiles where 64 x 64 would give fewer than 512
 tiles (M x N < 2^21): too few to load the GPU's cores evenly. `f16` weights with
 f16 acts (`f16`, `f32:f16`) run the gemm too, K in steps of 64 (or 32) values,
-for M >= 8, N >= 32, K % 32 == 0 and M * N >= 2^16, and `flat`'s rows otherwise.
+for M >= 8, N >= 32, K % 32 == 0 and M * N >= 2^16, and `flat`'s rows otherwise;
+`f16` and `bf16` weights with other acts (`f32`, `bf16`, `f32:bf16`) run it on
+their exact f32 values (Metal C has no `bfloat` type for GGML's
+`simdgroup_bfloat8x8`): at M = 512 0.75-0.81x of GGML's `kernel_mul_mm_bf16_f32`
+(4-9x `flat`'s rows), at M = 32 0.87-1.2x.
 
 GGML picks its Metal kernel by M: mul_mv (exact; `kernel_mul_mv_mma_*` for M =
 2..16 on q4_0) up to 16, then `kernel_mul_mm` (f16 weights). The Halide

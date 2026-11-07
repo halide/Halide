@@ -107,7 +107,8 @@ public:
                 bound.insert(bound.end(), p.begin(), p.end());
             }
         }
-        x = fa.scheme.defined() && fa.block == block && block > 1 ? approx.back().replacement : X;
+        x = fa.scheme.defined() && fa.block == block && block > 1 ? approx.back().replacement : block == 1 ? Xf :
+                                                                                                             X;
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
             for (size_t i = 0; i < dots.size(); i++) {
@@ -225,7 +226,7 @@ private:
     std::vector<Func> dots{Func("dot")};      // one per act encoding
     std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
-    Func x;                                   // the act dots[0] reads, unless staged
+    Func x;                                   // the act dots[0] reads (flat: its rows), unless staged
     ggml::Formats fmt;
     Approximation acc;  // the dot's sums (undefined: f32)
     GeneratorOutput<Buffer<>> *result = nullptr;
