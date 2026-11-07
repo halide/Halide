@@ -431,6 +431,139 @@ int main(int argc, char **argv) {
         }
     }
 
+    // GPU device code compiled with LLVM (PTX) gets line information that
+    // points into the conceptual stmt, which is where the code of its kernels
+    // is, with gpu_debug_symbols. The html links it to the conceptual stmt
+    // either way.
+    for (bool with_gpu_debug_symbols : {false, true}) {
+        ImageParam gpu_input(Float(32), 2, "gpu_input");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Func blur("blur"), gpu_out("gpu_out");
+        blur(x, y) = (gpu_input(x, y) + gpu_input(x + 1, y)) / 2;
+        gpu_out(x, y) = select(blur(x, y) > 0.5f, blur(x, y) * 3.0f, blur(x, y + 1));
+        gpu_out.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+        blur.compute_at(gpu_out, xo).gpu_threads(x, y);
+
+        const std::string ptx_path = dir + "debug_symbols_gpu.ptx";
+        const std::string conceptual_stmt_path = dir + "debug_symbols_gpu.conceptual.stmt";
+        const std::string conceptual_html_path = dir + "debug_symbols_gpu.conceptual.stmt.html";
+        const std::string gpu_object_path = dir + "debug_symbols_gpu.o";
+        for (const auto &p : {ptx_path, conceptual_stmt_path, conceptual_html_path, gpu_object_path}) {
+            Internal::ensure_no_file_exists(p);
+        }
+        bool compiled = true;
+        Target gpu_target = get_host_target().with_feature(Target::CUDA);
+        if (with_gpu_debug_symbols) {
+            gpu_target = gpu_target.with_feature(Target::GPUDebugSymbols);
+        }
+        try {
+            gpu_out.compile_to({{OutputFileType::device_code, ptx_path},
+                                {OutputFileType::conceptual_stmt, conceptual_stmt_path},
+                                {OutputFileType::conceptual_stmt_html, conceptual_html_path},
+                                {OutputFileType::object, gpu_object_path}},
+                               {gpu_input}, "debug_symbols_gpu", gpu_target);
+        } catch (const Halide::CompileError &e) {
+            printf("[SKIP] No CUDA backend: %s\n", e.what());
+            compiled = false;
+        }
+        if (compiled) {
+            const std::string ptx = read_file(ptx_path);
+            const std::vector<std::string> conceptual = split_lines(read_file(conceptual_stmt_path));
+            if (ptx.find(", debug") != std::string::npos) {
+                printf("The PTX asks for debug compilation\n");
+                return 1;
+            }
+            if (!with_gpu_debug_symbols &&
+                (ptx.find(".loc") != std::string::npos || ptx.find("$L__tmp") != std::string::npos ||
+                 ptx.find(".debug_") != std::string::npos)) {
+                printf("The PTX has line information without gpu_debug_symbols\n");
+                return 1;
+            }
+            std::regex loc_re(R"(\.loc\s+\d+ (\d+) (\d+))");
+            int locs = 0;
+            for (std::sregex_iterator it(ptx.begin(), ptx.end(), loc_re), end; it != end; ++it) {
+                int line = std::stoi((*it)[1]), column = std::stoi((*it)[2]);
+                if (line == 0 || column == 0) {
+                    continue;
+                }
+                if (line > (int)conceptual.size() || column > (int)conceptual[line - 1].size() ||
+                    conceptual[line - 1][column - 1] == ' ') {
+                    printf("PTX location %d:%d does not point at the conceptual stmt's text\n", line, column);
+                    return 1;
+                }
+                locs++;
+            }
+            if ((locs > 0) != with_gpu_debug_symbols) {
+                printf("The PTX has %d locations %s gpu_debug_symbols\n", locs, with_gpu_debug_symbols ? "with" : "without");
+                return 1;
+            }
+            const std::string html = read_file(conceptual_html_path);
+            if (html.find("data-ir='") == std::string::npos || html.find("data-device='1'") == std::string::npos) {
+                printf("The html does not link device code to the IR\n");
+                return 1;
+            }
+        }
+    }
+
+    // C-like GPU source, e.g. OpenCL C, gets #line directives that say which
+    // line of the conceptual stmt each line was made from, with
+    // gpu_debug_symbols. The html links it to the conceptual stmt either way.
+    {
+        ImageParam cl_input(Float(32), 2, "cl_input");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Func cl_blur("cl_blur"), cl_out("cl_out");
+        cl_blur(x, y) = (cl_input(x, y) + cl_input(x + 1, y)) / 2;
+        cl_out(x, y) = select(cl_blur(x, y) > 0.5f, cl_blur(x, y) * 3.0f, cl_blur(x, y + 1));
+        cl_out.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+        cl_blur.compute_at(cl_out, xo).gpu_threads(x, y);
+
+        const std::string cl_source_path = dir + "debug_symbols_cl.cl";
+        const std::string cl_conceptual_path = dir + "debug_symbols_cl.conceptual.stmt";
+        const std::string cl_html_path = dir + "debug_symbols_cl.conceptual.stmt.html";
+        for (bool with_gpu_debug_symbols : {false, true}) {
+            for (const auto &p : {cl_source_path, cl_conceptual_path, cl_html_path}) {
+                Internal::ensure_no_file_exists(p);
+            }
+            Target cl_target = get_host_target().with_feature(Target::OpenCL);
+            if (with_gpu_debug_symbols) {
+                cl_target = cl_target.with_feature(Target::GPUDebugSymbols);
+            }
+            cl_out.compile_to({{OutputFileType::device_code, cl_source_path},
+                               {OutputFileType::conceptual_stmt, cl_conceptual_path},
+                               {OutputFileType::conceptual_stmt_html, cl_html_path}},
+                              {cl_input}, "debug_symbols_cl", cl_target);
+            const std::string source = read_file(cl_source_path);
+            const std::vector<std::string> conceptual = split_lines(read_file(cl_conceptual_path));
+            std::regex line_re(R"re(#line (\d+) "([^"]*)")re");
+            int directives = 0;
+            for (std::sregex_iterator it(source.begin(), source.end(), line_re), end; it != end; ++it) {
+                directives++;
+                const std::string file = (*it)[2];
+                if (file != "debug_symbols_cl.conceptual.stmt") {
+                    continue;
+                }
+                const int line = std::stoi((*it)[1]);
+                if (line < 1 || line > (int)conceptual.size() ||
+                    conceptual[line - 1].find_first_not_of(' ') == std::string::npos) {
+                    printf("#line %d does not point at a line of the conceptual stmt\n", line);
+                    return 1;
+                }
+            }
+            if ((directives > 0) != with_gpu_debug_symbols) {
+                printf("%d #line directives %s gpu_debug_symbols\n", directives, with_gpu_debug_symbols ? "with" : "without");
+                return 1;
+            }
+            const std::string html = read_file(cl_html_path);
+            const bool linked = html.find("data-ir='") != std::string::npos &&
+                                html.find("data-device='1'") != std::string::npos;
+            if (!linked) {
+                printf("The html does not link the OpenCL C to the IR %s gpu_debug_symbols\n",
+                       with_gpu_debug_symbols ? "with" : "without");
+                return 1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

@@ -5,6 +5,7 @@
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "IRVisitor.h"
 
 namespace Halide {
@@ -276,6 +277,123 @@ std::string CodeGen_GPU_C::print_extern_call(const Call *op) {
     debug(3) << "Writing out call to " << name << "\n";
     rhs << name << "(" << with_commas(args) << ")";
     return rhs.str();
+}
+
+DeviceCodeLines CodeGen_GPU_Dev::device_code_lines() {
+    return {};
+}
+
+std::set<const IRNode *> nodes_of(const Stmt &s) {
+    class Nodes : public IRGraphVisitor {
+    public:
+        std::set<const IRNode *> nodes;
+
+    protected:
+        using IRGraphVisitor::include;
+        void include(const Expr &e) override {
+            nodes.insert(e.get());
+            IRGraphVisitor::include(e);
+        }
+        void include(const Stmt &s) override {
+            nodes.insert(s.get());
+            IRGraphVisitor::include(s);
+        }
+    } v;
+    if (s.defined()) {
+        v.nodes.insert(s.get());
+        s.accept(&v);
+    }
+    return std::move(v.nodes);
+}
+
+DeviceCodeLines c_like_device_code_lines(const std::string &source, const std::vector<IRPrinterLocation> &locations,
+                                         const std::set<const IRNode *> &nodes, const StmtSourceMap *ir,
+                                         const std::string &source_name) {
+    const StmtSourceMap printed = source_map_of(source, locations);
+
+    std::vector<std::string_view> lines;
+    for (size_t start = 0; start < source.size();) {
+        size_t end = std::min(source.find('\n', start), source.size());
+        lines.emplace_back(std::string_view(source).substr(start, end - start));
+        start = end + 1;
+    }
+
+    // The node each line was made from: the innermost Stmt it was printed for
+    // that is in nodes. Visit enclosing Stmts first, so that the Stmts in them
+    // overwrite their lines.
+    std::vector<const IRNode *> line_nodes(lines.size(), nullptr);
+    std::vector<uint32_t> order(printed.locations.size());
+    for (uint32_t i = 0; i < (uint32_t)order.size(); i++) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](uint32_t i, uint32_t j) {
+        const StmtSourceMap::Location &a = printed.locations[i], &b = printed.locations[j];
+        return a.start != b.start ? a.start < b.start : a.end > b.end;
+    });
+    for (uint32_t i : order) {
+        const StmtSourceMap::Location &l = printed.locations[i];
+        if (!nodes.count(l.node)) {
+            continue;
+        }
+        for (uint32_t line = l.line; line <= l.end_line && line <= lines.size(); line++) {
+            line_nodes[line - 1] = l.node;
+        }
+    }
+
+    DeviceCodeLines result;
+    if (!ir) {
+        result.text = source;
+        result.line_nodes = std::move(line_nodes);
+        return result;
+    }
+
+    // A #line directive sets the number of the next line, and the lines after
+    // count on from it.
+    std::ostringstream out;
+    uint32_t lines_out = 0, implied = 0;
+    for (size_t i = 0; i < lines.size(); i++) {
+        const StmtSourceMap::Location *l = line_nodes[i] ? ir->find(line_nodes[i], 0) : nullptr;
+        const uint32_t want = l ? l->line : 0;
+        if (want && implied != want) {
+            out << "#line " << want << " \"" << ir->path << "\"\n";
+            result.line_nodes.push_back(nullptr);
+            lines_out++;
+        } else if (!want && implied) {
+            out << "#line " << lines_out + 2 << " \"" << source_name << "\"\n";
+            result.line_nodes.push_back(nullptr);
+            lines_out++;
+        }
+        out << lines[i] << "\n";
+        result.line_nodes.push_back(line_nodes[i]);
+        lines_out++;
+        implied = want ? want + 1 : 0;
+    }
+    result.text = std::move(out).str();
+    return result;
+}
+
+bool is_ptx_line_info(std::string_view line) {
+    size_t first = line.find_first_not_of(" \t");
+    if (first == std::string_view::npos) {
+        return false;
+    }
+    line = line.substr(first);
+    auto begins = [&](std::string_view prefix) {
+        return line.substr(0, prefix.size()) == prefix;
+    };
+    if (begins(".loc\t") || begins(".loc ") || begins(".file\t") || begins(".file ") ||
+        begins(".section\t.debug") || begins(".section .debug")) {
+        return true;
+    }
+    // The labels only the line information refers to.
+    for (std::string_view label : {"$L__tmp", "$L__func_begin", "$L__func_end"}) {
+        if (begins(label)) {
+            std::string_view rest = line.substr(label.size());
+            return !rest.empty() && rest.back() == ':' &&
+                   rest.substr(0, rest.size() - 1).find_first_not_of("0123456789") == std::string_view::npos;
+        }
+    }
+    return false;
 }
 
 }  // namespace Internal

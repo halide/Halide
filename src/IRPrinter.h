@@ -235,6 +235,10 @@ StmtSourceMap print_with_source_map(const Module &m);
  * where all of its IR nodes went. */
 StmtSourceMap print_with_source_map(const Stmt &s);
 
+/** Make a source map of text, from the locations an IRPrinter recorded while
+ * printing it. */
+StmtSourceMap source_map_of(std::string text, const std::vector<IRPrinterLocation> &locations);
+
 /** For each location of from, in from.locations order: the location in to of
  * the same IR node, or else that of its nearest enclosing node that to has, or
  * else nullptr. Nodes are printed in both when to is a printing of IR that
