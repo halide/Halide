@@ -144,16 +144,18 @@ enum class IRPrinterStyle {
 
 class IRPrinter;
 
-/** Text that an IRPrinter styles. */
+/** Text that an IRPrinter styles, as made by its kw(), var(), paren(), ...
+ * helpers. Writing it to a stream writes the text between the printer's
+ * begin_style() and end_style(). */
 template<typename T>
-struct Ansi {
+struct StyledText {
     const T &cnt;
     const IRPrinter *printer;
     IRPrinterStyle style;
     /** For punctuation: how deeply it is nested. */
     int depth;
-    /** Whether the style ends with a full reset, rather than just one of
-     * the color. */
+    /** For colored text in a terminal: whether the style ends by resetting
+     * all attributes (e.g. bold too), rather than just the color. */
     bool reset;
 };
 
@@ -275,7 +277,7 @@ public:
 
     /** Called before and after text of the given style is emitted. Without
      * colors, these only emit the parentheses of IRPrinterStyle::TypeParens.
-     * See Ansi for depth and reset. */
+     * See StyledText for depth and reset. */
     virtual void begin_style(IRPrinterStyle style, int depth) const;
     virtual void end_style(IRPrinterStyle style, bool reset) const;
 
@@ -340,17 +342,17 @@ protected:
     const char *ansi_reset = "";
 
     // clang-format off
-    template<typename T> Ansi<T> hl(const T &t);
-    template<typename T> Ansi<T> kw(const T &t);
-    template<typename T> Ansi<T> imm_int(const T &t);
-    template<typename T> Ansi<T> imm_float(const T &t);
-    template<typename T> Ansi<T> imm_str(const T &t);
-    template<typename T> Ansi<T> var(const T &t);
-    template<typename T> Ansi<T> buf(const T &t);
-    template<typename T> Ansi<T> fn(const T &t);
-    template<typename T> Ansi<T> type(const T &t);
-    template<typename T> Ansi<T> typep(const T &t);
-    template<typename T> Ansi<T> paren(const T &t, bool bold = true, int d = -1);
+    template<typename T> StyledText<T> hl(const T &t);
+    template<typename T> StyledText<T> kw(const T &t);
+    template<typename T> StyledText<T> imm_int(const T &t);
+    template<typename T> StyledText<T> imm_float(const T &t);
+    template<typename T> StyledText<T> imm_str(const T &t);
+    template<typename T> StyledText<T> var(const T &t);
+    template<typename T> StyledText<T> buf(const T &t);
+    template<typename T> StyledText<T> fn(const T &t);
+    template<typename T> StyledText<T> type(const T &t);
+    template<typename T> StyledText<T> typep(const T &t);
+    template<typename T> StyledText<T> paren(const T &t, bool bold = true, int d = -1);
     // clang-format on
 
     /** Either emits "(" or "", depending on the value of implicit_parens */
@@ -436,7 +438,7 @@ protected:
 };
 
 template<typename T>
-std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
+std::ostream &operator<<(std::ostream &out, const StyledText<T> &a) {
     a.printer->begin_style(a.style, a.depth);
     out << a.cnt;
     a.printer->end_style(a.style, a.reset);
