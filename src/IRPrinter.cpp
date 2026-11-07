@@ -748,25 +748,25 @@ IRPrinter::IRPrinter(ostream &s)
     }
 }
 
-#define ansi_helper(name, style, reset)                    \
+#define styled_helper(name, style, reset)                  \
     template<typename T>                                   \
-    Ansi<T> IRPrinter::name(const T &t) {                  \
+    StyledText<T> IRPrinter::name(const T &t) {            \
         return {t, this, IRPrinterStyle::style, 0, reset}; \
     }
 
-ansi_helper(hl, Highlight, true);
-ansi_helper(kw, Keyword, true);
-ansi_helper(imm_int, ImmInt, false);
-ansi_helper(imm_float, ImmFloat, false);
-ansi_helper(imm_str, ImmString, false);
-ansi_helper(var, Var, false);
-ansi_helper(buf, Buffer, false);
-ansi_helper(fn, Function, false);
-ansi_helper(type, Type, false);
-ansi_helper(typep, TypeParens, true);
+styled_helper(hl, Highlight, true);
+styled_helper(kw, Keyword, true);
+styled_helper(imm_int, ImmInt, false);
+styled_helper(imm_float, ImmFloat, false);
+styled_helper(imm_str, ImmString, false);
+styled_helper(var, Var, false);
+styled_helper(buf, Buffer, false);
+styled_helper(fn, Function, false);
+styled_helper(type, Type, false);
+styled_helper(typep, TypeParens, true);
 
 template<typename T>
-Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
+StyledText<T> IRPrinter::paren(const T &t, bool bold, int depth) {
     return {t, this, bold ? IRPrinterStyle::BoldParen : IRPrinterStyle::Paren,
             depth == -1 ? paren_depth : depth, true};
 }
