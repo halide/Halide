@@ -97,7 +97,7 @@ int main() {
         return 0;
     }
     if (target.has_feature(Target::Vulkan)) {
-        printf("[SKIP] Vulkan does not yet copy correctly between buffers with different strides.\n");
+        printf("[SKIP-WITH-ISSUE-9694] Vulkan does not yet copy correctly between host and device buffers with different strides. See https://github.com/halide/Halide/issues/9694\n");
         return 0;
     }
     const halide_device_interface_t *itf =
