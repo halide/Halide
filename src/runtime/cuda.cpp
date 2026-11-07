@@ -881,6 +881,107 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
+// Copy one contiguous chunk of the copy.
+WEAK int cuda_copy_chunk(void *user_context, const device_copy &c,
+                         uint64_t src, uint64_t dst, bool from_host, bool to_host,
+                         CUstream stream) {
+    CUresult err = CUDA_SUCCESS;
+    const char *copy_name;
+    debug(user_context) << "    from " << (from_host ? "host" : "device")
+                        << " to " << (to_host ? "host" : "device") << ", "
+                        << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
+    if (!from_host && to_host) {
+        debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+        copy_name = "cuMemcpyDtoH";
+        if (stream) {
+            err = cuMemcpyDtoHAsync((void *)dst, (CUdeviceptr)src, c.chunk_size, stream);
+        } else {
+            err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
+        }
+    } else if (from_host && !to_host) {
+        debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+        copy_name = "cuMemcpyHtoD";
+        if (stream) {
+            err = cuMemcpyHtoDAsync((CUdeviceptr)dst, (void *)src, c.chunk_size, stream);
+        } else {
+            err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
+        }
+    } else if (!from_host && !to_host) {
+        debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+        copy_name = "cuMemcpyDtoD";
+        if (stream) {
+            err = cuMemcpyDtoDAsync((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size, stream);
+        } else {
+            err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
+        }
+    } else if (dst != src) {
+        debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+        // Could reach here if a user called directly into the
+        // cuda API for a device->host copy on a source buffer
+        // with device_dirty = false.
+        memcpy((void *)dst, (void *)src, c.chunk_size);
+    }
+    if (err != CUDA_SUCCESS) {
+        return error_cuda(user_context, err, copy_name, " failed");
+    }
+    return halide_error_code_success;
+}
+
+// Copy one task of the copy: a contiguous chunk, or a rectangle of chunks
+// spanning c.rect_dims dimensions with one cuMemcpy3D.
+WEAK int cuda_copy_task(void *user_context, const device_copy &c,
+                        uint64_t src, uint64_t dst, bool from_host, bool to_host,
+                        CUstream stream) {
+    // The largest CU_DEVICE_ATTRIBUTE_MAX_PITCH of any device.
+    const uint64_t max_pitch = 0x7fffffff;
+    if (c.rect_dims == 0 || (from_host && to_host) ||
+        c.src_rect_pitch[0] > max_pitch || c.dst_rect_pitch[0] > max_pitch) {
+        for (uint64_t z = 0; z < c.rect_extent[1]; z++) {
+            for (uint64_t y = 0; y < c.rect_extent[0]; y++) {
+                auto result = cuda_copy_chunk(user_context, c,
+                                              src + z * c.src_rect_pitch[1] + y * c.src_rect_pitch[0],
+                                              dst + z * c.dst_rect_pitch[1] + y * c.dst_rect_pitch[0],
+                                              from_host, to_host, stream);
+                if (result) {
+                    return result;
+                }
+            }
+        }
+        return halide_error_code_success;
+    }
+
+    CUDA_MEMCPY3D p = {};
+    p.srcMemoryType = from_host ? CU_MEMORYTYPE_HOST : CU_MEMORYTYPE_DEVICE;
+    if (from_host) {
+        p.srcHost = (const void *)src;
+    } else {
+        p.srcDevice = (CUdeviceptr)src;
+    }
+    p.srcPitch = c.src_rect_pitch[0];
+    p.srcHeight = c.rect_dims == 2 ? c.src_rect_pitch[1] / c.src_rect_pitch[0] : c.rect_extent[0];
+    p.dstMemoryType = to_host ? CU_MEMORYTYPE_HOST : CU_MEMORYTYPE_DEVICE;
+    if (to_host) {
+        p.dstHost = (void *)dst;
+    } else {
+        p.dstDevice = (CUdeviceptr)dst;
+    }
+    p.dstPitch = c.dst_rect_pitch[0];
+    p.dstHeight = c.rect_dims == 2 ? c.dst_rect_pitch[1] / c.dst_rect_pitch[0] : c.rect_extent[0];
+    p.WidthInBytes = c.chunk_size;
+    p.Height = c.rect_extent[0];
+    p.Depth = c.rect_extent[1];
+
+    debug(user_context) << "    rect copy from " << (from_host ? "host" : "device")
+                        << " to " << (to_host ? "host" : "device") << ", "
+                        << (void *)src << " -> " << (void *)dst << ", "
+                        << c.chunk_size << " x " << c.rect_extent[0] << " x " << c.rect_extent[1] << " bytes\n";
+    CUresult err = stream ? cuMemcpy3DAsync(&p, stream) : cuMemcpy3D(&p);
+    if (err != CUDA_SUCCESS) {
+        return error_cuda(user_context, err, "cuMemcpy3D", " failed");
+    }
+    return halide_error_code_success;
+}
+
 WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
                                        uint64_t src, uint64_t dst, int d, bool from_host, bool to_host,
                                        CUstream stream) {
@@ -888,45 +989,7 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return halide_error_code_bad_dimensions;
     } else if (d == 0) {
-        CUresult err = CUDA_SUCCESS;
-        const char *copy_name;
-        debug(user_context) << "    from " << (from_host ? "host" : "device")
-                            << " to " << (to_host ? "host" : "device") << ", "
-                            << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
-        if (!from_host && to_host) {
-            debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            copy_name = "cuMemcpyDtoH";
-            if (stream) {
-                err = cuMemcpyDtoHAsync((void *)dst, (CUdeviceptr)src, c.chunk_size, stream);
-            } else {
-                err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
-            }
-        } else if (from_host && !to_host) {
-            debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            copy_name = "cuMemcpyHtoD";
-            if (stream) {
-                err = cuMemcpyHtoDAsync((CUdeviceptr)dst, (void *)src, c.chunk_size, stream);
-            } else {
-                err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
-            }
-        } else if (!from_host && !to_host) {
-            debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            copy_name = "cuMemcpyDtoD";
-            if (stream) {
-                err = cuMemcpyDtoDAsync((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size, stream);
-            } else {
-                err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
-            }
-        } else if (dst != src) {
-            debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            // Could reach here if a user called directly into the
-            // cuda API for a device->host copy on a source buffer
-            // with device_dirty = false.
-            memcpy((void *)dst, (void *)src, c.chunk_size);
-        }
-        if (err != CUDA_SUCCESS) {
-            return error_cuda(user_context, err, copy_name, " failed");
-        }
+        return cuda_copy_task(user_context, c, src, dst, from_host, to_host, stream);
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
@@ -964,7 +1027,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host, /*max_rect_dims*/ 2);
 
     {
         Context ctx(user_context);
