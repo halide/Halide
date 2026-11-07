@@ -158,7 +158,7 @@ if (Halide_LLVM_FOUND)
         if (Halide_LLVM_SHARED_LIBS)
             target_link_libraries(Halide_LLVM::Core INTERFACE LLVM ${CMAKE_DL_LIBS})
         else ()
-            _Halide_LLVM_link(Halide_LLVM::Core orcjit bitwriter linker passes)
+            _Halide_LLVM_link(Halide_LLVM::Core orcjit orcdebugging bitwriter linker passes)
         endif ()
     endif ()
 
