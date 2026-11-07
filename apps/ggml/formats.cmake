@@ -219,6 +219,12 @@ set(GGML_SCHEDULE_PARAMS
     "iq4_xs mul_mat q8_K interleave=1"
     "iq4_xs mul_mat f32:q8_K interleave=1"
 )
+# OFF: every library at the GeneratorParams' defaults, the schedule a new
+# format gets (to measure what the table adds).
+option(GGML_SCHEDULE_KNOBS "Apply GGML_SCHEDULE_PARAMS" ON)
+if (NOT GGML_SCHEDULE_KNOBS)
+    set(GGML_SCHEDULE_PARAMS "")
+endif ()
 
 set(GGML_HALIDE_LIBRARIES "")
 set(registry "")
