@@ -123,23 +123,39 @@ struct Indentation {
 };
 std::ostream &operator<<(std::ostream &stream, const Indentation &);
 
+/** The kinds of text that IRPrinter styles, e.g. with colors. */
+enum class IRPrinterStyle {
+    Highlight,
+    Dim,
+    Keyword,
+    ImmInt,
+    ImmFloat,
+    ImmString,
+    Var,
+    Buffer,
+    Function,
+    Type,
+    /** A type in parentheses, which are part of the styled text. */
+    TypeParens,
+    /** Punctuation and operators, styled by how deeply they are nested. */
+    Paren,
+    BoldParen,
+};
+
+class IRPrinter;
+
+/** Text that an IRPrinter styles. */
 template<typename T>
 struct Ansi {
     const T &cnt;
-    const char *open, *close;
+    const IRPrinter *printer;
+    IRPrinterStyle style;
+    /** For punctuation: how deeply it is nested. */
+    int depth;
+    /** Whether the style ends with a full reset, rather than just one of
+     * the color. */
+    bool reset;
 };
-
-template<typename T>
-std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
-    if (a.open) {
-        out << a.open;
-    }
-    out << a.cnt;
-    if (a.close) {
-        out << a.close;
-    }
-    return out;
-}
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -166,6 +182,16 @@ public:
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
+
+    /** Emit a Module on the output stream, as operator<< does, with the
+     * bodies of its functions printed by this printer. */
+    void print(const Module &);
+
+    /** Called before and after text of the given style is emitted. Without
+     * colors, these only emit the parentheses of IRPrinterStyle::TypeParens.
+     * See Ansi for depth and reset. */
+    virtual void begin_style(IRPrinterStyle style, int depth) const;
+    virtual void end_style(IRPrinterStyle style, bool reset) const;
 
 protected:
     Indentation get_indent() const {
@@ -293,7 +319,22 @@ protected:
     void visit(const StreamingStore *) override;
     void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
+
+    /** Called before and after an Expr or Stmt is emitted. Do nothing by
+     * default. */
+    virtual void begin_node(const IRNode *) {
+    }
+    virtual void end_node(const IRNode *) {
+    }
 };
+
+template<typename T>
+std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
+    a.printer->begin_style(a.style, a.depth);
+    out << a.cnt;
+    a.printer->end_style(a.style, a.reset);
+    return out;
+}
 
 /** Debugging helpers for interactive debuggers (LLDB/GDB).
  *
