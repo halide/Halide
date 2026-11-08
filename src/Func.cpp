@@ -1924,15 +1924,10 @@ void collect_invariance_bounds(const Function &function, const Definition &defin
 // every intermediate still holds its initial value, the reduction's identity,
 // as it does if the reduction domain is empty? A hoisted factor s of a sum
 // gives f + s * 0, which is f, but an additive factor c of a min gives
-// min(f, c + identity), which is not. Neither is a float factor: s * 0.0f is
-// NaN for an infinite or NaN s, though the simplifier folds it to 0.
+// min(f, c + identity), which is not. This treats floats as reals, as Halide
+// does unless floats are strict (see float_writeback_needs_guard()).
 bool writeback_preserves_identity(const AssociativeOp &prover_result,
                                   const vector<vector<HoistedTerm>> &hoisted_terms) {
-    for (const Expr &op : prover_result.pattern.ops) {
-        if (op.type().is_float()) {
-            return false;
-        }
-    }
     std::map<string, Expr> y_values;
     for (size_t i = 0; i < prover_result.size(); i++) {
         if (prover_result.ys[i].var.empty()) {
@@ -1969,6 +1964,33 @@ bool writeback_preserves_identity(const AssociativeOp &prover_result,
         }
     }
     return true;
+}
+
+// Halide assumes floats are never infinite or NaN unless they are strict, so
+// the write-back of a float reduction that preserves the identity for reals,
+// e.g. f + s * 0.0f for a sum, may change f only under strict float: then it
+// is NaN for an infinite or NaN s. Floats are strict for strict_float()
+// intrinsics in the update or for the StrictFloat target feature.
+enum class FloatGuard { None,
+                        Always,
+                        IfStrictTarget };
+
+FloatGuard float_writeback_needs_guard(const AssociativeOp &prover_result, const Definition &definition) {
+    bool any_float = false;
+    for (const Expr &op : prover_result.pattern.ops) {
+        any_float |= op.type().is_float();
+    }
+    if (!any_float) {
+        return FloatGuard::None;
+    }
+    bool strict = false;
+    for (const Expr &value : definition.values()) {
+        visit_with(value, [&](auto *self, const Call *op) {
+            strict |= op->is_strict_float_intrinsic();
+            self->visit_base(op);
+        });
+    }
+    return strict ? FloatGuard::Always : FloatGuard::IfStrictTarget;
 }
 
 // A condition free of the RVars that holds exactly where the reduction domain
@@ -2027,14 +2049,26 @@ FuncVec define_hoisted_reductions(const Function &function, Definition definitio
     FuncVec intms(function.name() + "_intm", intermediate_count);
 
     Expr writeback_predicate = or_condition_over_domain(definition.predicate(), reduction_bounds);
-    if (!writeback_preserves_identity(prover_result, hoisted_terms)) {
-        writeback_predicate = nonempty_domain_condition(definition);
-        user_assert(writeback_predicate.defined())
+    const FloatGuard float_guard =
+        writeback_preserves_identity(prover_result, hoisted_terms) ?
+            float_writeback_needs_guard(prover_result, definition) :
+            FloatGuard::Always;
+    if (float_guard != FloatGuard::None) {
+        Expr nonempty = nonempty_domain_condition(definition);
+        user_assert(nonempty.defined())
             << "hoist_invariants() on " << stage_name << ": the write-back of the hoisted "
-            << "factors changes the result when the reduction domain is empty, so it must "
-            << "apply only where the domain is nonempty, but that could not be decided "
-            << "from its predicate:\n"
+            << "factors changes the result when the reduction domain is empty"
+            << (float_guard == FloatGuard::IfStrictTarget ? " (with the StrictFloat target feature)" : "")
+            << ", so it must apply only where the domain is nonempty, but that could not "
+            << "be decided from its predicate:\n"
             << "  " << definition.predicate() << "\n";
+        // Lowering folds the target query, leaving the projection as it was
+        // for non-strict targets.
+        if (float_guard == FloatGuard::Always) {
+            writeback_predicate = nonempty;
+        } else if (!is_const_one(nonempty) && !equal(nonempty, writeback_predicate)) {
+            writeback_predicate = select(target_has_feature(Target::StrictFloat), nonempty, writeback_predicate);
+        }
     }
 
     // Define one factor-free scalar intermediate reduction per outer term.

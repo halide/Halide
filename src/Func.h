@@ -431,10 +431,11 @@ public:
      * extent is positive and the RDom predicate, if any, holds at the corner
      * of the domain it is monotonic towards. That condition is true for
      * constant extents without a predicate, and it is exact for the predicate
-     * of a split's GuardWithIf tail. Every float reduction gets the condition
-     * too, since s * 0.0f is not 0 for an infinite or NaN s (observable with
-     * strict_float). Hoisting an integer sum's factors, or the factors of ||
-     * and &&, needs no condition.
+     * of a split's GuardWithIf tail. A float write-back gets the condition
+     * too when floats are strict, i.e. for the StrictFloat target feature or
+     * if the update contains strict_float(), since s * 0.0f is then NaN for
+     * an infinite or NaN s. Otherwise Halide assumes floats are finite, and a
+     * float sum, like an integer sum or || and &&, needs no condition.
      *
      * In an integer sum, the right shift of a bit field is a factor too. A bit
      * field (x >> s) & m, with m a non-negative constant, is exactly 2^-s times
@@ -478,8 +479,9 @@ public:
      *
      * It is an error if there is neither a distributable invariant factor (a
      * hoistable shift included) nor more than one outer term to split, or if
-     * the write-back needs the condition above and the RDom predicate is not
-     * monotonic in every RVar (e.g. it reads a Func or image).
+     * the write-back needs the condition above (on some target) and the RDom
+     * predicate is not monotonic in every RVar (e.g. it reads a Func or
+     * image).
      */
     FuncVec hoist_invariants();
 

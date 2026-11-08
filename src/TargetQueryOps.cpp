@@ -34,6 +34,18 @@ class LowerTargetQueryOps : public IRMutator {
         return IRMutator::visit(call);
     }
 
+    // Fold a select on a target query, so that the result is as if the select
+    // had never been there.
+    Expr visit(const Select *op) override {
+        const Call *call = op->condition.as<Call>();
+        if (call && (call->is_intrinsic(Call::target_arch_is) ||
+                     call->is_intrinsic(Call::target_has_feature) ||
+                     call->is_intrinsic(Call::target_os_is))) {
+            return is_const_one(mutate(op->condition)) ? mutate(op->true_value) : mutate(op->false_value);
+        }
+        return IRMutator::visit(op);
+    }
+
 public:
     LowerTargetQueryOps(const Target &t)
         : t(t) {

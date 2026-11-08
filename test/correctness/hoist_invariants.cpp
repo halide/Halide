@@ -1257,10 +1257,33 @@ int hoist_invariants_empty_domain_identity_test() {
     return 0;
 }
 
-// A float factor doesn't preserve the identity: inf * 0.0f is NaN. So a float
-// sum's write-back applies only where the domain is nonempty, and the guard
-// still vanishes for a constant extent. (Without strict_float, Halide assumes
-// no infinities or NaNs, so compile with it to observe them.)
+// Whether the lowered pipeline has an if whose condition depends on the
+// parameter `n`, i.e. whether the write-back is guarded by the extent.
+bool has_guard_on(Func f, const Target &t, const string &n) {
+    class FindGuard : public IRMutator {
+        using IRMutator::visit;
+        Stmt visit(const IfThenElse *op) override {
+            found |= expr_uses_var(op->condition, n);
+            return IRMutator::visit(op);
+        }
+
+    public:
+        const string &n;
+        bool found = false;
+        explicit FindGuard(const string &n)
+            : n(n) {
+        }
+    } finder(n);
+    Pipeline p(f);
+    p.add_custom_lowering_pass(&finder, [] {});
+    p.compile_to_module(p.infer_arguments(), "has_guard_on", t);
+    return finder.found;
+}
+
+// A float factor preserves the identity only if it is finite: inf * 0.0f is
+// NaN. Halide assumes floats are finite unless they are strict, so a float
+// sum's write-back is guarded where the domain is nonempty for the StrictFloat
+// target feature, and the guard still vanishes for a constant extent.
 int hoist_invariants_empty_domain_float_test() {
     ImageParam data_p{Float(32), 1, "data_p"};
     Param<float> scale{"scale"};
@@ -1299,6 +1322,77 @@ int hoist_invariants_empty_domain_float_test() {
     internal_assert(!pred.defined() || is_const_one(pred))
         << "hoist_invariants empty domain: constant extent left a float guard: " << pred << "\n";
 
+    internal_assert(has_guard_on(f, t, n.name()))
+        << "hoist_invariants empty domain: strict float sum has no guard\n";
+
+    return 0;
+}
+
+// Without strict floats, the factor of a float sum is finite and preserves the
+// identity, so the write-back needs no guard.
+int hoist_invariants_empty_domain_nonstrict_float_test() {
+    ImageParam data_p{Float(32), 1, "data_p"};
+    Param<float> scale{"scale"};
+    Param<int> n{"n"};
+    RDom r(0, n, "r");
+
+    Func f{"f"};
+    f() = 5.0f;
+    f() += scale * data_p(r);
+    f.update().hoist_invariants();
+
+    const Target t = get_jit_target_from_environment().without_feature(Target::StrictFloat);
+    internal_assert(!has_guard_on(f, t, n.name()))
+        << "hoist_invariants empty domain: non-strict float sum has a guard\n";
+
+    Buffer<float> data(4);
+    data.fill(2.0f);
+    data_p.set(data);
+    scale.set(3.0f);
+    for (int nv : {0, 4}) {
+        n.set(nv);
+        Buffer<float> result = f.realize({}, t);
+        const float expected = nv == 0 ? 5.0f : 29.0f;
+        internal_assert(result() == expected)
+            << "hoist_invariants empty domain: non-strict float sum was " << result()
+            << ", expected " << expected << "\n";
+    }
+    return 0;
+}
+
+// A strict_float() factor is strict without the target feature, so its
+// write-back is guarded too. (strict_float() around the whole update would
+// hide the sum from rfactor's associativity prover.)
+int hoist_invariants_empty_domain_strict_float_intrinsic_test() {
+    ImageParam data_p{Float(32), 1, "data_p"};
+    Param<float> scale{"scale"};
+    Param<int> n{"n"};
+    RDom r(0, n, "r");
+
+    Func f{"f"};
+    f() = 5.0f;
+    f() += strict_float(scale * 2.0f) * data_p(r);
+    f.update().hoist_invariants();
+
+    const Target t = get_jit_target_from_environment().without_feature(Target::StrictFloat);
+    internal_assert(has_guard_on(f, t, n.name()))
+        << "hoist_invariants empty domain: strict_float sum has no guard\n";
+    Buffer<float> data(4);
+    data.fill(2.0f);
+    data_p.set(data);
+    n.set(0);
+    for (float sv : {std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
+        scale.set(sv);
+        Buffer<float> result = f.realize({}, t);
+        internal_assert(result() == 5.0f)
+            << "hoist_invariants empty domain: strict_float sum with scale " << sv << " was "
+            << result() << ", expected 5\n";
+    }
+    scale.set(3.0f);
+    n.set(4);
+    Buffer<float> result = f.realize({}, t);
+    internal_assert(result() == 53.0f)
+        << "hoist_invariants empty domain: strict_float sum was " << result() << ", expected 53\n";
     return 0;
 }
 
@@ -1747,6 +1841,8 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (empty domain, block)", hoist_invariants_empty_block_test},
         {"hoist_invariants test (empty domain, identity preserved)", hoist_invariants_empty_domain_identity_test},
         {"hoist_invariants test (empty domain, float sum)", hoist_invariants_empty_domain_float_test},
+        {"hoist_invariants test (empty domain, non-strict float sum)", hoist_invariants_empty_domain_nonstrict_float_test},
+        {"hoist_invariants test (empty domain, strict_float sum)", hoist_invariants_empty_domain_strict_float_intrinsic_test},
         {"hoist_invariants test (empty domain, undecidable)", hoist_invariants_empty_domain_undecidable_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
