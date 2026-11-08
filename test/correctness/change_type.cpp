@@ -652,6 +652,66 @@ int change_type_float_term_rounding_rejected_test() {
     return 0;
 }
 
+// Type::can_represent(ConstantInterval) checks only an interval's endpoints.
+// That is not a test of exactness for a float type: [0, 2^25] passes for
+// Float(32), whose odd integers past 2^24 round. A float target is therefore
+// checked against its exactly representable integers instead, and only bounds
+// use endpoints, which is sound since rounding is monotone. But the endpoint
+// check itself round-trips through an out-of-range conversion at 2^63 - 1,
+// which rounds to 2^63 in a float64, so a full-range Int(64) promotion was
+// bounded as if it fit in Int(64).
+int change_type_float_promotion_bounds_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    Var i{"i"};
+    ImageParam A{Int(32), 1, "A_promote"}, L{Int(64), 1, "L_promote"};
+    RDom r(0, 1, "r");
+    const Expr wide = clamp(A(r), 0, 1 << 25);
+    auto rejected = [](Func f, Type t) {
+        std::string message;
+        try {
+            f.change_type(t);
+        } catch (const Halide::CompileError &e) {
+            message = e.what();
+        }
+        return message.find("a term may not be representable") != std::string::npos;
+    };
+    {
+        Func f{"f_wide_f64"};
+        f(i) = cast<double>(0);
+        f(i) += cast<double>(wide);
+        internal_assert(rejected(f, Float(32))) << "[0, 2^25] is not exact in Float(32)\n";
+        Func g{"f_wide_i32"};
+        g(i) = 0;
+        g(i) += wide;
+        internal_assert(rejected(g, Float(32))) << "[0, 2^25] is not exact in Float(32)\n";
+        Func h{"f_full_i64"};
+        h(i) = cast<double>(0);
+        h(i) += cast<double>(L(r));
+        internal_assert(rejected(h, Int(64)))
+            << "a full-range Int(64) promoted to Float(64) may round to 2^63\n";
+    }
+
+    // Retyping to an integer keeps a promotion that may round, so with
+    // endpoints exact in Float(32) its rounding is the original's.
+    Func f{"f_wide_max"};
+    f(i) = 0.0f;
+    f(i) = max(f(i), cast<float>(wide));
+    Func g = f.change_type(Int(32));
+    internal_assert(g.types()[0] == Int(32)) << "max of a rounding promotion not retyped\n";
+    Buffer<int32_t> a(1);
+    A.set(a);
+    for (int32_t v : {(1 << 24) + 1, (1 << 25) - 1, 1 << 25}) {
+        a(0) = v;
+        Buffer<float> result = f.realize({1});
+        internal_assert(result(0) == (float)v) << "max of " << v << " gave " << result(0) << "\n";
+    }
+#endif
+    return 0;
+}
+
 // Code-quality regression: when producer bounds let lossless_cast() narrow the
 // dot-product term, it should push the cast into the multiply and leave a native
 // Int(16) multiply, not a cast of an Int(32) widening_mul. This is what the cache
@@ -1107,10 +1167,10 @@ int change_type_chaining_preserves_runtime_checks_test() {
     return 0;
 }
 
-// The runtime guard itself must not use wrapping arithmetic. For a full-range
-// Int(64) term, multiplying either endpoint by a symbolic extent of two wraps,
-// making both comparisons spuriously true even though the accumulation can
-// overflow.
+// The runtime guard itself must not use wrapping arithmetic. For an Int(64)
+// term in [-2^62, 2^62], multiplying the upper endpoint by a symbolic extent of
+// two wraps, making both comparisons spuriously true even though the
+// accumulation can overflow.
 int change_type_runtime_check_arithmetic_does_not_overflow_test() {
 #if HALIDE_WITH_EXCEPTIONS
     if (!Halide::exceptions_enabled()) {
@@ -1123,9 +1183,10 @@ int change_type_runtime_check_arithmetic_does_not_overflow_test() {
     Var i{"i"};
     RDom r(0, extent, "r");
 
+    // +/-2^62 convert to Float(64) exactly, so they bound the promoted term.
     Func Acc{"Acc_guard_overflow"};
     Acc(i) = cast<double>(0);
-    Acc(i) += cast<double>(A(r));
+    Acc(i) += cast<double>(clamp(A(r), Expr(-(int64_t{1} << 62)), Expr(int64_t{1} << 62)));
 
     Func Acc_i64 = Acc.change_type(Int(64));
     Acc_i64.compute_root();
@@ -1134,7 +1195,7 @@ int change_type_runtime_check_arithmetic_does_not_overflow_test() {
     a.fill(int64_t{1} << 62);
     A.set(a);
 
-    // One full-range term is permitted and must not be rejected by an overly
+    // One near-full-range term is permitted and must not be rejected by an overly
     // conservative or malformed guard.
     extent.set(1);
     Buffer<double> safe_result = Acc.realize({1});
@@ -1552,6 +1613,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_float_term_rounding_rejected_test\n");
     if (change_type_float_term_rounding_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_promotion_bounds_test\n");
+    if (change_type_float_promotion_bounds_test()) {
         return 1;
     }
     printf("Running change_type_keeps_narrow_multiply_test\n");

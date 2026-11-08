@@ -3203,7 +3203,8 @@ public:
      * retyped to it stays exact rather than merely finite. For an integer
      * target, a term's int-to-float promotion is dropped only where the
      * integer's range is exact in the float (e.g. within 2^24 for float32);
-     * otherwise the promotion may round, and the term is rejected. A float
+     * otherwise the promotion may round, so it is kept, and its range is
+     * bounded only if both endpoints convert exactly. A float
      * term retyped to an integer type must also compute an integer exactly:
      * it must be built from integral constants and integer promotions by +,
      * -, *, min, max, and select, with every sum, difference, and product

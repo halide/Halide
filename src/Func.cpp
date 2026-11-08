@@ -5305,12 +5305,37 @@ optional<int64_t> float_as_exact_int64(double x) {
     return std::nullopt;
 }
 
+// Bounds of the conversion to float type `t` of an integer in `in`. Within
+// t's exactly representable integers, the conversion is exact. Otherwise it
+// may round, but rounding is monotone and fixes representable endpoints, so
+// `in` still bounds the result if both endpoints convert exactly. Unlike
+// Type::can_represent(), which is endpoint-based too, this doesn't round-trip
+// an endpoint through an out-of-range float-to-int conversion (e.g. 2^63 - 1
+// rounds to 2^63 in a float64).
+optional<ConstantInterval> float_conversion_bounds(Type t, const ConstantInterval &in) {
+    if (float_exact_integer_bounds(t).contains(in)) {
+        return in;
+    }
+    auto converts_exactly = [&](int64_t x) {
+        double d = t.is_bfloat()  ? (double)(float)bfloat16_t((float)x) :
+                   t.bits() == 16 ? (double)(float)float16_t((float)x) :
+                   t.bits() == 32 ? (double)(float)x :
+                                    (double)x;
+        return float_as_exact_int64(d) == x;
+    };
+    if (in.is_bounded() && converts_exactly(in.min) && converts_exactly(in.max)) {
+        return in;
+    }
+    return std::nullopt;
+}
+
 // Integer bounds of a float expression that provably computes an integer
 // exactly: one built from integral constants and promotions of integers by
 // +, -, *, min, max, and select, where every sum, difference, and product lies
 // within the float type's exactly representable integers (e.g. 2^24 for
 // float32), so the float arithmetic doesn't round. (A promotion may round, but
-// an integer retype keeps it as a conversion.) Returns nullopt for anything
+// an integer retype keeps it as a conversion, bounded by
+// float_conversion_bounds().) Returns nullopt for anything
 // else (a division, a float Func, a product that may round, ...).
 // constant_integer_bounds() can't be used directly, as it bounds float nodes
 // with integer arithmetic, e.g. 1.0f / 3.0f as integer division, giving [0, 0].
@@ -5324,14 +5349,11 @@ optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBo
     }
     optional<ConstantInterval> result;
     if (const Cast *c = e.as<Cast>()) {
-        if (c->value.type().is_int_or_uint()) {
-            return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
-        }
-        optional<ConstantInterval> b = float_integer_bounds(c->value, fvb);
-        if (b) {
-            b->cast_to(e.type());
-        }
-        return b;
+        optional<ConstantInterval> b =
+            c->value.type().is_int_or_uint() ?
+                constant_integer_bounds(c->value, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb) :
+                float_integer_bounds(c->value, fvb);
+        return b ? float_conversion_bounds(e.type(), *b) : std::nullopt;
     } else if (const Select *s = e.as<Select>()) {
         optional<ConstantInterval> a = float_integer_bounds(s->true_value, fvb);
         optional<ConstantInterval> b = float_integer_bounds(s->false_value, fvb);
