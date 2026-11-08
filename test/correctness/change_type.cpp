@@ -4,9 +4,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <string>
+#include <tuple>
+#include <utility>
 
 using namespace Halide;
 
@@ -483,6 +486,63 @@ int change_type_truncating_rejected_test() {
         }
         internal_assert(threw)
             << "change_type(Int(32)) on a rounding Int(32)-to-float promotion should be rejected\n";
+    }
+#endif
+    return 0;
+}
+
+// A float seed that is not exactly an integer of the target type (infinite,
+// NaN, non-integral, or beyond Int(64): 2^63 is integral but (int64_t)2^63 is
+// undefined) must be rejected as unrepresentable, not folded into some
+// integer. A seed just inside the target's range still retypes exactly.
+int change_type_float_seed_range_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    Var i{"i"};
+    ImageParam A{Int(8), 1, "A"};
+    RDom r(0, 1, "r");
+    auto make = [&](Type acc, double seed) {
+        Func f{"f_seed"};
+        f(i) = cast(acc, Expr(seed));
+        f(i) += cast(acc, A(r));
+        return f;
+    };
+    const double inf = std::numeric_limits<double>::infinity();
+    for (double seed : {0x1p63, -0x1p64, inf, -inf, std::numeric_limits<double>::quiet_NaN(), 2.5}) {
+        for (auto [acc, t] : {std::pair{Float(32), Int(32)}, std::pair{Float(64), Float(32)}}) {
+            Func f = make(acc, seed);
+            std::string message;
+            try {
+                f.change_type(t);
+            } catch (const Halide::CompileError &e) {
+                message = e.what();
+            }
+            internal_assert(message.find("the initial value may not be representable") != std::string::npos)
+                << "change_type(" << t << ") of a " << acc << " seed " << seed
+                << " should be rejected as unrepresentable, got: " << message << "\n";
+        }
+    }
+
+    // 2^31 - 128 is a float32 and, plus at most 127, an Int(32); 2^24 - 128 is
+    // likewise exact in a float32 accumulator.
+    Buffer<int8_t> a(1);
+    A.set(a);
+    for (auto [acc, t, seed] : {std::tuple{Float(32), Int(32), 0x1p31 - 128}, std::tuple{Float(64), Float(32), 0x1p24 - 128}}) {
+        Func f = make(acc, seed);
+        Func g = f.change_type(t);
+        internal_assert(g.types()[0] == t) << "change_type(" << t << ") of seed " << seed << " not applied\n";
+        for (int8_t v : {(int8_t)127, (int8_t)-128}) {
+            a(0) = v;
+            Func out{"seed_out"};
+            out(i) = cast<double>(f(i));
+            Buffer<double> result = out.realize({1});
+            // The original rounds the sum once to the accumulator type.
+            const double expected = acc == Float(32) ? (double)(float)(seed + v) : seed + v;
+            internal_assert(result(0) == expected)
+                << "change_type(" << t << ") of seed " << seed << " + " << (int)v << " gave " << result(0) << "\n";
+        }
     }
 #endif
     return 0;
@@ -1376,6 +1436,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_truncating_rejected_test\n");
     if (change_type_truncating_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_seed_range_test\n");
+    if (change_type_float_seed_range_test()) {
         return 1;
     }
     printf("Running change_type_keeps_narrow_multiply_test\n");

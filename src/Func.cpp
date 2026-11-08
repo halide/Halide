@@ -5295,6 +5295,16 @@ ConstantInterval float_exact_integer_bounds(Type t) {
     return ConstantInterval(-bound, bound);
 }
 
+// The value of a float constant as an int64, if it is exactly one: finite,
+// integral, and within [-2^63, 2^63). (double)INT64_MAX rounds to 2^63, so the
+// upper bound is exclusive.
+optional<int64_t> float_as_exact_int64(double x) {
+    if (std::isfinite(x) && x >= -0x1p63 && x < 0x1p63 && std::floor(x) == x) {
+        return (int64_t)x;
+    }
+    return std::nullopt;
+}
+
 // Rewrite a factor-free leaf expression `e` to type `t`
 Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     if (e.type() == t) {
@@ -5357,6 +5367,17 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
         return r;
     }
 
+    // cast() would fold a float constant that t doesn't represent (e.g. 2.5,
+    // 2^40, or inf for an Int(32) t) into some other integer. Keep the Cast,
+    // so that change_type_prove_safe() sees the float constant and rejects it.
+    if (t.is_int_or_uint()) {
+        if (optional<double> fv = as_const_float(folded)) {
+            optional<int64_t> i = float_as_exact_int64(*fv);
+            if (!i || !t.can_represent(*i)) {
+                return Cast::make(t, folded);
+            }
+        }
+    }
     return cast(t, folded);
 }
 
@@ -5579,12 +5600,12 @@ std::optional<std::string> change_type_prove_safe(
         // (e.g. a literal seed retyped to a float target) rather than leaving
         // a Cast to strip. constant_integer_bounds() only reasons about
         // integer-typed expressions, so recover such a leaf's exact integer
-        // value here; a non-integer float constant falls through to the
-        // type-based (unbounded) fallback below, same as before this check
-        // was added.
+        // value here. Any other float constant (non-integral, infinite, NaN,
+        // or outside Int(64)) is unbounded, so the proof rejects it.
         if (v.type().is_float()) {
-            if (optional<double> fv = as_const_float(v); fv && std::floor(*fv) == *fv) {
-                return ConstantInterval::single_point((int64_t)*fv);
+            if (optional<double> fv = as_const_float(v)) {
+                optional<int64_t> i = float_as_exact_int64(*fv);
+                return i ? ConstantInterval::single_point(*i) : ConstantInterval::everything();
             }
         }
         return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
