@@ -766,7 +766,10 @@ compares them exactly; nothing is evaluated.
 - `+`, `-`, `*` (and division by a constant) on floats and on 32/64-bit signed
   integers are real arithmetic: products are distributed, like terms collected
   with rational coefficients, and factors invariant in a summation variable are
-  pulled out of the sum, so `d * sum(q)` and `sum(d * q)` match.
+  pulled out of the sum, so `d * sum(q)` and `sum(d * q)` match. A sum of a term
+  with no factor in the variable is the term times `max(extent, 0)` (simply the
+  extent when that is provably nonnegative), since a negative extent runs no
+  iterations.
 - Widening float casts are the identity. Integer-to-integer and integer-to-float
   casts are the identity when the operand's range (from its type and the extents
   of the sums) is exactly representable in the result. Every other cast is a

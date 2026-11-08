@@ -676,6 +676,52 @@ int test_stored_types() {
     return 0;
 }
 
+// A sum of a term free of the reduction variable is the term times the
+// number of iterations: the extent, or zero if the extent is negative. (The
+// sums read r - r: an update sums over only the RDoms it uses.)
+int test_free_sum_extent() {
+    Param<int16_t> n("n");
+    Param<uint8_t> u("u");
+    Var b("b");
+    auto scaled = [](Expr count) {
+        return [=](const std::vector<Func> &from) {
+            Func s("scaled_stored");
+            Var b("b");
+            s(b) = cast<float>(from[0](0, b)) * cast<float>(count);
+            return s;
+        };
+    };
+    auto summed = [](Expr extent) {
+        return [=](const std::vector<Func> &from) {
+            Func s("summed_stored");
+            Var b("b");
+            RDom r(0, extent, "summed_r");
+            s(b) = 0.0f;
+            s(b) += cast<float>(from[0](r - r, b));
+            return s;
+        };
+    };
+    auto term_for = [&](const DerivedPort &port, Expr extent) {
+        Func term("free_term");
+        RDom r(0, extent, "free_r");
+        term(b) = 0.0f;
+        term(b) += cast<float>(port.from[0](r - r, b));
+        return term;
+    };
+
+    // n may be negative: the sum is not codes(0, b) * n.
+    CodesPort neg("neg", scaled(n));
+    DerivedPortMatch m = match_derived_port(term_for(neg.port, cast<int>(n)), neg.port);
+    CHECK(!m.matched && m.reason.find("differ") != std::string::npos);
+    // ...but it is the same sum written as one.
+    CodesPort neg_sum("neg_sum", summed(cast<int>(n)));
+    CHECK(match_derived_port(term_for(neg_sum.port, cast<int>(n)), neg_sum.port).matched);
+    // u is not negative.
+    CodesPort pos("pos", scaled(u));
+    CHECK(match_derived_port(term_for(pos.port, cast<int>(u)), pos.port).matched);
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -862,6 +908,7 @@ int main(int argc, char **argv) {
                                            {"argument_mapping", test_argument_mapping},
                                            {"affine_arguments", test_affine_arguments},
                                            {"stored_types", test_stored_types},
+                                           {"free_sum_extent", test_free_sum_extent},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},

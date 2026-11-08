@@ -2755,7 +2755,18 @@ public:
             }
             Poly term{{inv}};
             if (dep.factors.empty()) {
-                term = times(term, normalize(extent));
+                // A loop with a negative extent runs zero times, so the sum
+                // is inv * max(extent, 0).
+                Poly count;
+                if (n_iter) {
+                    count = constant({std::max<int64_t>(*n_iter, 0), 1});
+                } else {
+                    count = normalize(extent);
+                    if (!(range_of(count).lo >= 0)) {
+                        count = normalize(Internal::Max::make(extent, Internal::make_zero(extent.type())));
+                    }
+                }
+                term = times(term, count);
             } else {
                 auto n = std::make_shared<NNode>();
                 n->kind = NNode::Sum;
