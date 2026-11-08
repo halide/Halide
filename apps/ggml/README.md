@@ -280,7 +280,9 @@ sum (once per act column, amortized over the tile's rows), and q4_1 with f16/f32
 acts has no derived port. `ggml_scheme_properties` (ctest) checks q8_1's
 properties without its layout: requantizing is idempotent, `s` holds, every
 stage is closed; and with `s` derived GGML's way, requantizing changes `s` in
-about a quarter of the blocks.
+about a quarter of the blocks. `ggml_legacy_properties` checks every legacy
+format (q4_0, q4_1, q5_0, q5_1, q8_0, q8_1) without its layout: the error bound,
+the declared ranges, and that every stage is closed.
 
 q5_0 and q5_1 are q4_0's and q4_1's quantizers at 5 bits (`Type0Quant`,
 `Type1Quant`: GGML's "type-0" and "type-1"), each unsigned code split

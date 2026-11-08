@@ -97,8 +97,14 @@ struct Type1Quant {
         return {{{"blocks", Float(32)}},
                 {codes_port(0, (1 << bits) - 1), param_port("scale", Float(32), tag::scale), param_port("min", Float(32), tag::offset)}};
     }
+    // Half a step, and the f32 rounding of q * d + m (up to an ulp of
+    // |m| + top |d|: more than half a step's slack once |m| >> |d|).
     Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
-        return step_bound(e, 0.5);
+        Func f("bound");
+        Var j, b;
+        Expr d = abs(cast<double>(e[1](b, _))), m = abs(cast<double>(e[2](b, _)));
+        f(j, b, _) = d * Expr(0.5 * 1.0001) + (m + Expr((double)((1 << bits) - 1)) * d) * Expr(std::ldexp(1.0, -23));
+        return f;
     }
 };
 
