@@ -5461,18 +5461,12 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
         return r;
     }
 
-    // cast() would fold a float constant that t doesn't represent (e.g. 2.5,
-    // 2^40, or inf for an Int(32) t) into some other integer. Keep the Cast,
-    // so that change_type_prove_safe() sees the float constant and rejects it.
-    if (t.is_int_or_uint()) {
-        if (optional<double> fv = as_const_float(folded)) {
-            optional<int64_t> i = float_as_exact_int64(*fv);
-            if (!i || !t.can_represent(*i)) {
-                return Cast::make(t, folded);
-            }
-        }
-    }
-    return cast(t, folded);
+    // Not cast(): it would fold a constant that t doesn't represent into some
+    // other value of t (100000 wraps to -31072 in an Int(16), 2049 rounds to
+    // 2048 in a Float(16), inf becomes some integer), erasing the evidence.
+    // Keep the Cast, so that change_type_prove_safe() bounds the original
+    // value and rejects it.
+    return Cast::make(t, folded);
 }
 
 // Retype a whole definition value to type `t`, retargeting a direct self-reference

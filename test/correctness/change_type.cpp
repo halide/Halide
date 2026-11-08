@@ -712,6 +712,71 @@ int change_type_float_promotion_bounds_test() {
     return 0;
 }
 
+// A constant leaf that the target type doesn't represent must reach the
+// safety proof as a cast of the original constant, not be folded into the
+// target type first: folded, 100000 wraps to -31072 in an Int(16), 2049
+// rounds to 2048 in a Float(16), and 2^24 + 1 rounds to 2^24 in a Float(32),
+// each of which the proof would then accept.
+int change_type_constant_leaf_rejected_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    Var i{"i"};
+    RDom r(0, 1, "r");
+    ImageParam A{UInt(8), 1, "A_const"};
+    Buffer<uint8_t> a(1);
+    a(0) = 3;
+    A.set(a);
+    auto error_of = [](Func f, Type t) {
+        try {
+            f.change_type(t);
+        } catch (const Halide::CompileError &e) {
+            return std::string(e.what());
+        }
+        return std::string();
+    };
+    struct Case {
+        Expr value;
+        Type t;
+    };
+    const std::vector<Case> cases{{Expr(100000), Int(16)},
+                                  {Expr(100000.0f), Int(16)},
+                                  {Expr(-40000), UInt(16)},
+                                  {Expr(2049.0f), Float(16)},
+                                  {Expr((1 << 24) + 1), Float(32)}};
+    for (const Case &c : cases) {
+        Func seed{"f_const_seed"};
+        seed(i) = c.value;
+        seed(i) += cast(c.value.type(), A(r));
+        std::string message = error_of(seed, c.t);
+        internal_assert(message.find("the initial value may not be representable") != std::string::npos)
+            << "change_type(" << c.t << ") of the seed " << c.value << " should be rejected, got: " << message << "\n";
+        Func term{"f_const_term"};
+        term(i) = cast(c.value.type(), 0);
+        term(i) += c.value;
+        message = error_of(term, c.t);
+        internal_assert(message.find("a term may not be representable") != std::string::npos)
+            << "change_type(" << c.t << ") of the term " << c.value << " should be rejected, got: " << message << "\n";
+    }
+
+    // Representable constants are still retyped, and exactly.
+    for (const Case &c : std::vector<Case>{{Expr(30000), Int(16)}, {Expr(1792.0f), Float(16)}, {Expr((1 << 24) - 255), Float(32)}}) {
+        Func f{"f_const_ok"};
+        f(i) = c.value;
+        f(i) += cast(c.value.type(), A(r));
+        Func g = f.change_type(c.t);
+        internal_assert(g.types()[0] == c.t) << "constant " << c.value << " not retyped to " << c.t << "\n";
+        Func out{"const_out"};
+        out(i) = cast<double>(f(i));
+        Buffer<double> result = out.realize({1});
+        const double expected = *Internal::as_const_float(simplify(cast<double>(c.value))) + 3;
+        internal_assert(result(0) == expected) << "constant " << c.value << " gave " << result(0) << "\n";
+    }
+#endif
+    return 0;
+}
+
 // Code-quality regression: when producer bounds let lossless_cast() narrow the
 // dot-product term, it should push the cast into the multiply and leave a native
 // Int(16) multiply, not a cast of an Int(32) widening_mul. This is what the cache
@@ -1601,6 +1666,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_truncating_rejected_test\n");
     if (change_type_truncating_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_constant_leaf_rejected_test\n");
+    if (change_type_constant_leaf_rejected_test()) {
         return 1;
     }
     printf("Running change_type_float_seed_range_test\n");
