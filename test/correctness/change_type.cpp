@@ -604,6 +604,54 @@ int change_type_float_division_rejected_test() {
     return 0;
 }
 
+// A float term retyped to an integer type must also be computed exactly by
+// the float arithmetic. A float32 product of promoted int16/int8 values can
+// exceed 2^24 and round, while the integer retype computes it exactly, so
+// the retype would change the term's value; so would keeping a rounding
+// promotion of the exact product.
+int change_type_float_term_rounding_rejected_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    Var i{"i"};
+    ImageParam A{Int(16), 1, "A_round"}, B{Int(16), 1, "B_round"}, C{Int(8), 1, "C_round"};
+    RDom r(0, 1, "r");
+    const Expr a = cast<float>(A(r)), b = cast<float>(B(r)), c = cast<float>(C(r));
+    for (const Expr &term : {a * c * c, a * b, a * b + c}) {
+        Func f{"f_round"};
+        f(i) = 0.0f;
+        f(i) += term;
+        std::string message;
+        try {
+            f.change_type(Int(32));
+        } catch (const Halide::CompileError &e) {
+            message = e.what();
+        }
+        internal_assert(message.find("a term may not be representable") != std::string::npos)
+            << "change_type(int32) of the possibly rounding term " << term
+            << " should be rejected, got: " << message << "\n";
+    }
+
+    // Products within 2^24 are exact in float32 and still retyped.
+    Func f{"f_exact_product"};
+    f(i) = 0.0f;
+    f(i) += c * c * c + a;
+    Func g = f.change_type(Int(32));
+    internal_assert(g.types()[0] == Int(32)) << "exact float product not retyped\n";
+    Buffer<int16_t> av(1);
+    Buffer<int8_t> cv(1);
+    A.set(av);
+    C.set(cv);
+    av(0) = -32768;
+    cv(0) = -128;
+    Buffer<float> result = f.realize({1});
+    internal_assert(result(0) == -128.0f * -128.0f * -128.0f - 32768.0f)
+        << "exact float product gave " << result(0) << "\n";
+#endif
+    return 0;
+}
+
 // Code-quality regression: when producer bounds let lossless_cast() narrow the
 // dot-product term, it should push the cast into the multiply and leave a native
 // Int(16) multiply, not a cast of an Int(32) widening_mul. This is what the cache
@@ -1500,6 +1548,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_float_division_rejected_test\n");
     if (change_type_float_division_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_term_rounding_rejected_test\n");
+    if (change_type_float_term_rounding_rejected_test()) {
         return 1;
     }
     printf("Running change_type_keeps_narrow_multiply_test\n");

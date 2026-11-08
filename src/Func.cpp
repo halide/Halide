@@ -5305,12 +5305,15 @@ optional<int64_t> float_as_exact_int64(double x) {
     return std::nullopt;
 }
 
-// Integer bounds of a float expression whose value is provably an integer:
-// one built from integral constants and promotions of integers by +, -, *,
-// min, max, and select. Returns nullopt for anything else (a division, a
-// float Func, ...), which may not be an integer. constant_integer_bounds()
-// can't be used directly, as it bounds float nodes with integer arithmetic,
-// e.g. 1.0f / 3.0f as integer division, giving [0, 0].
+// Integer bounds of a float expression that provably computes an integer
+// exactly: one built from integral constants and promotions of integers by
+// +, -, *, min, max, and select, where every sum, difference, and product lies
+// within the float type's exactly representable integers (e.g. 2^24 for
+// float32), so the float arithmetic doesn't round. (A promotion may round, but
+// an integer retype keeps it as a conversion.) Returns nullopt for anything
+// else (a division, a float Func, a product that may round, ...).
+// constant_integer_bounds() can't be used directly, as it bounds float nodes
+// with integer arithmetic, e.g. 1.0f / 3.0f as integer division, giving [0, 0].
 optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBounds &fvb) {
     internal_assert(e.type().is_float());
     if (optional<double> fv = as_const_float(e)) {
@@ -5319,6 +5322,7 @@ optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBo
         }
         return std::nullopt;
     }
+    optional<ConstantInterval> result;
     if (const Cast *c = e.as<Cast>()) {
         if (c->value.type().is_int_or_uint()) {
             return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
@@ -5328,44 +5332,55 @@ optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBo
             b->cast_to(e.type());
         }
         return b;
-    }
-    if (const Select *s = e.as<Select>()) {
+    } else if (const Select *s = e.as<Select>()) {
         optional<ConstantInterval> a = float_integer_bounds(s->true_value, fvb);
         optional<ConstantInterval> b = float_integer_bounds(s->false_value, fvb);
         if (!a || !b) {
             return std::nullopt;
         }
         return ConstantInterval::make_union(*a, *b);
+    } else if (optional<pair<Expr, Expr>> operands = as_binary_operands(e)) {
+        optional<ConstantInterval> a = float_integer_bounds(operands->first, fvb);
+        optional<ConstantInterval> b = float_integer_bounds(operands->second, fvb);
+        if (a && b) {
+            switch (e.node_type()) {
+            case IRNodeType::Add:
+                result = *a + *b;
+                break;
+            case IRNodeType::Sub:
+                result = *a - *b;
+                break;
+            case IRNodeType::Mul:
+                result = *a * *b;
+                break;
+            case IRNodeType::Min:
+                return min(*a, *b);
+            case IRNodeType::Max:
+                return max(*a, *b);
+            default:
+                break;
+            }
+        }
     }
-    optional<pair<Expr, Expr>> operands = as_binary_operands(e);
-    if (!operands) {
+    if (result && !float_exact_integer_bounds(e.type()).contains(*result)) {
         return std::nullopt;
     }
-    optional<ConstantInterval> a = float_integer_bounds(operands->first, fvb);
-    optional<ConstantInterval> b = float_integer_bounds(operands->second, fvb);
-    if (!a || !b) {
-        return std::nullopt;
-    }
-    switch (e.node_type()) {
-    case IRNodeType::Add:
-        return *a + *b;
-    case IRNodeType::Sub:
-        return *a - *b;
-    case IRNodeType::Mul:
-        return *a * *b;
-    case IRNodeType::Min:
-        return min(*a, *b);
-    case IRNodeType::Max:
-        return max(*a, *b);
-    default:
-        return std::nullopt;
-    }
+    return result;
 }
 
 // Rewrite a factor-free leaf expression `e` to type `t`
 Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     if (e.type() == t) {
         return e;
+    }
+
+    // An integer retype of a float term is exact only if the term computes an
+    // integer exactly. lossless_cast() below bounds float nodes with integer
+    // arithmetic, and the fold below replaces a float op with a conversion of
+    // its exact result, so neither may see any other term. Truncate it with a
+    // single cast instead, which change_type_prove_safe() then rejects.
+    if (t.is_int_or_uint() && e.type().is_float() && !as_const_float(e) && !float_integer_bounds(e, fvb)) {
+        return Cast::make(t, e);
     }
 
     // Expose a single promotion cast for a sum, difference, or product of two
@@ -5417,14 +5432,7 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     // a producer's proven value range (e.g. narrowing a clamped producer). This
     // is a no-op-or-improvement for any target type: a float target just takes
     // lossless_cast()'s representable-widening path, and anything it can't
-    // prove falls through to the plain cast below. lossless_cast() bounds a
-    // float expression with integer arithmetic, so for an integer target it
-    // is only exact for an integer-valued one; truncate anything else with a
-    // single cast, which change_type_prove_safe() then rejects.
-    if (t.is_int_or_uint() && folded.type().is_float() && !as_const_float(folded) &&
-        !float_integer_bounds(folded, fvb)) {
-        return Cast::make(t, folded);
-    }
+    // prove falls through to the plain cast below.
     std::map<Expr, ConstantInterval, ExprCompare> cache;
     if (Expr r = lossless_cast(t, folded, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
         r.defined()) {
