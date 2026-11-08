@@ -2886,11 +2886,31 @@ public:
             rename[rv.var] = Variable::make(Int(32), p);
             rvars.emplace_back(p, rv.min, rv.extent);
         }
+        Poly init = normalize(Internal::substitute(pure, f.values()[0]));
         Poly result = normalize(Internal::substitute(rename, body));
+        if (const Type &t = f.values()[0].type(); !ring(t)) {
+            // The accumulator wraps, so it is the polynomial sum only if no
+            // partial sum leaves t: each is init plus k <= n terms, so lies in
+            // init + [0, n] * body for n the (constant) number of iterations.
+            int64_t n = 1;
+            for (auto &[p, min, extent] : rvars) {
+                std::optional<int64_t> e = Internal::as_const_int(Internal::simplify(Internal::substitute(pure, extent)));
+                if (!e) {
+                    return false;
+                }
+                n = *e <= 0 ? 0 : n * *e;
+                if (n > INT32_MAX) {
+                    return false;
+                }
+            }
+            if (!type_range(t).contains(range_of(init) + range_of(result) * ConstantInterval(0, n))) {
+                return false;
+            }
+        }
         for (auto &[p, min, extent] : rvars) {
             result = sum(result, p, Internal::substitute(pure, min), Internal::substitute(pure, extent));
         }
-        out = plus(normalize(Internal::substitute(pure, f.values()[0])), result);
+        out = plus(init, result);
         return true;
     }
 

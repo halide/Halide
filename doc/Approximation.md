@@ -762,7 +762,11 @@ compares them exactly; nothing is evaluated.
   arguments simplified. Other pure Funcs are expanded. A Func that is a sum
   reduction (zero initial value, one update `f(v) = f(v) + body`, no RDom
   predicate) becomes a sum over its RVars, which are renamed to binders so that
-  sums over equal bounds match regardless of names.
+  sums over equal bounds match regardless of names. If its type wraps (anything
+  but a float or a 32/64-bit signed integer), it is a sum only when its extents
+  are constants and no partial sum can leave the type: the type's range must
+  contain `range(init) + [0, n] * range(body)`, `n` the number of iterations.
+  Otherwise it is an opaque atom.
 - `+`, `-`, `*` (and division by a constant) on floats and on 32/64-bit signed
   integers are real arithmetic: products are distributed, like terms collected
   with rational coefficients, and factors invariant in a summation variable are

@@ -1567,7 +1567,9 @@ struct DerivedPortMatch {
  * - other pure Funcs are expanded, and Funcs that are sum reductions (a zero
  *   initial value and one update `f(vars) = f(vars) + body`, without an RDom
  *   predicate) become sums over their RVars, which are renamed so that sums
- *   over equal bounds match;
+ *   over equal bounds match; in a type that wraps (not a float or a 32/64-bit
+ *   signed integer), only when the extents are constant and no partial sum
+ *   can leave the type;
  * - + - * (and division by a constant) on floats and on 32/64-bit signed
  *   integers are real arithmetic: products are distributed, like terms are
  *   collected with rational coefficients, and within a sum, factors

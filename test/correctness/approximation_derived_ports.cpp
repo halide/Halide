@@ -753,6 +753,37 @@ int test_poly_range() {
     return 0;
 }
 
+// A sum reduction in a type that wraps (here narrower than 32 bits) is the
+// polynomial sum of its terms only if no partial sum leaves the type: four
+// int8 codes sum to as much as 508, which an Int(8) accumulator wraps, but
+// fit an Int(16) one.
+int test_narrow_sum() {
+    Var b("b");
+    auto port_for = [](const std::string &name, Type acc) {
+        return CodesPort(name, [=](const std::vector<Func> &from) {
+            Func s(name + "_acc"), d(name + "_stored");
+            Var b("b");
+            RDom r(0, 4, name + "_r");
+            s(b) = cast(acc, 0);
+            s(b) += cast(acc, from[0](r, b));
+            d(b) = cast<int32_t>(s(b));
+            return d;
+        });
+    };
+    auto term_for = [&](const DerivedPort &port) {
+        Func term("narrow_sum_term");
+        RDom r(0, 4, "narrow_sum_r");
+        term(b) = 0;
+        term(b) += cast<int32_t>(port.from[0](r, b));
+        return term;
+    };
+    CodesPort wraps = port_for("narrow_i8", Int(8));
+    CHECK(!match_derived_port(term_for(wraps.port), wraps.port).matched);
+    CodesPort fits = port_for("narrow_i16", Int(16));
+    CHECK(match_derived_port(term_for(fits.port), fits.port).matched);
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -941,6 +972,7 @@ int main(int argc, char **argv) {
                                            {"stored_types", test_stored_types},
                                            {"free_sum_extent", test_free_sum_extent},
                                            {"poly_range", test_poly_range},
+                                           {"narrow_sum", test_narrow_sum},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},
