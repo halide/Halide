@@ -740,10 +740,13 @@ splitting a sum); it must read the decode-side Funcs (`port.from`), so call it
 before inlining the decode. The variant matches `term` against `port.definition`
 (below), and on success replaces every call to `term` in `consumers` with a read
 of `port.stored` at the matched arguments, like the eager `substitute_calls` of
-`approximate_by`. A mismatch, or a port with no declared bound, is an error that
-prints both normal forms. The returned `DerivedSubstitution` holds the
-`replacement` Func, the `port_args`, and the lossy `error_bound` of
-`|replacement - term|` (or `exact`).
+`approximate_by`, cast to `term`'s type. A mismatch, or a port with no declared
+bound, is an error that prints both normal forms. So is a stored type that
+`term`'s type does not represent exactly (`Type::can_represent`): a float16,
+bfloat16, or int16 port can replace a float32 term, but a bfloat16 port cannot
+replace a float16 term, nor a float16 port a bfloat16 one. The returned
+`DerivedSubstitution` holds the `replacement` Func, the `port_args`, and the
+lossy `error_bound` of `|replacement - term|` (or `exact`).
 
 With `DerivedPortCheck::Runtime` the replacement also evaluates the definition
 where it reads the port and `require()`s `|stored - definition| <= bound` (or

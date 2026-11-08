@@ -549,8 +549,7 @@ int test_affine_arguments() {
         CHECK(m.matched && Internal::equal(Internal::simplify(m.port_args[0] - (t + 1)), 0));
     }
 
-    // Read through the port: approximate_by needs a stored type that widens
-    // exactly to the term's, so this port stores floats.
+    // Read through the port, here stored as floats.
     {
         AffinePort a = setup("read", [](Expr t, Expr r, Expr b) { return t * SUB + r; }, Float(32));
         Func term("read_term"), consumer("read_consumer");
@@ -607,6 +606,72 @@ int test_affine_arguments() {
         short_sum(t, b) += a.dq(t * SUB + r8, b);
         m = match_derived_port(short_sum, a.port);
         CHECK(!m.matched && m.reason.find("differ") != std::string::npos);
+    }
+    return 0;
+}
+
+// A port derived from Int8Codes's codes (k, b) of a fresh Func by
+// `definition`.
+struct CodesPort {
+    ApproximationResult res;
+    DerivedPort port;
+
+    CodesPort(const std::string &name, Derive::Definition definition) {
+        const int blocks = 2;
+        Buffer<float> xb(AB * blocks);
+        for (int i = 0; i < AB * blocks; i++) {
+            xb(i) = (float)((i * 37) % 255 - 127);
+        }
+        Func x(name + "_x"), use(name + "_use");
+        Var i("i");
+        x(i) = xb(i);
+        use(i) = x(i);
+        res = x.approximate_by(Compose{BlockReshape{AB}, Int8Codes{}, Derive{name, {"codes"}, std::move(definition)}}, {use});
+        port = res.derived_port(name);
+    }
+};
+
+// approximate_by reads the stored value cast to the term's type, so every
+// value of the stored type must be exact in the term's.
+int test_stored_types() {
+    struct Case {
+        Type stored, term;
+        bool ok;
+    };
+    for (const Case &c : std::vector<Case>{{Float(16), Float(32), true},
+                                           {BFloat(16), Float(32), true},
+                                           {Float(32), Float(64), true},
+                                           {Int(16), Int(32), true},
+                                           {Int(16), Float(32), true},
+                                           {Int(8), Float(16), true},
+                                           {BFloat(16), Float(16), false},
+                                           {Float(16), BFloat(16), false},
+                                           {Int(32), Float(32), false},
+                                           {Int(16), Int(8), false}}) {
+        Type stored = c.stored;
+        CodesPort a("widen", [=](const std::vector<Func> &from) {
+            Func s("widen_stored");
+            Var k("k"), b("b");
+            s(k, b) = cast(stored, from[0](k, b));
+            return s;
+        });
+        Var k("k"), b("b");
+        Func term("widen_term"), consumer("widen_consumer");
+        term(k, b) = cast(c.term, a.port.from[0](k, b));
+        consumer(k, b) = cast<double>(term(k, b));
+        if (!c.ok) {
+            CHECK(fails_with([&]() { term.approximate_by(a.port, {consumer}); }, "does not widen exactly"));
+            continue;
+        }
+        Buffer<double> before = consumer.realize({AB, 2});
+        DerivedSubstitution sub = term.approximate_by(a.port, {consumer});
+        CHECK(sub.replacement.defined() && sub.exact);
+        Buffer<double> after = consumer.realize({AB, 2});
+        for (int bb = 0; bb < 2; bb++) {
+            for (int kk = 0; kk < AB; kk++) {
+                CHECK(after(kk, bb) == before(kk, bb));
+            }
+        }
     }
     return 0;
 }
@@ -796,6 +861,7 @@ int main(int argc, char **argv) {
                                            {"substitution", test_substitution},
                                            {"argument_mapping", test_argument_mapping},
                                            {"affine_arguments", test_affine_arguments},
+                                           {"stored_types", test_stored_types},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},

@@ -2936,10 +2936,7 @@ public:
         Poly p = normalize(value);
         std::string round = "round<" + type_name(to) + ">";
         if (from.is_float() && to.is_float()) {
-            if (from.is_bfloat() == to.is_bfloat() && to.bits() >= from.bits()) {
-                return p;
-            }
-            if (from.is_bfloat() && to.bits() >= 32) {
+            if (to.can_represent(from)) {
                 return p;
             }
             return opaque(round, to, {p});

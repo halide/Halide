@@ -4004,8 +4004,9 @@ DerivedSubstitution Func::approximate_by(const DerivedPort &port, const vector<F
         << "  definition: " << match.definition_form << "\n";
 
     Type term_type = type(), stored_type = port.stored.type();
-    user_assert(stored_type == term_type ||
-                (stored_type.is_float() && term_type.is_float() && stored_type.bits() <= term_type.bits()))
+    // Every value of the stored type must be exact in the term's type, so the
+    // cast below is exact.
+    user_assert(term_type.can_represent(stored_type))
         << "approximate_by: derived port '" << port.name << "' has type " << stored_type
         << ", which does not widen exactly to " << name() << "'s type " << term_type << "\n";
 
