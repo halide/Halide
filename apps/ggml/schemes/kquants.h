@@ -27,15 +27,6 @@ inline Expr sf(const Expr &e) {
     return strict_float(e);
 }
 
-// args, then x's dimensions past its record's (j, b: the rows `_` stands
-// for), for the pure definitions of constants, whose `_` would be empty.
-inline std::vector<Expr> rows_of(const Func &x, std::vector<Expr> args) {
-    for (int i = 2; i < x.dimensions(); i++) {
-        args.push_back(Var::implicit(i - 2));
-    }
-    return args;
-}
-
 // The sums of each run of n codes, codes(j, b, ...) -> (j / n, b, ...), as
 // int16 (block_q8_K's bsums, n = 16): a derived port.
 inline Derive::Definition partial_sums(int n) {

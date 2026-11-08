@@ -2,14 +2,20 @@
 
 // GGML's legacy block formats (ggml-quants.c *_ref), as Approximations. Encode
 // order: reshape to 32-element blocks, quantize, store the fields, lay out
-// (layouts.h).
+// (layouts.h). The quantizers' float arithmetic is strict_float, GGML's bit
+// for bit (else a division by a constant becomes a product by its
+// reciprocal, x * id + c an fma, and the test of d for 0 one of its
+// numerator, missing a d that underflows to 0), with id = 1 / d (0 if d is
+// 0) for each block's scale d.
 #include "common.h"
+
+#include <cfloat>
 
 namespace ggml {
 
 // GGML's "type-0" quantization of `bits`-bit codes, h = 2^(bits - 1)
 // (block_q4_0, h = 8; block_q5_0, h = 16): d = the signed extreme / -h (-0
-// for all-zero); code = min(2h - 1, (int8)(x / d + h + 0.5)) - h.
+// for all-zero); code = min(2h - 1, (int8)(x * id + h + 0.5)) - h.
 // With `code_shift`, the power of two 2^code_shift moves from the scale into
 // the codes: (c * 2^code_shift, d / 2^code_shift), decoded alike (codes *
 // scale). Its decode is bit-exact with the unshifted one: both products are
@@ -20,13 +26,16 @@ struct Type0Quant {
     int bits = 4, code_shift = 0;
 
     std::vector<Func> encode(const std::vector<Func> &in) const {
-        Func x = in[0], d("scale"), q("codes");
+        Func x = in[0], am("absmax"), d("scale"), q("codes");
         Var j, b;
         RDom r(0, QK);
         int h = 1 << (bits - 1);
-        Tuple m = argmax(abs(x(r, b, _)));  // first strict max, as GGML's scan
-        d(b, _) = select(x(clamp(m[0], 0, QK - 1), b, _) < 0, m[1], -m[1]) / (float)h;
-        q(j, b, _) = min(cast<int8_t>(x(j, b, _) * inverse(d(b, _)) + (h + 0.5f)), cast<int8_t>(2 * h - 1)) - h;
+        // (|max|, max): GGML's scan, its first strict max
+        am(rows_of(x, {b})) = Tuple(0.0f, 0.0f);
+        Expr xr = x(r, b, _), gt = strict_float(abs(xr) > am(b, _)[0]);
+        am(b, _) = Tuple(select(gt, abs(xr), am(b, _)[0]), select(gt, xr, am(b, _)[1]));
+        d(b, _) = strict_float(am(b, _)[1] / (float)-h);
+        q(j, b, _) = min(cast<int8_t>(strict_float(x(j, b, _) * inverse(d(b, _)) + (h + 0.5f))), cast<int8_t>(2 * h - 1)) - h;
         if (!code_shift) return {q, d};
         Func qs("codes"), ds("scale");
         qs(j, b, _) = q(j, b, _) * cast<int8_t>(1 << code_shift);
@@ -59,19 +68,23 @@ inline Approximation q4_0(const Approximation &codes, const std::string &lay, in
 // GGML's "type-1" (affine) quantization of `bits`-bit codes (block_q4_1,
 // block_q5_1): values = codes * scale + min; d = (max - min) / (2^bits - 1),
 // min = the block's (both first strict extremes, as GGML's scan); code =
-// min(2^bits - 1, (int8)((x - min) / d + 0.5)). (GGML's q5_1 does without
-// the min: (x - min) / d + 0.5 stays below 2^bits there.)
+// min(2^bits - 1, (int8)((x - min) * id + 0.5)). (GGML's q5_1 does without
+// the min: (x - min) * id + 0.5 stays below 2^bits there.)
 struct Type1Quant {
     int bits = 4;
 
     std::vector<Func> encode(const std::vector<Func> &in) const {
-        Func x = in[0], d("scale"), m("min"), q("codes");
+        Func x = in[0], range("range"), d("scale"), m("min"), q("codes");
         Var j, b;
         RDom r(0, QK);
         int top = (1 << bits) - 1;
-        m(b, _) = argmin(x(r, b, _))[1];
-        d(b, _) = (argmax(x(r, b, _))[1] - m(b, _)) / (float)top;
-        q(j, b, _) = min(cast<int8_t>((x(j, b, _) - m(b, _)) * inverse(d(b, _)) + 0.5f), cast<int8_t>(top));
+        // (min, max): GGML's scan, its first strict extremes
+        range(rows_of(x, {b})) = Tuple(FLT_MAX, -FLT_MAX);
+        Expr xr = x(r, b, _), lo = range(b, _)[0], hi = range(b, _)[1];
+        range(b, _) = Tuple(select(strict_float(xr < lo), xr, lo), select(strict_float(xr > hi), xr, hi));
+        m(b, _) = range(b, _)[0];
+        d(b, _) = strict_float((range(b, _)[1] - m(b, _)) / (float)top);
+        q(j, b, _) = min(cast<int8_t>(strict_float((x(j, b, _) - m(b, _)) * inverse(d(b, _)) + 0.5f)), cast<int8_t>(top));
         return {q, d, m};
     }
     std::vector<Func> decode(const std::vector<Func> &e) const {
@@ -119,14 +132,14 @@ inline Approximation q5_1(const std::string &lay, bool indexed = false) {
                    layout(lay, {{"d", Float(16)}, {"m", Float(16)}, q5_qh(), {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d", "m"})};
 }
 
-// block_q8_0: d = max |x| / 127; code = roundf(x / d).
+// block_q8_0: d = max |x| / 127; code = roundf(x * id).
 struct Q8_0Quant {
     std::vector<Func> encode(const std::vector<Func> &in) const {
         Func x = in[0], d("scale"), q("codes");
         Var j, b;
         RDom r(0, QK);
-        d(b, _) = maximum(abs(x(r, b, _))) / 127.0f;
-        q(j, b, _) = cast<int8_t>(round_half_away(x(j, b, _) * inverse(d(b, _))));
+        d(b, _) = strict_float(maximum(abs(x(r, b, _))) / 127.0f);
+        q(j, b, _) = cast<int8_t>(strict_float(round_half_away(x(j, b, _) * inverse(d(b, _)))));
         return {q, d};
     }
     std::vector<Func> decode(const std::vector<Func> &e) const {

@@ -285,6 +285,15 @@ inline Expr inverse(const Expr &d) {
     return select(d != 0.0f, 1.0f / d, 0.0f);
 }
 
+// args, then x's dimensions past its record's (j, b: the rows `_` stands
+// for), for the pure definitions of constants, whose `_` would be empty.
+inline std::vector<Expr> rows_of(const Func &x, std::vector<Expr> args) {
+    for (int i = 2; i < x.dimensions(); i++) {
+        args.push_back(Var::implicit(i - 2));
+    }
+    return args;
+}
+
 // values = codes * scale, for codes(j, b, ...) and scale(b, ...).
 inline Func dequant(const std::vector<Func> &e) {
     Func v("values");
