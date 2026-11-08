@@ -1574,7 +1574,8 @@ struct DerivedPortMatch {
  *   invariant in the summation variable are pulled out;
  * - widening float casts are the identity; integer-to-integer and
  *   integer-to-float casts are the identity when the operand's range (from
- *   its type and the sums' extents) is exactly representable; every other
+ *   its type and the sums' extents, exact, and unbounded if it overflows 64
+ *   bits) is exactly representable; every other
  *   cast (a rounding) and every other operation is an opaque node, which
  *   only matches an identical node.
  *

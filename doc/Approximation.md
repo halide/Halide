@@ -772,10 +772,10 @@ compares them exactly; nothing is evaluated.
   iterations.
 - Widening float casts are the identity. Integer-to-integer and integer-to-float
   casts are the identity when the operand's range (from its type and the extents
-  of the sums) is exactly representable in the result. Every other cast is a
-  rounding and, like every other operation, an opaque node that only matches an
-  identical node: rounding is never the identity. `strict_float` wrappers are
-  looked through.
+  of the sums, computed exactly in 64-bit integers and unbounded on overflow) is
+  exactly representable in the result. Every other cast is a rounding and, like
+  every other operation, an opaque node that only matches an identical node:
+  rounding is never the identity. `strict_float` wrappers are looked through.
 - The arguments come from unifying each call to a port in the definition with
   one in the term, e.g. `codes(r, b)` in `psi` against `codes(r, b + 1)` in the
   term gives `port_args = {b + 1}`. A definition argument may also be affine in

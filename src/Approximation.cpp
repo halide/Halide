@@ -15,6 +15,7 @@
 #include <cstdlib>
 #endif
 
+#include "ConstantInterval.h"
 #include "Error.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
@@ -2386,9 +2387,8 @@ struct Poly {
     std::vector<Mono> monos;
 };
 
-struct Interval {
-    double lo = -INFINITY, hi = INFINITY;
-};
+// The exact range of an integer value; unbounded on overflow, and for floats.
+using Internal::ConstantInterval;
 
 // A factor: an atom (a call to a port or other unexpanded Func, an image, a
 // variable), an opaque operation over normalized children, or a sum of one
@@ -2404,7 +2404,7 @@ struct NNode {
     Expr min, extent;            // Sum
     Mono body;                   // Sum
     std::set<std::string> free;  // placeholders that occur free
-    Interval range;
+    ConstantInterval range;
     bool port = false;  // Atom: a call to a port
 };
 
@@ -2436,30 +2436,14 @@ std::string type_name(const Type &t) {
     return s.str();
 }
 
-Interval type_range(const Type &t) {
-    if (t.is_int()) {
-        return {-std::ldexp(1.0, t.bits() - 1), std::ldexp(1.0, t.bits() - 1) - 1};
-    }
-    if (t.is_uint()) {
-        return {0, std::ldexp(1.0, t.bits()) - 1};
-    }
+ConstantInterval type_range(const Type &t) {
     if (t.is_bool()) {
         return {0, 1};
     }
-    return {};
-}
-
-Interval interval_mul(Interval a, Interval b) {
-    double c[4] = {a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi};
-    Interval r{INFINITY, -INFINITY};
-    for (double x : c) {
-        if (std::isnan(x)) {
-            x = 0;  // 0 * inf
-        }
-        r.lo = std::min(r.lo, x);
-        r.hi = std::max(r.hi, x);
+    if (t.is_int_or_uint()) {
+        return ConstantInterval::bounds_of_type(t);
     }
-    return r;
+    return ConstantInterval::everything();
 }
 
 class Normalizer {
@@ -2695,20 +2679,27 @@ public:
         return false;
     }
 
-    Interval range_of(const Poly &p) {
-        Interval r{0, 0};
+    // Exact integer interval arithmetic, so that the range decides whether a
+    // cast is exact: an overflow leaves it unbounded.
+    ConstantInterval range_of(const Poly &p) {
+        ConstantInterval r = ConstantInterval::single_point(0);
         for (const Mono &m : p.monos) {
-            Interval t{(double)m.coeff.num / (double)m.coeff.den, (double)m.coeff.num / (double)m.coeff.den};
+            ConstantInterval t = ConstantInterval::single_point(m.coeff.num);
             for (const NNodePtr &f : m.factors) {
-                t = interval_mul(t, f->range);
+                t = t * f->range;
             }
-            r.lo += t.lo;
-            r.hi += t.hi;
+            if (m.coeff.den != 1) {
+                // Divide, rounding outwards.
+                internal_assert(m.coeff.den > 0);
+                t.min = Internal::div_imp(t.min, m.coeff.den);
+                t.max = Internal::div_imp(t.max, m.coeff.den) + (Internal::mod_imp(t.max, m.coeff.den) != 0);
+            }
+            r = r + t;
         }
         return r;
     }
 
-    NNodePtr atom(const std::string &name, std::vector<Expr> args, Interval range) {
+    NNodePtr atom(const std::string &name, std::vector<Expr> args, ConstantInterval range) {
         auto n = std::make_shared<NNode>();
         n->kind = NNode::Atom;
         n->name = name;
@@ -2762,7 +2753,7 @@ public:
                     count = constant({std::max<int64_t>(*n_iter, 0), 1});
                 } else {
                     count = normalize(extent);
-                    if (!(range_of(count).lo >= 0)) {
+                    if (!(range_of(count) >= 0)) {
                         count = normalize(Internal::Max::make(extent, Internal::make_zero(extent.type())));
                     }
                 }
@@ -2779,14 +2770,14 @@ public:
                 }
                 n->free.erase(var);
                 n->free.insert(bounds_free.begin(), bounds_free.end());
-                Interval r{1, 1};
+                ConstantInterval r = ConstantInterval::single_point(1);
                 for (const NNodePtr &f : dep.factors) {
-                    r = interval_mul(r, f->range);
+                    r = r * f->range;
                 }
                 if (n_iter && *n_iter >= 0) {
-                    n->range = interval_mul(r, {(double)*n_iter, (double)*n_iter});
+                    n->range = r * *n_iter;
                 } else {
-                    n->range = {};
+                    n->range = ConstantInterval::everything();
                 }
                 term = times(term, factor(n));
             }
@@ -2953,16 +2944,14 @@ public:
             return opaque(round, to, {p});
         }
         if ((from.is_int() || from.is_uint()) && (to.is_int() || to.is_uint())) {
-            Interval r = range_of(p), t = type_range(to);
-            if (r.lo >= t.lo && r.hi <= t.hi) {
+            if (to.can_represent(range_of(p))) {
                 return p;
             }
             return opaque("cast<" + type_name(to) + ">", to, {p});
         }
         if ((from.is_int() || from.is_uint()) && to.is_float()) {
-            Interval r = range_of(p);
-            double limit = std::ldexp(1.0, mantissa_bits(to));
-            if (r.lo >= -limit && r.hi <= limit) {
+            const int64_t limit = (int64_t)1 << mantissa_bits(to);
+            if (ConstantInterval(-limit, limit).contains(range_of(p))) {
                 return p;
             }
             return opaque(round, to, {p});
@@ -2999,7 +2988,7 @@ public:
             if (u->value <= (uint64_t)INT64_MAX / 4) {
                 return constant({(int64_t)u->value, 1});
             }
-            return factor(atom(std::to_string(u->value), {}, {(double)u->value, (double)u->value}));
+            return factor(atom(std::to_string(u->value), {}, u->value <= (uint64_t)INT64_MAX ? ConstantInterval::single_point((int64_t)u->value) : ConstantInterval::bounded_below(INT64_MAX)));
         }
         if (const FloatImm *f = e.as<FloatImm>()) {
             Rational r;
@@ -3008,7 +2997,7 @@ public:
             }
             std::ostringstream s;
             s << e;
-            return factor(atom(s.str(), {}, {f->value, f->value}));
+            return factor(atom(s.str(), {}, ConstantInterval::everything()));
         }
         if (const Variable *v = e.as<Variable>()) {
             if (starts_with(v->name, placeholder_prefix)) {

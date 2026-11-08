@@ -722,6 +722,37 @@ int test_free_sum_extent() {
     return 0;
 }
 
+// The range of an integer polynomial, which decides whether its cast to a
+// float is exact, is exact too: 128 x y + 1, for an int32 x and an int16 y,
+// reaches 2^53 + 1, which a double rounds to 2^53, the largest integer that
+// every double below it represents. So the cast to double of it is a rounding,
+// unlike that of 128 x y.
+int test_poly_range() {
+    Param<int32_t> x("x");
+    Param<int16_t> y("y");
+    Var b("b");
+    auto port_for = [&](const std::string &name, int scale) {
+        Expr xy = cast<int64_t>(x) * cast<int64_t>(y) * scale;
+        return CodesPort(name, [=](const std::vector<Func> &from) {
+            Func s(name + "_stored");
+            Var b("b");
+            s(b) = cast<double>(from[0](0, b)) + cast<double>(xy + 1);
+            return s;
+        });
+    };
+    auto term_for = [&](const DerivedPort &port, int scale) {
+        Func term("poly_range_term");
+        term(b) = cast<double>(port.from[0](0, b)) + cast<double>(cast<int64_t>(x) * cast<int64_t>(y) * scale) + Expr(1.0);
+        return term;
+    };
+    CodesPort big = port_for("poly_big", 128);
+    DerivedPortMatch m = match_derived_port(term_for(big.port, 128), big.port);
+    CHECK(!m.matched && m.reason.find("differ") != std::string::npos);
+    CodesPort small = port_for("poly_small", 64);
+    CHECK(match_derived_port(term_for(small.port, 64), small.port).matched);
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -909,6 +940,7 @@ int main(int argc, char **argv) {
                                            {"affine_arguments", test_affine_arguments},
                                            {"stored_types", test_stored_types},
                                            {"free_sum_extent", test_free_sum_extent},
+                                           {"poly_range", test_poly_range},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},
