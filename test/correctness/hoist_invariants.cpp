@@ -1079,6 +1079,222 @@ int hoist_invariants_block_index_finer_rejected_test() {
     return 0;
 }
 
+// Hoisting an additive factor out of min or max is wrong if the reduction
+// domain is empty: the intermediate keeps the identity, and the write-back
+// min(lo, bias + INT_MAX) changes lo. The write-back must apply only where the
+// domain is nonempty, and that guard must vanish for a constant extent.
+int hoist_invariants_empty_domain_test() {
+    ImageParam data_p{Int(32), 1, "data_p"};
+    Param<int> bias{"bias"}, n{"n"};
+    RDom r(0, n, "r");
+
+    Func lo{"lo"}, hi{"hi"};
+    lo() = Int(32).max();
+    lo() = min(lo(), bias + data_p(r));
+    hi() = Int(32).min();
+    hi() = max(hi(), bias + data_p(r));
+    lo.update().hoist_invariants();
+    hi.update().hoist_invariants();
+
+    Buffer<int> data(4);
+    for (int k = 0; k < 4; k++) {
+        data(k) = 3 * k - 5;
+    }
+    data_p.set(data);
+    for (int b : {-1, 1}) {
+        for (int len : {0, 3}) {
+            bias.set(b);
+            n.set(len);
+            int lo_ref = std::numeric_limits<int>::max();
+            int hi_ref = std::numeric_limits<int>::min();
+            for (int k = 0; k < len; k++) {
+                lo_ref = std::min(lo_ref, b + data(k));
+                hi_ref = std::max(hi_ref, b + data(k));
+            }
+            Buffer<int> lo_result = lo.realize();
+            Buffer<int> hi_result = hi.realize();
+            internal_assert(lo_result() == lo_ref && hi_result() == hi_ref)
+                << "hoist_invariants empty domain: bias " << b << ", n " << len
+                << ": min " << lo_result() << " vs ref " << lo_ref
+                << ", max " << hi_result() << " vs ref " << hi_ref << "\n";
+        }
+    }
+
+    // With a constant extent the domain is never empty, and the write-back is
+    // unconditional.
+    RDom k(0, 4, "k");
+    Func c{"c"};
+    c() = Int(32).max();
+    c() = min(c(), bias + data_p(k));
+    c.update().hoist_invariants();
+    const Expr &pred = c.function().update(0).predicate();
+    internal_assert(!pred.defined() || is_const_one(pred))
+        << "hoist_invariants empty domain: constant extent left a guard: " << pred << "\n";
+
+    return 0;
+}
+
+// The guard must also cover a predicated domain, here one that is empty when
+// m <= 0 even if n > 0.
+int hoist_invariants_empty_predicated_domain_test() {
+    ImageParam data_p{Int(32), 1, "data_p"};
+    Param<int> n{"n"}, m{"m"};
+    RDom r(0, n, "r");
+    r.where(r < m);
+
+    Func lo{"lo"};
+    lo() = Int(32).max();
+    lo() = min(lo(), 1 + data_p(r));
+    lo.update().hoist_invariants();
+
+    Buffer<int> data(4);
+    data.fill(5);
+    data_p.set(data);
+    for (int len : {0, 4}) {
+        for (int bound : {-2, 0, 2}) {
+            n.set(len);
+            m.set(bound);
+            const int ref = std::min(len, bound) > 0 ? 6 : std::numeric_limits<int>::max();
+            Buffer<int> result = lo.realize();
+            internal_assert(result() == ref)
+                << "hoist_invariants empty predicated domain: n " << len << ", m " << bound
+                << ": " << result() << " vs ref " << ref << "\n";
+        }
+    }
+    return 0;
+}
+
+// rfactor() of a split reduction makes one partial result per block. A block
+// past the end of a GuardWithIf tail has an empty domain and must hold the
+// identity, as it does without hoisting. The tail's predicate is monotonic, so
+// the write-back's guard u*8 + 1 <= extent is exact.
+int hoist_invariants_empty_block_test() {
+    constexpr int block = 8, n = 12, num_blocks = 4;
+    ImageParam data_p{Int(32), 1, "data_p"};
+    ImageParam bias_p{Int(32), 1, "bias_p"};
+
+    Var u{"u"};
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func lo{"lo"};
+    lo() = Int(32).max();
+    lo() = min(lo(), bias_p(r / block) + data_p(r));
+    lo.update().split(r, ko, ki, block, TailStrategy::GuardWithIf);
+    Func blocks = lo.update().rfactor(ko, u);
+    blocks.update().hoist_invariants();
+    blocks.compute_root().vectorize(u, 4);
+
+    Buffer<int> data(n), bias(num_blocks);
+    for (int k = 0; k < n; k++) {
+        data(k) = (k * 5) % 7 - 3;
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        bias(b) = 1 - 2 * b;
+    }
+    data_p.set(data);
+    bias_p.set(bias);
+
+    Buffer<int> result = blocks.realize({num_blocks});
+    for (int b = 0; b < num_blocks; b++) {
+        int ref = std::numeric_limits<int>::max();
+        for (int k = b * block; k < std::min(n, (b + 1) * block); k++) {
+            ref = std::min(ref, bias(b) + data(k));
+        }
+        internal_assert(result(b) == ref)
+            << "hoist_invariants empty block " << b << ": " << result(b) << " vs ref " << ref << "\n";
+    }
+
+    int lo_ref = std::numeric_limits<int>::max();
+    for (int k = 0; k < n; k++) {
+        lo_ref = std::min(lo_ref, bias(k / block) + data(k));
+    }
+    Buffer<int> lo_result = lo.realize();
+    internal_assert(lo_result() == lo_ref)
+        << "hoist_invariants empty block: total " << lo_result() << " vs ref " << lo_ref << "\n";
+    return 0;
+}
+
+// When the hoisted factors preserve the identity (a sum's scale or offset, of
+// an integer or a float sum, ||/&&, &&/||), an empty domain already leaves the
+// Func unchanged, and the write-back needs no guard.
+int hoist_invariants_empty_domain_identity_test() {
+    ImageParam data_p{Int(32), 1, "data_p"};
+    Param<int> scale{"scale"}, offset{"offset"}, n{"n"};
+    Param<bool> p{"p"};
+    RDom r(0, n, "r");
+
+    Func s{"s"}, fs{"fs"}, any{"any"}, all{"all"};
+    s() = 0;
+    s() += offset + scale * data_p(r);
+    fs() = 0.0f;
+    fs() += cast<float>(scale) * cast<float>(data_p(r));
+    any() = cast<bool>(false);
+    any() = any() || (p && data_p(r) > 0);
+    all() = cast<bool>(true);
+    all() = all() && (p || data_p(r) > 0);
+    for (Func f : {s, fs, any, all}) {
+        f.update().hoist_invariants();
+        const Expr &pred = f.function().update(0).predicate();
+        internal_assert(!pred.defined() || is_const_one(pred))
+            << "hoist_invariants empty domain: " << f.name() << " has an unneeded guard: "
+            << pred << "\n";
+    }
+
+    Buffer<int> data(4);
+    data.fill(-1);
+    data_p.set(data);
+    scale.set(3);
+    offset.set(7);
+    n.set(0);
+    for (bool pv : {false, true}) {
+        p.set(pv);
+        Buffer<int> s_result = s.realize();
+        Buffer<float> fs_result = fs.realize();
+        Buffer<bool> any_result = any.realize();
+        Buffer<bool> all_result = all.realize();
+        internal_assert(s_result() == 0 && fs_result() == 0.0f && !any_result() && all_result())
+            << "hoist_invariants empty domain: sum " << s_result() << ", float sum "
+            << fs_result() << ", any " << any_result() << ", all " << all_result() << "\n";
+    }
+    return 0;
+}
+
+// Whether a domain with a data-dependent predicate is empty can't be decided
+// at the write-back, so hoisting a factor that doesn't preserve the identity
+// must be rejected.
+int hoist_invariants_empty_domain_undecidable_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    ImageParam data_p{Int(32), 1, "data_p"};
+    Param<int> bias{"bias"};
+    RDom r(0, 16, "r");
+    r.where(data_p(r) > 0);
+
+    Func lo{"lo"};
+    lo() = Int(32).max();
+    lo() = min(lo(), bias + data_p(r));
+
+    bool error = false;
+    try {
+        lo.update().hoist_invariants();
+    } catch (const Halide::CompileError &e) {
+        error = true;
+        const string expected = "changes the result when the reduction domain is empty";
+        if (string(e.what()).find(expected) == string::npos) {
+            printf("Unexpected error for an undecidable empty domain:\n%s\n", e.what());
+            return 1;
+        }
+    }
+    if (!error) {
+        printf("hoist_invariants() should reject a data-dependent predicate\n");
+        return 1;
+    }
+    return 0;
+}
+
 // The min/max + add hoisting law is only valid for integer types where addition
 // has no defined wraparound behavior. For UInt(8), hoisting the invariant 250
 // would incorrectly turn min_k((250 + x_k) mod 256) into (250 + min_k(x_k)) mod
@@ -1484,6 +1700,11 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (block index, min/add and or/and)", hoist_invariants_block_index_other_laws_test},
         {"hoist_invariants test (block index, varying)", hoist_invariants_block_index_varying_test},
         {"hoist_invariants test (block index, finer factor rejected)", hoist_invariants_block_index_finer_rejected_test},
+        {"hoist_invariants test (empty domain, min/add and max/add)", hoist_invariants_empty_domain_test},
+        {"hoist_invariants test (empty domain, predicated)", hoist_invariants_empty_predicated_domain_test},
+        {"hoist_invariants test (empty domain, block)", hoist_invariants_empty_block_test},
+        {"hoist_invariants test (empty domain, identity preserved)", hoist_invariants_empty_domain_identity_test},
+        {"hoist_invariants test (empty domain, undecidable)", hoist_invariants_empty_domain_undecidable_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
         {"hoist_invariants test (field shift)", [] { return hoist_invariants_field_shift_test(false); }},

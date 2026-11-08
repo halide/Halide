@@ -38,6 +38,7 @@
 #include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
+#include "Monotonic.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
@@ -1919,9 +1920,89 @@ void collect_invariance_bounds(const Function &function, const Definition &defin
     }
 }
 
+// Does the write-back of `hoisted_terms` leave the Func's value unchanged when
+// every intermediate still holds its initial value, the reduction's identity,
+// as it does if the reduction domain is empty? A hoisted factor s of a sum
+// gives f + s * 0, which is f, but an additive factor c of a min gives
+// min(f, c + identity), which is not.
+bool writeback_preserves_identity(const AssociativeOp &prover_result,
+                                  const vector<vector<HoistedTerm>> &hoisted_terms) {
+    std::map<string, Expr> y_values;
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        if (prover_result.ys[i].var.empty()) {
+            continue;
+        }
+        Expr r;
+        for (const HoistedTerm &term : hoisted_terms[i]) {
+            // Ask whether the identity survives any factor and shift. Leaving
+            // them opaque also keeps their lets from being simplified here,
+            // which would consume unique names and perturb later naming.
+            optional<HoistedFactor> factor = term.factor;
+            if (factor) {
+                if (factor->factor.defined()) {
+                    factor->factor = Variable::make(factor->factor.type(), "hoisted_factor");
+                }
+                if (factor->shift.defined()) {
+                    factor->shift = Variable::make(factor->shift.type(), "hoisted_shift");
+                }
+            }
+            Expr t = apply_hoisted_factor(prover_result.pattern.identities[i], factor);
+            r = r.defined() ? make_binary_op(prover_result.pattern.ops[i].node_type(), r, t) : t;
+        }
+        y_values.emplace(prover_result.ys[i].var, r.defined() ? r : prover_result.pattern.identities[i]);
+    }
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        const string &x = prover_result.xs[i].var;
+        if (x.empty()) {
+            return false;
+        }
+        Expr combined = simplify(substitute(y_values, prover_result.pattern.ops[i]));
+        const Variable *v = combined.as<Variable>();
+        if (!v || v->name != x) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// A condition free of the RVars that holds exactly where the reduction domain
+// of `definition` has a point that satisfies its predicate, or an undefined
+// Expr if none is found. Each extent must be positive, and if the predicate is
+// monotonic in each RVar, it holds somewhere in the domain iff it holds at the
+// corner that favors it, e.g. at the first element of a block for the guard of
+// a split's tail.
+Expr nonempty_domain_condition(const Definition &definition) {
+    Expr cond = const_true();
+    for (const ReductionVariable &rv : definition.schedule().rvars()) {
+        cond = cond && rv.extent > 0;
+    }
+    if (definition.predicate().defined()) {
+        // Tags don't change values.
+        Expr pred = remove_promises(remove_likelies(definition.predicate()));
+        std::map<string, Expr> corner;
+        for (const ReductionVariable &rv : definition.schedule().rvars()) {
+            switch (is_monotonic(pred, rv.var)) {
+            case Monotonic::Constant:
+            case Monotonic::Decreasing:
+                corner.emplace(rv.var, rv.min);
+                break;
+            case Monotonic::Increasing:
+                corner.emplace(rv.var, rv.min + rv.extent - 1);
+                break;
+            case Monotonic::Unknown:
+                return Expr();
+            }
+        }
+        cond = cond && substitute(corner, pred);
+    }
+    return simplify(cond);
+}
+
 // Define one factor-free intermediate reduction per HoistedTerm (numbering
 // them in order), and replace `definition` with a write-back update that
-// combines their results, each with its hoisted factor applied.
+// combines their results, each with its hoisted factor applied. If the
+// write-back would change the Func's value given the intermediates' initial
+// values, it applies only where the reduction domain is nonempty.
 FuncVec define_hoisted_reductions(const Function &function, Definition definition,
                                   const string &stage_name,
                                   const vector<Var> &dim_vars,
@@ -1938,6 +2019,17 @@ FuncVec define_hoisted_reductions(const Function &function, Definition definitio
         }
     }
     FuncVec intms(function.name() + "_intm", intermediate_count);
+
+    Expr writeback_predicate = or_condition_over_domain(definition.predicate(), reduction_bounds);
+    if (!writeback_preserves_identity(prover_result, hoisted_terms)) {
+        writeback_predicate = nonempty_domain_condition(definition);
+        user_assert(writeback_predicate.defined())
+            << "hoist_invariants() on " << stage_name << ": the write-back of the hoisted "
+            << "factors changes the result when the reduction domain is empty, so it must "
+            << "apply only where the domain is nonempty, but that could not be decided "
+            << "from its predicate:\n"
+            << "  " << definition.predicate() << "\n";
+    }
 
     // Define one factor-free scalar intermediate reduction per outer term.
     const ReductionDomain rdom = reduction_domain_of(definition);
@@ -2002,7 +2094,7 @@ FuncVec define_hoisted_reductions(const Function &function, Definition definitio
 
     definition.args() = dim_vars_exprs;
     definition.values() = substitute(writeback_map, prover_result.pattern.ops);
-    definition.predicate() = or_condition_over_domain(definition.predicate(), reduction_bounds);
+    definition.predicate() = writeback_predicate;
     definition.schedule().dims() = std::move(writeback_dims);
     definition.schedule().rvars().clear();
     definition.schedule().splits() = var_splits;

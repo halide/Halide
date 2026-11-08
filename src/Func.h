@@ -424,6 +424,16 @@ public:
      * point. Terms without a hoistable factor are still split into separate
      * intermediates.
      *
+     * The intermediates start at the outer op's identity, which they keep if
+     * the reduction domain is empty. A write-back that would then change the
+     * Func, as for min or max with an additive factor (min(f, c + INT_MAX) is
+     * not f), applies only where the domain is nonempty: where every RVar's
+     * extent is positive and the RDom predicate, if any, holds at the corner
+     * of the domain it is monotonic towards. That condition is true for
+     * constant extents without a predicate, and it is exact for the predicate
+     * of a split's GuardWithIf tail. Hoisting a sum's factors, or the factors
+     * of || and &&, needs no condition.
+     *
      * In an integer sum, the right shift of a bit field is a factor too. A bit
      * field (x >> s) & m, with m a non-negative constant, is exactly 2^-s times
      * x & (m << s), the field read in place. So where its position s is
@@ -465,7 +475,9 @@ public:
      * \endcode
      *
      * It is an error if there is neither a distributable invariant factor (a
-     * hoistable shift included) nor more than one outer term to split.
+     * hoistable shift included) nor more than one outer term to split, or if
+     * the write-back needs the condition above and the RDom predicate is not
+     * monotonic in every RVar (e.g. it reads a Func or image).
      */
     FuncVec hoist_invariants();
 
