@@ -548,6 +548,62 @@ int change_type_float_seed_range_test() {
     return 0;
 }
 
+// Retyping a float term to an integer type truncates it, so the term must be
+// integer-valued. Integer interval arithmetic bounds a float quotient of
+// integer-valued operands as if it were integer division: 1.0f / 3.0f gets
+// [0, 0], so it once passed as an exact Int(32) term and the retype
+// truncated 1/3 to 0.
+int change_type_float_division_rejected_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    Var i{"i"}, x{"x"};
+    ImageParam A{UInt(8), 1, "A_div"}, B{Int(8), 1, "B_div"};
+    Func one{"one"}, three{"three"};
+    one(x) = 1;
+    three(x) = 3;
+    RDom r(0, 1, "r");
+    const Expr third = cast<float>(one(r)) / cast<float>(three(r));
+    for (const Expr &term : {third, third + cast<float>(A(r)), cast<float>(A(r)) / cast<float>(three(r))}) {
+        Func f{"f_div"};
+        f(i) = 0.0f;
+        f(i) += term;
+        std::string message;
+        try {
+            f.change_type(Int(32));
+        } catch (const Halide::CompileError &e) {
+            message = e.what();
+        }
+        internal_assert(message.find("a term may not be representable") != std::string::npos)
+            << "change_type(int32) of the non-integer term " << term
+            << " should be rejected, got: " << message << "\n";
+    }
+
+    // An integer-valued float term (sums, products, min/max of exact integer
+    // promotions) is still retyped, and exactly.
+    Func f{"f_int_valued"};
+    f(i) = 0.0f;
+    f(i) += max(cast<float>(A(r)) * cast<float>(B(r)) - cast<float>(B(r)), cast<float>(A(r)));
+    Func g = f.change_type(Int(32));
+    internal_assert(g.types()[0] == Int(32)) << "integer-valued float term not retyped\n";
+    Buffer<uint8_t> a(1);
+    Buffer<int8_t> b(1);
+    A.set(a);
+    B.set(b);
+    for (auto [av, bv] : {std::pair{255, 127}, std::pair{255, -128}, std::pair{3, -7}}) {
+        a(0) = av;
+        b(0) = bv;
+        Buffer<float> result = f.realize({1});
+        const float expected = std::max(av * bv - bv, av);
+        internal_assert(result(0) == expected)
+            << "integer-valued float term " << av << ", " << bv << " gave " << result(0)
+            << ", expected " << expected << "\n";
+    }
+#endif
+    return 0;
+}
+
 // Code-quality regression: when producer bounds let lossless_cast() narrow the
 // dot-product term, it should push the cast into the multiply and leave a native
 // Int(16) multiply, not a cast of an Int(32) widening_mul. This is what the cache
@@ -1440,6 +1496,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_float_seed_range_test\n");
     if (change_type_float_seed_range_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_division_rejected_test\n");
+    if (change_type_float_division_rejected_test()) {
         return 1;
     }
     printf("Running change_type_keeps_narrow_multiply_test\n");

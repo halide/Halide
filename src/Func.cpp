@@ -5305,6 +5305,63 @@ optional<int64_t> float_as_exact_int64(double x) {
     return std::nullopt;
 }
 
+// Integer bounds of a float expression whose value is provably an integer:
+// one built from integral constants and promotions of integers by +, -, *,
+// min, max, and select. Returns nullopt for anything else (a division, a
+// float Func, ...), which may not be an integer. constant_integer_bounds()
+// can't be used directly, as it bounds float nodes with integer arithmetic,
+// e.g. 1.0f / 3.0f as integer division, giving [0, 0].
+optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBounds &fvb) {
+    internal_assert(e.type().is_float());
+    if (optional<double> fv = as_const_float(e)) {
+        if (optional<int64_t> i = float_as_exact_int64(*fv)) {
+            return ConstantInterval::single_point(*i);
+        }
+        return std::nullopt;
+    }
+    if (const Cast *c = e.as<Cast>()) {
+        if (c->value.type().is_int_or_uint()) {
+            return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
+        }
+        optional<ConstantInterval> b = float_integer_bounds(c->value, fvb);
+        if (b) {
+            b->cast_to(e.type());
+        }
+        return b;
+    }
+    if (const Select *s = e.as<Select>()) {
+        optional<ConstantInterval> a = float_integer_bounds(s->true_value, fvb);
+        optional<ConstantInterval> b = float_integer_bounds(s->false_value, fvb);
+        if (!a || !b) {
+            return std::nullopt;
+        }
+        return ConstantInterval::make_union(*a, *b);
+    }
+    optional<pair<Expr, Expr>> operands = as_binary_operands(e);
+    if (!operands) {
+        return std::nullopt;
+    }
+    optional<ConstantInterval> a = float_integer_bounds(operands->first, fvb);
+    optional<ConstantInterval> b = float_integer_bounds(operands->second, fvb);
+    if (!a || !b) {
+        return std::nullopt;
+    }
+    switch (e.node_type()) {
+    case IRNodeType::Add:
+        return *a + *b;
+    case IRNodeType::Sub:
+        return *a - *b;
+    case IRNodeType::Mul:
+        return *a * *b;
+    case IRNodeType::Min:
+        return min(*a, *b);
+    case IRNodeType::Max:
+        return max(*a, *b);
+    default:
+        return std::nullopt;
+    }
+}
+
 // Rewrite a factor-free leaf expression `e` to type `t`
 Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     if (e.type() == t) {
@@ -5360,7 +5417,14 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     // a producer's proven value range (e.g. narrowing a clamped producer). This
     // is a no-op-or-improvement for any target type: a float target just takes
     // lossless_cast()'s representable-widening path, and anything it can't
-    // prove falls through to the plain cast below.
+    // prove falls through to the plain cast below. lossless_cast() bounds a
+    // float expression with integer arithmetic, so for an integer target it
+    // is only exact for an integer-valued one; truncate anything else with a
+    // single cast, which change_type_prove_safe() then rejects.
+    if (t.is_int_or_uint() && folded.type().is_float() && !as_const_float(folded) &&
+        !float_integer_bounds(folded, fvb)) {
+        return Cast::make(t, folded);
+    }
     std::map<Expr, ConstantInterval, ExprCompare> cache;
     if (Expr r = lossless_cast(t, folded, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
         r.defined()) {
@@ -5597,16 +5661,14 @@ std::optional<std::string> change_type_prove_safe(
             v = c->value;
         }
         // retype_leaf() may have folded a leaf directly into a float constant
-        // (e.g. a literal seed retyped to a float target) rather than leaving
-        // a Cast to strip. constant_integer_bounds() only reasons about
-        // integer-typed expressions, so recover such a leaf's exact integer
-        // value here. Any other float constant (non-integral, infinite, NaN,
-        // or outside Int(64)) is unbounded, so the proof rejects it.
+        // (e.g. a literal seed retyped to a float target) or left a float
+        // expression under the cast. constant_integer_bounds() bounds float
+        // nodes with integer arithmetic (a quotient as integer division), so
+        // bound these only if they are provably integer-valued. Anything else
+        // (non-integral, infinite, NaN, or outside Int(64)) is unbounded, so
+        // the proof rejects it.
         if (v.type().is_float()) {
-            if (optional<double> fv = as_const_float(v)) {
-                optional<int64_t> i = float_as_exact_int64(*fv);
-                return i ? ConstantInterval::single_point(*i) : ConstantInterval::everything();
-            }
+            return float_integer_bounds(v, fvb).value_or(ConstantInterval::everything());
         }
         return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
     };

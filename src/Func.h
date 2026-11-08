@@ -3203,7 +3203,11 @@ public:
      * retyped to it stays exact rather than merely finite. For an integer
      * target, a term's int-to-float promotion is dropped only where the
      * integer's range is exact in the float (e.g. within 2^24 for float32);
-     * otherwise the promotion may round, and the term is rejected. If safety
+     * otherwise the promotion may round, and the term is rejected. A float
+     * term retyped to an integer type must also be provably integer-valued:
+     * built from integral constants and integer promotions by +, -, *, min,
+     * max, and select. Any other term (e.g. a quotient) is rejected rather
+     * than truncated. If safety
      * can only be guaranteed under a runtime precondition (e.g. the RDom
      * extent isn't too wide), that precondition is injected into the
      * pipeline's assertion block (and removed by the no_asserts target
