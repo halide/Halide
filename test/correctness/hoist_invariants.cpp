@@ -1215,25 +1215,23 @@ int hoist_invariants_empty_block_test() {
     return 0;
 }
 
-// When the hoisted factors preserve the identity (a sum's scale or offset, of
-// an integer or a float sum, ||/&&, &&/||), an empty domain already leaves the
-// Func unchanged, and the write-back needs no guard.
+// When the hoisted factors preserve the identity (an integer sum's scale or
+// offset, ||/&&, &&/||), an empty domain already leaves the Func unchanged, and
+// the write-back needs no guard.
 int hoist_invariants_empty_domain_identity_test() {
     ImageParam data_p{Int(32), 1, "data_p"};
     Param<int> scale{"scale"}, offset{"offset"}, n{"n"};
     Param<bool> p{"p"};
     RDom r(0, n, "r");
 
-    Func s{"s"}, fs{"fs"}, any{"any"}, all{"all"};
+    Func s{"s"}, any{"any"}, all{"all"};
     s() = 0;
     s() += offset + scale * data_p(r);
-    fs() = 0.0f;
-    fs() += cast<float>(scale) * cast<float>(data_p(r));
     any() = cast<bool>(false);
     any() = any() || (p && data_p(r) > 0);
     all() = cast<bool>(true);
     all() = all() && (p || data_p(r) > 0);
-    for (Func f : {s, fs, any, all}) {
+    for (Func f : {s, any, all}) {
         f.update().hoist_invariants();
         const Expr &pred = f.function().update(0).predicate();
         internal_assert(!pred.defined() || is_const_one(pred))
@@ -1250,13 +1248,57 @@ int hoist_invariants_empty_domain_identity_test() {
     for (bool pv : {false, true}) {
         p.set(pv);
         Buffer<int> s_result = s.realize();
-        Buffer<float> fs_result = fs.realize();
         Buffer<bool> any_result = any.realize();
         Buffer<bool> all_result = all.realize();
-        internal_assert(s_result() == 0 && fs_result() == 0.0f && !any_result() && all_result())
-            << "hoist_invariants empty domain: sum " << s_result() << ", float sum "
-            << fs_result() << ", any " << any_result() << ", all " << all_result() << "\n";
+        internal_assert(s_result() == 0 && !any_result() && all_result())
+            << "hoist_invariants empty domain: sum " << s_result() << ", any "
+            << any_result() << ", all " << all_result() << "\n";
     }
+    return 0;
+}
+
+// A float factor doesn't preserve the identity: inf * 0.0f is NaN. So a float
+// sum's write-back applies only where the domain is nonempty, and the guard
+// still vanishes for a constant extent. (Without strict_float, Halide assumes
+// no infinities or NaNs, so compile with it to observe them.)
+int hoist_invariants_empty_domain_float_test() {
+    ImageParam data_p{Float(32), 1, "data_p"};
+    Param<float> scale{"scale"};
+    Param<int> n{"n"};
+    RDom r(0, n, "r");
+
+    Func f{"f"};
+    f() = 5.0f;
+    f() += scale * data_p(r);
+    f.update().hoist_invariants();
+
+    const Target t = get_jit_target_from_environment().with_feature(Target::StrictFloat);
+    Buffer<float> data(4);
+    data.fill(2.0f);
+    data_p.set(data);
+    n.set(0);
+    for (float sv : {std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
+        scale.set(sv);
+        Buffer<float> result = f.realize({}, t);
+        internal_assert(result() == 5.0f)
+            << "hoist_invariants empty domain: float sum with scale " << sv << " was "
+            << result() << ", expected 5\n";
+    }
+    scale.set(3.0f);
+    n.set(4);
+    Buffer<float> result = f.realize({}, t);
+    internal_assert(result() == 29.0f)
+        << "hoist_invariants empty domain: float sum was " << result() << ", expected 29\n";
+
+    RDom k(0, 4, "k");
+    Func g{"g"};
+    g() = 0.0f;
+    g() += scale * data_p(k);
+    g.update().hoist_invariants();
+    const Expr &pred = g.function().update(0).predicate();
+    internal_assert(!pred.defined() || is_const_one(pred))
+        << "hoist_invariants empty domain: constant extent left a float guard: " << pred << "\n";
+
     return 0;
 }
 
@@ -1704,6 +1746,7 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (empty domain, predicated)", hoist_invariants_empty_predicated_domain_test},
         {"hoist_invariants test (empty domain, block)", hoist_invariants_empty_block_test},
         {"hoist_invariants test (empty domain, identity preserved)", hoist_invariants_empty_domain_identity_test},
+        {"hoist_invariants test (empty domain, float sum)", hoist_invariants_empty_domain_float_test},
         {"hoist_invariants test (empty domain, undecidable)", hoist_invariants_empty_domain_undecidable_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},

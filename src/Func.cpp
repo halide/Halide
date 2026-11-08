@@ -1924,9 +1924,15 @@ void collect_invariance_bounds(const Function &function, const Definition &defin
 // every intermediate still holds its initial value, the reduction's identity,
 // as it does if the reduction domain is empty? A hoisted factor s of a sum
 // gives f + s * 0, which is f, but an additive factor c of a min gives
-// min(f, c + identity), which is not.
+// min(f, c + identity), which is not. Neither is a float factor: s * 0.0f is
+// NaN for an infinite or NaN s, though the simplifier folds it to 0.
 bool writeback_preserves_identity(const AssociativeOp &prover_result,
                                   const vector<vector<HoistedTerm>> &hoisted_terms) {
+    for (const Expr &op : prover_result.pattern.ops) {
+        if (op.type().is_float()) {
+            return false;
+        }
+    }
     std::map<string, Expr> y_values;
     for (size_t i = 0; i < prover_result.size(); i++) {
         if (prover_result.ys[i].var.empty()) {

@@ -431,8 +431,10 @@ public:
      * extent is positive and the RDom predicate, if any, holds at the corner
      * of the domain it is monotonic towards. That condition is true for
      * constant extents without a predicate, and it is exact for the predicate
-     * of a split's GuardWithIf tail. Hoisting a sum's factors, or the factors
-     * of || and &&, needs no condition.
+     * of a split's GuardWithIf tail. Every float reduction gets the condition
+     * too, since s * 0.0f is not 0 for an infinite or NaN s (observable with
+     * strict_float). Hoisting an integer sum's factors, or the factors of ||
+     * and &&, needs no condition.
      *
      * In an integer sum, the right shift of a bit field is a factor too. A bit
      * field (x >> s) & m, with m a non-negative constant, is exactly 2^-s times
