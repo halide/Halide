@@ -3200,12 +3200,15 @@ public:
      * per-term value range with the reduction extent. A float target is
      * checked against the largest integer it can represent exactly (e.g. 2048
      * for float16), not its full dynamic range, so an integer accumulation
-     * retyped to it stays exact rather than merely finite. If it can only be
-     * guaranteed under a runtime precondition (e.g. the RDom extent isn't too
-     * wide), that precondition is injected into the pipeline's assertion block
-     * (and removed by the no_asserts target feature). If safety cannot be
-     * established, change_type() errors unless `unsafe` is true, which bypasses
-     * the check entirely.
+     * retyped to it stays exact rather than merely finite. For an integer
+     * target, a term's int-to-float promotion is dropped only where the
+     * integer's range is exact in the float (e.g. within 2^24 for float32);
+     * otherwise the promotion may round, and the term is rejected. If safety
+     * can only be guaranteed under a runtime precondition (e.g. the RDom
+     * extent isn't too wide), that precondition is injected into the
+     * pipeline's assertion block (and removed by the no_asserts target
+     * feature). If safety cannot be established, change_type() errors unless
+     * `unsafe` is true, which bypasses the check entirely.
      *
      * Translating a min/max identity that does not round-trip through `t`
      * additionally requires the first update to be dense and unpredicated. Its

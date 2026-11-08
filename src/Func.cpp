@@ -5265,6 +5265,36 @@ bool is_self_reference(const Expr &e, const string &fname) {
     return false;
 }
 
+// The largest (and, by symmetry, most negative) integer exactly representable
+// in floating-point type `t`: 2^(significant bits), where significant bits
+// counts the mantissa plus its implicit leading one. Bounding a reduction by
+// this range instead of `t`'s full dynamic range ensures an integer
+// accumulation retyped to `t` is exact, not merely finite.
+ConstantInterval float_exact_integer_bounds(Type t) {
+    int significant_bits;
+    if (t.is_bfloat()) {
+        internal_assert(t.bits() == 16) << "Unhandled bfloat width in change_type()\n";
+        significant_bits = 8;  // 7 explicit mantissa bits + 1 implicit
+    } else {
+        switch (t.bits()) {
+        case 16:
+            significant_bits = 11;
+            break;
+        case 32:
+            significant_bits = 24;
+            break;
+        case 64:
+            significant_bits = 53;
+            break;
+        default:
+            internal_error << "Unhandled float width in change_type()\n";
+            significant_bits = 0;
+        }
+    }
+    const int64_t bound = (int64_t)1 << significant_bits;
+    return ConstantInterval(-bound, bound);
+}
+
 // Rewrite a factor-free leaf expression `e` to type `t`
 Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     if (e.type() == t) {
@@ -5298,14 +5328,17 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
         }
     }
 
-    // lossless_cast uses Type::can_represent to decide if it can strip an outer
-    // cast, which uses strict, not fast-math semantics. When accumulating at an
-    // integer type, we peel a redundant int-to-float promotion here according to
-    // fast-math semantics. This exposes an integer form that lossless_cast can
-    // retype. A strict_cast is a Call, not a Cast, and is left alone.
+    // When accumulating at an integer type, peel an int-to-float promotion
+    // whose operand is within the float's exactly representable integers, as
+    // lossless_cast can't see that range. This exposes an integer form that
+    // lossless_cast can retype. Any other promotion may round, so it is left
+    // for change_type_prove_safe() to reject. A strict_cast is a Call, not a
+    // Cast, and is left alone.
     if (t.is_int_or_uint()) {
         if (const Cast *c = folded.as<Cast>()) {
-            if (folded.type().is_float() && c->value.type().is_int_or_uint()) {
+            if (folded.type().is_float() && c->value.type().is_int_or_uint() &&
+                float_exact_integer_bounds(folded.type())
+                    .contains(constant_integer_bounds(c->value, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb))) {
                 folded = c->value;
             }
         }
@@ -5504,36 +5537,6 @@ std::optional<std::string> nonempty_dense_update_precondition(const Function &fn
         *condition = positive_extents;
     }
     return std::nullopt;
-}
-
-// The largest (and, by symmetry, most negative) integer exactly representable
-// in floating-point type `t`: 2^(significant bits), where significant bits
-// counts the mantissa plus its implicit leading one. Bounding a reduction by
-// this range instead of `t`'s full dynamic range ensures an integer
-// accumulation retyped to `t` is exact, not merely finite.
-ConstantInterval float_exact_integer_bounds(Type t) {
-    int significant_bits;
-    if (t.is_bfloat()) {
-        internal_assert(t.bits() == 16) << "Unhandled bfloat width in change_type()\n";
-        significant_bits = 8;  // 7 explicit mantissa bits + 1 implicit
-    } else {
-        switch (t.bits()) {
-        case 16:
-            significant_bits = 11;
-            break;
-        case 32:
-            significant_bits = 24;
-            break;
-        case 64:
-            significant_bits = 53;
-            break;
-        default:
-            internal_error << "Unhandled float width in change_type()\n";
-            significant_bits = 0;
-        }
-    }
-    const int64_t bound = (int64_t)1 << significant_bits;
-    return ConstantInterval(-bound, bound);
 }
 
 // Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns

@@ -465,6 +465,25 @@ int change_type_truncating_rejected_test() {
         internal_assert(threw)
             << "change_type(Int(8)) on an unbounded max-reduction term should be rejected as truncating\n";
     }
+
+    // cast<float>(A(r)) rounds an Int(32) past 2^24, e.g. 2^25 + 1 to 2^25,
+    // so the promotion can't be peeled to retype the max at Int(32).
+    {
+        ImageParam A{Int(32), 1, "A"};
+        RDom r(0, 8, "r");
+        Func m{"m_round"};
+        m(i) = 0.0f;
+        m(i) = max(m(i), cast<float>(A(r)));
+
+        bool threw = false;
+        try {
+            m.change_type(Int(32));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type(Int(32)) on a rounding Int(32)-to-float promotion should be rejected\n";
+    }
 #endif
     return 0;
 }
