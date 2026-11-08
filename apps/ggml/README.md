@@ -58,13 +58,14 @@ from the weight type (`qsi8d32_qsi4c32` for q4_0, `qai8dx_qsi8cx` for q8_0).
 ## Oracle
 
 The reference is an f64 dot product of GGML's own decoding (`to_float`) of the
-inputs, on up to 64 x 4 sampled outputs. The tolerance is derived from what each
-provider declares it does (`Precision` in `harness/harness.h`), not tuned:
-accumulator precision and chain length, operand rounding, and internal
-re-quantization of activations or weights (see `harness/oracle.cpp`). It passes
-when error / tolerance \<= 1 (`err_ratio`). With pre-quantized activations the
-bound is tight; providers that re-quantize f32 activations get a worst-case
-requantization term, which is much looser.
+inputs, on every output with `--check` (the `ggml_check` test), or on up to 64 x
+4 sampled outputs otherwise (`--outputs all|sampled` overrides). The tolerance
+is derived from what each provider declares it does (`Precision` in
+`harness/harness.h`), not tuned: accumulator precision and chain length, operand
+rounding, and internal re-quantization of activations or weights (see
+`harness/oracle.cpp`). It passes when error / tolerance \<= 1 (`err_ratio`).
+With pre-quantized activations the bound is tight; providers that re-quantize
+f32 activations get a worst-case requantization term, which is much looser.
 
 Notable GGML behavior: KleidiAI's q8_0 path re-quantizes weights and activations
 per row (it does not compute q8_0 x q8_0); the CPU backend rejects f16

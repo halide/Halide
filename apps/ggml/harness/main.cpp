@@ -42,6 +42,7 @@ struct Options {
     int threads = 0, rounds = 15;
     double min_ms = 20;
     bool check = false, json = false, cold = false, pretouch = true;
+    int all_outputs = -1;  // oracle on every output (1) or a sample (0); -1: every output with --check
 };
 
 std::vector<std::string> split(const std::string &s) {
@@ -62,6 +63,8 @@ const char *usage =
     "  --threads N              (default: performance cores)\n"
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
     "  --check                  correctness only, exit 1 on any failure\n"
+    "  --outputs all|sampled    outputs the oracle checks: every one, or up to 64 rows x 4\n"
+    "                           columns (default: all with --check, else sampled)\n"
     "  --cold                   cycle >= 512 MiB of weight copies (cache-cold)\n"
     "  --no-keep-awake          let Halide's idle threads sleep during samples\n"
     "  --no-pretouch            don't fault in every page of the loaded images' __TEXT and\n"
@@ -240,6 +243,13 @@ int main(int argc, char **argv) {
             o.min_ms = std::stod(next());
         } else if (a == "--check") {
             o.check = true;
+        } else if (a == "--outputs") {
+            std::string v = next();
+            if (v != "all" && v != "sampled") {
+                fprintf(stderr, "%s", usage);
+                return 2;
+            }
+            o.all_outputs = v == "all";
         } else if (a == "--cold") {
             o.cold = true;
         } else if (a == "--no-keep-awake") {
@@ -317,7 +327,7 @@ int main(int argc, char **argv) {
                     std::vector<uint8_t> a = input_buffer(ggml_row_size(at, s.K) * s.M, o.pretouch);
                     convert_rows(at, af.data(), a.data(), s.M, s.K);
                     Inputs in{wt, at, s, op == GQ_vec_dot ? 1 : o.threads, &w, copies, &a};
-                    Reference ref = reference(in, af);
+                    Reference ref = reference(in, af, o.all_outputs < 0 ? o.check : o.all_outputs);
 
                     struct Entry {
                         const Provider *p;

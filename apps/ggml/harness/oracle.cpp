@@ -109,12 +109,12 @@ void to_float(ggml_type t, const uint8_t *p, float *out, int64_t K) {
     }
 }
 
-Reference reference(const Inputs &in, const std::vector<float> &a_f32) {
+Reference reference(const Inputs &in, const std::vector<float> &a_f32, bool all) {
     int64_t K = in.s.K;
     Reference r;
     r.K = K;
-    r.ns = sample(in.s.N, 64);
-    r.ms = sample(in.s.M, 4);
+    r.ns = sample(in.s.N, all ? in.s.N : 64);
+    r.ms = sample(in.s.M, all ? in.s.M : 4);
     r.w = decode(in.wt, in.w->data(), r.ns, K);
     r.a = decode(in.at, in.a->data(), r.ms, K);
     for (int64_t m : r.ms)
