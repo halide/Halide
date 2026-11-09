@@ -5,9 +5,10 @@
 // themselves quantized against the super-block's fp16 scale(s); and q8_K,
 // their activations. The quantizers are GGML's searches, step for step: each
 // scan a sequential reduction (vectorized across sub-blocks), each float
-// operation as GGML's arm64 build computes it (strict_float; fma where clang
-// contracts a product into a sum, -ffp-contract=on, but not in the loops it
-// vectorizes: there the products are rounded, then summed in order), so the
+// operation as GGML's build computes it (strict_float; on arm64 an fma where
+// clang contracts a product into a sum, -ffp-contract=on, but not in the
+// loops it vectorizes: there the products are rounded, then summed in order;
+// madd, common.h: on x86-64 none), so the
 // bytes match (scratch/w4a/exact). GGML's quantizers are its reference ones,
 // which ggml_quantize_chunk uses without an importance matrix.
 #include "common.h"
@@ -144,7 +145,7 @@ struct KAffineQuant {
         Expr xr = x(s * n + r, b, _);
         if (rms_weights) {
             sx2(rows_of(x, {s, b})) = 0.0f;
-            sx2(s, b, _) = fma(xr, xr, sx2(s, b, _));
+            sx2(s, b, _) = madd(xr, xr, sx2(s, b, _));
             w(j, b, _) = sf(sqrt(sx2(j / n, b, _) / (float)n) + abs(x(j, b, _)));
         } else {
             w(j, b, _) = abs(x(j, b, _));
@@ -154,7 +155,7 @@ struct KAffineQuant {
         Expr x0 = x(s * n, b, _), w0 = w(s * n, b, _), x1 = x(s * n + r1, b, _), w1 = w(s * n + r1, b, _);
         scan(s, b, _) = Tuple(x0, x0, w0, sf(w0 * x0));
         scan(s, b, _) = Tuple(sf(select(x1 < scan(s, b, _)[0], x1, scan(s, b, _)[0])), sf(select(x1 > scan(s, b, _)[1], x1, scan(s, b, _)[1])),
-                              sf(scan(s, b, _)[2] + w1), fma(w1, x1, scan(s, b, _)[3]));
+                              sf(scan(s, b, _)[2] + w1), madd(w1, x1, scan(s, b, _)[3]));
         Func ext("qkx2_range");
         ext(s, b, _) = Tuple(sf(select(scan(s, b, _)[0] > 0.0f, 0.0f, scan(s, b, _)[0])), scan(s, b, _)[1]);
         Expr lo = ext(s, b, _)[0], hi = ext(s, b, _)[1], sum_w = scan(s, b, _)[2], sum_x = scan(s, b, _)[3];
@@ -162,25 +163,25 @@ struct KAffineQuant {
         auto codes = [&](const Expr &iscale, const Expr &m, const Expr &v) { return cast<float>(clamp(nearest_int(sf(iscale * (v - m))), 0, nmax)); };
         auto err_of = [&](const Expr &e) { return mad ? abs(e) : e * e; };
         // the state: (best error, scale, min, the iscale and min of the best codes)
-        Expr is0 = sf((float)nmax / (hi - lo)), sc0 = sf(1.0f / is0), e0 = err_of(fma(sc0, codes(is0, lo, xr), lo) - xr);
+        Expr is0 = sf((float)nmax / (hi - lo)), sc0 = sf(1.0f / is0), e0 = err_of(madd(sc0, codes(is0, lo, xr), lo) - xr);
         init(rows_of(x, {s, b})) = 0.0f;
-        init(s, b, _) = vector_init ? sf(init(s, b, _) + wr * e0) : fma(wr, e0, init(s, b, _));
+        init(s, b, _) = vector_init ? sf(init(s, b, _) + wr * e0) : madd(wr, e0, init(s, b, _));
         Func st("qkx2_state0");
         st(s, b, _) = Tuple(init(s, b, _), sc0, lo, is0, lo);
         for (int step = 0; step <= nstep; step++) {
             std::string i = std::to_string(step);
             Func sums("qkx2_sums" + i), fit("qkx2_fit" + i), err("qkx2_err" + i), next("qkx2_state" + std::to_string(step + 1));
-            float t = std::fma(0.1f, (float)step, rmin) + (float)nmax;  // rmin + rdelta * is + nmax
+            Expr t = sf(madd(0.1f, (float)step, rmin) + (float)nmax);  // rmin + rdelta * is + nmax
             Expr m = st(s, b, _)[2], iscale = sf(t / (hi - m)), l = codes(iscale, m, xr), wl = sf(wr * l);
             sums(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f, 0.0f);
             sums(s, b, _) = Tuple(sf(sums(s, b, _)[0] + wl), sf(sums(s, b, _)[1] + wl * l), sf(sums(s, b, _)[2] + wl * xr));
             Expr s_l = sums(s, b, _)[0], s_l2 = sums(s, b, _)[1], s_xl = sums(s, b, _)[2];
-            Expr D = sf(fma(sum_w, s_l2, -(s_l * s_l))), ts = sf(fma(sum_w, s_xl, -(sum_x * s_l)) / D), tm = sf(fma(s_l2, sum_x, -(s_l * s_xl)) / D);
+            Expr D = sf(madd(sum_w, s_l2, -(s_l * s_l))), ts = sf(madd(sum_w, s_xl, -(sum_x * s_l)) / D), tm = sf(madd(s_l2, sum_x, -(s_l * s_xl)) / D);
             Expr pos = tm > 0.0f;
             fit(s, b, _) = Tuple(D, sf(select(pos, s_xl / s_l2, ts)), select(pos, 0.0f, tm));
             Expr fs = fit(s, b, _)[1], fm = fit(s, b, _)[2];
             err(rows_of(x, {s, b})) = 0.0f;
-            err(s, b, _) = sf(fma(wr, err_of(fma(fs, l, fm) - xr), err(s, b, _)));
+            err(s, b, _) = sf(madd(wr, err_of(madd(fs, l, fm) - xr), err(s, b, _)));
             Expr better = sf(fit(s, b, _)[0] > 0.0f && err(s, b, _) < st(s, b, _)[0]);
             next(s, b, _) = Tuple(select(better, err(s, b, _), st(s, b, _)[0]), select(better, fs, st(s, b, _)[1]), select(better, fm, m),
                                   select(better, iscale, st(s, b, _)[3]), select(better, m, st(s, b, _)[4]));
@@ -387,7 +388,7 @@ struct Q6KQuant : ScaledCodes {
         // -nmax, then -(nmax + 0.1 is) for is = -9..9 but 0
         std::vector<Expr> nums{-32.0f};
         for (int is = -9; is <= 9; is++) {
-            if (is) nums.push_back(-std::fma(0.1f, (float)is, 32.0f));
+            if (is) nums.push_back(-madd(0.1f, (float)is, 32.0f));
         }
         auto iscale = [&](const Expr &t) { return sf(mux(t, nums) / mx); };
         auto codes = [&](const Expr &is, const Expr &v) { return clamp(nearest_int(sf(is * v)), -32, 31); };
@@ -395,7 +396,7 @@ struct Q6KQuant : ScaledCodes {
         cand(rows_of(x, {c, s, b})) = Tuple(0.0f, 0.0f);
         // (the first pass's sums are not fused: GGML's build vectorizes its products)
         Expr wl = sf(cx * cx * l), lx = cand(c, s, b, _)[0], l2 = cand(c, s, b, _)[1];
-        cand(c, s, b, _) = Tuple(select(c == 0, sf(lx + wx * l), fma(wx, l, lx)), select(c == 0, sf(l2 + wl * l), fma(wl, l, l2)));
+        cand(c, s, b, _) = Tuple(select(c == 0, sf(lx + wx * l), madd(wx, l, lx)), select(c == 0, sf(l2 + wl * l), madd(wl, l, l2)));
         // (scale, best, iscale)
         Expr lx0 = cand(0, s, b, _)[0], l20 = cand(0, s, b, _)[1], sc0 = sf(select(l20 != 0.0f, lx0 / l20, 0.0f));
         st(s, b, _) = Tuple(sc0, sf(sc0 * lx0), iscale(0));
@@ -474,15 +475,15 @@ struct Q3KQuant : ScaledCodes {
         l0(s, j, b, _) = codes(sf(iscale * x(s * n + j, b, _)));
         Expr lr = cast<float>(l0(s, r, b, _)), w = sf(xr * xr);
         sums0(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f);
-        sums0(s, b, _) = Tuple(fma(sf(w * xr), lr, sums0(s, b, _)[0]), fma(sf(w * lr), lr, sums0(s, b, _)[1]));
+        sums0(s, b, _) = Tuple(madd(sf(w * xr), lr, sums0(s, b, _)[0]), madd(sf(w * lr), lr, sums0(s, b, _)[1]));
         // (sumlx, suml2, code) after each step t of the passes, code t % n's;
         // t in [-n, 0): the first codes, and their sums (sub-blocks first,
         // the scan vectorized across them)
         st(s, t, b, _) = Tuple(sums0(s, b, _)[0], sums0(s, b, _)[1], l0(s, clamp(t + n, 0, n - 1), b, _));
         Expr xi = x(s * n + rt % n, b, _), wi = sf(xi * xi), li = st(s, rt - n, b, _)[2], fl = cast<float>(li);
         Expr sumlx = st(s, rt - 1, b, _)[0], suml2 = st(s, rt - 1, b, _)[1];
-        Expr slx = fma(-sf(xi * wi), fl, sumlx), sl2 = fma(-sf(fl * wi), fl, suml2), nl = codes(sf(sf(xi * sl2) / slx)), fnl = cast<float>(nl);
-        Expr slx1 = fma(sf(xi * wi), fnl, slx), sl21 = fma(sf(wi * fnl), fnl, sl2);
+        Expr slx = madd(-sf(xi * wi), fl, sumlx), sl2 = madd(-sf(fl * wi), fl, suml2), nl = codes(sf(sf(xi * sl2) / slx)), fnl = cast<float>(nl);
+        Expr slx1 = madd(sf(xi * wi), fnl, slx), sl21 = madd(sf(wi * fnl), fnl, sl2);
         Expr better = sf(slx > 0.0f && nl != li && sl21 > 0.0f && slx1 * slx1 * suml2 > sumlx * sumlx * sl21);
         st(s, rt, b, _) = Tuple(select(better, slx1, sumlx), select(better, sl21, suml2), select(better, nl, li));
         Expr zs = sf(am(s, b, _)[0] < 1e-15f), lx = st(s, passes * n - 1, b, _)[0], l2 = st(s, passes * n - 1, b, _)[1];

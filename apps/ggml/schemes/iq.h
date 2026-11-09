@@ -77,7 +77,7 @@ struct IQ4Quant : ScaledCodes {
         Expr id = select(c == 0, sf(1.0f / sf(mx / 127.0f)), sf(cast<float>(c - 135) / mx));
         Expr fq = cast<float>(iq4nl_code(sf(id * xr))), wq = sf(sf(xr * xr) * fq);
         cand(rows_of(x, {c, s, b})) = Tuple(0.0f, 0.0f);
-        cand(c, s, b, _) = Tuple(fma(wq, xr, cand(c, s, b, _)[0]), fma(wq, fq, cand(c, s, b, _)[1]));
+        cand(c, s, b, _) = Tuple(madd(wq, xr, cand(c, s, b, _)[0]), madd(wq, fq, cand(c, s, b, _)[1]));
         // (scale, best)
         Expr qx0 = cand(0, s, b, _)[0], q20 = cand(0, s, b, _)[1], d0 = sf(select(q20 > 0.0f, qx0 / q20, 0.0f));
         st(s, b, _) = Tuple(d0, sf(d0 * qx0));

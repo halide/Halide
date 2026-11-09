@@ -285,6 +285,18 @@ inline Expr inverse(const Expr &d) {
     return select(d != 0.0f, 1.0f / d, 0.0f);
 }
 
+// a * b + c, rounded as GGML's reference quantizers round it. They are in
+// ggml-base, built for the baseline ISA: on arm64, which has FMA, clang
+// contracts the expression into one; x86-64's baseline has none, so there
+// it is the rounded product, then the rounded sum.
+inline Expr madd(const Expr &a, const Expr &b, const Expr &c) {
+    return select(target_arch_is(Target::X86), strict_float(strict_float(a * b) + c), fma(a, b, c));
+}
+inline Expr madd(float a, float b, float c) {
+    volatile float p = a * b;  // (not contracted by this build)
+    return select(target_arch_is(Target::X86), Expr(p + c), Expr(std::fma(a, b, c)));
+}
+
 // args, then x's dimensions past its record's (j, b: the rows `_` stands
 // for), for the pure definitions of constants, whose `_` would be empty.
 inline std::vector<Expr> rows_of(const Func &x, std::vector<Expr> args) {
