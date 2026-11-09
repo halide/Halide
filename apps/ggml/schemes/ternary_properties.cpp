@@ -1,4 +1,4 @@
-// Properties of tq1_0 and tq2_0 (schemes/ternary.h) and q1_0
+// Properties of tq1_0, tq2_0 and q2_0 (schemes/ternary.h) and q1_0
 // (schemes/binary.h), without their layouts:
 // the round trip is within the declared error bound, the codes are within
 // their declared range, and every stage is closed. The blocks are drawn to
@@ -6,12 +6,13 @@
 // blocks dominated by one value, constants and zeros.
 //
 // And where requantizing is idempotent (enc dec enc = enc), block by block.
-// tq1_0, tq2_0: in exactly the blocks whose fp16 scale (the block's max
+// tq1_0, tq2_0, q2_0: in exactly the blocks whose fp16 scale (the block's max
 // |x|) is finite and not 0, normal or subnormal: the max's code is +-1, so
 // the decoded max is the stored scale D, the scale again, and the codes
 // round(c D / D) = c. It fails where the scale underflows to 0 (codes from
 // the unrounded scale, decoded 0, requantized 0) or overflows to inf (inf *
-// 0 = NaN). q1_0: in every block whose scale (mean |x|) is not 0, inf
+// 0 = NaN; q2_0's code 2, of blocks of max |x| < 2^-128, among the former).
+// q1_0: in every block whose scale (mean |x|) is not 0, inf
 // included (the decoded block is +-D, its mean |x| D: 128 multiples of an
 // fp16 are exact in f32), and in no block whose scale underflows to 0 with
 // a negative value: its code -1 decodes to -0, and requantizes to 1 (x >= 0).
@@ -49,7 +50,7 @@ int main() {
     // each format's stages before its layout, and its quantizer, held: its
     // bound checked at it
     std::vector<std::tuple<std::string, Approximation, Approximation>> schemes;
-    for (const auto &[name, format] : {std::pair{"q1_0", ggml::q1_0("aos")}, {"tq2_0", ggml::tq2_0("aos")}, {"tq1_0", ggml::tq1_0("aos")}}) {
+    for (const auto &[name, format] : {std::pair{"q1_0", ggml::q1_0("aos")}, {"tq2_0", ggml::tq2_0("aos")}, {"tq1_0", ggml::tq1_0("aos")}, {"q2_0", ggml::q2_0("aos")}}) {
         std::vector<Approximation> stages = ggml::pre_layout(format);
         schemes.emplace_back(name, stages[1], Compose{stages});
     }
@@ -67,6 +68,17 @@ int main() {
                 std::cout << scheme << " (" << name << "): " << r;
                 failures += !r.passed;
             }
+        }
+    }
+
+    // q2_0's blocks of max |x| < 2^-128 (f32 subnormals), whose 1 / max is
+    // inf: the code 2 (x > 0) and its wider bound
+    {
+        const auto &[scheme, q, a] = schemes.back();
+        for (const Property &p : {within_declared_bound().at(q), outputs_within_declared_ranges(), closed()}) {
+            PropertyResult r = check_property(a, p, Distribution::normal(0, 1e-40), Float(32), {n}, trials, 1);
+            std::cout << scheme << " (f32 subnormal): " << r;
+            failures += !r.passed;
         }
     }
 
