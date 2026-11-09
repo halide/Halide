@@ -78,6 +78,21 @@ int main(int argc, char **argv) {
     e = cast(i64, cast(i16, 10) - cast(i16, 17));
     found_error |= check_lossless_cast(u32, e, Expr());
 
+    // A float32 made from a bfloat16's bits is that bfloat16
+    {
+        Type bf16x = BFloat(16, 4), f32x = Float(32, 4);
+        Expr var_u16x = Variable::make(u16x, "x"), sixteen = make_const(u16x, 16);
+        e = reinterpret(f32x, widening_shift_left(var_u16x, sixteen));
+        found_error |= check_lossless_cast(bf16x, e, reinterpret(bf16x, var_u16x));
+        e = reinterpret(f32x, cast(u32x, var_u16x) << make_const(u32x, 16));
+        found_error |= check_lossless_cast(bf16x, e, reinterpret(bf16x, var_u16x));
+        // (not 16 bits, or not shifted to the top)
+        e = reinterpret(f32x, widening_shift_left(var_u16x, make_const(u16x, 15)));
+        found_error |= check_lossless_cast(bf16x, e, Expr());
+        e = reinterpret(f32x, cast(u32x, var_u8x) << make_const(u32x, 16));
+        found_error |= check_lossless_cast(bf16x, e, Expr());
+    }
+
     e = cast(i64, 1024) * cast(i64, 1024) * cast(i64, 1024);
     found_error |= check_lossless_cast(i32, e, (cast(i32, 1024) * 1024) * 1024);
 

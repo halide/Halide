@@ -733,6 +733,10 @@ public:
                 check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
                 check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
                 check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                // bf16 operands as their bits, widened by shifting them to
+                // float32's top
+                auto bf16_bits = [](const Expr &u) { return reinterpret<float>(u32(u) << 16); };
+                check("vdpbf16ps*zmm", 16, sum(bf16_bits(in_u16(2 * x + r)) * bf16_bits(in_u16(2 * x + r + 32))));
             }
             {
                 // 8 bit, 4 element dot product

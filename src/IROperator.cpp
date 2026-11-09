@@ -531,6 +531,21 @@ Expr lossless_cast(Type t,
             }
         }
         return Shuffle::make(vecs, shuf->indices);
+    } else if (const Reinterpret *r = e.as<Reinterpret>();
+               r && t.is_bfloat() && t.bits() == 16 && e.type().is_float() && e.type().bits() == 32) {
+        // A float32 from a bfloat16's bits (16 bits shifted to the top) is
+        // that bfloat16, exactly.
+        const Call *c = Call::as_intrinsic(r->value, {Call::widening_shift_left, Call::shift_left});
+        if (c && is_const(c->args[1], 16)) {
+            Expr x = c->args[0];
+            if (c->is_intrinsic(Call::shift_left)) {
+                const Cast *w = x.as<Cast>();
+                x = w && w->value.type().is_int_or_uint() && w->value.type().bits() == 16 ? w->value : Expr();
+            }
+            if (x.defined() && x.type().is_int_or_uint() && x.type().bits() == 16) {
+                return reinterpret(t, x);
+            }
+        }
     } else if (t.is_int_or_uint()) {
         // Check the bounds. If they're small enough, we can throw narrowing
         // casts around e, or subterms.
