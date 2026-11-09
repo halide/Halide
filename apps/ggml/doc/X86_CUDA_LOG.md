@@ -64,6 +64,16 @@ Core changes (each with its test; none upstreamed yet):
   `pextr`/`pinsr` per lane. tq1_0's last 16 values from 4 bytes; with the
   above, vec_dot 62.5 -> 30.9 cycles a block (GGML 30.7), one-thread vec_dot
   0.34 -> 0.70x of GGML, gemv 0.37 -> 0.66x. Test: `small_table_lookup`.
+- Value bounds of `precompute()`d Funcs from their Buffers' contents, kept
+  through precomputation (keyed by buffer name) and read by `ConstantBounds`.
+  `FindIntrinsics` marks an int8 Mul's operands with `unsafe_promise_clamped`
+  when one factor is in [-1, 1] (stripped by `lower_intrinsic` elsewhere);
+  x86 makes it `psignb`, and the signed dot of such codes
+  `dot(abs(a), psign(b, a))` (`vpdpbusd`). The iq formats' `grid * sign`
+  codes, as GGML builds them; one-thread gemv (q8_K acts) iq2_xxs 0.67 ->
+  0.78x, iq2_xs 0.69 -> 0.81x, iq2_s 0.47 -> 0.67x, iq3_xxs 0.54 -> 0.59x,
+  iq3_s 0.72 -> 0.92x, iq1_s 0.77 -> 0.82x, iq1_m 0.66 -> 0.69x, q3_K 0.79 ->
+  0.80x. Test: `simd_op_check_x86`.
 
 App changes:
 
