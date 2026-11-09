@@ -107,6 +107,7 @@ set(GGML_FORMATS
     "q5_1 mul_mat f32,f16,q8_1 metal"
     "mxfp4 mul_mat f32,f16,q8_0 metal"
     "iq4_nl mul_mat f32,f16,q8_0 metal"
+    "q2_0 mul_mat f32,f16,q8_0 metal"
     "q4_K mul_mat f32,f16,q8_K metal"
     "q6_K mul_mat f32,f16,q8_K metal"
     "q5_K mul_mat f32,f16,q8_K metal"
@@ -128,6 +129,7 @@ set(GGML_FORMATS
     "q5_1:f16 mul_mat f32:f16,f16 metal"
     "mxfp4:f16 mul_mat f32:f16,f16 metal"
     "iq4_nl:f16 mul_mat f32:f16,f16 metal"
+    "q2_0:f16 mul_mat f32:f16,f16 metal"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
