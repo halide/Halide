@@ -808,7 +808,10 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
-    int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
+    // lanes of 16 bytes (NEON's) on every target: wider (AVX-512's 64) leaves
+    // a 32-value block or sub-block one step, no loop for its scale to hoist
+    // out of
+    int per = integer ? 4 : 1, vec = std::min(t.natural_vector_size<int8_t>(), 16);
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
     int nsub = sub ? block / sub : 0;
     if (nsub && integer && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {

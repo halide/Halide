@@ -197,7 +197,9 @@ void register_halide_providers() {
         bool kai = rowwise_format(fs), kai_act = kai && rowwise_format(parse_format(row.at));
         ggml_type wt = kai ? GGML_TYPE_Q8_0 : type_named(fs.type.c_str()), at = kai ? GGML_TYPE_F32 : type_named(row.at),
                   aq = kai ? GGML_TYPE_Q8_0 : type_named(parse_format(row.aq).type.c_str());
-        bool gpu = strstr(row.features, "metal") != nullptr;
+        const char *gpu_api = strstr(row.features, "metal") ? "metal" : strstr(row.features, "cuda") ? "cuda" :
+                                                                                                       nullptr;
+        bool gpu = gpu_api != nullptr;
         // f16 accumulation (acc16): 32 f16 lanes, then 3 f16 tree levels, as
         // GGML's f16 vec_dot, whose results it then equals where GGML has
         // fp16 arithmetic (else it accumulates in f32) and K % 32 == 0 (GGML
@@ -232,7 +234,7 @@ void register_halide_providers() {
                                            k->f = f;
                                            k->gpu = gpu;
                                            k->threads = in.threads;
-                                           k->path = gpu ? "halide:metal" : "halide";
+                                           k->path = gpu ? std::string("halide:") + gpu_api : "halide";
                                            if (aq != at) k->prec.act_quant = aq;
                                            if (!fs.compute.empty()) k->prec.w_quant = type_named(fs.compute.c_str());
                                            if (kai) k->prec.act_block = k->prec.w_block = s.K;  // as ggml-cpu-kleidiai's

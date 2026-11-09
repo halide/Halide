@@ -9,6 +9,12 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <optional>
+#include <utility>
+
+#ifdef GQ_CUPTI
+#include <cupti.h>
+#endif
 
 namespace gq {
 
@@ -165,45 +171,122 @@ Precision cpu_precision(const Inputs &in) {
     return p;
 }
 
-// Empty if the case crashed or failed: Metal's supports_op ignores src1's
-// type, but e.g. mul_mv has no q4_0 x f16 kernel.
-std::string metal_path(const Inputs &in) {
+// The GPU kernels a case runs, from a child process (--probe-gpu), comma
+// separated; nullopt if the case crashed or failed: the GPU backends'
+// supports_op accept cases they abort on (Metal's ignores src1's type, mul_mv
+// has no q4_0 x f16 kernel; CUDA's batched cuBLAS has no q4_0 x f16
+// conversion).
+std::optional<std::string> gpu_probe(const Inputs &in) {
     char cmd[512];
-    snprintf(cmd, sizeof(cmd), "exec 2>/dev/null; '%s' --probe-metal %s %s %lld %lld %lld", self_exe.c_str(),
+    snprintf(cmd, sizeof(cmd), "exec 2>/dev/null; '%s' --probe-gpu %s %s %lld %lld %lld", self_exe.c_str(),
              ggml_type_name(in.wt), ggml_type_name(in.at), (long long)in.s.K, (long long)in.s.N, (long long)in.s.M);
     FILE *f = popen(cmd, "r");
-    if (!f) return "";
+    if (!f) return std::nullopt;
     std::string out;
     char line[512];
     while (fgets(line, sizeof(line), f))
         out += line;
-    if (pclose(f) != 0) return "";
+    if (pclose(f) != 0) return std::nullopt;
     while (!out.empty() && isspace(out.back()))
         out.pop_back();
-    return "metal:" + (out.empty() ? std::string("?") : out);
+    return out;
+}
+
+#ifdef GQ_CUPTI
+// The kernels a CUDA graph launches, by their (mangled) names, from CUPTI's
+// launch callbacks (NVIDIA's public profiling API; the CUDA counterpart of
+// Metal's logged pipeline names).
+std::vector<std::string> cuda_launches;
+
+void CUPTIAPI cupti_cb(void *, CUpti_CallbackDomain, CUpti_CallbackId, const void *data) {
+    const auto *cb = (const CUpti_CallbackData *)data;
+    if (cb->callbackSite == CUPTI_API_ENTER && cb->functionName && strstr(cb->functionName, "Launch") && cb->symbolName) {
+        cuda_launches.emplace_back(cb->symbolName);
+    }
+}
+
+std::vector<std::string> cuda_kernels(Kernel &k) {
+    CUpti_SubscriberHandle sub = nullptr;
+    if (cuptiSubscribe(&sub, (CUpti_CallbackFunc)cupti_cb, nullptr) != CUPTI_SUCCESS) return {};
+    cuda_launches.clear();
+    cuptiEnableDomain(1, sub, CUPTI_CB_DOMAIN_RUNTIME_API);
+    cuptiEnableDomain(1, sub, CUPTI_CB_DOMAIN_DRIVER_API);
+    k.run(1);
+    cuptiUnsubscribe(sub);
+    return std::exchange(cuda_launches, {});
+}
+#else
+std::vector<std::string> cuda_kernels(Kernel &k) {
+    k.run(1);
+    return {};
+}
+#endif
+
+// GGML's CUDA mul_mat path (ggml_cuda_mul_mat), from the kernels it launched
+// (`ks`, gpu_probe()), and what it does to the operands:
+//   mmvq (mul_mat_vec_q), mmq (mul_mat_q): f32 acts quantized to q8_1 (dp4a/int8 mma)
+//   mmvf (mul_mat_vec_f): f16 weights times acts rounded to f16, in half2
+//     per-thread partial sums (>= 32 threads, 2 lanes each), then f32
+//   mmf (mul_mat_f): tensor-core mma on f16/bf16 (f32: tf32) operands, f32 accumulators
+//   cublas: weights and acts converted to f16 (bf16 for bf16), cuBLAS gemm;
+//     on f16, CUBLAS_COMPUTE_16F with an f16 result (Ampere and later)
+std::string cuda_path(const std::string &ks, const Inputs &in, Precision &p) {
+    auto has = [&](const char *s) { return ks.find(s) != std::string::npos; };
+    const bool bf = in.wt == GGML_TYPE_BF16;
+    if (has("mul_mat_vec_q") || has("mul_mat_q")) {
+        p.act_quant = GGML_TYPE_Q8_1;
+        return has("mul_mat_vec_q") ? "cuda:mmvq" : "cuda:mmq";
+    }
+    if (has("mul_mat_vec_f")) {
+        if (in.wt == GGML_TYPE_F16) {
+            p.operand_bits = 11;
+            p.acc_bits = 11;
+            p.chain = in.s.K / 64;
+        }
+        return "cuda:mmvf";
+    }
+    if (has("mul_mat_f")) {
+        p.operand_bits = bf ? 8 : 11;
+        return "cuda:mmf";
+    }
+    if (ks.empty()) {
+        // no attribution: assume the worst (cuBLAS's)
+        p.operand_bits = bf ? 8 : 11;
+        p.acc_bits = bf ? 24 : 11;
+        return "cuda:?";
+    }
+    if (in.wt != GGML_TYPE_F32) {
+        p.operand_bits = bf ? 8 : 11;
+        if (!bf) p.acc_bits = 11;
+    }
+    return "cuda:cublas";
 }
 
 void add_device(ggml_backend_dev_t dev) {
     std::string dname = ggml_backend_dev_name(dev);
+    std::string rname = ggml_backend_reg_name(ggml_backend_dev_backend_reg(dev));
     auto type = ggml_backend_dev_type(dev);
     bool cpu = type == GGML_BACKEND_DEVICE_TYPE_CPU;
     bool gpu = type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU;
-    std::string name = cpu ? "ggml-cpu" : gpu ? "ggml-metal" :
-                                                "ggml-" + lower(dname);
-    if (gpu && dname.rfind("MTL", 0) != 0) name = "ggml-" + lower(dname);
-    providers().push_back({name, GQ_mul_mat, true, [dev, cpu, gpu](const Inputs &in) -> std::unique_ptr<Kernel> {
-                               std::string mpath = gpu ? metal_path(in) : "";
-                               if (gpu && mpath.empty()) return nullptr;
+    bool metal = gpu && dname.rfind("MTL", 0) == 0, cuda = gpu && rname == "CUDA";
+    std::string name = cpu ? "ggml-cpu" : metal ? "ggml-metal" :
+                                      cuda      ? "ggml-cuda" :
+                                                  "ggml-" + lower(dname);
+    providers().push_back({name, GQ_mul_mat, true, [dev, cpu, metal, cuda](const Inputs &in) -> std::unique_ptr<Kernel> {
+                               std::optional<std::string> probe = cpu ? std::optional<std::string>("") : gpu_probe(in);
+                               if (!probe) return nullptr;
                                auto k = make_graph(dev, nullptr, in);
                                if (!k) return nullptr;
                                if (cpu) {
                                    k->prec = cpu_precision(in);
                                    bool kai_f16 = in.wt == GGML_TYPE_F16 && in.at == GGML_TYPE_F32 && in.s.M > 1 && ggml_cpu_has_sme();
                                    k->path = kai_f16 ? "kleidiai:f16:SME" : std::string("vec_dot:") + ggml_type_name(dot_type(in.wt));
-                               } else if (gpu) {
+                               } else if (metal) {
                                    // mul_mm stages both operands in half; mul_mv may not: assume the worse.
                                    k->prec.operand_bits = 11;
-                                   k->path = mpath;
+                                   k->path = "metal:" + (probe->empty() ? std::string("?") : *probe);
+                               } else if (cuda) {
+                                   k->path = cuda_path(*probe, in, k->prec);
                                } else {
                                    k->path = "blas:sgemm(dequant)";
                                }
@@ -234,6 +317,10 @@ void add_device(ggml_backend_dev_t dev) {
                                    } else {
                                        std::string layout = grep_log(log, "repack tensor ");
                                        if (auto p = layout.find(" with "); p != std::string::npos) layout = layout.substr(p + 6);
+                                       // (AMX's: "<tensor> of type <type>", repacked to its tiles' layout)
+                                       if (auto p = layout.find(" of type "); p != std::string::npos) layout = layout.substr(p + 9);
+                                       // AMX keeps f16 as is and runs it on AVX-512, not tiles.
+                                       if (layout.empty() && bname == "amx" && in.wt == GGML_TYPE_F16) layout = "f16(avx512)";
                                        k->path = bname + ":" + (layout.empty() ? "?" : layout) + ":" + kind;
                                    }
                                    return k;
@@ -271,10 +358,11 @@ void register_ggml_providers() {
         add_device(ggml_backend_dev_get(i));
 }
 
-// Child process: run one case on Metal and print the mul_m* pipelines it
-// compiled. Metal compiles (and logs) a pipeline once per process, so a fresh
-// process is the robust way to attribute pipelines to a case.
-int probe_metal(int argc, char **argv) {
+// Child process: run one case on the first GPU and print the kernels it ran:
+// Metal's mul_m* pipelines (compiled, and logged, once per process, so a
+// fresh process is the robust way to attribute them to a case), CUDA's
+// launched kernels (CUPTI).
+int probe_gpu(int argc, char **argv) {
     if (argc < 5) return 1;
     auto type = [](const char *n) {
         for (int t = 0; t < GGML_TYPE_COUNT; t++) {
@@ -292,11 +380,16 @@ int probe_metal(int argc, char **argv) {
         if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_GPU && ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_IGPU) continue;
         auto k = make_graph(dev, nullptr, in);
         if (!k) return 1;
-        k->run(1);
         std::string names;
-        for (const auto &l : take_log()) {
-            std::string n = grep_log({l}, "name = '", '\'');
-            if (n.rfind("kernel_mul_m", 0) == 0) names += (names.empty() ? "" : ",") + n;
+        if (std::string(ggml_backend_reg_name(ggml_backend_dev_backend_reg(dev))) == "CUDA") {
+            for (const auto &n : cuda_kernels(*k))
+                names += (names.empty() ? "" : ",") + n;
+        } else {
+            k->run(1);
+            for (const auto &l : take_log()) {
+                std::string n = grep_log({l}, "name = '", '\'');
+                if (n.rfind("kernel_mul_m", 0) == 0) names += (names.empty() ? "" : ",") + n;
+            }
         }
         printf("%s\n", names.c_str());
         return 0;
