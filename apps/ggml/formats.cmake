@@ -70,6 +70,7 @@ set(GGML_FORMATS
     "tq2_0 codec,vec_dot,mul_mat q8_K,f16,f32,f32:q8_K"
     "tq1_0 codec,vec_dot,mul_mat q8_K,f16,f32,f32:q8_K"
     "q1_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
+    "q2_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
     "iq2_xxs codec,vec_dot,mul_mat q8_K,f16,f32,f32:q8_K"
     "iq2_xs codec,vec_dot,mul_mat q8_K,f16,f32,f32:q8_K"
     "iq2_s codec,vec_dot,mul_mat q8_K,f16,f32,f32:q8_K"

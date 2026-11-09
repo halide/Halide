@@ -88,6 +88,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "tq2_0" && codes.empty()) return {tq2_0(lay, indexed), QK_K, rows, chunk};
     if (type == "tq1_0" && codes.empty()) return {tq1_0(lay, indexed), QK_K, rows, chunk};
     if (type == "q1_0" && codes.empty()) return {q1_0(lay, indexed), SignQuant::block, rows, chunk * 8};
+    if (type == "q2_0" && codes.empty()) return {q2_0(lay, indexed), Q2Quant::block, rows, chunk};
     if (type == "iq2_xxs" && codes.empty()) return sub_blocks({iq2_xxs(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "iq2_xs" && codes.empty()) return sub_blocks({iq2_xs(lay, indexed), QK_K, rows, chunk}, 16);
     if (type == "iq2_s" && codes.empty()) return sub_blocks({iq2_s(lay, indexed), QK_K, rows, chunk}, 16);

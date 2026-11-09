@@ -1,9 +1,10 @@
 #pragma once
 
 // GGML's ternary formats (ggml-quants.c quantize_row_tq1_0_ref,
-// quantize_row_tq2_0_ref), as Approximations: codes in {-1, 0, 1} times an
-// fp16 scale per 256 values, stored as 2-bit fields (tq2_0) or as base-3
-// digits, five per byte (tq1_0).
+// quantize_row_tq2_0_ref, quantize_row_q2_0_ref), as Approximations: codes
+// in {-1, 0, 1} times an fp16 scale per 256 values, stored as 2-bit fields
+// (tq2_0) or as base-3 digits, five per byte (tq1_0); or per 64 values, as
+// 2-bit fields (q2_0).
 #include "common.h"
 #include "kquants.h"
 
@@ -67,6 +68,48 @@ inline Approximation tq1_0(const std::string &lay, bool indexed = false) {
                    Parallel{{"qs_lo", TritPack{32}}, {"qs_hi", TritPack{16}}, {"qh", TritPack{4, 4}}},
                    layout(lay, {{"qs_lo", UInt(8), 32}, {"qs_hi", UInt(8), 16}, {"qh", UInt(8), QK_K / 64}, {"d", Float(16)}},
                           {"qs_lo", "qs_hi", "qh", "d"})};
+}
+
+// q2_0's quantization: d = amax, the greatest |x| by GGML's strict scan
+// (fabsf(x) > amax from 0: NaNs never taken), so order-free; code =
+// (int)roundf(x * (1 / d)) (0 for d = 0), clamped to [-1, 2] (GGML clamps
+// the code + 1 to [0, 3]; arm64's conversion saturates, NaN to 0). Only
+// blocks of d < 2^-128, whose 1 / d is inf, have the code 2 (x > 0), with an
+// error up to 2 d. Values = codes * d.
+struct Q2Quant {
+    static constexpr int block = 64;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func x = in[0], d("scale"), q("codes");
+        Var j, b;
+        RDom r(0, block);
+        Expr xr = x(r, b, _);
+        d(b, _) = maximum(sf(select(is_nan(xr), 0.0f, abs(xr))));
+        Expr v = sf(x(j, b, _) * inverse(d(b, _)));
+        q(j, b, _) = cast<int8_t>(sf(select(is_nan(v), 0.0f, clamp(round_half_away(v), -1.0f, 2.0f))));
+        return {q, d};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        return {dequant(e)};
+    }
+    ApproximationSignature signature() const {
+        return codes_and_scale(-1, 2);
+    }
+    Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
+        Func f("bound");
+        Var j, b;
+        Expr d = e[1](b, _);
+        f(j, b, _) = abs(cast<double>(d)) * select(is_inf(sf(inverse(d))), Expr(2.0001), Expr(0.50005));
+        return f;
+    }
+};
+
+// block_q2_0 {f16 d; u8 qs[16]}: the codes + 1 as 2-bit fields, four per
+// byte, least significant first.
+inline Approximation q2_0(const std::string &lay, bool indexed = false) {
+    return Compose{BlockReshape{Q2Quant::block, indexed}, Q2Quant{}, Parallel{{"codes", multiples(0, -1, 4)}, {"scale", fp16()}},
+                   Parallel{{"codes", PlanarFieldPack{2, 1}}},
+                   layout(lay, {{"d", Float(16)}, {"qs", UInt(8), Q2Quant::block / 4}}, {"qs", "d"})};
 }
 
 }  // namespace ggml

@@ -327,17 +327,21 @@ mxfp4's. tq2_0 and tq1_0 (`schemes/ternary.h`, `TernaryQuant`) are codes in {-1,
 five base-3 digits per byte (tq1_0: `Segments` splits the block into its `qs`
 and `qh` runs, `TritPack` packs each). q1_0 (`schemes/binary.h`, `SignQuant`) is
 the signs of 128 values (`PlanarFieldPack{1, 1}`) under their mean magnitude
-(GGML's sequential float sum, kept serial by the encoder schedule). All six
-codecs are bit-exact against GGML's quantizers and dequantizers; their kernels
-are the existing one-level and two-level recipes, the q8_0 acts of iq4_nl, nvfp4
-and q1_0 a divisor of the weight's block (nvfp4: 2 per block, q1_0: 4) and float
-sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block. nvfp4's ue4m3
-scales decode through a table of each byte's (as clang compiles GGML's NEON
-vec_dot), and its vec_dot and gemv take GGML's lanes: one per (sub-block, act
-block) of a pair of act blocks, each a sub-block's sdot, then all four scaled by
-one vector multiply-add (`blocked_sub_lanes`). `ggml_iq_properties`,
+(GGML's sequential float sum, kept serial by the encoder schedule). q2_0
+(`schemes/ternary.h`, `Q2Quant`) is codes in {-1, 0, 1} under an fp16 scale per
+64 values (the max |x| by GGML's strict scan, which skips NaNs; `(int)roundf`
+saturating, clamped to -1..2: the code 2 only where 1 / max is inf), stored as
+tq2_0's 2-bit fields packed densely (`PlanarFieldPack{2, 1}`). All seven codecs
+are bit-exact against GGML's quantizers and dequantizers; their kernels are the
+existing one-level and two-level recipes, the q8_0 acts of iq4_nl, nvfp4, q1_0
+and q2_0 a divisor of the weight's block (nvfp4 and q2_0: 2 per block, q1_0: 4)
+and float sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block. nvfp4's
+ue4m3 scales decode through a table of each byte's (as clang compiles GGML's
+NEON vec_dot), and its vec_dot and gemv take GGML's lanes: one per (sub-block,
+act block) of a pair of act blocks, each a sub-block's sdot, then all four
+scaled by one vector multiply-add (`blocked_sub_lanes`). `ggml_iq_properties`,
 `ggml_mxfp4_properties` (nvfp4) and `ggml_ternary_properties` (tq1_0, tq2_0,
-q1_0) check their bounds, ranges and closure.
+q2_0, q1_0) check their bounds, ranges and closure.
 
 The grid formats iq2_xxs, iq2_xs, iq2_s, iq3_xxs, iq3_s, iq1_s and iq1_m
 (`schemes/grid.h`) decode natively and encode by GGML's quantizer. Their decode
