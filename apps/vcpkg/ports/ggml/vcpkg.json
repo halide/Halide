@@ -13,5 +13,13 @@
       "name": "vcpkg-cmake-config",
       "host": true
     }
-  ]
+  ],
+  "features": {
+    "cuda": {
+      "description": "CUDA backend (for the build machine's GPU)",
+      "dependencies": [
+        "cuda"
+      ]
+    }
+  }
 }

@@ -8,7 +8,10 @@ vcpkg_from_github(
 )
 
 # Benchmark baseline: GGML's best paths on the build machine (native ISA,
-# CPU repack, KleidiAI on arm64, Metal on macOS). Backends are linked, not
+# CPU repack, KleidiAI on arm64, Metal on macOS; on x86 the native ISA
+# includes AMX where the CPU has it, ggml-cpu's AMX extra buffer type; CUDA
+# with the `cuda` feature). GGML_LLAMAFILE stays off, so the plain CPU path is
+# GGML's own vec_dot loop. Backends are linked, not
 # dlopen'ed. KleidiAI is fetched here because vcpkg disables FetchContent.
 # Shared libraries, as GGML ships: statically linked, GGML's code and constant
 # tables move with every change to the benchmark's own code, which moves its
@@ -29,6 +32,13 @@ endif ()
 if (VCPKG_TARGET_IS_OSX)
     list(APPEND options -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON)
 endif ()
+# CUDA for the build machine's GPU. FlashAttention and NCCL are unused by
+# mul_mat; off, to cut the build.
+if ("cuda" IN_LIST FEATURES)
+    list(APPEND options
+        -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=native -DGGML_CUDA_FA=OFF -DGGML_CUDA_NCCL=OFF
+    )
+endif ()
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
@@ -38,6 +48,7 @@ vcpkg_cmake_configure(
     -DGGML_BACKEND_DL=OFF
     -DGGML_NATIVE=ON
     -DGGML_CPU_REPACK=ON
+    -DGGML_LLAMAFILE=OFF
     -DGGML_OPENMP=OFF
     -DGGML_BUILD_TESTS=OFF
     -DGGML_BUILD_EXAMPLES=OFF

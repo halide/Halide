@@ -81,6 +81,15 @@ if (GGML_CPU_KLEIDIAI)
     # KleidiAI's packers, the reference of the qsi8cx and qai8dx codecs
     target_compile_definitions(ggml-quant-bench PRIVATE GQ_KLEIDIAI)
 endif ()
+if (GGML_CUDA)
+    # CUPTI's launch callbacks name the kernels GGML's CUDA mul_mat runs
+    # (ggml-cuda's path column: mmq, mmvq, mmvf, mmf or cuBLAS)
+    find_package(CUDAToolkit)
+    if (TARGET CUDA::cupti)
+        target_link_libraries(ggml-quant-bench PRIVATE CUDA::cupti)
+        target_compile_definitions(ggml-quant-bench PRIVATE GQ_CUPTI)
+    endif ()
+endif ()
 
 add_test(NAME ggml_check COMMAND ggml-quant-bench --check --shapes smoke)
 set_tests_properties(ggml_check PROPERTIES LABELS ggml)
