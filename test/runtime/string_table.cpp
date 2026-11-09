@@ -63,6 +63,28 @@ int main(int argc, char **argv) {
         }
     }
 
+    // test parsing input with empty tokens (consecutive/leading/trailing delimiters)
+    {
+        // count_tokens() counts empty segments, but parse() skips them, so the
+        // table must not report (or expose) more entries than it actually stores.
+        // Uses the default allocator on purpose: allocate_system() pads every
+        // block, which would hide a read of an unassigned pointer slot.
+        StringTable st3(user_context, 0);
+        size_t entry_count = st3.parse(user_context, ":a::b:", ":");
+        HALIDE_CHECK(user_context, entry_count == 2);
+        HALIDE_CHECK(user_context, st3.size() == 2);
+        // Every reported entry must be a real stored token, not a stale slot.
+        HALIDE_CHECK(user_context, strcmp(st3[0], "a") == 0);
+        HALIDE_CHECK(user_context, strcmp(st3[1], "b") == 0);
+        HALIDE_CHECK(user_context, st3.contains("a"));
+        HALIDE_CHECK(user_context, st3.contains("b"));
+
+        // A string made of only delimiters has no tokens at all.
+        StringTable st4(user_context, 0);
+        HALIDE_CHECK(user_context, st4.parse(user_context, ":::", ":") == 0);
+        HALIDE_CHECK(user_context, st4.size() == 0);
+    }
+
     print(user_context) << "Success!\n";
     return 0;
 }
