@@ -18,6 +18,10 @@
 #include "thread_pool.h"
 
 #include <cstring>
+#if defined(__x86_64__)
+#include <cpuid.h>
+#include <immintrin.h>
+#endif
 
 namespace gq {
 
@@ -27,6 +31,33 @@ int halide_metal_sync_every = 1;
 namespace {
 
 using Fn = int (*)(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
+
+// The calling thread's AMX tile configuration, kept across a Halide call.
+// GGML's AMX kernels load theirs once per thread and assume it persists, but
+// the psABI makes it volatile across calls, and a Halide kernel's tile ops
+// load their own: GGML's next tileloadd on this (shared, main) thread would
+// fault. The pools' threads are distinct.
+struct TileConfig {
+#if defined(__x86_64__)
+    alignas(64) uint8_t cfg[64];
+    __attribute__((target("xsave"))) static bool detect() {
+        unsigned a, b, c, d;
+        if (!__get_cpuid_count(7, 0, &a, &b, &c, &d) || !(d & (1u << 24))) return false;  // AMX-TILE
+        if (!__get_cpuid(1, &a, &b, &c, &d) || !(c & (1u << 27))) return false;           // OSXSAVE
+        return ((_xgetbv(0) >> 17) & 3) == 3;                                             // XTILECFG, XTILEDATA
+    }
+    static bool amx() {
+        static const bool ok = detect();
+        return ok;
+    }
+    __attribute__((target("amx-tile"))) TileConfig() {
+        if (amx()) _tile_storeconfig(cfg);
+    }
+    __attribute__((target("amx-tile"))) ~TileConfig() {
+        if (amx()) _tile_loadconfig(cfg);
+    }
+#endif
+};
 
 ggml_type type_named(const char *n) {
     for (int t = 0; t < GGML_TYPE_COUNT; t++) {
@@ -96,6 +127,7 @@ struct HalideKernel : Kernel {
         // work for the duration of the sample.
         const bool keep_awake = halide_keep_awake && !gpu;
         if (keep_awake) ggml_halide_thread_pool_keep_awake(true);
+        TileConfig keep;
         // A GPU rep is `batch` calls (to distinct outputs) and one device sync.
         const int group = gpu ? batch : 1;
         for (int r = 0, c = 0; r < reps; r++) {
