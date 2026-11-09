@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <optional>
@@ -281,6 +282,16 @@ void add_device(ggml_backend_dev_t dev) {
                                    k->prec = cpu_precision(in);
                                    bool kai_f16 = in.wt == GGML_TYPE_F16 && in.at == GGML_TYPE_F32 && in.s.M > 1 && ggml_cpu_has_sme();
                                    k->path = kai_f16 ? "kleidiai:f16:SME" : std::string("vec_dot:") + ggml_type_name(dot_type(in.wt));
+                                   // x86: GGML's tiled gemm (ggml-cpu/tiled) for these
+                                   // weights at M >= 8, unless GGML_CPU_TILED_MM=0
+                                   const char *tiled_env = getenv("GGML_CPU_TILED_MM");
+                                   static const ggml_type tiled_types[] = {GGML_TYPE_Q2_K, GGML_TYPE_Q3_K, GGML_TYPE_Q4_K, GGML_TYPE_Q5_K, GGML_TYPE_Q6_K,
+                                                                           GGML_TYPE_IQ4_XS, GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_S,
+                                                                           GGML_TYPE_IQ3_XXS, GGML_TYPE_IQ3_S, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M};
+                                   if (ggml_cpu_has_avx() && in.s.M >= 8 && !(tiled_env && atoi(tiled_env) == 0) &&
+                                       std::find(std::begin(tiled_types), std::end(tiled_types), in.wt) != std::end(tiled_types)) {
+                                       k->path = std::string("tiled:") + ggml_type_name(in.wt);
+                                   }
                                } else if (metal) {
                                    // mul_mm stages both operands in half; mul_mv may not: assume the worse.
                                    k->prec.operand_bits = 11;
