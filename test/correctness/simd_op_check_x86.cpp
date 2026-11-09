@@ -44,6 +44,7 @@ public:
             check_sse_and_avx();
             check_streaming_accesses();
             check_table_lookups();
+            check_sign_tables();
         }
     }
 
@@ -88,6 +89,34 @@ public:
                 internal.compute_root();
                 check(op, w, internal(i32(idx)));
             }
+        }
+    }
+
+    void check_sign_tables() {
+        // x86 has no byte multiply, but one by a sign (e.g. from a precomputed
+        // table, whose contents bound it) is psignb.
+        if (!use_ssse3) {
+            return;
+        }
+        Buffer<int8_t> signs(16);
+        for (int i = 0; i < 16; i++) {
+            signs(i) = (int8_t)(i % 3 - 1);
+        }
+        Func sign{"sign"}, staged{"staged"};
+        sign(x) = signs(x);
+        sign.precompute();
+        staged(x) = sign(x) + i8(0);
+        staged.compute_root();
+        const char *op = use_avx2 ? "vpsignb*ymm" : "psignb";
+        check(op, 32, in_i8(x) * sign(x % 16));
+        check(op, 32, in_i8(x) * sign(in_u8(x) % 16));
+        check(op, 32, staged(x % 16) * in_i8(x));
+        if (target.has_feature(Target::AVX512_Zen4)) {
+            // A byte times a sign is never -128: the dot of it and another
+            // is one of |the other| and it with the other's sign.
+            RDom r(0, 4);
+            Expr signed_byte = i8(in_u8(4 * x + r + 32) / 2) * sign((4 * x + r) % 16);
+            check("vpabsb*ymm", 8, sum(i32(in_i8(4 * x + r)) * signed_byte));
         }
     }
 
@@ -768,6 +797,10 @@ public:
                 check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * i8(in_u8(4 * x + r + 32) / 2)));
+                // With an operand known not to be -128: |a| by b with a's sign
+                check("vpsignb*ymm", 8, sum(i32(in_i8(4 * x + r)) * (in_i8(4 * x + r + 32) / 2)));
+                check("vpabsb*ymm", 8, sum(i32(in_i8(4 * x + r)) * (in_i8(4 * x + r + 32) / 2)));
+                check("vpabsb*zmm", 16, sum(i32(in_i8(4 * x + r)) * (in_i8(4 * x + r + 32) / 2)));
             }
             {
                 // 16 bit, 2 element saturaing dot product

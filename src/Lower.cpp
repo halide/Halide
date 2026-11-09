@@ -265,7 +265,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after allocation bounds inference:", s);
 
     debug(1) << "Precomputing constant Funcs...\n";
-    s = precompute_constants(s, order, env, args, t, result_module);
+    s = precompute_constants(s, order, env, args, t, result_module, func_bounds);
     log("Lowering after precomputing constant Funcs:", s);
 
     bool will_inject_host_copies =
@@ -498,7 +498,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // divisions into shifts, which the simplifier reverses.
     s = simplify(s);
     log("Lowering after finding intrinsics (simplify):", s);
-    s = find_intrinsics(s);
+    s = find_intrinsics(s, &func_bounds);
     log("Lowering after finding intrinsics:", s);
 
     debug(1) << "Hoisting prefetches...\n";

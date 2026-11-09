@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "Bounds.h"
 #include "Expr.h"
 
 namespace Halide {
@@ -29,13 +30,15 @@ class Function;
  * with reads of the resulting embedded Buffer. Identical results (type, shape
  * and contents) share one Buffer, including Buffers already in
  * result_module. Must run after allocation bounds inference and before image
- * checks are added. */
+ * checks are added. Adds the bounds of each Func's values in func_bounds to
+ * it under its Buffers' names, for their loads. */
 Stmt precompute_constants(const Stmt &s,
                           const std::vector<std::string> &order,
                           const std::map<std::string, Function> &env,
                           const std::vector<Argument> &args,
                           const Target &t,
-                          const Module &result_module);
+                          const Module &result_module,
+                          FuncValueBounds &func_bounds);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -148,6 +148,20 @@ ConstantInterval bounds_helper(const Expr &e,
             } else if (op->is_intrinsic(Call::if_then_else) && op->args.size() == 3) {
                 return ConstantInterval::make_union(recurse(op->args[1]),
                                                     recurse(op->args[2]));
+            } else if (op->is_intrinsic(Call::promise_clamped) ||
+                       op->is_intrinsic(Call::unsafe_promise_clamped)) {
+                ConstantInterval lo = recurse(op->args[1]), hi = recurse(op->args[2]);
+                ConstantInterval promised = ConstantInterval::everything();
+                promised.min_defined = lo.min_defined;
+                promised.min = lo.min;
+                promised.max_defined = hi.max_defined;
+                promised.max = hi.max;
+                ConstantInterval arg = recurse(op->args[0]);
+                if ((promised.min_defined && arg.max_defined && promised.min > arg.max) ||
+                    (promised.max_defined && arg.min_defined && promised.max < arg.min)) {
+                    return arg;
+                }
+                return ConstantInterval::make_intersection(arg, promised);
             } else if (func_bounds && op->call_type == Call::Halide && op->type.is_int_or_uint()) {
                 auto it = func_bounds->find({op->name, op->value_index});
                 if (it != func_bounds->end()) {
@@ -158,6 +172,24 @@ ConstantInterval bounds_helper(const Expr &e,
             }
             // If you add a new intrinsic here, also add it to the expression
             // generator in test/correctness/lossless_cast.cpp
+        } else if (const Load *op = e.as<Load>();
+                   op && func_bounds && op->type.is_int_or_uint()) {
+            // A load from a Func's flattened realization: "f", or "f.i" for
+            // value i of a Tuple-valued one
+            auto it = func_bounds->find({op->name, 0});
+            if (size_t dot = op->name.rfind('.');
+                it == func_bounds->end() && dot != std::string::npos) {
+                char *end = nullptr;
+                long i = std::strtol(op->name.c_str() + dot + 1, &end, 10);
+                if (end != op->name.c_str() + dot + 1 && *end == 0) {
+                    it = func_bounds->find({op->name.substr(0, dot), (int)i});
+                }
+            }
+            if (it != func_bounds->end()) {
+                return ConstantInterval::make_intersection(
+                    ConstantInterval::bounds_of_type(op->type),
+                    covering_constant_interval(it->second));
+            }
         }
 
         return ConstantInterval::bounds_of_type(e.type());

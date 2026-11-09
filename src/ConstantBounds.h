@@ -24,7 +24,8 @@ namespace Internal {
  * known Exprs, which this function will update, and previously-computed
  * FuncValueBounds for any Halide Call nodes encountered, which lets a call to
  * a producer Func (e.g. one known to be the result of a clamp) get a tighter
- * bound than its type's full range. The cache is helpful to short-circuit
+ * bound than its type's full range; after storage flattening, likewise a Load
+ * from a Func's realization ("f", or "f.i" for a Tuple's value i). The cache is helpful to short-circuit
  * large numbers of redundant queries, but it should not be used in contexts
  * where the same Expr object may take on different values within a single
  * Expr (i.e. before uniquify_variable_names).
