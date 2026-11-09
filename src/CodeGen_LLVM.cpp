@@ -238,19 +238,6 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
 void CodeGen_LLVM::initialize_llvm() {
     static std::once_flag init_llvm_once;
     std::call_once(init_llvm_once, []() {
-        // You can hack in command-line args to llvm with the
-        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
-        std::string args = get_env_variable("HL_LLVM_ARGS");
-        if (!args.empty()) {
-            vector<std::string> arg_vec = split_string(args, " ");
-            vector<const char *> c_arg_vec;
-            c_arg_vec.push_back("llc");
-            for (const std::string &s : arg_vec) {
-                c_arg_vec.push_back(s.c_str());
-            }
-            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
-        }
-
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
@@ -269,6 +256,42 @@ void CodeGen_LLVM::initialize_llvm() {
     Initialize##target##AsmPrinter();
 #include <llvm/Config/AsmPrinters.def>
 #undef LLVM_ASM_PRINTER
+
+#ifdef WITH_AARCH64
+        // Enable Checked Pointer Arithmetic (FEAT_CPA) instruction selection
+        // when +cpa is present on the subtarget (e.g. arm64e_x1). Run after
+        // Initialize*Target() so AArch64 backend options are registered, and
+        // before HL_LLVM_ARGS so explicit user overrides still win.
+        auto &llvm_opts = cl::getRegisteredOptions();
+        if (auto it = llvm_opts.find("aarch64-use-featcpa-codegen"); it != llvm_opts.end()) {
+            if (it->second->getNumOccurrences() == 0) {
+                it->second->addOccurrence(1, "aarch64-use-featcpa-codegen", "true");
+            }
+        } else {
+            // In LLVM 24+, target backend flags migrated from cl::opt to
+            // TableGen LibraryOptions, which are not in getRegisteredOptions()
+            // and are configured via ParseCommandLineOptions. Pass
+            // &llvm::nulls() so this stays non-fatal if a future LLVM release
+            // enables CPA codegen unconditionally and removes the flag.
+            const char *featcpa_args[] = {"llc", "-aarch64-use-featcpa-codegen=true"};
+            cl::ParseCommandLineOptions(2, featcpa_args, "Halide compiler\n", &llvm::nulls());
+        }
+#endif
+
+        // You can hack in command-line args to llvm with the
+        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
+        std::string args = get_env_variable("HL_LLVM_ARGS");
+        if (!args.empty()) {
+            vector<std::string> arg_vec = split_string(args, " ");
+            vector<const char *> c_arg_vec;
+            c_arg_vec.push_back("llc");
+            for (const std::string &s : arg_vec) {
+                if (!s.empty()) {
+                    c_arg_vec.push_back(s.c_str());
+                }
+            }
+            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
+        }
     });
 }
 
@@ -433,6 +456,30 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
     return codegen->finish_codegen();
 }
 
+void CodeGen_LLVM::apply_target_options(llvm::Module &m) const {
+    llvm::LLVMContext &ctx = m.getContext();
+    bool enable_bt = target.has_feature(Target::Feature::EnableBacktraces) ||
+                     target.has_feature(Target::Feature::Debug);
+    m.addModuleFlag(llvm::Module::Warning, "halide_enable_backtraces", enable_bt ? 1 : 0);
+    m.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+#if LLVM_VERSION >= 240
+    m.addModuleFlag(llvm::Module::Error, "float-abi", MDString::get(ctx, use_soft_float_abi() ? "soft" : "hard"));
+#endif
+    m.addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(ctx, mcpu_target()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(ctx, mcpu_tune()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(ctx, mattrs()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(ctx, mabi()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
+    m.addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
+    m.addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
+    if (effective_vscale != 0) {
+        m.addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
+    }
+    if (target.has_feature(Target::ARM64eX1)) {
+        m.addModuleFlag(llvm::Module::Warning, "halide_arm64e_x1", 1);
+    }
+}
+
 void CodeGen_LLVM::init_codegen(const std::string &name) {
     init_module();
 
@@ -443,23 +490,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
     module->setModuleIdentifier(name);
 
     // Add some target specific info to the module as metadata.
-    bool enable_bt = target.has_feature(Target::Feature::EnableBacktraces) ||
-                     target.has_feature(Target::Feature::Debug);
-    module->addModuleFlag(llvm::Module::Warning, "halide_enable_backtraces", enable_bt ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-#if LLVM_VERSION >= 240
-    module->addModuleFlag(llvm::Module::Error, "float-abi", MDString::get(*context, use_soft_float_abi() ? "soft" : "hard"));
-#endif
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
-    if (effective_vscale != 0) {
-        module->addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
-    }
+    apply_target_options(*module);
 
     // Ensure some types we need are defined
     halide_buffer_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_buffer_t");
@@ -871,6 +902,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
 
     // Optimize
     CodeGen_LLVM::optimize_module();
+
+    apply_arm64e_pointer_authentication(*module, target);
 
     if (target.has_feature(Target::EmbedBitcode)) {
         std::string halide_command = "halide target=" + target.to_string();

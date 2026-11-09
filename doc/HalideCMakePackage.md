@@ -487,6 +487,9 @@ author warning will be issued.
 When `CMAKE_OSX_ARCHITECTURES` is set and the `TARGETS` argument resolves to
 `cmake`, the generator will be run once for each architecture and the results
 will be fused together using `lipo`. This behavior extends to runtime targets.
+On 64-bit iOS and macOS, `arm64e` and `arm64e.x1` slices in
+`CMAKE_OSX_ARCHITECTURES` map to `arm-64-(ios|macos)-arm64e` and
+`arm-64-(ios|macos)-arm64e_x1` (including in `FEATURES[<triple>]`).
 
 Sometimes, the generation will need to read files that were generated during the
 build. To declare dependencies on these files, use the `DEPENDS` argument. Paths

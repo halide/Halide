@@ -3018,8 +3018,19 @@ string CodeGen_ARM::mcpu_target() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "apple-a7";
+            if (target.has_feature(Target::ARM64eX1)) {
+                // apple-m5 is currently the newest Apple CPU model in LLVM;
+                // +pauth-lr and +cpa are added explicitly in mattrs().
+                return "apple-m5";
+            } else if (target.has_feature(Target::ARM64e)) {
+                return "apple-a12";
+            } else {
+                return "apple-a7";
+            }
         } else if (target.os == Target::MacOS) {
+            if (target.has_feature(Target::ARM64eX1)) {
+                return "apple-m5";
+            }
             return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
@@ -3100,6 +3111,10 @@ string CodeGen_ARM::mattrs() const {
         }
         if (target.os == Target::IOS || target.os == Target::MacOS) {
             attrs.emplace_back("+reserve-x18");
+            if (target.has_feature(Target::ARM64eX1)) {
+                attrs.emplace_back("+pauth-lr");
+                attrs.emplace_back("+cpa");
+            }
         }
     }
     return join_strings(attrs, ",");
