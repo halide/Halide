@@ -72,7 +72,7 @@ int main() {
     }
 
     // q2_0's blocks of max |x| < 2^-128 (f32 subnormals), whose 1 / max is
-    // inf: the code 2 (x > 0) and its wider bound
+    // inf: the code 2 (x > 0; -1 on x86-64) and its wider bound
     {
         const auto &[scheme, q, a] = schemes.back();
         for (const Property &p : {within_declared_bound().at(q), outputs_within_declared_ranges(), closed()}) {
