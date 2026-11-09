@@ -54,6 +54,16 @@ Core changes (each with its test; none upstreamed yet):
   (a sub-block scale), is `pmaddubsw` of the other two then `pmaddwd` by the
   scale (GGML's AVX2 q2_K/q6_K), not a byte multiply by the scale first.
   Test: `simd_op_check_x86`.
+- `CodeGen_X86`: the high half of a u8 x u8 product (`mul_shift_right`, or a
+  narrowed `widening_mul >> 8..15`) is `pmulhuw` on the even and odd bytes in
+  place, not unpack/multiply/pack. tq1_0's base-3 digits, `(q * 3) >> 8`.
+  Test: `simd_op_check_x86`.
+- `OptimizeSmallTableLookups`: on x86, a gather whose lanes are lane 0's index
+  plus constants is a dense load of that span and a shuffle (safe as
+  `stage_strided_loads` is: it reads only between elements it reads), not a
+  `pextr`/`pinsr` per lane. tq1_0's last 16 values from 4 bytes; with the
+  above, vec_dot 62.5 -> 30.9 cycles a block (GGML 30.7), one-thread vec_dot
+  0.34 -> 0.70x of GGML, gemv 0.37 -> 0.66x. Test: `small_table_lookup`.
 
 App changes:
 
