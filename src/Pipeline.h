@@ -413,11 +413,15 @@ public:
                                              const std::vector<std::string> &suffixes);
 
     /** Create an internal representation of lowered code as a self
-     * contained Module suitable for further compilation. */
+     * contained Module suitable for further compilation. Set
+     * for_html_outputs if the Module will be compiled to the stmt_html or
+     * conceptual_stmt_html outputs, which need it to be lowered such that
+     * they can say which code came from which IR. */
     Module compile_to_module(const std::vector<Argument> &args,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment(),
-                             LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                             LinkageType linkage_type = LinkageType::ExternalPlusMetadata,
+                             bool for_html_outputs = false);
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're

@@ -113,6 +113,8 @@ struct PipelineContents {
 
     // Cached lowered stmt
     Module module;
+    // Whether module was lowered for the html outputs.
+    bool module_for_html_outputs = false;
 
     // Cached jit-compiled code
     JITCache jit_cache;
@@ -409,7 +411,9 @@ void Pipeline::compile_to(const std::map<OutputFileType, std::string> &output_fi
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
-    compile_to_module(args, fn_name, target).compile(output_files);
+    const bool for_html_outputs = output_files.count(OutputFileType::stmt_html) ||
+                                  output_files.count(OutputFileType::conceptual_stmt_html);
+    compile_to_module(args, fn_name, target, LinkageType::ExternalPlusMetadata, for_html_outputs).compile(output_files);
 }
 
 void Pipeline::compile_to_bitcode(const string &filename,
@@ -612,7 +616,8 @@ vector<Argument> Pipeline::infer_arguments() {
 Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
-                                   const LinkageType linkage_type) {
+                                   const LinkageType linkage_type,
+                                   bool for_html_outputs) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
     for (const Function &f : contents->outputs) {
@@ -669,6 +674,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     same_compile = same_compile && std::equal(lowering_args.begin(), lowering_args.end(), old_module.functions().front().args.begin());
     // Linkage is the same.
     same_compile = same_compile && old_module.functions().front().linkage == linkage_for_target(linkage_type, target);
+    // It was lowered for the same outputs.
+    same_compile = same_compile && contents->module_for_html_outputs == for_html_outputs;
     // The outputs of a Pipeline cannot change, so no need to test them.
 
     if (same_compile) {
@@ -682,7 +689,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
         contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
                                  linkage_type, contents->requirements, contents->trace_pipeline,
-                                 custom_passes);
+                                 custom_passes, for_html_outputs);
+        contents->module_for_html_outputs = for_html_outputs;
     }
 
     if (!contents->runtime_prefixes_params.prefixes.empty()) {
