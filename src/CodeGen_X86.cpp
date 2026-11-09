@@ -842,6 +842,42 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     };
 
     std::vector<Expr> matches;
+
+    // VNNI's 4-way dot product (vpdpbusd) multiplies unsigned by signed
+    // bytes. Rewrite a signed one exactly: with an operand known to be
+    // non-negative, as unsigned; else with a = (a ^ 0x80) - 128, as the
+    // unsigned dot of a ^ 0x80 minus 128 times b's sums, which depend on b
+    // alone (shared by dots against the same b).
+    if (op->op == VectorReduce::Add && factor == 4 && target.has_feature(Target::AVX512_Zen4) &&
+        expr_match(i32(widening_mul(wild_i8x_, wild_i8x_)), op->value, matches)) {
+        Expr a = matches[0], b = matches[1];
+        const Type u8_type = UInt(8, a.type().lanes());
+        auto dot = [&](const Expr &u, const Expr &s) {
+            return VectorReduce::make(VectorReduce::Add, i32(widening_mul(u, s)), op->type.lanes());
+        };
+        auto non_negative = [](const Expr &e) {
+            ConstantInterval c = constant_integer_bounds(e);
+            return c.min_defined && c.min >= 0;
+        };
+        if (non_negative(b)) {
+            std::swap(a, b);
+        }
+        if (non_negative(a)) {
+            Expr d = dot(cast(u8_type, a), b);
+            codegen_vector_reduce(d.as<VectorReduce>(), init);
+            return;
+        }
+        const Expr bias = make_const(u8_type, 128);
+        Expr d = dot(reinterpret(u8_type, a) ^ bias, b);
+        codegen_vector_reduce(d.as<VectorReduce>(), init);
+        Value *biased = value;
+        // (a zero init: VNNI accumulates)
+        Expr sums = dot(bias, b);
+        codegen_vector_reduce(sums.as<VectorReduce>(), make_zero(op->type));
+        value = builder->CreateSub(biased, value);
+        return;
+    }
+
     for (const Pattern &p : patterns) {
         if (op->op != p.reduce_op || p.factor != factor) {
             continue;

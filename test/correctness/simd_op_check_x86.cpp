@@ -738,6 +738,12 @@ public:
                 check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
                 check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                // signed by signed: biased to unsigned, or as unsigned when
+                // known non-negative
+                check("vpdpbusd*zmm", 16, sum(i32(in_i8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * i8(in_u8(4 * x + r + 32) / 2)));
             }
             {
                 // 16 bit, 2 element saturaing dot product
