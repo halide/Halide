@@ -44,7 +44,7 @@ struct Options {
     std::string shapes = "smoke";
     int threads = 0, rounds = 15;
     double min_ms = 20;
-    bool check = false, json = false, cold = false, pretouch = true;
+    bool check = false, json = false, cold = false, pretouch = true, early_stop = false;
     int all_outputs = -1;  // oracle on every output (1) or a sample (0); -1: every output with --check
 };
 
@@ -65,6 +65,8 @@ const char *usage =
     "  --providers a,b          only providers whose name contains one of these\n"
     "  --threads N              (default: performance cores; Linux: physical cores)\n"
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
+    "  --early-stop             end a case's rounds (after 5) once every Halide/GGML\n"
+    "                           ratio's 95% CI is outside [0.8, 1.25]\n"
     "  --check                  correctness only, exit 1 on any failure\n"
     "  --outputs all|sampled    outputs the oracle checks: every one, or up to 64 rows x 4\n"
     "                           columns (default: all with --check, else sampled)\n"
@@ -256,6 +258,8 @@ int main(int argc, char **argv) {
             o.rounds = std::stoi(next());
         } else if (a == "--min-ms") {
             o.min_ms = std::stod(next());
+        } else if (a == "--early-stop") {
+            o.early_stop = true;
         } else if (a == "--check") {
             o.check = true;
         } else if (a == "--outputs") {
@@ -376,9 +380,13 @@ int main(int argc, char **argv) {
                     std::vector<Timing> ts;
                     if (!o.check) {
                         std::vector<Kernel *> ks;
-                        for (auto &e : es)
+                        std::vector<int> side;
+                        for (auto &e : es) {
                             ks.push_back(e.k.get());
-                        ts = time_interleaved(ks, o.rounds, o.min_ms);
+                            if (o.early_stop) side.push_back(e.p->name.rfind("ggml-", 0) == 0 ? 0 : e.p->name.rfind("halide-", 0) == 0 ? 1 :
+                                                                                                                                         -1);
+                        }
+                        ts = time_interleaved(ks, o.rounds, o.min_ms, side);
                     }
                     for (size_t i = 0; i < es.size(); i++) {
                         auto &e = es[i];

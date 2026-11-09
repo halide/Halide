@@ -107,6 +107,10 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   warmed up; then 15 rounds, each timing one sample of every provider in a fresh
   random order. Reported: median, a distribution-free 95% CI of the median
   (order statistics), `ci_pct` = CI width / median, GB/s, GOP/s.
+  `--early-stop` (for iterating, not for reported numbers) ends a case's rounds
+  after 5 once, for every Halide/GGML pair, the 95% CI of the median per-round
+  ratio of their times lies outside [0.8, 1.25]; `samples` records the rounds
+  run.
 - Matched synchronization (Metal): by default one sample of our Metal kernels
   ends with one device sync, while GGML's sample is graphs of 16 nodes with one
   wait each. `--metal-sync-every 16` makes ours match: a rep is 16 calls writing
