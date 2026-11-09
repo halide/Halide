@@ -101,6 +101,9 @@ public:
     size_t bytes_allocated_for_regions() const;
     size_t regions_allocated() const;
 
+    // The command buffers this allocator's device submits work with (see vk_begin_submission)
+    VulkanSubmissionQueue *submission_queue = nullptr;
+
 private:
     static constexpr uint32_t invalid_memory_heap = uint32_t(-1);
     static constexpr uint32_t invalid_usage_flags = uint32_t(-1);
@@ -199,6 +202,7 @@ int VulkanMemoryAllocator::initialize(void *user_context,
     region_byte_count = 0;
     block_count = 0;
     block_byte_count = 0;
+    submission_queue = nullptr;
     BlockAllocator::MemoryAllocators allocators;
     allocators.system = system_allocator;
     allocators.block = {VulkanMemoryAllocator::allocate_block, VulkanMemoryAllocator::deallocate_block, VulkanMemoryAllocator::conform_block_request};
@@ -500,6 +504,10 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
     if ((device == nullptr) || (physical_device == nullptr) || (block_allocator == nullptr)) {
         return false;
     }
+    // Released regions may still be in use by submitted work: wait for it to finish
+    // before freeing them. (Retiring the submissions would release their staging
+    // buffers, which must not happen here: this may be called from inside reserve().)
+    vk_wait_for_submissions(user_context, this, false);
     return block_allocator->collect(this);
 }
 
@@ -508,6 +516,7 @@ int VulkanMemoryAllocator::destroy(void *user_context) {
     debug(nullptr) << "VulkanMemoryAllocator: Destroying allocator ("
                    << "user_context=" << user_context << ") ... \n";
 #endif
+    vk_destroy_submission_queue(user_context, this);
     if (block_allocator != nullptr) {
         BlockAllocator::destroy(user_context, block_allocator);
         block_allocator = nullptr;
@@ -1230,6 +1239,15 @@ int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *r
         return halide_error_code_internal_error;
     }
 
+    // A released region may still be in use by submitted work, when it is split
+    // or coalesced to serve a new request. (Retiring the submissions would release
+    // their staging buffers, which must not happen here: this is called from
+    // inside reserve().)
+    int wait_status = vk_wait_for_submissions(user_context, instance, false);
+    if (wait_status != halide_error_code_success) {
+        error(user_context) << "VulkanRegionAllocator: Failed to wait for submitted work!\n";
+        return wait_status;
+    }
     vkDestroyBuffer(instance->device, *buffer, instance->alloc_callbacks);
 #ifdef DEBUG_RUNTIME
     debug(nullptr) << "vkDestroyBuffer: Destroyed buffer for device region (" << (uint64_t)region->allocation.size << " bytes) ...\n";
@@ -1381,6 +1399,8 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context,
 
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator) {
     if (allocator != nullptr) {
+        // Release what the submissions hold before collecting the unused regions
+        vk_destroy_submission_queue(user_context, allocator);
         allocator->collect(user_context);
         VulkanMemoryAllocator::destroy(user_context, allocator);
         allocator = nullptr;
@@ -1390,74 +1410,9 @@ int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *alloc
 
 // --------------------------------------------------------------------------
 
-int vk_clear_device_buffer(void *user_context,
-                           VulkanMemoryAllocator *allocator,
-                           VkCommandBuffer command_buffer,
-                           VkQueue command_queue,
-                           VkBuffer device_buffer) {
-
-#ifdef DEBUG_RUNTIME
-    debug(user_context)
-        << " vk_clear_device_buffer (user_context: " << user_context << ", "
-        << "allocator: " << (void *)allocator << ", "
-        << "command_buffer: " << (void *)command_buffer << ", "
-        << "command_queue: " << (void *)command_queue << ", "
-        << "device_buffer: " << (void *)device_buffer << ")\n";
-#endif
-
-    // begin the command buffer
-    VkCommandBufferBeginInfo command_buffer_begin_info =
-        {
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
-            nullptr,                                      // pointer to struct extending this
-            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
-            nullptr                                       // pointer to parent command buffer
-        };
-
-    VkResult result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    // fill buffer with zero values up to the size of the buffer
+// Records filling the whole buffer with zeros.
+void vk_clear_device_buffer(VkCommandBuffer command_buffer, VkBuffer device_buffer) {
     vkCmdFillBuffer(command_buffer, device_buffer, 0, VK_WHOLE_SIZE, 0);
-
-    // end the command buffer
-    result = vkEndCommandBuffer(command_buffer);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    // submit the command buffer
-    VkSubmitInfo submit_info =
-        {
-            VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
-            nullptr,                        // pointer to struct extending this
-            0,                              // wait semaphore count
-            nullptr,                        // semaphores
-            nullptr,                        // pipeline stages where semaphore waits occur
-            1,                              // how many command buffers to execute
-            &command_buffer,                // the command buffers
-            0,                              // number of semaphores to signal
-            nullptr                         // the semaphores to signal
-        };
-
-    result = vkQueueSubmit(command_queue, 1, &submit_info, VK_NULL_HANDLE);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    // wait for memset to finish
-    result = vkQueueWaitIdle(command_queue);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    return halide_error_code_success;
 }
 
 // --------------------------------------------------------------------------

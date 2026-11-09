@@ -18,6 +18,7 @@ tests(
     fast_inverse.cpp
     fast_pow.cpp
     fast_sine_cosine.cpp
+    gpu_dispatch_overhead.cpp
     gpu_half_throughput.cpp
     interleave.cpp
     irmatch_throughput.cpp
