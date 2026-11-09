@@ -216,7 +216,7 @@ struct Knobs {
     int interleave = 2;
     bool sublanes = false, gpr_scales = false;
     Fold fold = Fold::All;
-    bool row_pairs = true, index_words = false;
+    bool row_pairs = true, index_words = false, plain_index_words = true;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -333,11 +333,12 @@ inline int array_field(const std::vector<ApproximationResult> &rs, const Func &f
 // A table decode g's `index` (its Tabulate's input), if read as is (iq3_xxs's
 // grid index bytes), else, if `nested`, the bytes read as is that it is
 // computed from (iq3_s's qs): staged at `at`, a word per load, in GPRs (MemoryType::GPR), each index
-// a shift and a mask; in place, each is a load (iq3_xxs gemv 1.16-1.27x).
-inline void staged_indices(const std::vector<ApproximationResult> &rs, Func g, Func index, LoopLevel at, const Target &t, bool nested) {
+// a shift and a mask; in place, each is a load (iq3_xxs gemv 1.16-1.27x on
+// M3). Not if !plain, the index read as is in place (x86: a byte load each).
+inline void staged_indices(const std::vector<ApproximationResult> &rs, Func g, Func index, LoopLevel at, const Target &t, bool nested, bool plain = true) {
     std::vector<std::pair<Func, Func>> staged;  // (Func read as is, its caller)
     if (array_field(rs, index)) {
-        staged.emplace_back(index, g);
+        if (plain) staged.emplace_back(index, g);
     } else if (const ApproximationTraceNode *n = nested ? defining_call(rs, index) : nullptr) {
         // (g's own copy: the index is shared by the tables' copies for
         // other consumers, e.g. mul_mat's other tiles)
@@ -376,7 +377,7 @@ inline void staged_indices(const std::vector<ApproximationResult> &rs, Func g, F
 
 // The table decodes at `at` (per block group), a copy for each's calls from
 // `consumers`, split by the table's rows (a row read is a dense load).
-inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at, const Target &t, bool nested = false) {
+inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at, const Target &t, bool nested = false, bool plain = true) {
     for (Func f : staged_tables(rs)) {
         Func g = f.clone_in_callers(consumers);
         if (!g.defined()) continue;
@@ -385,7 +386,7 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
         for (size_t k = 1; k < g.args().size(); k++) {
             g.unroll(g.args()[k]);
         }
-        staged_indices(rs, g, defining_call(rs, f)->inputs[0], at, t, nested);
+        staged_indices(rs, g, defining_call(rs, f)->inputs[0], at, t, nested, plain);
     }
 }
 
@@ -970,7 +971,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             readers.push_back(k);
         }
     }
-    tables(rs, readers, LoopLevel(acc, ryo), t, index_words);
+    tables(rs, readers, LoopLevel(acc, ryo), t, index_words, k.plain_index_words);
 }
 
 // Float weights (one value per record): per output, f32 products in vectors
@@ -1298,7 +1299,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             .vectorize(kb, 4, VectorizeIn::SWAR)
             .unroll(k.args()[2]);
     }
-    tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo), t, index_words);
+    tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo), t, index_words, k.plain_index_words);
 }
 
 // AMX tiles (x86 tdpbssd/tdpbusd), as GGML's AMX backend: out's stage st
