@@ -278,10 +278,8 @@ endif ()
 
 # Lessons 17 - 20
 add_tutorial(lesson_17_predicated_rdom.cpp)
-add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded)
-add_tutorial(lesson_19_wrapper_funcs.cpp)
 
-# Check that tutorial/figures/generate_figures.py still reproduces lesson 19's
+# Check that tutorial/figures/generate_figures.py still reproduces lesson 17's
 # figures, which come from a small, deterministic trace.
 find_package(Python 3 QUIET COMPONENTS Interpreter)
 if (Python_Interpreter_FOUND)
@@ -294,16 +292,18 @@ if (Python_Interpreter_FOUND)
     )
     if (NOT _figure_deps_missing)
         add_test(
-            NAME tutorial_lesson_19_figures
+            NAME tutorial_lesson_17_figures
             COMMAND
                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/figures/generate_figures.py"
-                --check --lesson-dir "$<TARGET_FILE_DIR:lesson_19_wrapper_funcs>"
-                lesson_19_wrapper_funcs
+                --check --lesson-dir "$<TARGET_FILE_DIR:lesson_17_predicated_rdom>"
+                lesson_17_predicated_rdom
         )
-        set_tests_properties(tutorial_lesson_19_figures PROPERTIES LABELS tutorial)
+        set_tests_properties(tutorial_lesson_17_figures PROPERTIES LABELS tutorial)
     endif ()
 endif ()
 
+add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded)
+add_tutorial(lesson_19_wrapper_funcs.cpp)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
 # Lesson 21
