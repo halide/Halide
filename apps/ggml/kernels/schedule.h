@@ -889,10 +889,31 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // per block and sub-block, the tile's sub-block dots (inner), then their
     // scales (part)
     std::vector<Func> readers{blk, mid, codes, rest};
+    // With VNNI, sub-blocks of a vec's quads in pairs, their dots and scales
+    // one vector of both (GGML's AVX2 q6_K): half the dots, multiplies and
+    // adds, the scales loaded in pairs. 16-value sub-blocks only: pairs of
+    // 32-value ones (a zmm) lose (q4_K/q5_K/iq4_xs vec_dot 0.76-0.85x)
+    int pair = vnni && !sl && !fsub && vec * 2 <= std::min(t.natural_vector_size<int8_t>(), 32) && nsub % 2 == 0 ? 2 : 1;
     for (auto [f, part, inner] : subs) {
         readers.insert(readers.end(), {part, inner});
-        f.update().reorder(lane, n, m, rxs, u).unroll(rxs);
+        RVar rso("rso"), rsi("rsi");
+        if (pair > 1) {
+            // the block's accumulator too a vector of both (one fold per block)
+            Var w("w");
+            f.update().split(rxs, rso, rsi, pair);
+            Func fp = f.update().rfactor(rsi, w);
+            fp.compute_at(acc, ryo).reorder_storage(lane, w, n, m).vectorize_all_stages(lane).vectorize_all_stages(w).unroll_all_stages(u, n, m);
+            fp.update().reorder(lane, w, n, m, rso, u).unroll(rso);
+            f.update().unroll(rsi);
+            readers.push_back(fp);
+            for (Func g : {part, inner}) {
+                g.compute_at(fp, rso).reorder_storage(lane, v, n, m).vectorize_all_stages(lane).vectorize_all_stages(v).unroll_all_stages(u, n, m);
+            }
+        } else {
+            f.update().reorder(lane, n, m, rxs, u).unroll(rxs);
+        }
         for (Func g : {part, inner}) {
+            if (pair > 1) break;
             g.compute_at(f, rxs).reorder_storage(lane, n, m).vectorize_all_stages(lane).unroll_all_stages(v, u, n, m);
         }
         if (sl) {
