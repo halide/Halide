@@ -66,8 +66,23 @@ void test_constant_integer_bounds_of_select() {
                                   ConstantInterval(0, 1000));
 }
 
+void test_constant_integer_bounds_of_bitwise_and() {
+    Expr u8 = Variable::make(UInt(8), "u8");
+    Expr i8 = Variable::make(Int(8), "i8");
+
+    // Masking a non-negative value bounds it by the mask, and by the value.
+    check_constant_integer_bounds(cast<uint32_t>(u8) & 12, ConstantInterval(0, 12));
+    check_constant_integer_bounds(cast<int8_t>(cast<uint32_t>(u8) & 12), ConstantInterval(0, 12));
+    check_constant_integer_bounds(cast<int>(u8) & 1000, ConstantInterval(0, 255));
+    // A signed value and a non-negative mask: within the mask.
+    check_constant_integer_bounds(i8 & cast<int8_t>(48), ConstantInterval(0, 48));
+    // Both possibly negative: nothing known.
+    check_constant_integer_bounds(i8 & cast<int8_t>(-4), ConstantInterval::bounds_of_type(Int(8)));
+}
+
 int main(int argc, char **argv) {
     test_constant_integer_bounds_of_select();
+    test_constant_integer_bounds_of_bitwise_and();
 
     for (int i = 0; i < 1000; i++) {
         std::vector<std::pair<ConstantInterval, int64_t>> values;

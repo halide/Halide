@@ -133,6 +133,18 @@ ConstantInterval bounds_helper(const Expr &e,
                 // We can't do much with the other bitwise ops, but we can treat
                 // bitwise_not as an all-ones bit pattern minus the argument.
                 return recurse(make_const(e.type(), -1) - op->args[0]);
+            } else if (op->is_intrinsic(Call::bitwise_and)) {
+                // a & b only clears bits of a: if a is non-negative, so is
+                // the result, and it is at most a. Likewise for b.
+                ConstantInterval result = ConstantInterval::bounds_of_type(e.type());
+                for (const Expr &a : op->args) {
+                    ConstantInterval c = recurse(a);
+                    if (c.min_defined && c.min >= 0) {
+                        c.min = 0;
+                        result = ConstantInterval::make_intersection(result, c);
+                    }
+                }
+                return result;
             } else if (op->is_intrinsic(Call::if_then_else) && op->args.size() == 3) {
                 return ConstantInterval::make_union(recurse(op->args[1]),
                                                     recurse(op->args[2]));
