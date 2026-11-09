@@ -777,6 +777,44 @@ int change_type_constant_leaf_rejected_test() {
     return 0;
 }
 
+// A float-to-integer conversion truncates toward zero. Bounding its operand
+// with integer arithmetic instead (here -2 / 3 as -1, where the conversion
+// gives 0) would hide that 127 + 0 + 1 overflows an int8.
+int change_type_truncated_conversion_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    Var i{"i"};
+    RDom r(0, 1, "r");
+    ImageParam A{UInt(8), 1, "A_trunc"};
+    Buffer<uint8_t> a(1);
+    a(0) = 0;
+    A.set(a);
+    Expr p = cast<int>(min(A(r), cast<uint8_t>(1)));
+    Func f{"f_trunc"};
+    f(i) = 127;
+    f(i) += cast<int>(cast<float>(p - 2) / cast<float>(p + 3)) + 1;
+    try {
+        f.change_type(Int(8));
+        std::cerr << "change_type(int8) of a truncating conversion should be rejected\n";
+        return 1;
+    } catch (const Halide::CompileError &e) {
+        internal_assert(std::string(e.what()).find("may not be representable") != std::string::npos) << e.what();
+    }
+
+    // A conversion of a float that provably holds an integer is still bounded.
+    Func g{"g_trunc"};
+    g(i) = 0;
+    g(i) += cast<int>(cast<float>(p - 2)) + 1;
+    Func h = g.change_type(Int(8));
+    internal_assert(h.types()[0] == Int(8));
+    Buffer<int> result = g.realize({1});
+    internal_assert(result(0) == -1) << result(0) << "\n";
+#endif
+    return 0;
+}
+
 // Code-quality regression: when producer bounds let lossless_cast() narrow the
 // dot-product term, it should push the cast into the multiply and leave a native
 // Int(16) multiply, not a cast of an Int(32) widening_mul. This is what the cache
@@ -1670,6 +1708,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_constant_leaf_rejected_test\n");
     if (change_type_constant_leaf_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_truncated_conversion_test\n");
+    if (change_type_truncated_conversion_test()) {
         return 1;
     }
     printf("Running change_type_float_seed_range_test\n");

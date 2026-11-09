@@ -1196,9 +1196,11 @@ using CallSelector = std::function<bool(const Expr &)>;
 // Constant bounds of an integer Expr's value (see value_bounds_of_calls()).
 using ValueBounds = std::function<ConstantInterval(const Expr &)>;
 
+ConstantInterval integer_bounds(const Expr &e, const FuncValueBounds &fvb);
+
 // Constant bounds of the values of the Funcs `e` calls, directly or not, for
-// constant_integer_bounds(). Each pure Func's integer values are bounded by
-// constant_integer_bounds() of their simplified definitions (which, e.g.,
+// integer_bounds(). Each pure Func's integer values are bounded by
+// integer_bounds() of their simplified definitions (which, e.g.,
 // turns a mask x & 3 into x % 4), given the bounds of the Funcs they call;
 // other Funcs are left unbounded (constant_integer_bounds() then uses their
 // type's bounds).
@@ -1229,7 +1231,7 @@ FuncValueBounds value_bounds_of_calls(const Expr &e) {
             if (!value.type().is_int_or_uint()) {
                 continue;
             }
-            ConstantInterval b = constant_integer_bounds(simplify(value), Scope<ConstantInterval>::empty_scope(), nullptr, &fb);
+            ConstantInterval b = integer_bounds(simplify(value), fb);
             fb[{name, j}] = Interval(b.min_defined ? make_const(value.type(), b.min) : Interval::neg_inf(),
                                      b.max_defined ? make_const(value.type(), b.max) : Interval::pos_inf());
         }
@@ -1237,15 +1239,13 @@ FuncValueBounds value_bounds_of_calls(const Expr &e) {
     return fb;
 }
 
-// constant_integer_bounds() of `e` given the bounds of the Funcs it calls,
+// integer_bounds() of `e` given the bounds of the Funcs it calls,
 // tightened by those of `e` simplified, as value_bounds_of_calls() bounds a
 // Func's definition (a mask x & 3 is bounded only as x % 4). So the bounds
 // do not depend on whether a Func was inlined into `e`.
 ConstantInterval bounds_given_calls(const Expr &e, const FuncValueBounds &func_bounds) {
-    const Scope<ConstantInterval> &empty = Scope<ConstantInterval>::empty_scope();
-    return ConstantInterval::make_intersection(
-        constant_integer_bounds(e, empty, nullptr, &func_bounds),
-        constant_integer_bounds(simplify(e), empty, nullptr, &func_bounds));
+    return ConstantInterval::make_intersection(integer_bounds(e, func_bounds),
+                                               integer_bounds(simplify(e), func_bounds));
 }
 
 // A sum split by whether its terms make a selected call: the original equals
@@ -5351,7 +5351,7 @@ optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBo
     if (const Cast *c = e.as<Cast>()) {
         optional<ConstantInterval> b =
             c->value.type().is_int_or_uint() ?
-                constant_integer_bounds(c->value, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb) :
+                integer_bounds(c->value, fvb) :
                 float_integer_bounds(c->value, fvb);
         return b ? float_conversion_bounds(e.type(), *b) : std::nullopt;
     } else if (const Select *s = e.as<Select>()) {
@@ -5388,6 +5388,26 @@ optional<ConstantInterval> float_integer_bounds(const Expr &e, const FuncValueBo
         return std::nullopt;
     }
     return result;
+}
+
+// constant_integer_bounds() of an integer expression, except that each
+// conversion of a float to an integer is bounded by float_integer_bounds() if
+// the float provably computes an integer, and by the integer type otherwise.
+// constant_integer_bounds() would bound the float operand with integer
+// arithmetic, e.g. int32(float32(-1) / float32(3)) as -1 by integer division,
+// where the conversion truncates -0.33 to 0.
+ConstantInterval integer_bounds(const Expr &e, const FuncValueBounds &fvb) {
+    Scope<ConstantInterval> conversions;
+    Expr hidden = mutate_with(e, [&](auto *self, const Cast *op) -> Expr {
+        if (!op->value.type().is_float()) {
+            return self->visit_base(op);
+        }
+        optional<ConstantInterval> b = float_integer_bounds(op->value, fvb);
+        const string name = unique_name('t');
+        conversions.push(name, b ? cast(op->type, *b) : ConstantInterval::bounds_of_type(op->type));
+        return Variable::make(op->type, name);
+    });
+    return constant_integer_bounds(hidden, conversions, nullptr, &fvb);
 }
 
 // Rewrite a factor-free leaf expression `e` to type `t`
@@ -5442,7 +5462,7 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
         if (const Cast *c = folded.as<Cast>()) {
             if (folded.type().is_float() && c->value.type().is_int_or_uint() &&
                 float_exact_integer_bounds(folded.type())
-                    .contains(constant_integer_bounds(c->value, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb))) {
+                    .contains(integer_bounds(c->value, fvb))) {
                 folded = c->value;
             }
         }
@@ -5694,7 +5714,7 @@ std::optional<std::string> change_type_prove_safe(
         if (v.type().is_float()) {
             return float_integer_bounds(v, fvb).value_or(ConstantInterval::everything());
         }
-        return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
+        return integer_bounds(v, fvb);
     };
 
     // The initial accumulator value must be representable at the new type. Carry

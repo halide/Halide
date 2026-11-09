@@ -265,6 +265,37 @@ int wrapping_test() {
     return 0;
 }
 
+// A float-to-integer conversion truncates toward zero, so the bounds of
+// int8(float(p - 2) / float(p + 3)) are [0, 0] for p in [0, 1], not -2 / 3
+// rounded down to -1. Then 64 * (c + 1) + q wraps the int8 for q = 64, and
+// the cast is not split.
+int truncated_conversion_test() {
+    Buffer<uint8_t> pb(1), qb(1);
+    pb(0) = 0;
+    qb(0) = 64;
+    Var v{"v"};
+    Func p{"p"}, q{"q"};
+    p(v) = cast<int>(min(pb(v), cast<uint8_t>(1)));
+    q(v) = cast<int8_t>(min(qb(v), cast<uint8_t>(64)));
+    RDom r(0, 1, "r");
+    Expr c = cast<int8_t>(cast<float>(p(r) - 2) / cast<float>(p(r) + 3));
+    Expr with = cast<int8_t>(cast<int16_t>(c) * 64 + 64);
+
+    Func f{"f"};
+    f() = 0;
+    f() += cast<int>(with + q(r));
+    FuncVec intms = f.update().hoist_invariants({p});
+    if (!check(intms.size() == 2 && intms[0].defined() && !intms[1].defined(),
+               "truncated conversion: the cast was split")) {
+        return 1;
+    }
+    Buffer<int> out = f.realize();
+    if (!check(out() == -128, "truncated conversion: wrong result")) {
+        return 1;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -277,6 +308,7 @@ int main(int argc, char **argv) {
         {"hoist_invariants casts test (widening intrinsics)", widening_mul_test},
         {"hoist_invariants casts test (offset split)", offset_split_test},
         {"hoist_invariants casts test (wrapping)", wrapping_test},
+        {"hoist_invariants casts test (truncated conversion)", truncated_conversion_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
