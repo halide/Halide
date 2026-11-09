@@ -961,14 +961,17 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
 
 // Float weights (one value per record): per output, f32 products in vectors
 // of `vec` values of r.y, ts.interleave independent accumulators (the K tail
-// guarded), then summed across them.
-inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Target &t) {
+// guarded), then summed across them. With `pairs`, each lane sums two
+// adjacent products first (a 2-way dot product instruction's shape).
+inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Target &t, bool pairs = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), bacc("bacc");
-    RVar ry = r.y, ryo("ryo"), ryi("ryi"), ryl("ryl");
-    int vec = 2 * t.natural_vector_size<float>();
-    s.split(ry, ryo, ryi, vec * ts.interleave, TailStrategy::GuardWithIf).split(ryi, ryi, ryl, vec);
-    sum_tree(s, {{{ryl, lane}, {ryi, bacc}}, {{ryl, lane}}}, tile_at(out, st), n, m, ryo);
+    RVar ry = r.y, ryo("ryo"), ryi("ryi"), ryl("ryl"), rp("rp");
+    int vec = 2 * t.natural_vector_size<float>(), p = pairs ? 2 : 1;
+    s.split(ry, ryo, ryi, vec * p * ts.interleave, TailStrategy::GuardWithIf).split(ryi, ryi, ryl, vec * p);
+    if (pairs) s.split(ryl, ryl, rp, 2);
+    std::vector<Func> fs = sum_tree(s, {{{ryl, lane}, {ryi, bacc}}, {{ryl, lane}}}, tile_at(out, st), n, m, ryo);
+    if (pairs) fs[0].update().atomic().vectorize(rp).vectorize(lane);
     s.atomic().vectorize(ryl).unroll(n).unroll(m);
 }
 
@@ -1323,7 +1326,13 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     if (fmt.block == 1) {
         // 8 interleaved steps: f16 vec_dot 1.2x, gemv 1.05-1.1x of 4 (M3)
-        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t);
+        // bf16 weights and acts, with a bf16 dot (AVX512-BF16's vdpbf16ps,
+        // GGML's AVX-512 bf16 vec_dot): the products' sums in pairs
+        bool pairs = t.with_implied_features().has_feature(Target::AVX512_Zen4) && rs.size() == 2;
+        for (const ApproximationResult &a : rs) {
+            pairs = pairs && a.encoded.size() == 1 && a.encoded[0].type() == BFloat(16);
+        }
+        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t, pairs);
         return;
     }
     blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true);
