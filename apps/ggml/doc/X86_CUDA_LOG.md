@@ -31,3 +31,35 @@ App fixes:
 
 Known, unrelated: core `correctness_constant_blob_placement` segfaults in
 libstdc++'s `std::regex` (recursion depth), before and after these changes.
+
+## Phase 1: x86 CPU
+
+Core changes (each with its test; none upstreamed yet):
+
+- `CodeGen_X86`: signed int8 x int8 4-way dots select `vpdpbusd` (unsigned
+  where an operand is known non-negative, else a bias of 128 corrected by the
+  other's sums, as GGML does). Unblocked VNNI for every integer block dot.
+  Test: `simd_op_check_x86`.
+- `x86`: Sapphire Rapids implies AVX512-FP16, so scalar f16 loads are `vmovsh`,
+  not F16C's merging `vpinsrw`, which serialized reductions (q8_0 vec_dot: 11
+  cycles per block). Test: `simd_op_check_x86`.
+- `lossless_cast`: a float32 built from a bfloat16's bits (shift by 16) is that
+  bfloat16, so bf16 dots reach `vdpbf16ps`. Test: `simd_op_check_x86`'s
+  `vdpbf16ps` checks, `lossless_cast`.
+- `constant_integer_bounds`: `a & b` with a non-negative operand lies in
+  [0, its max]. Unblocked `vpdpbusd` for masked 2-bit codes (tq2_0: 12 to 8
+  dot instructions per iteration). Tests: `constant_interval`, `lossless_cast`
+  fuzz generator.
+
+App changes:
+
+- VNNI block dots on 32-byte lanes and steps; 16-value sub-blocks paired per
+  vector; bf16 vec_dot by `vdpbf16ps` pairs; q2_0 (new format) as GGML's x86
+  build converts its non-finite codes.
+- AMX gemm (`blocked_amx()`, M >= 16) for integer weights of one row per record
+  with no sub-blocks or affine terms: the weights decoded in rows then
+  transposed into AMX's 4-byte interleave, once per block for up to 4 tiles
+  of M; one `tdpbssd` per 64 bytes; per-block scales in f32 on AVX-512.
+- Bench: `--early-stop[=LO,HI]` ends a case's rounds once every GGML/Halide
+  ratio's 95% CI is outside [LO, HI]; the main thread's AMX tile config is
+  kept across Halide calls (GGML's AMX kernels load theirs once per thread).
