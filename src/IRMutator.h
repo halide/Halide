@@ -59,11 +59,6 @@ protected:
         return mutate_with_changes(exprs).first;
     }
 
-    // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
-    template<typename T>
-    friend struct ExprNode;
-    template<typename T>
-    friend struct StmtNode;
     template<typename Mutator, typename... Args>
     friend std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args);
 

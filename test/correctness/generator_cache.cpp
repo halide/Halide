@@ -90,12 +90,16 @@ std::vector<uint8_t> read_all(const fs::path &p) {
     return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
 }
 
-void set_cache_dir(const std::string &dir) {
+void set_env(const char *name, const std::string &value) {
 #ifdef _WIN32
-    _putenv_s("HL_CACHE_DIR", dir.c_str());
+    _putenv_s(name, value.c_str());
 #else
-    setenv("HL_CACHE_DIR", dir.c_str(), /*overwrite*/ 1);
+    setenv(name, value.c_str(), /*overwrite*/ 1);
 #endif
+}
+
+void set_cache_dir(const std::string &dir) {
+    set_env("HL_CACHE_DIR", dir);
 }
 
 // Find the single cached blob for a given output type (blobs are named "f<int>"
@@ -168,6 +172,14 @@ int main(int argc, char **argv) {
     //    bytes, proving the object came from the cache rather than a recompile.
     const fs::path obj_b = run("b", "1");
     check(read_all(obj_b) == sentinel);
+
+    // HL_LLVM_ARGS can change codegen, so it is part of the key: setting it
+    // misses instead of restoring the sentinel.
+    set_env("HL_LLVM_ARGS", "-misched-regpressure=false");
+    const fs::path obj_llvm_args = run("llvm-args", "1");
+    set_env("HL_LLVM_ARGS", "");
+    check(fs::exists(obj_llvm_args));
+    check(read_all(obj_llvm_args) != sentinel);
 
     // 3. A different GeneratorParam changes the pipeline, so the key differs and
     //    the run recompiles rather than restoring the sentinel.

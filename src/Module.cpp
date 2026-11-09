@@ -369,6 +369,13 @@ LoweredFunc::LoweredFunc(const std::string &name,
     }
 }
 
+LinkageType linkage_for_target(LinkageType linkage, const Target &target) {
+    if (linkage == LinkageType::ExternalPlusMetadata && target.has_feature(Target::NoMetadata)) {
+        return LinkageType::External;
+    }
+    return linkage;
+}
+
 }  // namespace Internal
 
 using namespace Halide::Internal;
@@ -458,6 +465,7 @@ void Module::append(const Buffer<> &buffer) {
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+    contents->functions.back().linkage = Internal::linkage_for_target(function.linkage, target());
 }
 
 void Module::append(const Module &module) {
@@ -572,6 +580,15 @@ const Internal::Stmt &Module::get_conceptual_stmt() const {
 
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
+
+    if (target().has_feature(Target::NoMetadata) && !functions().empty()) {
+        for (auto t : {OutputFileType::python_extension, OutputFileType::registration}) {
+            user_assert(!contains(output_files, t))
+                << "The " << get_output_info(target()).at(t).name
+                << " output requires the _argv() and _metadata() entry points, "
+                << "which are not emitted for a Target with no_metadata: " << target() << "\n";
+        }
+    }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
@@ -903,12 +920,13 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 10> must_match_features = {{
+        static const std::array<Target::Feature, 11> must_match_features = {{
             Target::ASAN,
             Target::CPlusPlusMangling,
             Target::Debug,
             Target::JIT,
             Target::MSAN,
+            Target::NoMetadata,
             Target::NoRuntime,
             Target::TSAN,
             Target::SanitizerCoverage,

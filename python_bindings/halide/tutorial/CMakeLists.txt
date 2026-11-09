@@ -91,6 +91,8 @@ else ()
     Python_add_library(
         lesson_10_halide
         MODULE
+        USE_SABI 3.12
+        WITH_SOABI
         EXCLUDE_FROM_ALL lesson_10_halide.py.cpp lesson_10_halide.o
     )
     set_target_properties(lesson_10_halide PROPERTIES EXPORT_COMPILE_COMMANDS OFF)

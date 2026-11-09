@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(Halide_Python VERSION 22.0.0)
+project(Halide_Python VERSION 23.0.0)
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()
@@ -38,10 +38,25 @@ cmake_dependent_option(WITH_TEST_PYTHON "Build Python tests" ON WITH_TESTS OFF)
 # Development.Module and Development.Embed. We don't need the Embed
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
-find_package(Python 3.10 REQUIRED Interpreter Development.Module)
+find_package(Python 3.12 REQUIRED Interpreter Development.Module Development.SABIModule)
+if (NOT Python_INTERPRETER_ID STREQUAL "Python" OR Python_SOABI MATCHES "(cpython-|cp)[0-9]+t")
+    message(
+        FATAL_ERROR "Halide Python bindings require regular (GIL-enabled) CPython 3.12 or newer."
+    )
+endif ()
 
 if (WITH_PYTHON_BINDINGS)
-    find_package(pybind11 2.11.1 REQUIRED)
+    # Avoid backslash escapes in vcpkg's find_package wrapper on Windows.
+    file(TO_CMAKE_PATH "${Python_SITEARCH}" Python_SITEARCH)
+    # nanobind's version file only accepts requests within one major version,
+    # so check the minimum separately to allow nanobind 3.x as well.
+    find_package(nanobind CONFIG REQUIRED HINTS "${Python_SITEARCH}/nanobind/cmake")
+    if (nanobind_VERSION VERSION_LESS 2.11)
+        message(
+            FATAL_ERROR "Halide's Python bindings require nanobind 2.11 or newer, "
+            "but found ${nanobind_VERSION} at ${nanobind_DIR}"
+        )
+    endif ()
 endif ()
 
 # Note: this must happen, especially when WITH_PYTHON_BINDINGS is OFF.
@@ -63,6 +78,7 @@ include(AddPythonTest)
 set(Halide_Python_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/site-packages/halide")
 add_subdirectory(halide-bin)
 if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(common)
     add_subdirectory(halide-runtime)
 endif ()
 add_subdirectory(halide)

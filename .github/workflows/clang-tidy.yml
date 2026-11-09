@@ -19,14 +19,14 @@ permissions:
   contents: read
 
 env:
-  LLVM_VERSION: '21'
+  LLVM_VERSION: '22'
   WABT_VERSION: '1.0.39'
 
 jobs:
   check_clang_tidy:
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: Check clang-tidy
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -53,7 +53,7 @@ jobs:
             "lld-${LLVM_VERSION}" \
             "llvm-${LLVM_VERSION}-dev" \
             ninja-build \
-            pybind11-dev
+            nanobind-dev
 
       # Ubuntu's packaged libwabt.a isn't built with -fPIC, so it can't be
       # linked into libHalide.so -- build our own instead.

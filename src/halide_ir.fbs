@@ -116,7 +116,7 @@ enum MemoryType: byte {
     GPUTexture,
     LockedCache,
     VTCM,
-    AMXTile,
+    Tile,
     GPUSharedAsync,
 }
 
@@ -477,6 +477,13 @@ enum TypeCode: byte {
     Float,
     Handle,
     BFloat,
+    Struct,
+}
+
+table StructField {
+    name: string;
+    type: Type;
+    array_extent: int32 = -1;  // -1 means the field is scalar, not an array
 }
 
 // TODO: no halide_handle_cplusplus_type yet
@@ -484,6 +491,9 @@ table Type {
     code: TypeCode;
     bits: uint8;
     lanes: int32;
+    // Only present when code == Struct: the struct's field layout (see
+    // Type::Struct/StructTypeInfo). Absent for every other type code.
+    struct_fields: [StructField];
 }
 
 table Bound {
@@ -576,6 +586,7 @@ table Split {
     exact: bool;
     tail: TailStrategy;
     split_type: SplitType;
+    align: Expr;
 }
 
 enum DimType: ubyte {
@@ -732,6 +743,7 @@ table Func {
     trace_loads: bool = false;
     trace_stores: bool = false;
     trace_realizations: bool = false;
+    trace_bounds_required: bool = false;
     trace_tags: [string];
     no_profiling: bool = false;
     profiler_display_name: string;

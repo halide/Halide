@@ -10,6 +10,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
     if (info) {
         info->bounds = a_info.bounds + b_info.bounds;
+        // a + b is the difference (a - (-b)), so the facts can say more about
+        // it than the two sides do apart.
+        if (has_facts() && no_overflow_int(op->type)) {
+            ConstantInterval d = known_linear_difference(a.get(), 1, b.get(), -1);
+            if (d.min_defined || d.max_defined) {
+                info->bounds = ConstantInterval::make_intersection(info->bounds, d);
+            }
+        }
         info->alignment = a_info.alignment + b_info.alignment;
         info->cast_to(op->type);
         info->trim_bounds_using_alignment();
@@ -19,6 +27,34 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
     if (should_commute(a, b)) {
         std::swap(a, b);
         std::swap(a_info, b_info);
+    }
+
+    // Reassociate/commute Param variables to the right.
+    auto is_param = [](const Expr &e) {
+        const auto *v = e.as<Variable>();
+        return v && v->param.defined();
+    };
+    if (!is_param(b) && !is_const(b)) {
+        if (const Add *add_a = a.as<Add>()) {
+            if (is_param(add_a->a)) {
+                // (p + x) + y => (x + y) + p
+                return mutate((add_a->b + b) + add_a->a, info);
+            }
+            if (is_param(add_a->b)) {
+                // (x + p) + y => (x + y) + p
+                return mutate((add_a->a + b) + add_a->b, info);
+            }
+        }
+        if (const Add *add_b = b.as<Add>()) {
+            if (is_param(add_b->a)) {
+                // x + (p + y) => (x + y) + p
+                return mutate((a + add_b->b) + add_b->a, info);
+            }
+            if (is_param(add_b->b)) {
+                // x + (y + p) => (x + y) + p
+                return mutate((a + add_b->a) + add_b->b, info);
+            }
+        }
     }
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
@@ -40,7 +76,15 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
     if (EVAL_IN_LAMBDA  //
         (rewrite(c0 + c1, fold(c0 + c1)) ||
+         // Simple linear combinations of one Expr:
          rewrite(x + x, x * 2) ||
+         rewrite(x * y + x, x * (y + 1)) ||
+         rewrite(x + x * y, x * (y + 1)) ||
+         rewrite(x * y + z * y, (x + z) * y) ||
+         rewrite(x * y + y * z, (x + z) * y) ||
+         rewrite(y * x + z * y, y * (x + z)) ||
+         rewrite(y * x + y * z, y * (x + z)) ||
+
          rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
          rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
          rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1 / c0)), c0), c1 % c0 == 0) ||
@@ -80,6 +124,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((c0 - x) + y, (y - x) + c0) ||
          rewrite(max(x, y * c0 + z) + (u - y) * c0, max(x - y * c0, z) + u * c0) ||
 
+         // Collect a repeated term across a nested sum.
+         rewrite((x + y) + y, x + y * 2) ||
+         rewrite((y + x) + y, x + y * 2) ||
+         rewrite((x + (y + z)) + z, z * 2 + (x + y)) ||
+         rewrite((x + (z + y)) + z, z * 2 + (x + y)) ||
+         rewrite(((y + z) + x) + z, z * 2 + (x + y)) ||
+         rewrite(((z + y) + x) + z, z * 2 + (x + y)) ||
+
          rewrite((x - y) + y, x) ||
          rewrite(x + (y - x), y) ||
 
@@ -111,18 +163,10 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite(((0 - x) - y) + z, z - (x + y)) ||
          rewrite(((c0 - x) - y) + c1, (fold(c0 + c1) - y) - x) ||
 
-         rewrite(x * y + z * y, (x + z) * y) ||
-         rewrite(x * y + y * z, (x + z) * y) ||
-         rewrite(y * x + z * y, y * (x + z)) ||
-         rewrite(y * x + y * z, y * (x + z)) ||
-
          rewrite((x * y) + (z - (w * x)), z + (x * (y - w))) ||
          rewrite((x * y) + (z - (w * y)), z + (y * (x - w))) ||
          rewrite((x * y) + (z - (x * w)), z + (x * (y - w))) ||
          rewrite((x * y) + (z - (y * w)), z + (y * (x - w))) ||
-
-         rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
-         rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
@@ -201,6 +245,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
            rewrite(x + ((c0 - x) / c1) * c1, c0 - ((c0 - x) % c1), c1 > 0) ||
            rewrite(x + ((c0 - x) / c1 + y) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
            rewrite(x + (y + (c0 - x) / c1) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+
+           // Very specific form that shows up with working with aligned_splits:
+           rewrite(((c2 - x) / c0) + ((x % c0 + c1) / c0), fold(c2 / c0 + c1 / c0) - (x / c0), c0 > 0 && (c1 + 1) % c0 == 0 && c2 % c0 == 0) ||
 
            false)))) {
         return mutate(rewrite.result, info);

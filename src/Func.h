@@ -82,7 +82,7 @@ class Stage {
     void set_dim_type(const VarOrRVar &var, Internal::ForType t);
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
-               const Expr &factor, bool exact, TailStrategy tail);
+               const Expr &factor, const Expr &align, bool exact, TailStrategy tail);
     void remove(const std::string &var);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
@@ -410,6 +410,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -1565,6 +1566,41 @@ public:
      * argument specifies how the tail should be handled if the split
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+
+    /** A version of split() that additionally takes a runtime-valued
+     * 'align' Expr. This version anchors the inner-loop's iterations
+     * to absolute coordinates, instead of to Halide's inferred loop
+     * bounds.
+     *
+     * As such, in absolute coordinates, the inner-loop boundaries fall
+     * at ``align``, ``align + factor``, ``align + 2*factor``, and so on.
+     * The inner dimension still iterates over ``[0, factor-1]``, same as
+     * an unaligned split. The difference is how the original loop Var
+     * is reconstructed from the outer and inner loop Vars.
+     * This may increase the number of iterations over the outer
+     * loop by 1 compared to an unaligned split.
+     *
+     * This is useful when an algorithm selects between cases using an
+     * expression like ``(x - offset) % factor``, where 'offset' is a
+     * value only known at runtime (e.g. a Param). Passing that same
+     * 'offset' as 'align' makes ``(x - offset) % factor`` a
+     * compile-time constant on each unrolled iteration of the inner
+     * loop, so that a mux() indexed by it can be resolved statically
+     * instead of compiling to a runtime select:
+     \code
+     Var x, xo, xi;
+     Param<int> offset;
+     f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
+     f.aligned_split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+      .unroll(xi);
+     \endcode
+     * Without 'align', the compiler can't tell at compile time which of
+     * the four mux() cases applies to a given unrolled value of 'xi',
+     * because that depends on the runtime value of 'offset'. With it,
+     * ``(x - offset) % 4`` simplifies to a distinct compile-time
+     * constant for each unrolled value of 'xi', and each mux() call
+     * collapses to its selected case. */
+    Func &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
 
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions
@@ -2735,13 +2771,14 @@ public:
      * This splits the Func in two: a new intermediate Func (returned) that
      * copies this Func's definitions but accumulates at the requested type `t`
      * (with the appropriate casts inserted, preferring integer forms such as
-     * widening_mul over float round-trips), and this Func, which is rewritten in
-     * place into an inline wrapper that casts the intermediate's result back to
-     * the original type. Every existing consumer therefore keeps seeing the
-     * original type, while the returned intermediate can be scheduled to exploit
-     * the new type (e.g. an Int(32) accumulator eligible for dot-product
-     * instructions). Schedule the returned Func to control the retyped
-     * computation.
+     * widening_mul over float round-trips, and, for an unsafe float `t`, a
+     * fused multiply-add of a product whose factors `t` represents exactly),
+     * and this Func, which is rewritten in place into an inline wrapper that
+     * casts the intermediate's result back to the original type. Every
+     * existing consumer therefore keeps seeing the original type, while the
+     * returned intermediate can be scheduled to exploit the new type (e.g. an
+     * Int(32) accumulator eligible for dot-product instructions). Schedule the
+     * returned Func to control the retyped computation.
      *
      * The change is validated with the bounds machinery: for an integer or
      * floating-point target, change_type() proves the accumulation cannot
@@ -2853,6 +2890,14 @@ public:
     /** Trace all realizations of this Func by emitting calls to
      * halide_trace. */
     Func &trace_realizations();
+
+    /** At each iteration of each loop containing a production of this Func,
+     * emit a halide_trace_bounds_required event giving the region of it
+     * that must be computed there. Values computed outside of that region
+     * (e.g. due to TailStrategy::RoundUp in a consumer) do not affect the
+     * output and may depend on uninitialized memory. If the Func is inlined,
+     * this has no effect. */
+    Func &trace_bounds_required();
 
     /** Add a string of arbitrary text that will be passed thru to trace
      * inspection code if the Func is realized in trace mode. (Funcs that are

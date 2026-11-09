@@ -460,6 +460,7 @@ SOURCE_FILES = \
   Bounds.cpp \
   BoundsInference.cpp \
   BoundSmallAllocations.cpp \
+  BoundsTracker.cpp \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
@@ -508,6 +509,7 @@ SOURCE_FILES = \
   Error.cpp \
   Expr.cpp \
   ExtractTileOperations.cpp \
+  ExtractWMMAOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
@@ -519,6 +521,7 @@ SOURCE_FILES = \
   FuzzFloatStores.cpp \
   Generator.cpp \
   GeneratorCache.cpp \
+  Halidoscope.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -545,6 +548,7 @@ SOURCE_FILES = \
   Lower.cpp \
   LowerParallelTasks.cpp \
   LowerSMEStreamingTasks.cpp \
+  LowerStructTypes.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -665,6 +669,7 @@ HEADER_FILES = \
   Bounds.h \
   BoundsInference.h \
   BoundSmallAllocations.h \
+  BoundsTracker.h \
   Buffer.h \
   Callable.h \
   CanonicalizeGPUVars.h \
@@ -713,6 +718,7 @@ HEADER_FILES = \
   Extern.h \
   ExternFuncArgument.h \
   ExtractTileOperations.h \
+  ExtractWMMAOperations.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
@@ -725,6 +731,7 @@ HEADER_FILES = \
   FuzzFloatStores.h \
   Generator.h \
   GeneratorCache.h \
+  Halidoscope.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -753,6 +760,7 @@ HEADER_FILES = \
   Lower.h \
   LowerParallelTasks.h \
   LowerSMEStreamingTasks.h \
+  LowerStructTypes.h \
   LowerWarpShuffles.h \
   Memoization.h \
   Module.h \
@@ -848,6 +856,8 @@ RUNTIME_CPP_COMPONENTS = \
   fopen \
   fopen_lfs \
   force_include_types \
+  freebsd_host_cpu_count \
+  freebsd_thread_id \
   fuchsia_clock \
   fuchsia_host_cpu_count \
   fuchsia_thread_id \
@@ -1268,6 +1278,9 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+$(BUILD_DIR)/Halidoscope.o: CXX_FLAGS += -I$(SRC_DIR)/runtime
+
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -1486,6 +1499,10 @@ $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(TES
 # The spirv_ir test needs access to the internal-only SpirvIR.h header and
 # the vendored SPIR-V headers used by the Vulkan backend.
 $(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
+$(BIN_DIR)/correctness_vulkan_bool_minmax: $(ROOT_DIR)/test/correctness/vulkan_bool_minmax.cpp $(TEST_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
 
@@ -1771,6 +1788,10 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI201
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
 
+$(FILTERS_DIR)/sever_dequantize.a: $(BIN_DIR)/sever.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g sever $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f sever_dequantize target=$(TARGET)-no_runtime direction=dequantize
+
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
 # nested_externs_generators.cpp is a counterexample, and thus requires
@@ -1837,6 +1858,15 @@ $(BIN_DIR)/$(TARGET)/generator_aot_autograd: $(ROOT_DIR)/test/generator/autograd
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_autograd: $(ROOT_DIR)/test/generator/autograd_aottest.cpp $(FILTERS_DIR)/autograd.halide_generated.cpp $(FILTERS_DIR)/autograd_grad.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# sever has additional deps to link in
+$(BIN_DIR)/$(TARGET)/generator_aot_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.a $(FILTERS_DIR)/sever_dequantize.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.halide_generated.cpp $(FILTERS_DIR)/sever_dequantize.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -2077,7 +2107,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(TEST_DEPS)
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
-		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@;\
@@ -2488,6 +2518,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
@@ -2570,7 +2601,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: format
 format:
@@ -2578,7 +2609,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: clang-tidy
 clang-tidy:

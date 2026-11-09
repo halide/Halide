@@ -109,6 +109,37 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Test case 4: merging conditional uses forms a shared predicate DAG.
+    // Bounds analysis must not recursively visit it as an exponential tree.
+    {
+        Func f, g;
+        f(x) = track_call(x);
+        Expr value = cast<uint32_t>(f(x));
+        for (int i = 0; i < 40; ++i) {
+            value = select(x + i < p_int, value, cast<uint32_t>(0)) +
+                    select(x - i > p_int, value, cast<uint32_t>(0));
+        }
+        g(x) = value;
+        f.compute_root();
+        g.compile_jit();
+
+        for (int threshold : {-1000, 0, 1000}) {
+            p_int.set(threshold);
+            Buffer<uint32_t> result = g.realize({16});
+            for (int i = 0; i < 16; ++i) {
+                uint32_t expected = i;
+                for (int level = 0; level < 40; ++level) {
+                    expected = (i + level < threshold ? expected : 0) +
+                               (i - level > threshold ? expected : 0);
+                }
+                if (result(i) != expected) {
+                    printf("Shared predicate DAG produced %u instead of %u\n", result(i), expected);
+                    return 1;
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

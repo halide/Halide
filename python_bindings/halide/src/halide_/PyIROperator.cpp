@@ -1,7 +1,9 @@
 #include "PyIROperator.h"
 
+#include <nanobind/stl/function.h>
 #include <utility>
 
+#include "PyBinaryOperators.h"
 #include "PyTuple.h"
 
 namespace Halide {
@@ -22,7 +24,7 @@ namespace {
 
 bool is_expr(const py::handle &obj) {
     try {
-        (void)obj.cast<Expr>();  // Check if casting succeeds
+        (void)py::cast<Expr>(obj);  // Check if casting succeeds
         return true;
     } catch (const py::cast_error &) {
         return false;
@@ -32,12 +34,14 @@ bool is_expr(const py::handle &obj) {
 template<typename T>
 T cast_arg(const py::handle &arg) {
     try {
-        return arg.cast<T>();
+        return py::cast<T>(arg);
     } catch (const py::cast_error &) {
+        const py::str expected_name = py::type<T>().attr("__name__");
+        const py::str actual_name = arg.type().attr("__name__");
         _halide_user_error
-            << "select(): Expected " << py::str(py::type::of<T>().attr("__name__"))
-            << " but got " << py::str(py::type::of(arg).attr("__name__")) << ": "
-            << py::str(arg);
+            << "select(): Expected " << expected_name.c_str()
+            << " but got " << actual_name.c_str() << ": "
+            << py::str(arg).c_str();
     }
 }
 
@@ -80,13 +84,10 @@ py::object py_print(const py::args &args, F make_print) {
     if (is_expr(args[0])) {
         return py::cast(make_print(collect_print_args(args)));
     }
-    Tuple t = args[0].cast<Tuple>();
-    py::tuple rest(args.size() - 1);
-    for (size_t i = 1; i < args.size(); i++) {
-        rest[i - 1] = args[i];
-    }
+    Tuple t = py::cast<Tuple>(args[0]);
+    py::tuple rest = py::handle(args)[py::slice(py::int_(1), py::none(), py::none())];
     std::vector<Expr> v = t.as_vector();
-    std::vector<Expr> extra = collect_print_args(py::args(rest));
+    std::vector<Expr> extra = collect_print_args(rest);
     v.insert(v.end(), extra.begin(), extra.end());
     t[0] = make_print(v);
     return py::cast(t);
@@ -94,15 +95,48 @@ py::object py_print(const py::args &args, F make_print) {
 
 }  // namespace
 
-void define_operators(py::module &m) {
+void define_operators(py::module_ &m) {
+    auto field_ref_class =
+        py::class_<FieldRef>(m, "FieldRef")
+            .def("__getitem__", &FieldRef::operator[])
+            .def("size", &FieldRef::size)
+            .def("__len__", &FieldRef::size);
+    add_binary_operators(field_ref_class);
+
+    m.def("field", static_cast<FieldRef (*)(const Expr &, const std::string &)>(&field),
+          py::arg("struct_value"), py::arg("name"));
+    m.def("field", static_cast<FieldRef (*)(const Expr &, int)>(&field),
+          py::arg("struct_value"), py::arg("index"));
+    // Per-field pack_struct: one initializer per struct field, in declaration
+    // order. Each item is an Expr (a scalar field's value; a gather() packet or
+    // a single expression with one `_` placeholder swept over an array field's
+    // extent) or a FieldRef (to copy a whole same-typed field). Mirrors the C++
+    // per-field pack_struct overload.
+    m.def(
+        "pack_struct",
+        [](const Type &type, const py::iterable &fields) -> Expr {
+            std::vector<StructFieldInit> inits;
+            for (py::handle item : fields) {
+                // Check FieldRef first: a scalar FieldRef also converts to Expr,
+                // but here it means "copy this field", not "use its value".
+                if (py::isinstance<FieldRef>(item)) {
+                    inits.emplace_back(py::cast<FieldRef>(item));
+                } else {
+                    inits.emplace_back(py::cast<Expr>(item));
+                }
+            }
+            return pack_struct(type, inits);
+        },
+        py::arg("type"), py::arg("fields"));
+
     m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
             throw py::value_error("max() must have at least 2 arguments");
         }
         int pos = (int)args.size() - 1;
-        Expr value = args[pos--].cast<Expr>();
+        Expr value = py::cast<Expr>(args[pos--]);
         while (pos >= 0) {
-            value = max(args[pos--].cast<Expr>(), value);
+            value = max(py::cast<Expr>(args[pos--]), value);
         }
         return value;
     });
@@ -112,9 +146,9 @@ void define_operators(py::module &m) {
             throw py::value_error("min() must have at least 2 arguments");
         }
         int pos = (int)args.size() - 1;
-        Expr value = args[pos--].cast<Expr>();
+        Expr value = py::cast<Expr>(args[pos--]);
         while (pos >= 0) {
-            value = min(args[pos--].cast<Expr>(), value);
+            value = min(py::cast<Expr>(args[pos--]), value);
         }
         return value;
     });
@@ -160,6 +194,7 @@ void define_operators(py::module &m) {
     m.def("floor", &floor);
     m.def("ceil", &ceil);
     m.def("round", &round);
+    m.def("round_half_away", &round_half_away);
     m.def("trunc", &trunc);
     m.def("fract", &fract);
     m.def("is_nan", &is_nan);
@@ -176,7 +211,7 @@ void define_operators(py::module &m) {
         "print_when", [](const Expr &condition, const py::args &args) -> py::object {
             return py_print(args, [&](const std::vector<Expr> &v) { return print_when(condition, v); });
         },
-        py::arg("condition"));
+        py::arg("condition"), py::arg("args"));
 
     m.def(
         "require", [](const Expr &condition, const Expr &value, const py::args &args) -> Expr {
@@ -184,7 +219,7 @@ void define_operators(py::module &m) {
             v.insert(v.begin(), value);
             return require(condition, v);
         },
-        py::arg("condition"), py::arg("value"));
+        py::arg("condition"), py::arg("value"), py::arg("args"));
     m.def(
         "require", [](const Expr &condition, const Tuple &value, const py::args &args) -> Tuple {
             auto v = collect_print_args(args);
@@ -196,7 +231,7 @@ void define_operators(py::module &m) {
             }
             return result;
         },
-        py::arg("condition"), py::arg("value"));
+        py::arg("condition"), py::arg("value"), py::arg("args"));
 
     m.def("lerp", &lerp);
     m.def("popcount", &popcount);
@@ -216,7 +251,7 @@ void define_operators(py::module &m) {
         "memoize_tag", [](const Expr &result, const py::args &cache_key_values) -> Expr {
             return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
         },
-        py::arg("result"));
+        py::arg("result"), py::arg("cache_key_values"));
     m.def(
         "memoize_tag", [](const Tuple &result, const py::args &cache_key_values) -> Tuple {
             auto v = args_to_vector<Expr>(cache_key_values);
@@ -226,7 +261,7 @@ void define_operators(py::module &m) {
             }
             return tagged;
         },
-        py::arg("result"));
+        py::arg("result"), py::arg("cache_key_values"));
 
     m.def("likely", static_cast<Expr (*)(Expr)>(&likely));
     m.def("likely", static_cast<Tuple (*)(const Tuple &)>(&likely));
@@ -237,6 +272,11 @@ void define_operators(py::module &m) {
     m.def("strict_float", static_cast<Tuple (*)(const Tuple &)>(&strict_float));
     m.def("scatter", static_cast<Expr (*)(const std::vector<Expr> &)>(&scatter));
     m.def("gather", static_cast<Expr (*)(const std::vector<Expr> &)>(&gather));
+    // Generator form: gather(extent, gen) builds a packet of `extent` elements
+    // by calling gen(k) for k in [0, extent), e.g. to fill a struct array field.
+    m.def("gather",
+          static_cast<Expr (*)(int, const std::function<Expr(Expr)> &)>(&gather),
+          py::arg("extent"), py::arg("gen"));
     m.def("extract_bits", static_cast<Expr (*)(Type, const Expr &, const Expr &)>(&extract_bits));
     m.def("concat_bits", &concat_bits);
     m.def("widen_right_add", &widen_right_add);

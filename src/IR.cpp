@@ -876,9 +876,14 @@ constexpr const char *intrinsic_op_names[] = {
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "fixed_to_float",
     "get_runtime_streaming_vscale",
     "get_runtime_vscale",
     "get_user_context",
+    "gpu_shuffle_down",
+    "gpu_shuffle_idx",
+    "gpu_shuffle_up",
+    "gpu_shuffle_xor",
     "gpu_thread_barrier",
     "halving_add",
     "halving_sub",
@@ -910,6 +915,7 @@ constexpr const char *intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "round",
+    "round_half_away",
     "rounding_halving_add",
     "rounding_mul_shift_right",
     "rounding_shift_left",
@@ -940,11 +946,14 @@ constexpr const char *intrinsic_op_names[] = {
     "strict_mul",
     "strict_sub",
     "stringify",
+    "struct_field_read",
+    "struct_pack",
     "target_arch_is",
     "target_bits",
     "target_has_feature",
     "target_natural_vector_size",
     "target_os_is",
+    "trace_bounds_required_marker",
     "undef",
     "unreachable",
     "unsafe_promise_clamped",
@@ -956,6 +965,12 @@ constexpr const char *intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
+    "wmma_fragment_to_matrix_d",
+    "wmma_lane_owns",
+    "wmma_matrix_to_fragment_a",
+    "wmma_matrix_to_fragment_b",
+    "wmma_matrix_to_fragment_c",
+    "wmma_mma",
     // keep-sorted end
 };
 
@@ -1123,12 +1138,27 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
 }
 
 Expr Shuffle::make_broadcast(Expr vector, int factor) {
-    std::vector<int> indices(factor * vector.type().lanes());
-    for (int ix = 0; ix < factor; ix++) {
-        std::iota(indices.begin() + ix * vector.type().lanes(),
-                  indices.begin() + (ix + 1) * vector.type().lanes(), 0);
+    internal_assert(factor > 0) << "Repeat factor must be positive.\n";
+    if (factor == 1) {
+        return vector;
     }
+    const int lanes = vector.type().lanes();
+    std::vector<int> indices(factor * lanes);
+    for (size_t i = 0; i < indices.size(); i++) {
+        indices[i] = (int)i % lanes;
+    }
+    return make({std::move(vector)}, indices);
+}
 
+Expr Shuffle::make_repeat_each_lane(Expr vector, int factor) {
+    internal_assert(factor > 0) << "Repeat factor must be positive.\n";
+    if (factor == 1) {
+        return vector;
+    }
+    std::vector<int> indices(factor * vector.type().lanes());
+    for (size_t i = 0; i < indices.size(); i++) {
+        indices[i] = (int)i / factor;
+    }
     return make({std::move(vector)}, indices);
 }
 
@@ -1150,38 +1180,39 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
 }
 
-bool Shuffle::is_broadcast() const {
-    int lanes = indices.size();
-    int factor = broadcast_factor();
-    if (factor == 0 || factor >= lanes) {
-        return false;
+std::optional<int> Shuffle::is_broadcast() const {
+    if (vectors.size() != 1) {
+        return std::nullopt;
     }
-    int broadcasted_lanes = lanes / factor;
-
-    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
-        return false;
+    const int src_lanes = vectors[0].type().lanes();
+    const int lanes = (int)indices.size();
+    if (src_lanes < 2 || lanes % src_lanes != 0 || lanes / src_lanes < 2) {
+        return std::nullopt;
     }
     for (int i = 0; i < lanes; i++) {
-        if (indices[i % broadcasted_lanes] != indices[i]) {
-            return false;
+        if (indices[i] != i % src_lanes) {
+            return std::nullopt;
         }
     }
-    return true;
+    return lanes / src_lanes;
 }
 
-int Shuffle::broadcast_factor() const {
-    int lanes = indices.size();
-    int broadcasted_lanes = 0;
-    for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
-        if (indices[broadcasted_lanes] != broadcasted_lanes) {
-            break;
+std::optional<int> Shuffle::is_repeat_each_lane() const {
+    if (vectors.size() != 1) {
+        return std::nullopt;
+    }
+    const int src_lanes = vectors[0].type().lanes();
+    const int lanes = (int)indices.size();
+    if (src_lanes < 2 || lanes % src_lanes != 0 || lanes / src_lanes < 2) {
+        return std::nullopt;
+    }
+    const int factor = lanes / src_lanes;
+    for (int i = 0; i < lanes; i++) {
+        if (indices[i] != i / factor) {
+            return std::nullopt;
         }
     }
-    if (broadcasted_lanes > 0) {
-        return lanes / broadcasted_lanes;
-    } else {
-        return 0;
-    }
+    return factor;
 }
 
 bool Shuffle::is_interleave() const {
@@ -1334,34 +1365,30 @@ bool Shuffle::is_concat() const {
     return indices.size() == input_lanes && is_ramp(indices);
 }
 
-bool Shuffle::is_transpose() const {
+std::optional<int> Shuffle::is_transpose() const {
     if (vectors.size() > 1 ||
         (int)indices.size() != vectors[0].type().lanes() ||
         indices.size() < 2 ||
         indices[0] != 0 ||
         indices[1] <= 0) {
-        return false;
+        return std::nullopt;
     }
     int cols = indices[1];
     int rows = vectors[0].type().lanes() / cols;
     if ((int)indices.size() != rows * cols) {
-        return false;
+        return std::nullopt;
     }
     for (int row = 0; row < rows; row++) {
         for (int col = 0; col < cols; col++) {
             if (indices[col * rows + row] != row * cols + col) {
-                return false;
+                return std::nullopt;
             }
         }
     }
-    return true;
+    return cols;
 }
 
-int Shuffle::transpose_factor() const {
-    return indices[1] - indices[0];
-}
-
-bool Shuffle::is_slice() const {
+std::optional<Shuffle::Slice> Shuffle::is_slice() const {
     size_t input_lanes = 0;
     for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
@@ -1369,7 +1396,11 @@ bool Shuffle::is_slice() const {
 
     // A slice is a ramp where the output does not contain all of the
     // lanes of the input.
-    return indices.size() < input_lanes && is_ramp(indices, slice_stride());
+    const int stride = indices.size() >= 2 ? indices[1] - indices[0] : 1;
+    if (indices.size() < input_lanes && is_ramp(indices, stride)) {
+        return Slice{indices[0], stride};
+    }
+    return std::nullopt;
 }
 
 bool Shuffle::is_extract_element() const {
@@ -1377,406 +1408,17 @@ bool Shuffle::is_extract_element() const {
 }
 
 template<>
-void ExprNode<IntImm>::accept(IRVisitor *v) const {
-    v->visit((const IntImm *)this);
-}
-template<>
-void ExprNode<UIntImm>::accept(IRVisitor *v) const {
-    v->visit((const UIntImm *)this);
-}
-template<>
-void ExprNode<FloatImm>::accept(IRVisitor *v) const {
-    v->visit((const FloatImm *)this);
-}
-template<>
-void ExprNode<StringImm>::accept(IRVisitor *v) const {
-    v->visit((const StringImm *)this);
-}
-template<>
-void ExprNode<Cast>::accept(IRVisitor *v) const {
-    v->visit((const Cast *)this);
-}
-template<>
-void ExprNode<Reinterpret>::accept(IRVisitor *v) const {
-    v->visit((const Reinterpret *)this);
-}
-template<>
-void ExprNode<Variable>::accept(IRVisitor *v) const {
-    v->visit((const Variable *)this);
-}
-template<>
-void ExprNode<Add>::accept(IRVisitor *v) const {
-    v->visit((const Add *)this);
-}
-template<>
-void ExprNode<Sub>::accept(IRVisitor *v) const {
-    v->visit((const Sub *)this);
-}
-template<>
-void ExprNode<Mul>::accept(IRVisitor *v) const {
-    v->visit((const Mul *)this);
-}
-template<>
-void ExprNode<Div>::accept(IRVisitor *v) const {
-    v->visit((const Div *)this);
-}
-template<>
-void ExprNode<Mod>::accept(IRVisitor *v) const {
-    v->visit((const Mod *)this);
-}
-template<>
-void ExprNode<Min>::accept(IRVisitor *v) const {
-    v->visit((const Min *)this);
-}
-template<>
-void ExprNode<Max>::accept(IRVisitor *v) const {
-    v->visit((const Max *)this);
-}
-template<>
-void ExprNode<EQ>::accept(IRVisitor *v) const {
-    v->visit((const EQ *)this);
-}
-template<>
-void ExprNode<NE>::accept(IRVisitor *v) const {
-    v->visit((const NE *)this);
-}
-template<>
-void ExprNode<LT>::accept(IRVisitor *v) const {
-    v->visit((const LT *)this);
-}
-template<>
-void ExprNode<LE>::accept(IRVisitor *v) const {
-    v->visit((const LE *)this);
-}
-template<>
-void ExprNode<GT>::accept(IRVisitor *v) const {
-    v->visit((const GT *)this);
-}
-template<>
-void ExprNode<GE>::accept(IRVisitor *v) const {
-    v->visit((const GE *)this);
-}
-template<>
-void ExprNode<And>::accept(IRVisitor *v) const {
-    v->visit((const And *)this);
-}
-template<>
-void ExprNode<Or>::accept(IRVisitor *v) const {
-    v->visit((const Or *)this);
-}
-template<>
-void ExprNode<Not>::accept(IRVisitor *v) const {
-    v->visit((const Not *)this);
-}
-template<>
-void ExprNode<Select>::accept(IRVisitor *v) const {
-    v->visit((const Select *)this);
-}
-template<>
-void ExprNode<Load>::accept(IRVisitor *v) const {
-    v->visit((const Load *)this);
-}
-template<>
-void ExprNode<Ramp>::accept(IRVisitor *v) const {
-    v->visit((const Ramp *)this);
-}
-template<>
-void ExprNode<Broadcast>::accept(IRVisitor *v) const {
-    v->visit((const Broadcast *)this);
-}
-template<>
-void ExprNode<Call>::accept(IRVisitor *v) const {
-    v->visit((const Call *)this);
-}
-template<>
-void ExprNode<Shuffle>::accept(IRVisitor *v) const {
-    v->visit((const Shuffle *)this);
-}
-template<>
-void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
-    v->visit((const VectorReduce *)this);
-}
-template<>
-void ExprNode<Let>::accept(IRVisitor *v) const {
-    v->visit((const Let *)this);
-}
-template<>
-void StmtNode<LetStmt>::accept(IRVisitor *v) const {
-    v->visit((const LetStmt *)this);
-}
-template<>
-void StmtNode<AssertStmt>::accept(IRVisitor *v) const {
-    v->visit((const AssertStmt *)this);
-}
-template<>
-void StmtNode<ProducerConsumer>::accept(IRVisitor *v) const {
-    v->visit((const ProducerConsumer *)this);
-}
-template<>
-void StmtNode<For>::accept(IRVisitor *v) const {
-    v->visit((const For *)this);
-}
-template<>
-void StmtNode<Store>::accept(IRVisitor *v) const {
-    v->visit((const Store *)this);
-}
-template<>
-void StmtNode<Provide>::accept(IRVisitor *v) const {
-    v->visit((const Provide *)this);
-}
-template<>
-void StmtNode<Allocate>::accept(IRVisitor *v) const {
-    v->visit((const Allocate *)this);
-}
-template<>
-void StmtNode<Free>::accept(IRVisitor *v) const {
-    v->visit((const Free *)this);
-}
-template<>
-void StmtNode<Realize>::accept(IRVisitor *v) const {
-    v->visit((const Realize *)this);
-}
-template<>
-void StmtNode<Block>::accept(IRVisitor *v) const {
-    v->visit((const Block *)this);
-}
-template<>
-void StmtNode<IfThenElse>::accept(IRVisitor *v) const {
-    v->visit((const IfThenElse *)this);
-}
-template<>
-void StmtNode<Evaluate>::accept(IRVisitor *v) const {
-    v->visit((const Evaluate *)this);
-}
-template<>
-void StmtNode<Prefetch>::accept(IRVisitor *v) const {
-    v->visit((const Prefetch *)this);
-}
-template<>
-void StmtNode<Acquire>::accept(IRVisitor *v) const {
-    v->visit((const Acquire *)this);
-}
-template<>
-void StmtNode<Fork>::accept(IRVisitor *v) const {
-    v->visit((const Fork *)this);
-}
-template<>
-void StmtNode<Atomic>::accept(IRVisitor *v) const {
-    v->visit((const Atomic *)this);
-}
-template<>
-void StmtNode<StreamingStore>::accept(IRVisitor *v) const {
-    v->visit((const StreamingStore *)this);
-}
-template<>
-void StmtNode<StreamingLoads>::accept(IRVisitor *v) const {
-    v->visit((const StreamingLoads *)this);
-}
-template<>
-void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
-    v->visit((const HoistedStorage *)this);
-}
-
-template<>
-Expr ExprNode<IntImm>::mutate_expr(IRMutator *v) const {
-    return v->visit((const IntImm *)this);
-}
-template<>
-Expr ExprNode<UIntImm>::mutate_expr(IRMutator *v) const {
-    return v->visit((const UIntImm *)this);
-}
-template<>
-Expr ExprNode<FloatImm>::mutate_expr(IRMutator *v) const {
-    return v->visit((const FloatImm *)this);
-}
-template<>
-Expr ExprNode<StringImm>::mutate_expr(IRMutator *v) const {
-    return v->visit((const StringImm *)this);
-}
-template<>
-Expr ExprNode<Cast>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Cast *)this);
-}
-template<>
-Expr ExprNode<Reinterpret>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Reinterpret *)this);
-}
-template<>
-Expr ExprNode<Variable>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Variable *)this);
-}
-template<>
-Expr ExprNode<Add>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Add *)this);
-}
-template<>
-Expr ExprNode<Sub>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Sub *)this);
-}
-template<>
-Expr ExprNode<Mul>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Mul *)this);
-}
-template<>
-Expr ExprNode<Div>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Div *)this);
-}
-template<>
-Expr ExprNode<Mod>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Mod *)this);
-}
-template<>
-Expr ExprNode<Min>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Min *)this);
-}
-template<>
-Expr ExprNode<Max>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Max *)this);
-}
-template<>
-Expr ExprNode<EQ>::mutate_expr(IRMutator *v) const {
-    return v->visit((const EQ *)this);
-}
-template<>
-Expr ExprNode<NE>::mutate_expr(IRMutator *v) const {
-    return v->visit((const NE *)this);
-}
-template<>
-Expr ExprNode<LT>::mutate_expr(IRMutator *v) const {
-    return v->visit((const LT *)this);
-}
-template<>
-Expr ExprNode<LE>::mutate_expr(IRMutator *v) const {
-    return v->visit((const LE *)this);
-}
-template<>
-Expr ExprNode<GT>::mutate_expr(IRMutator *v) const {
-    return v->visit((const GT *)this);
-}
-template<>
-Expr ExprNode<GE>::mutate_expr(IRMutator *v) const {
-    return v->visit((const GE *)this);
-}
-template<>
-Expr ExprNode<And>::mutate_expr(IRMutator *v) const {
-    return v->visit((const And *)this);
-}
-template<>
-Expr ExprNode<Or>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Or *)this);
-}
-template<>
-Expr ExprNode<Not>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Not *)this);
-}
-template<>
-Expr ExprNode<Select>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Select *)this);
-}
-template<>
-Expr ExprNode<Load>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Load *)this);
-}
-template<>
-Expr ExprNode<Ramp>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Ramp *)this);
-}
-template<>
-Expr ExprNode<Broadcast>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Broadcast *)this);
-}
-template<>
-Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Call *)this);
-}
-template<>
-Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Shuffle *)this);
-}
-template<>
-Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {
-    return v->visit((const VectorReduce *)this);
-}
-template<>
-Expr ExprNode<Let>::mutate_expr(IRMutator *v) const {
-    return v->visit((const Let *)this);
-}
-
-template<>
-Stmt StmtNode<LetStmt>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const LetStmt *)this);
-}
-template<>
-Stmt StmtNode<AssertStmt>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const AssertStmt *)this);
-}
-template<>
-Stmt StmtNode<ProducerConsumer>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const ProducerConsumer *)this);
-}
-template<>
-Stmt StmtNode<For>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const For *)this);
-}
-template<>
-Stmt StmtNode<Store>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Store *)this);
-}
-template<>
-Stmt StmtNode<Provide>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Provide *)this);
-}
-template<>
-Stmt StmtNode<Allocate>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Allocate *)this);
-}
-template<>
-Stmt StmtNode<Free>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Free *)this);
-}
-template<>
-Stmt StmtNode<Realize>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Realize *)this);
-}
-template<>
-Stmt StmtNode<Block>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Block *)this);
-}
-template<>
-Stmt StmtNode<IfThenElse>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const IfThenElse *)this);
-}
-template<>
-Stmt StmtNode<Evaluate>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Evaluate *)this);
-}
-template<>
-Stmt StmtNode<Prefetch>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Prefetch *)this);
-}
-template<>
-Stmt StmtNode<Acquire>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Acquire *)this);
-}
-template<>
-Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Fork *)this);
-}
-template<>
-Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const Atomic *)this);
-}
-template<>
-Stmt StmtNode<StreamingStore>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const StreamingStore *)this);
-}
-template<>
-Stmt StmtNode<StreamingLoads>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const StreamingLoads *)this);
-}
-template<>
-Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {
-    return v->visit((const HoistedStorage *)this);
+void destroy<IRNode>(const IRNode *t) {
+    switch (t->node_type) {
+#define HALIDE_DELETE_NODE(T) \
+    case IRNodeType::T:       \
+        delete (const T *)t;  \
+        break;
+        HALIDE_FOR_EACH_IR_NODE(HALIDE_DELETE_NODE)
+#undef HALIDE_DELETE_NODE
+    default:
+        unknown_node_type_error(t->node_type);
+    }
 }
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";

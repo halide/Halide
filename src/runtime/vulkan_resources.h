@@ -654,21 +654,16 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
     // Add up all arg sizes for scalar params
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            scalar_arg_sizes += arg_sizes[i];
+            size_t arg_size = arg_sizes[i];
+            scalar_arg_sizes = aligned_offset(scalar_arg_sizes, arg_size);
+            scalar_arg_sizes += arg_size;
         } else {
             buffer_count++;
         }
     }
 
     // Add space for index offsets for storage buffers (to support arbitrary crops)
-    size_t buffer_offset_arg_sizes = 0;
-    if (buffer_count) {
-        for (size_t i = 0; arg_sizes[i] > 0; i++) {
-            if (arg_is_buffer[i]) {
-                buffer_offset_arg_sizes += sizeof(int32_t);
-            }
-        }
-    }
+    size_t buffer_offset_arg_sizes = buffer_count * sizeof(int32_t);
 
     size_t end_of_scalar_args = aligned_offset(scalar_arg_sizes, sizeof(int32_t));
     size_t scalar_uniform_buffer_size = end_of_scalar_args + buffer_offset_arg_sizes;
@@ -754,9 +749,11 @@ int vk_update_scalar_uniform_buffer(void *user_context,
     size_t buffer_count = 0;
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            halide_debug_assert(user_context, (arg_offset + arg_sizes[i]) <= region->allocation.size);
-            memcpy(host_ptr + arg_offset, args[i], arg_sizes[i]);
-            arg_offset += arg_sizes[i];
+            size_t arg_size = arg_sizes[i];
+            arg_offset = aligned_offset(arg_offset, arg_size);
+            halide_debug_assert(user_context, (arg_offset + arg_size) <= region->allocation.size);
+            memcpy(host_ptr + arg_offset, args[i], arg_size);
+            arg_offset += arg_size;
         } else {
             buffer_count++;
         }

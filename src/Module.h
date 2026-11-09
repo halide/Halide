@@ -49,7 +49,9 @@ enum class OutputFileType {
 };
 
 /** Type of linkage a function in a lowered Halide module can have.
-    Also controls whether auxiliary functions and metadata are generated. */
+    Also controls whether auxiliary functions and metadata are generated.
+    ExternalPlusMetadata is reduced to External when the Module's Target has
+    the NoMetadata feature. */
 enum class LinkageType {
     External,              ///< Visible externally.
     ExternalPlusMetadata,  ///< Visible externally. Argument metadata and an argv wrapper are also generated.
@@ -143,6 +145,10 @@ struct LoweredFunc {
                 NameMangling mangling = NameMangling::Default,
                 uint64_t attributes = 0);
 };
+
+/** The linkage a function requested with the given linkage actually gets
+ * when compiled for the given target. */
+LinkageType linkage_for_target(LinkageType linkage, const Target &target);
 
 }  // namespace Internal
 

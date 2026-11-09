@@ -289,9 +289,10 @@ public:
         check("vpacko(v*.w,v*.w)", hvx_width / 2, in_u16(2 * x + 1));
         check("vdeal(v*,v*,r*)", hvx_width / 4, in_u32(2 * x + 1));
 
-        check("vdelta(v*,v*)", hvx_width / 1, in_u8(3 * x / 2));
-        check("vdelta(v*,v*)", hvx_width / 2, in_u16(3 * x / 2));
-        check("vdelta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
+        // A dense load and a single delta network, in either direction.
+        check("v*delta(v*,v*)", hvx_width / 1, in_u8(3 * x / 2));
+        check("v*delta(v*,v*)", hvx_width / 2, in_u16(3 * x / 2));
+        check("v*delta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
         check("vdelta(v*,v*)", hvx_width * 3, in_u16(x * 3));
         check("vdelta(v*,v*)", hvx_width * 3, in_u8(x * 3));
         check("vdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));

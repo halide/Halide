@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_derivative(py::module &m);
+void define_derivative(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

@@ -288,6 +288,20 @@ public:
             expect(")");
             return max(a, b);
         }
+        if (consume("in_range(")) {
+            Expr value = parse_expr();
+            expect(",");
+            Expr lo = parse_expr();
+            expect(",");
+            Expr hi = parse_expr();
+            if (consume(",")) {
+                consume_whitespace();
+                expect("this");
+                consume_whitespace();
+            }
+            expect(")");
+            return lo <= value && value < hi;
+        }
         if (consume("select(")) {
             Expr a = parse_expr();
             a = reparse_as_bool(a);

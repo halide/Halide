@@ -5,9 +5,19 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    aligned_split.cpp
+    aligned_split_2d.cpp
+    aligned_split_2d_3x3.cpp
+    aligned_split_blend_small_extent.cpp
+    aligned_split_mux_phase.cpp
+    aligned_split_nested.cpp
+    aligned_split_partition.cpp
+    aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
+    amx_matmul.cpp
     argmax.cpp
     arm_cpu_detect.cpp
+    arm_dot_product_by_element.cpp
     associativity.cpp
     async_device_copy.cpp
     async_require_fail.cpp
@@ -59,9 +69,11 @@ tests(
     bounds_inference_chunk.cpp
     bounds_inference_complex.cpp
     bounds_inference_outer_split.cpp
+    bounds_inference_specialized_spans.cpp
     bounds_internal.cpp
     bounds_of_abs.cpp
     bounds_of_cast.cpp
+    bounds_of_compound_index_from_where.cpp
     bounds_of_func.cpp
     bounds_of_monotonic_math.cpp
     bounds_of_multiply.cpp
@@ -69,6 +81,7 @@ tests(
     bounds_of_split.cpp
     bounds_query.cpp
     bounds_query_respects_specialize_fail.cpp
+    bounds_tracker.cpp
     broken_promise.cpp
     buffer_larger_than_two_gigs.cpp
     buffer_t.cpp
@@ -109,6 +122,7 @@ tests(
     compute_with_inlined.cpp
     computed_index.cpp
     concat.cpp
+    conditional_box_merge.cpp
     constant_expr.cpp
     constant_interval.cpp
     constant_type.cpp
@@ -149,6 +163,8 @@ tests(
     deinterleave4.cpp
     deinterleave_lets.cpp
     deinterleave_vector.cpp
+    deinterleave_vector_based_ramp.cpp
+    dense_multiramp_index.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
@@ -240,6 +256,8 @@ tests(
     gpu_free_sync.cpp
     gpu_give_input_buffers_device_allocations.cpp
     gpu_jit_explicit_copy_to_device.cpp
+    gpu_lanes_reduction.cpp
+    gpu_lanes_reduction_codegen.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
     gpu_max_registers.cpp
@@ -261,17 +279,22 @@ tests(
     gpu_register_stored_by_one_thread.cpp
     gpu_register_stored_by_one_warp.cpp
     gpu_reuse_shared_memory.cpp
+    gpu_shared_vector_codegen.cpp
     gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp
+    gpu_struct_type.cpp
     gpu_sum_scan.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
+    gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
+    gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp
     growing_stack.cpp
     half_native_interleave.cpp
     halide_buffer.cpp
+    halidoscope.cpp
     handle.cpp
     heap_cleanup.cpp
     hello_gpu.cpp
@@ -311,6 +334,7 @@ tests(
     interleave.cpp
     interleave_rgb.cpp
     interleave_x.cpp
+    internal_linkage.cpp
     interval.cpp
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
@@ -323,6 +347,8 @@ tests(
     isnan.cpp
     issue_3926.cpp
     iterate_over_circle.cpp
+    jit_host_environment.cpp
+    jit_set_trace_file.cpp
     lambda.cpp
     lazy_convolution.cpp
     leak_device_memory.cpp
@@ -373,6 +399,7 @@ tests(
     nested_tail_strategies.cpp
     newtons_method.cpp
     no_default_device.cpp
+    no_metadata.cpp
     non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
     nonexistent_update_stage.cpp
@@ -426,6 +453,7 @@ tests(
     reduction_type_mismatch.cpp
     register_shuffle.cpp
     reorder_storage.cpp
+    repeat_each_element.cpp
     require.cpp
     require_fail.cpp
     reschedule.cpp
@@ -435,7 +463,9 @@ tests(
     reused_args.cpp
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
+    rfactor_guarded_merge.cpp
     rfactor_inner_dim_non_commutative.cpp
+    rfactor_specialize_rvar_bounds.cpp
     round.cpp
     round_up_and_blend_race.cpp
     run_process.cpp
@@ -446,6 +476,7 @@ tests(
     scatter.cpp
     serialization.cpp
     set_custom_trace.cpp
+    sever.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
     shift_by_unsigned_negated.cpp
@@ -454,6 +485,7 @@ tests(
     side_effects.cpp
     simplified_away_embedded_image.cpp
     simplify.cpp
+    simplify_region_bound_regression.cpp
     skip_stages.cpp
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp
@@ -469,6 +501,7 @@ tests(
     sort_exprs.cpp
     specialize.cpp
     specialize_fail.cpp
+    specialize_split_rvar_guard.cpp
     specialize_stride_lowering.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
@@ -479,6 +512,7 @@ tests(
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp
     split_predicate.cpp
+    split_predicate_stores_compute_at.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
     split_storage.cpp
@@ -502,17 +536,26 @@ tests(
     strict_float_bounds.cpp
     strict_fma.cpp
     strided_load.cpp
+    struct_bool_storage.cpp
+    struct_mixed_field_stores.cpp
+    struct_nested_field_load.cpp
+    struct_nested_field_store.cpp
+    struct_type.cpp
+    struct_type_dot_product.cpp
+    struct_type_record_field_reads.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     target.cpp
     target_query.cpp
     thread_id_outside_block_id.cpp
-    tiled_matmul.cpp
     tiled_matmul_errors.cpp
     too_many_args.cpp
     tracing.cpp
     tracing_bounds.cpp
+    tracing_bounds_required.cpp
     tracing_broadcast.cpp
+    tracing_errors.cpp
+    tracing_matched_events.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
@@ -577,7 +620,11 @@ tests(
     vectorized_initialization.cpp
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
+    vulkan_bool_scalar_abi.cpp
+    warp_shuffle_hoisting.cpp
     widening_reduction.cpp
+    wmma_matmul.cpp
+    wmma_row_max.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
     wrapper_never_used.cpp
@@ -585,6 +632,12 @@ tests(
     wrong_type.cpp
     x86_cpu_detect.cpp
     # keep-sorted end
+)
+
+set_tests_properties(
+    correctness_conditional_box_merge correctness_bounds_inference_specialized_spans
+    PROPERTIES
+    TIMEOUT 60
 )
 
 # These test the host CPU detection logic that libHalide shares with the
@@ -655,8 +708,13 @@ tests(
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp
+    rfactor_aligned_split.cpp
+    rfactor_aligned_split_2d.cpp
+    rfactor_aligned_split_nested.cpp
+    rfactor_aligned_split_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
+    thread_pool_keep_awake.cpp
     thread_safety.cpp
     tracing_thread_ids.cpp
     transitive_in.cpp
@@ -665,6 +723,7 @@ tests(
     vector_cast.cpp
     vector_math.cpp
     vector_reductions.cpp
+    vulkan_bool_minmax.cpp
     # keep-sorted end
 )
 
@@ -689,6 +748,10 @@ find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependenci
 target_include_directories(correctness_spirv_ir PRIVATE "${Halide_SOURCE_DIR}/src")
 target_link_libraries(correctness_spirv_ir PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
+
+target_include_directories(correctness_vulkan_bool_minmax PRIVATE "${Halide_SOURCE_DIR}/src")
+target_link_libraries(correctness_vulkan_bool_minmax PRIVATE SPIRV-Headers::SPIRV-Headers)
+target_compile_definitions(correctness_vulkan_bool_minmax PRIVATE WITH_SPIRV)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(
@@ -746,6 +809,7 @@ if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_halidoscope PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
 
 if (WITH_AUTOSCHEDULERS)

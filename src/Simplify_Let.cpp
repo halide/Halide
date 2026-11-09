@@ -119,6 +119,18 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
 
         debug(4) << "simplify let " << op->name << " = " << f.value << " in...\n";
 
+        // A variable with no let binding of its own (e.g. a loop variable)
+        // scaled by a constant is as cheap to push into the uses as a bare
+        // variable: substituting it cannot pull in yet another let value.
+        auto free_var_times_const = [&](const Expr &e) {
+            const Mul *m = e.as<Mul>();
+            if (!m || !is_const(m->b)) {
+                return false;
+            }
+            const Variable *v = m->a.as<Variable>();
+            return v && !var_info.contains(v->name);
+        };
+
         while (true) {
             const Variable *var = f.new_value.template as<Variable>();
             const Add *add = f.new_value.template as<Add>();
@@ -148,12 +160,8 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
                 var_b = shuffle->vectors[1].as<Variable>();
             }
 
-            if (is_const(f.new_value)) {
+            if (is_const(f.new_value) || var) {
                 replacement = substitute(f.new_name, f.new_value, replacement);
-                f.new_value = Expr();
-                break;
-            } else if (var) {
-                replacement = substitute(f.new_name, var, replacement);
                 f.new_value = Expr();
                 break;
             } else if (add && (is_const(add->b) || var_b)) {
@@ -162,6 +170,15 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
             } else if (add && var_a) {
                 replacement = substitute(f.new_name, Add::make(add->a, new_var), replacement);
                 f.new_value = add->b;
+            } else if (add && free_var_times_const(add->b)) {
+                replacement = substitute(f.new_name, Add::make(new_var, add->b), replacement);
+                f.new_value = add->a;
+            } else if (add && free_var_times_const(add->a)) {
+                replacement = substitute(f.new_name, Add::make(add->a, new_var), replacement);
+                f.new_value = add->b;
+            } else if (sub && free_var_times_const(sub->b)) {
+                replacement = substitute(f.new_name, Sub::make(new_var, sub->b), replacement);
+                f.new_value = sub->a;
             } else if (mul && (is_const(mul->b) || var_b)) {
                 replacement = substitute(f.new_name, Mul::make(new_var, mul->b), replacement);
                 f.new_value = mul->a;

@@ -554,6 +554,16 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
     return common_subexpression_elimination(a - correction);
 }
 
+Expr lower_round_half_away_from_zero(const Expr &x) {
+    // Adding the largest float below one half, with x's sign, then truncating
+    // rounds ties away from zero. Adding one half instead would round, e.g.,
+    // that largest float itself up to one.
+    Type bits_type = x.type().with_code(halide_type_uint);
+    Expr sign_bit = reinterpret(bits_type, x) & (cast(bits_type, 1) << (x.type().bits() - 1));
+    Expr just_under_one_half = reinterpret(x.type(), (reinterpret(bits_type, cast(x.type(), 0.5f)) - 1) | sign_bit);
+    return common_subexpression_elimination(trunc(x + just_under_one_half));
+}
+
 namespace {
 std::optional<int64_t> get_md_int(llvm::Metadata *value) {
     if (!value) {
@@ -604,24 +614,25 @@ std::string get_modflag_string(const llvm::Module &mod, const char *flag, const 
 }  // namespace
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
-    bool use_soft_float_abi = get_modflag_bool(module, "halide_use_soft_float_abi");
     std::string mabi = get_modflag_string(module, "halide_mabi");
 
-    // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
+    options = llvm::TargetOptions();
+#if LLVM_VERSION < 240
+    bool use_soft_float_abi = get_modflag_bool(module, "halide_use_soft_float_abi");
     bool per_instruction_fast_math_flags = get_modflag_bool(module, "halide_per_instruction_fast_math_flags");
 
-    options = llvm::TargetOptions();
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
 #if LLVM_VERSION < 230
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
     options.NoNaNsFPMath = !per_instruction_fast_math_flags;
 #endif
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
+    options.FloatABIType = use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+#endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.FunctionSections = true;
     options.UseInitArray = true;
-    options.FloatABIType = use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.MCOptions.X86RelaxRelocations = false;
     options.MCOptions.ABIName = mabi;
 }
@@ -641,6 +652,9 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     }
 
     // Clone string metadata
+    if (auto md = get_md_string(from.getModuleFlag("float-abi"))) {
+        to.addModuleFlag(llvm::Module::Error, "float-abi", llvm::MDString::get(context, *md));
+    }
     for (const char *s : {"halide_mcpu_target",
                           "halide_mcpu_tune",
                           "halide_mattrs"}) {

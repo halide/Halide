@@ -241,6 +241,16 @@ protected:
         }
 
         if (!expr.defined()) {
+            // Adding zero is a no-op. This comes up when terms cancel, or when
+            // a negation arrives here written as (0 - f(x)).
+            if (is_const_zero(b)) {
+                expr = a;
+            } else if (is_const_zero(a)) {
+                expr = b;
+            }
+        }
+
+        if (!expr.defined()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {

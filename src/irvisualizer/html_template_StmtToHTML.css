@@ -995,9 +995,6 @@ div.cost-btn:hover {
     display:inline-block;
     border-radius:5px
 }
-[class*=shj-lang-]::selection,[class*=shj-lang-] ::selection{
-    background: var(--bg-color)
-}
 [class*=shj-lang-]>div{
     display: block;
     overflow: visible;

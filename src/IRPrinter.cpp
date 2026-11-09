@@ -46,8 +46,22 @@ ostream &operator<<(ostream &out, const Type &type) {
     case Type::BFloat:
         out << "bfloat";
         break;
+    case Type::StructKind:
+        out << "struct{";
+        if (const StructTypeInfo *info = type.struct_type()) {
+            const char *sep = "";
+            for (const auto &f : info->fields) {
+                out << sep << f.name << ": " << f.type;
+                if (f.array_extent) {
+                    out << "[" << *f.array_extent << "]";
+                }
+                sep = ", ";
+            }
+        }
+        out << "}";
+        break;
     }
-    if (!type.is_handle()) {
+    if (!type.is_handle() && !type.is_struct()) {
         out << type.bits();
     }
     if (type.lanes() > 1) {
@@ -172,8 +186,8 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::VTCM:
         out << "VTCM";
         break;
-    case MemoryType::AMXTile:
-        out << "AMXTile";
+    case MemoryType::Tile:
+        out << "Tile";
         break;
     }
     return out;
@@ -235,6 +249,14 @@ ostream &operator<<(ostream &stream, const Target &target) {
 }
 
 namespace Internal {
+
+std::ostream &operator<<(std::ostream &stream, const IRHandle &ir) {
+    if (ir.defined() && ir->node_type > StrongestExprNodeType) {
+        return stream << Stmt((const BaseStmtNode *)ir.get());
+    } else {
+        return stream << Expr((const BaseExprNode *)ir.get());
+    }
+}
 
 std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
 #define CASE(e)         \
@@ -1443,17 +1465,24 @@ void IRPrinter::visit(const Shuffle *op) {
         openf("extract_element");
         print_list(op->vectors);
         stream << paren(", ") << imm_int(op->indices[0]);
-    } else if (op->is_slice()) {
+    } else if (auto slice = op->is_slice()) {
         openf("slice_vectors");
         print_list(op->vectors);
-        stream << paren(", ") << imm_int(op->slice_begin())
-               << paren(", ") << imm_int(op->slice_stride())
+        stream << paren(", ") << imm_int(slice->begin)
+               << paren(", ") << imm_int(slice->stride)
                << paren(", ") << imm_int(op->indices.size());
-    } else if (op->is_transpose()) {
+    } else if (auto cols = op->is_transpose()) {
         openf("transpose_vector");
         print_list(op->vectors);
-        stream << paren(", ") << imm_int(op->transpose_factor());
-
+        stream << paren(", ") << imm_int(*cols);
+    } else if (auto factor = op->is_repeat_each_lane()) {
+        openf("repeat_each_lane");
+        print_list(op->vectors);
+        stream << paren(", ") << imm_int(*factor);
+    } else if (auto factor = op->is_broadcast()) {
+        openf("broadcast");
+        print_list(op->vectors);
+        stream << paren(", ") << imm_int(*factor);
     } else {
         openf("shuffle");
         print_list(op->vectors);

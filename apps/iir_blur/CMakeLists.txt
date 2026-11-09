@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(iir_blur.generator SOURCES iir_blur_generator.cpp)
 
 # Filters
-add_halide_library(iir_blur FROM iir_blur.generator)
+add_halide_library(
+    iir_blur_pipeline
+    FROM iir_blur.generator
+    GENERATOR iir_blur
+    FUNCTION_NAME iir_blur
+    FILE_BASE_NAME iir_blur
+)
 add_halide_library(
     iir_blur_auto_schedule
     FROM iir_blur.generator
@@ -31,9 +37,10 @@ target_link_libraries(
     PRIVATE
     Halide::Tools
     Halide::ImageIO
-    iir_blur
+    iir_blur_pipeline
     iir_blur_auto_schedule
 )
+add_custom_target(iir_blur DEPENDS iir_blur_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)

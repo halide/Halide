@@ -254,9 +254,19 @@ public:
             check(arm32 ? "vcvt.f32.s32" : "scvtf", 2 * w, f32(i32_1));
             check(arm32 ? "vcvt.u32.f32" : "fcvtzu", 2 * w, u32(f32_1));
             check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2 * w, i32(f32_1));
-            // skip the fixed point conversions for now
+            check(arm32 ? "vcvt.f32.u32*#4" : "ucvtf*#4", 2 * w, f32(u32_1) * 0.0625f);
+            check(arm32 ? "vcvt.f32.s32*#4" : "scvtf*#4", 2 * w, f32(i32_1) * 0.0625f);
+            check(arm32 ? "vcvt.f32.s32*#3" : "scvtf*#3", 2 * w, (f32(i32_1) * f32_2) * 0.125f);
+            if (!arm32) {
+                check("scvtf*#32", 2 * w, f64(i64_1) * Internal::make_const(Float(64), 1.0 / 4294967296.0));
+            }
 
             if (!arm32) {
+                check("frinta", 2 * w, round_half_away(f32_1));
+                check("frinta", w, round_half_away(f64_1));
+                check("fcvtas *v", 2 * w, i32(round_half_away(f32_1)));
+                check("fcvtau *v", 2 * w, u32(round_half_away(f32_1)));
+                check("fcvtas *v", 8 * w, i8(round_half_away(f32_1)));
                 check("fcvtmu *v", 2 * w, u32(floor(f32_1)));
                 check("fcvtpu *v", 2 * w, u32(ceil(f32_1)));
                 check("fcvtms *v", 2 * w, i32(floor(f32_1)));
@@ -383,6 +393,25 @@ public:
                 check("tbl.16b", 32 * w, in_u8(x * 4));
                 check("tbl.16b", 16 * w, in_i16(x * 4));
                 check("tbl.16b", 16 * w, in_u16(x * 4));
+            }
+
+            if (!arm32) {
+                // Repeating each element of a short vector k times (e.g. from
+                // vectorizing f(x / k)) should be a single tbl per output
+                // vector, not a sequence of dups and unzips.
+                check("tbl", 16 * w, in_u8(x / 8));
+                check("tbl", 16 * w, in_i8(x / 4));
+                check("tbl", 8 * w, in_u16(x / 4));
+
+                // A dense store of such a vector for small k, or k == 4 with
+                // wide types, is better done as an interleaving store.
+                check("st2", 32 * w, in_u8(x / 2));
+                check("st3", 48 * w, in_u8(x / 3));
+                check("st4", 16 * w, in_f32(x / 4));
+            } else {
+                check("vst2.8", 32 * w, in_u8(x / 2));
+                check("vst3.8", 24 * w, in_u8(x / 3));
+                check("vst4.16", 16 * w, in_u16(x / 4));
             }
 
             // VLDM     X       F, D    Load Multiple Registers

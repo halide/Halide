@@ -71,6 +71,7 @@ target_sources(
     Bounds.h
     BoundsInference.h
     BoundSmallAllocations.h
+    BoundsTracker.h
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
@@ -119,6 +120,7 @@ target_sources(
     Extern.h
     ExternFuncArgument.h
     ExtractTileOperations.h
+    ExtractWMMAOperations.h
     FastIntegerDivide.h
     FindCalls.h
     FindIntrinsics.h
@@ -131,6 +133,7 @@ target_sources(
     FuzzFloatStores.h
     Generator.h
     GeneratorCache.h
+    Halidoscope.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -159,6 +162,7 @@ target_sources(
     Lower.h
     LowerParallelTasks.h
     LowerSMEStreamingTasks.h
+    LowerStructTypes.h
     LowerWarpShuffles.h
     Memoization.h
     Module.h
@@ -255,6 +259,7 @@ target_sources(
     Bounds.cpp
     BoundsInference.cpp
     BoundSmallAllocations.cpp
+    BoundsTracker.cpp
     Buffer.cpp
     Callable.cpp
     CanonicalizeGPUVars.cpp
@@ -303,6 +308,7 @@ target_sources(
     Error.cpp
     Expr.cpp
     ExtractTileOperations.cpp
+    ExtractWMMAOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
     FindIntrinsics.cpp
@@ -314,6 +320,7 @@ target_sources(
     FuzzFloatStores.cpp
     Generator.cpp
     GeneratorCache.cpp
+    Halidoscope.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
@@ -340,6 +347,7 @@ target_sources(
     Lower.cpp
     LowerParallelTasks.cpp
     LowerSMEStreamingTasks.cpp
+    LowerStructTypes.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
     Module.cpp
@@ -510,6 +518,13 @@ target_sources(
     FILES "${Halide_BINARY_DIR}/include/Halide.h"
 )
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+set_source_files_properties(
+    Halidoscope.cpp
+    PROPERTIES
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
+)
+
 ##
 # CodeGen backends
 ##
@@ -547,7 +562,13 @@ if (WITH_SERIALIZATION)
     find_package(FlatBuffers REQUIRED)
     _Halide_pkgdep(FlatBuffers NAMESPACE flatbuffers)
 
-    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    # Prefer the static library, but some distributions (e.g. Arch) only
+    # build the shared one.
+    if (TARGET flatbuffers::flatbuffers)
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    else ()
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers_shared)
+    endif ()
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
     set(fb_dir "${Halide_BINARY_DIR}/include/flatc")
@@ -592,14 +613,8 @@ target_compile_definitions(
 # WasmExecutor backend selection
 ##
 
-set(Halide_WASM_BACKEND "wabt" CACHE STRING "Which backend to use for Halide's WASM testing.")
-set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
-
-if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
-    message(WARNING "wabt is not yet supported on Windows")
-    set(Halide_WASM_BACKEND "OFF")
-endif ()
-
+# Halide_WASM_BACKEND is defined in the top-level CMakeLists.txt, since it
+# determines whether LLD is required.
 if (Halide_WASM_BACKEND STREQUAL "wabt")
     find_package(wabt REQUIRED)
     _Halide_pkgdep(wabt)

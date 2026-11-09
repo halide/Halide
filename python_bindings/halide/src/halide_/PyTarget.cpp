@@ -13,7 +13,7 @@ std::string target_repr(const Target &t) {
 
 }  // namespace
 
-void define_target(py::module &m) {
+void define_target(py::module_ &m) {
     // Disambiguate some ambiguous methods
     int (Target::*natural_vector_size_method)(const Type &t) const = &Target::natural_vector_size;
     bool (Target::*supports_type1_method)(const Type &t) const = &Target::supports_type;
@@ -31,10 +31,10 @@ void define_target(py::module &m) {
             .def("__eq__", [](const Target &value, Target *value2) { return value2 && value == *value2; })
             .def("__ne__", [](const Target &value, Target *value2) { return !value2 || value != *value2; })
 
-            .def_readwrite("os", &Target::os)
-            .def_readwrite("arch", &Target::arch)
-            .def_readwrite("bits", &Target::bits)
-            .def_readwrite("processor_tune", &Target::processor_tune)
+            .def_rw("os", &Target::os)
+            .def_rw("arch", &Target::arch)
+            .def_rw("bits", &Target::bits)
+            .def_rw("processor_tune", &Target::processor_tune)
 
             .def("__repr__", &target_repr)
             .def("__str__", &Target::to_string)

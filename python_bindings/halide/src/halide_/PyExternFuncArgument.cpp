@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_extern_func_argument(py::module &m) {
+void define_extern_func_argument(py::module_ &m) {
     auto extern_func_argument_class =
         py::class_<ExternFuncArgument>(m, "ExternFuncArgument")
             .def(py::init<>())
@@ -12,10 +12,10 @@ void define_extern_func_argument(py::module &m) {
             .def(py::init<int>())
             .def(py::init<float>())
             // for implicitly_convertible
-            .def(py::init([](const Func &f) -> ExternFuncArgument { return f; }))
-            .def(py::init([](const Param<> &p) -> ExternFuncArgument { return p; }))
-            .def(py::init([](const ImageParam &im) -> ExternFuncArgument { return im; }))
-            .def(py::init([](const OutputImageParam &im) -> ExternFuncArgument { return im; }))
+            .def("__init__", [](ExternFuncArgument *self, const Func &f) { new (self) ExternFuncArgument(f); })
+            .def("__init__", [](ExternFuncArgument *self, const Param<> &p) { new (self) ExternFuncArgument(Expr(p)); })
+            .def("__init__", [](ExternFuncArgument *self, const ImageParam &im) { new (self) ExternFuncArgument(im); })
+            .def("__init__", [](ExternFuncArgument *self, const OutputImageParam &im) { new (self) ExternFuncArgument(im); })
 
             .def("is_func", &ExternFuncArgument::is_func)
             .def("is_expr", &ExternFuncArgument::is_expr)

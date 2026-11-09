@@ -18,7 +18,8 @@ namespace Internal {
  * rearranging, etc. Simplifies across let statements, so must not be called on
  * stmts with dangling or repeated variable names. Can optionally be passed
  * known bounds of any variables, known alignment properties, and any other
- * Exprs that should be assumed to be true.
+ * Exprs that should be assumed to be true. The assumptions must already be
+ * simplified.
  */
 // @{
 Stmt simplify(const Stmt &,

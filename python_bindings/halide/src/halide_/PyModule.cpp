@@ -7,15 +7,15 @@ namespace {
 
 }  // namespace
 
-void define_module(py::module &m) {
+void define_module(py::module_ &m) {
 
     auto auto_scheduler_results_class =
         py::class_<AutoSchedulerResults>(m, "AutoSchedulerResults")
             .def(py::init<>())
-            .def_readwrite("target", &AutoSchedulerResults::target)
-            .def_readwrite("autoscheduler_params", &AutoSchedulerResults::autoscheduler_params)
-            .def_readwrite("schedule_source", &AutoSchedulerResults::schedule_source)
-            .def_readwrite("featurization", &AutoSchedulerResults::featurization)
+            .def_rw("target", &AutoSchedulerResults::target)
+            .def_rw("autoscheduler_params", &AutoSchedulerResults::autoscheduler_params)
+            .def_rw("schedule_source", &AutoSchedulerResults::schedule_source)
+            .def_rw("featurization", &AutoSchedulerResults::featurization)
             .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
                 return "<halide.AutoSchedulerResults>";
             });

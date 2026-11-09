@@ -6,6 +6,8 @@
  */
 
 #include <cstdint>
+#include <functional>
+#include <string>
 
 #include "Util.h"
 
@@ -82,11 +84,21 @@ ModulusRemainder modulus_remainder(const Expr &e);
  * modulus_remainder: */
 ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope);
 
+/** A callback giving the alignment of a free variable by name, e.g. from
+ * facts a mutator already tracks. It should return ModulusRemainder{} for
+ * variables it knows nothing about. */
+using AlignmentLookup = std::function<ModulusRemainder(const std::string &)>;
+
+/** As above, but asks a callback about free variables, so the caller doesn't
+ * need to mirror the facts it has into a Scope. */
+ModulusRemainder modulus_remainder(const Expr &e, const AlignmentLookup &alignment_of);
+
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
 ///@{
 HALIDE_MUST_USE_RESULT bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder);
 HALIDE_MUST_USE_RESULT bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
+HALIDE_MUST_USE_RESULT bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder, const AlignmentLookup &alignment_of);
 ///@}
 
 /** The greatest common divisor of two integers. Returns a positive result,

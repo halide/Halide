@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <filesystem>
 #include <sstream>
 #include <utility>
 
@@ -125,6 +126,8 @@ protected:
         std::string get_memory_space(const std::string &);
 
         std::string shared_name;
+
+        const std::string simd_lane_id_name = "_simd_lane_id";
 
         void visit(const Min *) override;
         void visit(const Max *) override;
@@ -299,9 +302,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
-    user_assert(loop->for_type != ForType::GPULane)
-        << "The Metal backend does not support the gpu_lanes() scheduling directive.";
-
     if (is_gpu(loop->for_type)) {
         internal_assert(is_const_zero(loop->min));
 
@@ -372,6 +372,33 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         // In Metal, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        // In Metal, round rounds ties away from zero
+        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else if (op->is_intrinsic({Call::gpu_shuffle_down, Call::gpu_shuffle_up,
+                                 Call::gpu_shuffle_xor, Call::gpu_shuffle_idx})) {
+        // LowerWarpShuffles checks that the SIMD-groups are 32 wide.
+        internal_assert(op->args.size() == 3);
+        auto width = as_const_int(op->args[2]);
+        internal_assert(width);
+        string value = print_expr(op->args[0]);
+        string x = print_expr(op->args[1]);
+        ostringstream rhs;
+        if (op->is_intrinsic(Call::gpu_shuffle_idx)) {
+            rhs << "simd_shuffle(" << value << ", (ushort)(";
+            if (*width < 32) {
+                // The lane is relative to the start of this group of lanes.
+                rhs << "(" << simd_lane_id_name << " & " << ~(*width - 1) << ") | ";
+            }
+            rhs << x << "))";
+        } else {
+            rhs << (op->is_intrinsic(Call::gpu_shuffle_down) ? "simd_shuffle_down" :
+                    op->is_intrinsic(Call::gpu_shuffle_up)   ? "simd_shuffle_up" :
+                                                               "simd_shuffle_xor")
+                << "(" << value << ", (ushort)" << x << ")";
+        }
+        print_assignment(op->type, rhs.str());
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -558,8 +585,15 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
+        // A struct is stored as a raw byte array (print_storage_type emits a byte
+        // element type), so size is an element count and must be scaled to bytes.
+        if (op->type.is_struct()) {
+            size *= op->type.bytes();
+        }
+
         stream << get_indent() << print_storage_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
+
         stream << get_indent() << "#define " << get_memory_space(op->name) << " thread\n";
 
         Allocation alloc;
@@ -754,9 +788,21 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     }
 
     // Emit the function prototype
+    bool uses_simd_lane_id = false;
+    visit_with(s, [&](auto *self, const Call *op) {
+        if (op->is_intrinsic(Call::gpu_shuffle_idx)) {
+            auto width = as_const_int(op->args[2]);
+            uses_simd_lane_id |= (!width || *width < 32);
+        }
+        self->visit_base(op);
+    });
+
     stream << "kernel void " << name << "(\n";
     stream << "uint3 tgroup_index [[ threadgroup_position_in_grid ]],\n"
            << "uint3 tid_in_tgroup [[ thread_position_in_threadgroup ]]";
+    if (uses_simd_lane_id) {
+        stream << ",\nushort " << simd_lane_id_name << " [[ thread_index_in_simdgroup ]]";
+    }
     size_t buffer_index = 0;
     if (any_scalar_args) {
         stream << ",\nconst device " << name << "_args *_scalar_args [[ buffer(0) ]]";
@@ -881,8 +927,19 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     if (!metal_compiler.empty() && !metal_linker.empty()) {
         // The user has specified the Metal compiler and linker to use via set_metal_compiler_and_linker(),
         // so instead of embedding the shader as a string, we will embed it as a metallib
-        // Write the source to a temporary file.
-        auto tmpfile = file_make_temp("metal", ".metal");
+        // Write the source to a temporary file. The compiler and linker outputs
+        // go in the same private directory, since their names are derived from
+        // the source file's name. The directory and anything in it are removed
+        // on scope exit, including when the compiler or linker fails.
+        struct TemporaryDir {
+            string path = dir_make_temp();
+            ~TemporaryDir() {
+                std::error_code ec;
+                std::filesystem::remove_all(path, ec);
+            }
+        } tmpdir_guard;
+        const string &tmpdir = tmpdir_guard.path;
+        string tmpfile = tmpdir + "/kernel.metal";
         write_entire_file(tmpfile, buffer);
 
         // Compile the Metal source to a metallib.

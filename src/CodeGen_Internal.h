@@ -91,6 +91,10 @@ Expr lower_concat_bits(const Call *c);
  * standard library being present. */
 Expr lower_round_to_nearest_ties_to_even(const Expr &);
 
+/** A vectorizable implementation of Halide::round_half_away that doesn't
+ * depend on any standard library being present. */
+Expr lower_round_half_away_from_zero(const Expr &);
+
 /** Given an llvm::Module, set llvm:TargetOptions information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);
 

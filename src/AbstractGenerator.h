@@ -239,6 +239,11 @@ public:
      * Set all the GeneratorParams in the map. This is equivalent to simply calling the
      * `set_generatorparam_value()` method in a loop over the map, but is quite convenient. */
     void set_generatorparam_values(const GeneratorParamsMap &m);
+
+protected:
+    /** The input Arguments of the built pipeline, in the order the
+     * Callable returned by compile_to_callable() expects them. */
+    std::vector<Argument> ordered_input_arguments();
 };
 
 using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;

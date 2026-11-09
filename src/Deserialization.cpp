@@ -188,8 +188,8 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::LockedCache;
     case Serialize::MemoryType::VTCM:
         return MemoryType::VTCM;
-    case Serialize::MemoryType::AMXTile:
-        return MemoryType::AMXTile;
+    case Serialize::MemoryType::Tile:
+        return MemoryType::Tile;
     default:
         user_error << "unknown memory type " << (int)memory_type << "\n";
         return MemoryType::Auto;
@@ -434,6 +434,27 @@ Type Deserializer::deserialize_type(const Serialize::Type *type) {
     const int bits = type->bits();
     const int lanes = type->lanes();
     const TypeCode code_deserialized = type->code();
+
+    if (code_deserialized == TypeCode::Struct) {
+        user_assert(lanes == 1) << "A struct type cannot be a vector.\n";
+        const auto *fields_serialized = type->struct_fields();
+        user_assert(fields_serialized != nullptr && fields_serialized->size() > 0)
+            << "deserializing a struct type with no fields\n";
+        std::vector<StructField> fields;
+        fields.reserve(fields_serialized->size());
+        for (const auto *field_serialized : *fields_serialized) {
+            StructField field;
+            field.name = deserialize_string(field_serialized->name());
+            field.type = deserialize_type(field_serialized->type());
+            const int array_extent = field_serialized->array_extent();
+            if (array_extent >= 0) {
+                field.array_extent = array_extent;
+            }
+            fields.push_back(field);
+        }
+        return Type::Struct(fields);
+    }
+
     halide_type_code_t code = halide_type_uint;
     switch (code_deserialized) {
     case TypeCode::Int:
@@ -505,6 +526,7 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     const bool trace_loads = function->trace_loads();
     const bool trace_stores = function->trace_stores();
     const bool trace_realizations = function->trace_realizations();
+    const bool trace_bounds_required = function->trace_bounds_required();
     const std::vector<std::string> trace_tags =
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
@@ -527,7 +549,8 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
-                                            trace_loads, trace_stores, trace_realizations, trace_tags,
+                                            trace_loads, trace_stores, trace_realizations,
+                                            trace_bounds_required, trace_tags,
                                             no_profiling, profiler_display_name, frozen, global_wrapper);
 }
 
@@ -1145,7 +1168,11 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
     const auto strategy = deserialize_prefetch_bound_strategy(prefetch_directive->strategy());
     const auto param_name = deserialize_string(prefetch_directive->param_name());
     Parameter param;
-    if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+    if (auto it = user_params.find(param_name); it != user_params.end()) {
+        param = it->second;
+    } else if (auto it = external_params.find(param_name); it != external_params.end()) {
+        param = it->second;
+    } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
         param = it->second;
     } else if (!param_name.empty()) {
         user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
@@ -1169,6 +1196,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     const auto exact = split->exact();
     const auto tail = deserialize_tail_strategy(split->tail());
     const auto split_type = deserialize_split_type(split->split_type());
+    const auto align = deserialize_expr(split->align_type(), split->align());
     auto hl_split = Split();
     hl_split.old_var = old_var;
     hl_split.outer = outer;
@@ -1177,6 +1205,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     hl_split.exact = exact;
     hl_split.tail = tail;
     hl_split.split_type = split_type;
+    hl_split.align = align;
     return hl_split;
 }
 

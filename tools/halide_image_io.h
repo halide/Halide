@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -73,6 +74,20 @@ inline bool CheckFail(bool condition, const char *msg) {
 
 inline bool CheckReturn(bool condition, const char *msg) {
     return condition;
+}
+
+// Buffer strides are ints, so a dense buffer with these (positive) extents can
+// only be represented if every stride, i.e. the product of the extents of the
+// inner dimensions, fits in an int.
+inline bool dense_strides_fit_in_int(const std::vector<int> &extents) {
+    int64_t stride = 1;
+    for (size_t i = 0; i + 1 < extents.size(); i++) {
+        stride *= extents[i];
+        if (stride > std::numeric_limits<int>::max()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 template<typename To, typename From>
@@ -918,6 +933,9 @@ bool load_png(const std::string &filename, ImageType *im) {
     if (channels != 1) {
         im_dimensions.push_back(channels);
     }
+    if (!check(Internal::dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        return false;
+    }
 
     *im = ImageType(im_type, im_dimensions);
 
@@ -1080,6 +1098,9 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
     std::vector<int> im_dimensions = {width, height};
     if (channels > 1) {
         im_dimensions.push_back(channels);
+    }
+    if (!check(Internal::dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        return false;
     }
     *im = ImageType(im_type, im_dimensions);
 
@@ -1374,6 +1395,9 @@ bool load_npy(const std::string &filename, ImageType *im) {
     if (!check(im_type.bits != 0, "Unsupported type in load_npy")) {
         return false;
     }
+    if (!check(dense_strides_fit_in_int(h.extents), "Image is too large")) {
+        return false;
+    }
 
     *im = ImageType(im_type, h.extents);
 
@@ -1528,6 +1552,10 @@ bool load_jpg(const std::string &filename, ImageType *im) {
     if (channels > 1) {
         im_dimensions.push_back(channels);
     }
+    if (!check(Internal::dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        jpeg_destroy_decompress(&cinfo);
+        return false;
+    }
     *im = ImageType(im_type, im_dimensions);
 
     auto copy_to_image = Internal::read_big_endian_row<uint8_t, ImageType>;
@@ -1650,6 +1678,9 @@ bool load_tmp(const std::string &filename, ImageType *im) {
 
     const halide_type_t im_type = tmp_code_to_halide_type()[header[4]];
     std::vector<int> im_dimensions = {header[0], header[1], header[2], header[3]};
+    if (!check(dense_strides_fit_in_int(im_dimensions), "Image is too large")) {
+        return false;
+    }
     *im = ImageType(im_type, im_dimensions);
 
     // This should never fail unless the default Buffer<> constructor behavior changes.
@@ -1812,6 +1843,9 @@ bool load_mat(const std::string &filename, ImageType *im) {
         if (!check(extent > 0, "Bad extent in .mat file\n")) {
             return false;
         }
+    }
+    if (!check(dense_strides_fit_in_int(extents), "Image is too large\n")) {
+        return false;
     }
 
     // Skip over the name

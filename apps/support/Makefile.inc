@@ -42,7 +42,7 @@ GENERATOR_OUTPUTS ?= static_library,h,registration,stmt,assembly
 # This pulls in the definition of HALIDE_SYSTEM_LIBS and HALIDE_RTTI
 include $(HALIDE_DISTRIB_PATH)/halide_config.make
 
-LDFLAGS += -ldl -lpthread -lz
+LDFLAGS += -ldl -lpthread
 
 CXX ?= g++
 GXX ?= g++

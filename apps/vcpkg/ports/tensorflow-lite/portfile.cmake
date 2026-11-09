@@ -3,8 +3,8 @@ vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO tensorflow/tensorflow
-    REF a344c313f75bbe28d00abe63f5d49cd6f233b6d0  # 2.21.0-rc0
-    SHA512 48463c1dde438f18bf8d17104537258d6edf308be9f48af4fb40abee011a6f8c1c8aa50220fd1928bdfb8f251b8a9c764a1db50c9b7b9b0fe34d9e11d5273e4e
+    REF a481b10260dfdf833a1b16007eead49c1d7febf3  # 2.21.0
+    SHA512 abfe63c23194270c3487a76aaba131b7e3ecb90da2d6b27e53524458a9234b9b345537cd4404cdec79b29cae56ef3b3ed6d6d8baf1a0eb5e09b3e18b8fa543f5
     PATCHES fix-neon2sse-config.patch fix-msvc-friend-access.patch
 )
 

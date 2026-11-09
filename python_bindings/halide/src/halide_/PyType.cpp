@@ -38,6 +38,14 @@ std::string halide_type_to_string(const Type &type) {
                 stream << "handle";
             }
             break;
+        case halide_type_struct:
+            // A struct's size is a byte count, not a bit width; report it and
+            // return early so the trailing bits() isn't appended.
+            stream << "struct" << std::to_string(type.bytes());
+            if (type.lanes() > 1) {
+                stream << "x" + std::to_string(type.lanes());
+            }
+            return stream.str();
         default:
             stream << "#unknown";
             break;
@@ -50,7 +58,39 @@ std::string halide_type_to_string(const Type &type) {
     return stream.str();
 }
 
-void define_type(py::module &m) {
+void define_type(py::module_ &m) {
+    py::class_<StructField>(m, "StructField")
+        .def("__init__", [](StructField *self, const std::string &name, const Type &type, const py::object &array_extent) {
+                 std::optional<int> extent;
+                 if (!array_extent.is_none()) {
+                     extent = py::cast<int>(array_extent);
+                 }
+                 new (self) StructField(StructField{name, type, extent}); }, py::arg("name"), py::arg("type"), py::arg("array_extent") = py::none())
+        .def("__init__", [](StructField *self, const py::tuple &t) {
+            if (t.size() < 2 || t.size() > 3) {
+                throw py::value_error("StructField requires (name, type) or (name, type, array_extent)");
+            }
+            std::optional<int> extent;
+            if (t.size() == 3 && !t[2].is_none()) {
+                extent = py::cast<int>(t[2]);
+            }
+            new (self) StructField(StructField{py::cast<std::string>(t[0]), py::cast<Type>(t[1]), extent}); })
+        .def_rw("name", &StructField::name)
+        .def_rw("type", &StructField::type)
+        .def_prop_rw("array_extent", [](const StructField &f) -> py::object { return f.array_extent ? py::cast(*f.array_extent) : py::none(); }, [](StructField &f, const py::object &v) { f.array_extent = v.is_none() ? std::nullopt : std::make_optional(py::cast<int>(v)); }, py::for_setter(py::arg("value").none()))
+        .def("__eq__", [](const StructField &a, const StructField &b) -> bool { return a == b; })
+        .def("__ne__", [](const StructField &a, const StructField &b) -> bool { return !(a == b); });
+
+    // Allow e.g. Type.Struct([("d", Float(16)), ("qs", UInt(8), 16)]),
+    // mirroring the tuple -> Range convenience conversion above.
+    py::implicitly_convertible<py::tuple, StructField>();
+
+    py::class_<StructTypeInfo>(m, "StructTypeInfo")
+        .def_ro("fields", &StructTypeInfo::fields)
+        .def_ro("offsets", &StructTypeInfo::offsets)
+        .def_ro("total_bytes", &StructTypeInfo::total_bytes)
+        .def("find_field", &StructTypeInfo::find_field, py::arg("name"));
+
     py::class_<Type>(m, "Type")
         .def(py::init<>())
         .def(py::init<halide_type_code_t, int, int>(), py::arg("code"), py::arg("bits"), py::arg("lanes"))
@@ -72,6 +112,13 @@ void define_type(py::module &m) {
         .def("is_uint", &Type::is_uint)
         .def("is_handle", &Type::is_handle)
         .def("same_handle_type", &Type::same_handle_type, py::arg("other"))
+
+        .def_static("Struct", &Type::Struct, py::arg("fields"))
+        .def("is_struct", &Type::is_struct)
+        .def("same_struct_type", &Type::same_struct_type, py::arg("other"))
+        .def_prop_ro("struct_type", [](const Type &t) -> py::object {
+            return t.struct_type() ? py::cast(StructTypeInfo(*t.struct_type())) : py::none();
+        })
 
         .def("__eq__", [](const Type &value, Type *value2) -> bool { return value2 && value == *value2; })
         .def("__ne__", [](const Type &value, Type *value2) -> bool { return !value2 || value != *value2; })

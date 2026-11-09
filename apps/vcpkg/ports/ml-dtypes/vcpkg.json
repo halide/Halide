@@ -1,6 +1,6 @@
 {
   "name": "ml-dtypes",
-  "version-string": "0.5.4",
+  "version-string": "0.6.0",
   "description": "Machine learning data types support headers (source provider for TFLite in-tree build)",
   "homepage": "https://github.com/jax-ml/ml_dtypes",
   "license": "Apache-2.0"

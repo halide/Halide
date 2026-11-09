@@ -6,14 +6,16 @@
  */
 
 #include "Expr.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
 /** Canonicalize GPU var names into some pre-determined block/thread names
  * (i.e. __block_id_x, __thread_id_x, etc.). The x/y/z/w order is determined
- * by the nesting order: innermost is assigned to x and so on. */
-Stmt canonicalize_gpu_vars(Stmt s);
+ * by the nesting order: innermost is assigned to x and so on. The target
+ * says which API the GPU loops with the default API will use. */
+Stmt canonicalize_gpu_vars(Stmt s, const Target &t);
 
 /** Names for the thread and block id variables. Includes the leading
  * dot. Indexed from inside out, so 0 gives you the innermost loop. */

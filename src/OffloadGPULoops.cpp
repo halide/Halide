@@ -207,18 +207,23 @@ protected:
         vector<Expr> args, arg_types_or_sizes, arg_is_buffer;
         for (const DeviceArgument &i : closure_args) {
             Expr val;
+            Type runtime_arg_type = i.type;
             if (i.is_buffer) {
                 val = Variable::make(Handle(), i.name + ".buffer");
             } else {
                 val = Variable::make(i.type, i.name);
+                runtime_arg_type = gpu_codegen->kernel_run_scalar_arg_type(i.type);
+                if (runtime_arg_type != i.type) {
+                    val = cast(runtime_arg_type, val);
+                }
                 val = Call::make(type_of<void *>(), Call::make_struct, {val}, Call::Intrinsic);
             }
             args.emplace_back(val);
 
             if (runtime_run_takes_types) {
-                arg_types_or_sizes.emplace_back(i.type.to_abi());
+                arg_types_or_sizes.emplace_back(runtime_arg_type.to_abi());
             } else {
-                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
+                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : runtime_arg_type.bytes()));
             }
 
             arg_is_buffer.emplace_back(make_const(UInt(8), (int)i.is_buffer));
@@ -380,10 +385,21 @@ class FlattenAliasedAllocations : public IRMutator {
         return alignment + modulus_remainder(offset);
     }
 
+    // Shift an index into the backing allocation by the offset. Nothing
+    // simplifies the result, so add the offset to the base of a ramp rather
+    // than adding a broadcast to it: the device code generators only emit a
+    // dense vector load or store for an index that is a Ramp.
+    static Expr shift_index(const Expr &index, const Expr &offset) {
+        if (const Ramp *r = index.as<Ramp>()) {
+            return Ramp::make(shift_index(r->base, offset), r->stride, r->lanes);
+        }
+        return index + offset;
+    }
+
     Expr visit(const Load *op) override {
         if (aliases.contains(op->name)) {
             const Alias &a = aliases.get(op->name);
-            return Load::make(op->type, a.backing, mutate(op->index) + a.offset,
+            return Load::make(op->type, a.backing, shift_index(mutate(op->index), a.offset),
                               op->image, op->param, mutate(op->predicate),
                               shift_alignment(op->alignment, a.offset), false);
         }
@@ -393,7 +409,7 @@ class FlattenAliasedAllocations : public IRMutator {
     Stmt visit(const Store *op) override {
         if (aliases.contains(op->name)) {
             const Alias &a = aliases.get(op->name);
-            return Store::make(a.backing, mutate(op->value), mutate(op->index) + a.offset,
+            return Store::make(a.backing, mutate(op->value), shift_index(mutate(op->index), a.offset),
                                op->param, mutate(op->predicate),
                                shift_alignment(op->alignment, a.offset), false);
         }

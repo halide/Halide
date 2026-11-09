@@ -232,20 +232,24 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
     return result;
 }
 
-Callable AbstractGenerator::compile_to_callable(const JITHandlers *jit_handlers,
-                                                const std::map<std::string, JITExtern> *jit_externs) {
-    Pipeline pipeline = build_pipeline();
-
-    std::vector<Argument> arguments;
-    const auto arg_infos = arginfos();
-    for (const auto &a : arg_infos) {
+std::vector<Argument> AbstractGenerator::ordered_input_arguments() {
+    std::vector<Argument> args;
+    for (const auto &a : arginfos()) {
         if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
         for (const auto &p : input_parameter(a.name)) {
-            arguments.push_back(to_argument(p));
+            args.push_back(to_argument(p));
         }
     }
+    return args;
+}
+
+Callable AbstractGenerator::compile_to_callable(const JITHandlers *jit_handlers,
+                                                const std::map<std::string, JITExtern> *jit_externs) {
+    Pipeline pipeline = build_pipeline();
+
+    std::vector<Argument> arguments = ordered_input_arguments();
     if (jit_handlers != nullptr) {
         pipeline.jit_handlers() = *jit_handlers;
     }

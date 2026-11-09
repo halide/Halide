@@ -40,6 +40,8 @@ target_link_libraries(run_c_backend_and_native PRIVATE pipeline_native pipeline_
 add_executable(run_c_backend_and_native_cpp run_cpp.cpp)
 target_link_libraries(run_c_backend_and_native_cpp PRIVATE pipeline_cpp_native pipeline_cpp_cpp)
 
+add_custom_target(c_backend DEPENDS run_c_backend_and_native run_c_backend_and_native_cpp)
+
 # Test that the app actually works!
 add_test(NAME c_backend COMMAND run_c_backend_and_native)
 add_test(NAME c_backend_cpp COMMAND run_c_backend_and_native_cpp)

@@ -158,8 +158,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::LockedCache;
     case MemoryType::VTCM:
         return Serialize::MemoryType::VTCM;
-    case MemoryType::AMXTile:
-        return Serialize::MemoryType::AMXTile;
+    case MemoryType::Tile:
+        return Serialize::MemoryType::Tile;
     default:
         user_error << "Unsupported memory type\n";
         return Serialize::MemoryType::Auto;
@@ -401,8 +401,23 @@ Offset<String> Serializer::serialize_string(FlatBufferBuilder &builder, const st
 Offset<Serialize::Type> Serializer::serialize_type(FlatBufferBuilder &builder, const Type &type) {
     const int bits = type.bits();
     const int lanes = type.lanes();
-    halide_type_code_t code = type.code();
-    const auto code_serialized = Serialize::TypeCode(code);
+
+    if (type.is_struct()) {
+        const StructTypeInfo *info = type.struct_type();
+        internal_assert(info != nullptr) << "Struct type is missing its field layout.\n";
+        std::vector<Offset<Serialize::StructField>> fields_serialized;
+        fields_serialized.reserve(info->fields.size());
+        for (const StructField &field : info->fields) {
+            const auto name_serialized = serialize_string(builder, field.name);
+            const auto field_type_serialized = serialize_type(builder, field.type);
+            fields_serialized.push_back(Serialize::CreateStructField(
+                builder, name_serialized, field_type_serialized, field.array_extent.value_or(-1)));
+        }
+        const auto fields_vector_serialized = builder.CreateVector(fields_serialized);
+        return Serialize::CreateType(builder, Serialize::TypeCode::Struct, bits, lanes, fields_vector_serialized);
+    }
+
+    const auto code_serialized = Serialize::TypeCode(type.code());
     return Serialize::CreateType(builder, code_serialized, bits, lanes);
 }
 
@@ -1026,6 +1041,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     const bool trace_loads = function.is_tracing_loads();
     const bool trace_stores = function.is_tracing_stores();
     const bool trace_realizations = function.is_tracing_realizations();
+    const bool trace_bounds_required = function.is_tracing_bounds_required();
     std::vector<Offset<String>> trace_tags_serialized;
     trace_tags_serialized.reserve(function.get_trace_tags().size());
     for (const auto &tag : function.get_trace_tags()) {
@@ -1066,6 +1082,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_loads,
                                       trace_stores,
                                       trace_realizations,
+                                      trace_bounds_required,
                                       builder.CreateVector(trace_tags_serialized),
                                       no_profiling,
                                       profiler_display_name_serialized,
@@ -1268,10 +1285,12 @@ Offset<Serialize::Split> Serializer::serialize_split(FlatBufferBuilder &builder,
     const auto exact = split.exact;
     const auto tail_serialized = serialize_tail_strategy(split.tail);
     const auto split_type_serialized = serialize_split_type(split.split_type);
+    const auto align_serialized = serialize_expr(builder, split.align);
     return Serialize::CreateSplit(builder, old_var_serialized,
                                   outer_serialized, inner_serialized,
                                   factor_serialized.first, factor_serialized.second,
-                                  exact, tail_serialized, split_type_serialized);
+                                  exact, tail_serialized, split_type_serialized,
+                                  align_serialized.first, align_serialized.second);
 }
 
 Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, const Dim &dim) {

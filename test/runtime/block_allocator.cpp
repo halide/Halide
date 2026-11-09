@@ -101,12 +101,42 @@ int conform_region(void *user_context, MemoryRequest *request) {
     return halide_error_code_success;
 }
 
+int conform_padded_region(void *user_context, MemoryRequest *request) {
+    // Test-only alignments: keep the 128-byte allocation modest, but make its
+    // larger free tail round up enough to exceed the 8 KiB test block.
+    request->alignment = request->size > 256 ? 4096 : 256;
+    return conform_region(user_context, request);
+}
+
 }  // end namespace
 
 int main(int argc, char **argv) {
     void *user_context = (void *)1;
 
     SystemMemoryAllocatorFns system_allocator = {allocate_system, deallocate_system};
+
+    // Regression: keep the allocation unsplit when conforming the free tail would overrun the block.
+    {
+        BlockResource block_resource = {};
+        block_resource.memory.size = 8192;
+        allocate_block(user_context, &block_resource.memory);
+        RegionAllocator::MemoryAllocators allocators = {
+            system_allocator, {allocate_region, deallocate_region, conform_padded_region}};
+        RegionAllocator *instance = RegionAllocator::create(user_context, &block_resource, allocators);
+
+        MemoryRequest request = {};
+        request.size = 128;
+        // The free tail's stricter alignment would extend it past the block.
+        MemoryRegion *region = instance->reserve(user_context, request);
+        check_region(user_context, region);
+        HALIDE_CHECK(user_context, region->allocation.size == block_resource.memory.size);
+        HALIDE_CHECK(user_context, instance->reserve(user_context, request) == nullptr);
+
+        RegionAllocator::destroy(user_context, instance);
+        deallocate_block(user_context, &block_resource.memory);
+        HALIDE_CHECK(user_context, allocated_region_memory == 0);
+        HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
+    }
 
     // test region allocator class interface
     {

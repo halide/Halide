@@ -1,8 +1,17 @@
 # Halide Bindings for Python
 
-Halide provides Python bindings for most of its public API. Python 3.10 (or
+Halide provides Python bindings for most of its public API. Python 3.12 (or
 higher) is required. The Python bindings are supported on 64-bit Linux, OSX, and
 Windows systems.
+
+The compiler and standalone runtime extensions use nanobind and CPython's stable
+ABI. Their `cp312-abi3` wheels work unchanged on regular, GIL-enabled CPython
+3.12 and newer on the same platform. Free-threaded CPython and PyPy are not
+supported. This does not stabilize Halide's C++ ABI or change the versioned
+runtime capsule API: keep the three Halide distributions at matching versions.
+Existing generator stubs must be rebuilt. New stubs use only the limited Python
+C API and dispatch through the compiler bindings; building them does not require
+nanobind.
 
 In addition to the ability to write just-in-time Halide code using Python, you
 can write [Generators](#halide-generators-in-python) using the Python bindings,
@@ -530,9 +539,9 @@ add_halide_python_extension_library(my_extension
 This compiles the Generator code in `logical_op_generator.py` with the
 registered name `logical_op_generator` to produce the target `xor_filter`, and
 then wraps the compiled output with a Python extension. The result will be a
-shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes the
-specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10
-on OSX.) Each exported function is a callable `halide.runtime.Kernel`, so the
+stable-ABI shared library, such as `<target>.abi3.so` on Linux/macOS or
+`<target>.pyd` on Windows. The same binary supports regular CPython 3.12 and
+newer. Each exported function is a callable `halide.runtime.Kernel`, so the
 environment where the extension is imported must have the matching
 `halide-runtime` package installed. The full `halide` package includes this
 dependency automatically.
