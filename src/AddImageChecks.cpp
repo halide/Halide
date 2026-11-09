@@ -664,7 +664,8 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // and check alignment of the host field
-        if (param.defined() && param.host_alignment() != param.type().bytes()) {
+        // (unless it is just the type's default alignment; see Parameter)
+        if (param.defined() && param.host_alignment() != (param.type().is_struct() ? param.type().struct_type()->alignment() : param.type().bytes())) {
             int alignment_required = param.host_alignment();
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
