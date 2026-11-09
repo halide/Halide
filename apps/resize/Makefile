@@ -81,17 +81,4 @@ $(BIN)/$(HL_TARGET)/out_%_down.png: $(BIN)/$(HL_TARGET)/resize
 clean:
 	rm -rf $(BIN)
 
-../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
-	$(MAKE) -C ../../ bin/HalideTraceViz
-
 .SECONDARY:
-
-$(BIN)/$(HL_TARGET)/viz_auto_%.mp4: $(BIN)/$(HL_TARGET)-trace_all/resize ../support/viz_auto.sh ../../bin/HalideTraceViz
-	@mkdir -p $(@D)
-	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh \
-		"$(BIN)/$(HL_TARGET)-trace_all/resize $(IMAGES)/rgb_small.png /tmp/$*.png -p 0 -b 1 -i $* -t float32 -f 0.5" \
-		"../../bin/HalideTraceViz --timestep 1000" \
-		$@
-
-viz_auto_%: $(BIN)/$(HL_TARGET)/viz_auto_%.mp4
-	$(HL_VIDEOPLAYER) $^

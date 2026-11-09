@@ -517,8 +517,8 @@ default, the number of cores on the host is used.)
 
 `HL_TRACE_FILE=...` specifies a binary target file to dump tracing data into
 (ignored unless at least one `trace_` feature is enabled in the target). The
-output can be parsed programmatically by starting from the code in
-`utils/HalideTraceViz.cpp`.
+output can be visualized with `tools/halidoscope`, or parsed programmatically by
+starting from the code in `util/HalideTraceDump.cpp`.
 
 `HL_CACHE_DIR=...` enables the opt-in generator compile cache, restoring a
 generator's previously emitted artifacts instead of recompiling when its inputs
