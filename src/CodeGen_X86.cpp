@@ -544,6 +544,22 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
+    // An 8-bit cast of a u8 x u8 product shifted right by 8 or more is that
+    // u8 mul_shift_right (which then never saturates), lowered below. (Only
+    // when that lowering applies: the generic one is this cast.)
+    if (const Call *shr = Call::as_intrinsic(op->value, {Call::shift_right});
+        shr && dst.bits() == 8 && src == UInt(16, dst.lanes()) && dst.lanes() % 16 == 0) {
+        const Call *mul = Call::as_intrinsic(shr->args[0], {Call::widening_mul});
+        auto shift = as_const_uint(shr->args[1]);
+        if (mul && shift && *shift >= 8 && *shift < 16 &&
+            mul->args[0].type().element_of() == UInt(8) &&
+            mul->args[1].type().element_of() == UInt(8)) {
+            Expr m = mul_shift_right(mul->args[0], mul->args[1], (int)*shift);
+            value = codegen(reinterpret(dst, m));
+            return;
+        }
+    }
+
     if (const Call *widening_op = Call::as_intrinsic(op->value, {Call::widening_mul, Call::widening_add, Call::widening_sub})) {
         bool should_upcast_args_to_dst_type =
             dst.can_represent(widening_op->args[0].type()) &&
@@ -641,6 +657,32 @@ void CodeGen_X86::visit(const Call *op) {
                 codegen(mul_shift_right(op->args[0], op->args[1] << shift_left, 16));
                 return;
             }
+        }
+    } else if (op->type.element_of() == UInt(8) &&
+               op->type.lanes() % 16 == 0 &&
+               op->is_intrinsic(Call::mul_shift_right)) {
+        // x86 has no 8-bit multiply. LLVM widens both halves to 16 bits,
+        // multiplies and packs back; instead take the even and odd bytes'
+        // high halves with pmulhuw on 16-bit lanes in place: (a_even << 8) *
+        // b_even >> 16 is a_even * b_even >> 8, and the odd bytes' product
+        // a_odd * b_odd (both masked to the high byte) has its high byte in
+        // place. (At least a 128-bit vector, so pmulhuw always matches: the
+        // generic lowering of a 16-bit mul_shift_right may narrow it back.)
+        internal_assert(op->args.size() == 3);
+        auto shift = as_const_uint(op->args[2]);
+        if (shift && *shift >= 8 && *shift < 16) {
+            Type wide = UInt(16, op->type.lanes() / 2);
+            Expr a = reinterpret(wide, op->args[0]);
+            Expr b = reinterpret(wide, op->args[1]);
+            Expr hi = make_const(wide, 0xff00);
+            Expr even = mul_shift_right(a << 8, b & make_const(wide, 0x00ff), 16);
+            Expr odd = mul_shift_right(a & hi, b & hi, 16) & hi;
+            Expr r = reinterpret(op->type, simplify(even | odd));
+            if (*shift > 8) {
+                r = r >> make_const(op->type, *shift - 8);
+            }
+            codegen(r);
+            return;
         }
     } else if (op->type.is_int() &&
                op->type.bits() <= 16 &&
