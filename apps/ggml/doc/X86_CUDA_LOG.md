@@ -50,6 +50,10 @@ Core changes (each with its test; none upstreamed yet):
   [0, its max]. Unblocked `vpdpbusd` for masked 2-bit codes (tq2_0: 12 to 8
   dot instructions per iteration). Tests: `constant_interval`, `lossless_cast`
   fuzz generator.
+- `CodeGen_X86`: a 4-way dot of three byte factors, one uniform over lane pairs
+  (a sub-block scale), is `pmaddubsw` of the other two then `pmaddwd` by the
+  scale (GGML's AVX2 q2_K/q6_K), not a byte multiply by the scale first.
+  Test: `simd_op_check_x86`.
 
 App changes:
 
@@ -60,6 +64,11 @@ App changes:
   with no sub-blocks or affine terms: the weights decoded in rows then
   transposed into AMX's 4-byte interleave, once per block for up to 4 tiles
   of M; one `tdpbssd` per 64 bytes; per-block scales in f32 on AVX-512.
+- With AVX-512 VNNI, 16-value sub-blocks decoded without tables (q2_K, q6_K)
+  take a zmm, each sub-block's scale in its lanes' products (the
+  `pmaddubsw`/`pmaddwd` rewrite above): one-thread vec_dot 0.45 -> 0.77x of
+  GGML for q2_K, 0.48 -> 0.79x for q6_K; gemv 0.47 -> 0.81x, 0.83 -> 1.08x.
+  The q6_K offset sums 16 lanes a step on x86 (a ymm `pmaddwd`).
 - Bench: `--early-stop[=LO,HI]` ends a case's rounds once every GGML/Halide
   ratio's 95% CI is outside [LO, HI]; the main thread's AMX tile config is
   kept across Halide calls (GGML's AMX kernels load theirs once per thread).
