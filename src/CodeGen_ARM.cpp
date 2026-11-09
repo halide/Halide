@@ -3018,7 +3018,11 @@ string CodeGen_ARM::mcpu_target() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "apple-a7";
+            if (target.has_feature(Target::ARM64e)) {
+                return "apple-a12";
+            } else {
+                return "apple-a7";
+            }
         } else if (target.os == Target::MacOS) {
             return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {

@@ -734,6 +734,101 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
         fn.addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(
             module.getContext(), vscale_range, vscale_range));
     }
+
+    if (!fn.isIntrinsic() && module.getTargetTriple().isArm64e()) {
+        fn.addFnAttr("ptrauth-returns");
+        fn.addFnAttr("ptrauth-calls");
+        fn.addFnAttr("ptrauth-auth-traps");
+        fn.addFnAttr("ptrauth-indirect-gotos");
+        fn.addFnAttr("aarch64-jump-table-hardening");
+    }
+}
+
+void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &target) {
+    if (!target.has_feature(Target::ARM64e)) {
+        return;
+    }
+
+    llvm::LLVMContext &ctx = module.getContext();
+    llvm::ConstantInt *ptrauth_key = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0);
+    llvm::ConstantInt *ptrauth_disc = llvm::ConstantInt::get(llvm::Type::getInt64Ty(ctx), 0);
+    llvm::Constant *null_ptr = llvm::Constant::getNullValue(llvm::PointerType::get(ctx, 0));
+
+    auto is_in_llvm_intrinsic_global = [](const llvm::User *u, auto &self) -> bool {
+        if (const auto *gv = llvm::dyn_cast<llvm::GlobalVariable>(u)) {
+            return gv->getName() == "llvm.used" ||
+                   gv->getName() == "llvm.compiler.used" ||
+                   gv->getName() == "llvm.global_ctors" ||
+                   gv->getName() == "llvm.global_dtors";
+        }
+        if (llvm::isa<llvm::Constant>(u) && !llvm::isa<llvm::GlobalValue>(u)) {
+            for (const llvm::User *parent : u->users()) {
+                if (self(parent, self)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    auto should_sign_use = [&](llvm::Use &u) -> bool {
+        llvm::User *user = u.getUser();
+        if (auto *cb = llvm::dyn_cast<llvm::CallBase>(user)) {
+            if (cb->isCallee(&u)) {
+                return false;
+            }
+        }
+        if (llvm::isa<llvm::ConstantPtrAuth>(user) ||
+            llvm::isa<llvm::GlobalAlias>(user) ||
+            llvm::isa<llvm::Function>(user) ||
+            llvm::isa<llvm::BlockAddress>(user)) {
+            return false;
+        }
+        if (is_in_llvm_intrinsic_global(user, is_in_llvm_intrinsic_global)) {
+            return false;
+        }
+        return true;
+    };
+
+    for (llvm::Function &fn : module) {
+        if (fn.isIntrinsic()) {
+            continue;
+        }
+        bool has_signable_use = false;
+        for (llvm::Use &u : fn.uses()) {
+            if (should_sign_use(u)) {
+                has_signable_use = true;
+                break;
+            }
+        }
+        if (has_signable_use) {
+            llvm::Constant *signed_fn = llvm::ConstantPtrAuth::get(
+                &fn, ptrauth_key, ptrauth_disc, null_ptr, null_ptr);
+            fn.replaceUsesWithIf(signed_fn, should_sign_use);
+        }
+    }
+
+    llvm::OperandBundleDef ptrauth_bundle(
+        "ptrauth", std::vector<llvm::Value *>{ptrauth_key, ptrauth_disc});
+    for (llvm::Function &fn : module) {
+        for (llvm::BasicBlock &bb : fn) {
+            for (llvm::Instruction &inst : llvm::make_early_inc_range(bb)) {
+                auto *cb = llvm::dyn_cast<llvm::CallBase>(&inst);
+                if (!cb || cb->isInlineAsm() ||
+                    cb->getCalledFunction() != nullptr ||
+                    llvm::isa<llvm::Constant>(cb->getCalledOperand()) ||
+                    cb->getOperandBundle(llvm::LLVMContext::OB_ptrauth).has_value()) {
+                    continue;
+                }
+                llvm::CallBase *signed_cb =
+                    llvm::CallBase::Create(cb, ptrauth_bundle, cb->getIterator());
+                cb->replaceAllUsesWith(signed_cb);
+                cb->eraseFromParent();
+            }
+        }
+    }
+
+    internal_assert(!verifyModule(module, &llvm::errs()));
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {

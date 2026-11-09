@@ -107,6 +107,10 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 /** Set the appropriate llvm Function attributes given the Halide Target. */
 void set_function_attributes_from_halide_target_options(llvm::Function &);
 
+/** Sign non-callee function references with ConstantPtrAuth and attach
+ * "ptrauth" operand bundles to indirect calls when targeting Apple arm64e. */
+void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &target);
+
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's
  * -fembed-bitcode flag and is useful to satisfy Apple's bitcode

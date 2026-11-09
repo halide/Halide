@@ -244,6 +244,59 @@ void test_compile_to_everything(Func j, bool do_object) {
     check_header_declares_all_entrypoints(filename_prefix + ".h", function_name, target_strings);
 }
 
+void test_compile_to_word1_vector_targets(Func &j) {
+    struct TestCase {
+        const char *tag;
+        std::vector<std::string> target_strings;
+    };
+
+    const TestCase cases[] = {
+        {"c7",
+         {"arm-64-linux-sve2-vector_bits_128-profile-no_bounds_query",
+          "arm-64-linux-sve2-vector_bits_128-profile"}},
+        {"c8",
+         {"arm-64-linux-sve2-vector_bits_256",
+          "arm-64-linux-sve2-vector_bits_128"}},
+        {"c9",
+         {"arm-64-linux-sme2-sme_svl512-profile-no_bounds_query",
+          "arm-64-linux-sme2-sme_svl512-profile"}},
+        {"c10",
+         {"arm-64-linux-sme2-sme_svl512",
+          "arm-64-linux-sme2-sme_svl128"}},
+    };
+
+    for (const auto &tc : cases) {
+        std::vector<Target> targets;
+        bool all_supported = true;
+        for (const auto &s : tc.target_strings) {
+            targets.emplace_back(s);
+            if (!targets.back().supported()) {
+                all_supported = false;
+            }
+        }
+        if (!all_supported) {
+            continue;
+        }
+
+        const std::string filename_prefix = get_output_path_prefix(tc.tag);
+        const std::string ext =
+            Internal::get_output_info(targets.back()).at(OutputFileType::static_library).extension;
+        const std::vector<std::string> files = {
+            filename_prefix + ".h",
+            filename_prefix + ext,
+        };
+        for (const auto &f : files) {
+            Internal::ensure_no_file_exists(f);
+        }
+
+        j.compile_to_multitarget_static_library(filename_prefix, j.infer_arguments(), targets);
+
+        for (const auto &f : files) {
+            Internal::assert_file_exists(f);
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     Param<float> factor("factor");
     Func f, g, h, j;
@@ -263,6 +316,7 @@ int main(int argc, char **argv) {
     test_compile_to_object_files_single_target(j);
     test_compile_to_everything(j, /*do_object*/ true);
     test_compile_to_everything(j, /*do_object*/ false);
+    test_compile_to_word1_vector_targets(j);
 
     printf("Success!\n");
     return 0;
