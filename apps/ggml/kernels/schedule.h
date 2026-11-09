@@ -510,6 +510,7 @@ struct Sums {
     Func sums, blk, sum, part, pair;
     bool sub_sums = false;  // d.sum sums the act's sub-block sums (no part)
     bool offsets = false;   // a constant code offset's (offset_path())
+    int offset_lanes = 8;   // (offsets: d.part's vector)
 };
 inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true) {
     d = Sums();
@@ -634,9 +635,10 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         if (d.offsets) {
             // q6_K's int8 scales times the act's int16 sums, 8 lanes a step
             // (sshll, smull; at 16 LLVM shuffles the sign extend: q6_K's
-            // vec_dot and one-thread gemv 5-6% slower on M3)
-            d.part.split(t, to, ti, 8);
-            d.part.update().split(t, to, ti, 8);
+            // vec_dot and one-thread gemv 5-6% slower on M3), on x86 16 (a
+            // ymm pmaddwd)
+            d.part.split(t, to, ti, d.offset_lanes);
+            d.part.update().split(t, to, ti, d.offset_lanes);
             d.part.vectorize_all_stages(ti).unroll_all_stages(to, u, n, m);
         } else {
             d.part.vectorize_all_stages(t).unroll_all_stages(u, n, m);
@@ -817,6 +819,17 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // shuffles).
     bool vnni = t.has_feature(Target::AVXVNNI) || t.has_feature(Target::AVX512_Zen4);
     int wide = integer && vnni && sub % 32 == 0 && !(sub && sublanes) ? 32 : 16;
+    // With AVX-512 VNNI, 16-value sub-blocks decoded without tables take a
+    // zmm (any sublanes too): four sub-blocks a step, each scale in its
+    // lanes' products, which CodeGen_X86 sums as GGML's AVX2 q2_K/q6_K do
+    // (pmaddubsw, then pmaddwd by the scales; one-thread vec_dot 0.45 ->
+    // 0.77x of GGML for q2_K, 0.48 -> 0.79x for q6_K). Not tables' (iq2_xs:
+    // signed codes, 5% more), nor with offsets not to fold (q3_K's: its
+    // one-thread gemv 0.78 -> 0.51x of GGML)
+    if (integer && vnni && t.natural_vector_size<int8_t>() >= 64 && sub == 16 && !float_sub_scales(rs) &&
+        staged_tables(rs).empty() && k.fold != Fold::None) {
+        wide = 64;
+    }
     int per = integer ? 4 : 1, vec = std::min(t.natural_vector_size<int8_t>(), wide);
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
     int nsub = sub ? block / sub : 0;
@@ -842,6 +855,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         dkept.insert(dkept.end(), gpr.begin(), gpr.end());
     }
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, dkept, fold_offsets)) aff = false;
+    if (t.arch == Target::X86) d.offset_lanes = 16;
     if (aff) kept.clear();
     RVar rxl("rxl");  // (sl: the sub-block's lane)
     if (sl) {
