@@ -185,6 +185,11 @@ public:
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> 17));
             check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u16_2)) >> 18));
 
+            // x86 has no 8-bit multiply; the high halves of 8-bit products
+            // are taken with pmulhuw on the even and odd bytes in place.
+            check("pmulhuw", 16 * w, u8((u16(u8_1) * u16(u8_2)) >> 8));
+            check("pmulhuw", 16 * w, i8((u16(u8_1) * 3) >> 9));
+
             if (w > 1) {  // LLVM does a lousy job at the comparisons for 64-bit types
                 check("pcmp*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
                 check("pcmp*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
