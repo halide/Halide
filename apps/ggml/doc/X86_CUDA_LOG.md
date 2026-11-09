@@ -98,3 +98,15 @@ App changes:
   indices, then extracted each with `vpextrw`): one-thread gemv 0.41 -> 0.69x,
   0.36 -> 0.47x, 0.48 -> 0.71x of GGML; vec_dot 0.35 -> 0.50x, 0.29 -> 0.50x,
   0.47 -> 0.71x.
+- `Knobs::plain_index_words` (default true, the M3 behavior): false reads each
+  grid index byte in place rather than staging the index words in registers
+  (LLVM extracted each byte with shift and mask, and the words spilled). On
+  x86, iq3_xxs takes it, and its gemv `sublanes=false` (rows were built on the
+  stack): 103 -> 79 cycles a block in vec_dot, 101 -> 76 in gemv; one-thread
+  gemv 0.59 -> 0.89x of GGML, all-core 0.66 -> 0.92x, vec_dot 0.67 -> 0.85x.
+- Bench: GGML CPU mul_mat is labelled `tiled:<type>` where GGML 0.26's tiled
+  gemm (`ggml-cpu/tiled`, x86, M >= 8, K-quants, iq4_xs and the iq2/iq3/iq1
+  formats; off with `GGML_CPU_TILED_MM=0`) takes it, not `vec_dot:`. It decodes
+  a panel of weights once to biased bytes and runs a 16x16 VNNI microkernel
+  over columns: about 9 cycles a block-dot against our 36 for iq3_xxs (4096^2,
+  M = 32, one thread: GGML 4.9 ms, without tiled 41.7 ms, ours 20.3 ms).
