@@ -3,6 +3,8 @@
 #include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "Debug.h"
+#include "Deinterleave.h"
+#include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -876,6 +878,73 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         codegen_vector_reduce(sums.as<VectorReduce>(), make_zero(op->type));
         value = builder->CreateSub(biased, value);
         return;
+    }
+
+    // A 4-way (or wider) dot product of three 8-bit factors, one of them
+    // uniform over each pair of adjacent lanes (a scale per group of
+    // values): the other two's pair sums with pmaddubsw (when they provably
+    // fit int16), then times the scale and summed in pairs with pmaddwd,
+    // rather than an 8-bit product of the scale and a factor first.
+    if (op->op == VectorReduce::Add && factor % 4 == 0 && op->type.is_int() && op->type.bits() == 32 &&
+        target.has_feature(Target::AVX2)) {
+        const int lanes = op->value.type().lanes();
+        std::vector<Expr> leaves;
+        // (multiplies that can't wrap, or at the reduction's width, where
+        // wrapping commutes)
+        std::function<void(const Expr &)> factors = [&](const Expr &e) {
+            const Call *c = Call::as_intrinsic(e, {Call::widening_mul});
+            const Mul *m = e.as<Mul>();
+            const Cast *cast = e.as<Cast>();
+            if (c) {
+                factors(c->args[0]);
+                factors(c->args[1]);
+            } else if (m && (m->type.bits() == 32 ||
+                             ConstantInterval::bounds_of_type(m->type).contains(constant_integer_bounds(e)))) {
+                factors(m->a);
+                factors(m->b);
+            } else if (cast && cast->type.is_int_or_uint() && cast->value.type().is_int_or_uint() &&
+                       cast->type.can_represent(cast->value.type())) {
+                factors(cast->value);
+            } else {
+                leaves.push_back(e);
+            }
+        };
+        factors(op->value);
+        auto pairwise_uniform = [](const Expr &e) {
+            return equal(simplify(extract_even_lanes(e)), simplify(extract_odd_lanes(e)));
+        };
+        // (exact by the value's bounds, too)
+        auto narrow = [](Type t, const Expr &e) {
+            Expr n = lossless_cast(t, e);
+            if (!n.defined() && e.type().is_int_or_uint() &&
+                ConstantInterval::bounds_of_type(t).contains(constant_integer_bounds(e))) {
+                n = cast(t, e);
+            }
+            return n;
+        };
+        for (size_t i = 0; leaves.size() == 3 && i < 3; i++) {
+            Expr s = narrow(Int(16, lanes), leaves[i]);
+            if (!s.defined() || !pairwise_uniform(leaves[i])) {
+                continue;
+            }
+            Expr x = leaves[(i + 1) % 3], y = leaves[(i + 2) % 3];
+            Expr u = narrow(UInt(8, lanes), x), v = narrow(Int(8, lanes), y);
+            if (!u.defined() || !v.defined()) {
+                u = narrow(UInt(8, lanes), y);
+                v = narrow(Int(8, lanes), x);
+            }
+            if (!u.defined() || !v.defined() ||
+                !ConstantInterval(INT16_MIN, INT16_MAX).contains(constant_integer_bounds(u) * constant_integer_bounds(v) * 2)) {
+                continue;
+            }
+            Expr pairs = VectorReduce::make(VectorReduce::SaturatingAdd, widening_mul(u, v), lanes / 2);
+            Expr scaled = VectorReduce::make(VectorReduce::Add, widening_mul(pairs, extract_even_lanes(s)), lanes / 4);
+            if (factor > 4) {
+                scaled = VectorReduce::make(VectorReduce::Add, scaled, op->type.lanes());
+            }
+            codegen_vector_reduce(scaled.as<VectorReduce>(), init);
+            return;
+        }
     }
 
     for (const Pattern &p : patterns) {

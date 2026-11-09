@@ -431,6 +431,16 @@ public:
             check(check_pmaddwd, 2 * w, i32(i16_1) * i32(i16_2));
         }
 
+        if (use_avx2 && !use_avx512) {
+            // A dot product of three 8-bit factors, one uniform over pairs
+            // of lanes (a scale per group): pmaddubsw of the other two,
+            // then pmaddwd by the scale (not a byte multiply by it first)
+            RDom r4(0, 4);
+            for (const char *op : {"vpmaddubsw", "vpmaddwd"}) {
+                check(op, 8, sum(i32(in_u8(4 * x + r4) % 4) * i32(in_i8(4 * x + r4 + 32)) * i32(in_u8(x + 64) % 16)));
+            }
+        }
+
         // llvm doesn't distinguish between signed and unsigned multiplies
         // check("pmuldq", 4, i64(i32_1) * i64(i32_2));
 
