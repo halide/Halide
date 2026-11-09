@@ -73,9 +73,10 @@ inline Approximation tq1_0(const std::string &lay, bool indexed = false) {
 // q2_0's quantization: d = amax, the greatest |x| by GGML's strict scan
 // (fabsf(x) > amax from 0: NaNs never taken), so order-free; code =
 // (int)roundf(x * (1 / d)) (0 for d = 0), clamped to [-1, 2] (GGML clamps
-// the code + 1 to [0, 3]; arm64's conversion saturates, NaN to 0). Only
-// blocks of d < 2^-128, whose 1 / d is inf, have the code 2 (x > 0), with an
-// error up to 2 d. Values = codes * d.
+// the code + 1 to [0, 3]; arm64's conversion saturates, NaN to 0; x86-64's
+// gives INT_MIN for inf and NaN alike, the code -1). Only blocks of
+// d < 2^-128, whose 1 / d is inf, have a non-finite x / d: the code 2 (x > 0)
+// on arm64, -1 on x86-64, with an error up to 2 d. Values = codes * d.
 struct Q2Quant {
     static constexpr int block = 64;
 
@@ -86,7 +87,8 @@ struct Q2Quant {
         Expr xr = x(r, b, _);
         d(b, _) = maximum(sf(select(is_nan(xr), 0.0f, abs(xr))));
         Expr v = sf(x(j, b, _) * inverse(d(b, _)));
-        q(j, b, _) = cast<int8_t>(sf(select(is_nan(v), 0.0f, clamp(round_half_away(v), -1.0f, 2.0f))));
+        Expr c = clamp(round_half_away(v), -1.0f, 2.0f);
+        q(j, b, _) = cast<int8_t>(sf(select(target_arch_is(Target::X86), select(is_finite(v), c, -1.0f), select(is_nan(v), 0.0f, c))));
         return {q, d};
     }
     std::vector<Func> decode(const std::vector<Func> &e) const {
