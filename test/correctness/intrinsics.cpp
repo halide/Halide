@@ -92,6 +92,7 @@ void check_intrinsics_over_range() {
                 {mul_shift_right(a_expr, b_expr, t_bits), mul_shift_right<T>(a, b, t_bits)},
                 {rounding_mul_shift_right(a_expr, b_expr, t_bits - 1), rounding_mul_shift_right<T>(a, b, t_bits - 1)},
                 {rounding_mul_shift_right(a_expr, b_expr, t_bits), rounding_mul_shift_right<T>(a, b, t_bits)},
+                {rounding_mul_shift_right(a_expr, b_expr, 0), mul_shift_right<T>(a, b, 0)},
             };
             for (const auto &p : multiply_intrinsics_with_reference_answer) {
                 if (a < std::numeric_limits<int>::min() || a > std::numeric_limits<int>::max() ||
