@@ -137,6 +137,32 @@ protected:
     std::map<Expr, ConstantInterval, ExprCompare> bounds_cache;
     Scope<ConstantInterval> let_var_bounds;
 
+    // The values of the Funcs whose realizations the Stmt loads, if known
+    // (in a scope and cache of their own: lossless_cast's are without them).
+    const FuncValueBounds *func_bounds = nullptr;
+    std::map<Expr, ConstantInterval, ExprCompare> value_bounds_cache;
+    Scope<ConstantInterval> let_var_value_bounds;
+
+    ConstantInterval value_bounds(const Expr &e) {
+        return Halide::Internal::constant_integer_bounds(e, let_var_value_bounds, &value_bounds_cache, func_bounds);
+    }
+
+    // e, with any bounds on it tighter than its type's made visible to later
+    // passes (codegen) that can't see the Funcs' values.
+    Expr with_value_bounds(const Expr &e) {
+        ConstantInterval b = value_bounds(e);
+        if (!b.is_bounded() || b.contains(ConstantInterval::bounds_of_type(e.type()))) {
+            return e;
+        }
+        return unsafe_promise_clamped(e, make_const(e.type().element_of(), b.min), make_const(e.type().element_of(), b.max));
+    }
+
+public:
+    FindIntrinsics(const FuncValueBounds *func_bounds = nullptr)
+        : func_bounds(func_bounds) {
+    }
+
+protected:
     Expr lossless_cast(Type t, const Expr &e) {
         return Halide::Internal::lossless_cast(t, e, let_var_bounds, &bounds_cache);
     }
@@ -287,6 +313,9 @@ protected:
         while (op) {
             Expr v = mutate(op->value);
             ConstantInterval b = constant_integer_bounds(v);
+            if (func_bounds) {
+                let_var_value_bounds.push(op->name, value_bounds(v));
+            }
             frames.emplace_back(op,
                                 std::move(v),
                                 ScopedBinding<ConstantInterval>(let_var_bounds, op->name, b));
@@ -297,6 +326,9 @@ protected:
         body = mutate(body);
 
         for (const auto &f : reverse_view(frames)) {
+            if (func_bounds) {
+                let_var_value_bounds.pop(f.orig->name);
+            }
             if (f.new_value.same_as(f.orig->value) && body.same_as(f.orig->body)) {
                 body = f.orig;
             } else {
@@ -487,6 +519,15 @@ protected:
 
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        // A byte times a factor in [-1, 1] (e.g. a sign looked up in a
+        // precomputed table) is the byte with that sign (x86: psignb), and its
+        // other factor's bounds bound the product.
+        if (func_bounds && op->type.is_int() && op->type.bits() == 8 &&
+            (ConstantInterval(-1, 1).contains(value_bounds(a)) ||
+             ConstantInterval(-1, 1).contains(value_bounds(b)))) {
+            return Mul::make(with_value_bounds(a), with_value_bounds(b));
+        }
 
         if (op->type.is_float()) {
             if (Expr r = find_fixed_to_float(a, b); r.defined()) {
@@ -1323,9 +1364,9 @@ protected:
 
 }  // namespace
 
-Stmt find_intrinsics(const Stmt &s) {
+Stmt find_intrinsics(const Stmt &s, const FuncValueBounds *func_bounds) {
     Stmt stmt = SubstituteInWideningLets()(s);
-    stmt = FindIntrinsics()(stmt);
+    stmt = FindIntrinsics(func_bounds)(stmt);
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
@@ -1636,7 +1677,11 @@ Expr lower_fixed_to_float(const Type &t, const Expr &x, const Expr &k) {
 }
 
 Expr lower_intrinsic(const Call *op) {
-    if (op->is_intrinsic(Call::widen_right_add)) {
+    if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
+        // Injected by find_intrinsics for codegen's peephole optimizations
+        internal_assert(op->args.size() == 3);
+        return op->args[0];
+    } else if (op->is_intrinsic(Call::widen_right_add)) {
         internal_assert(op->args.size() == 2);
         return lower_widen_right_add(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::widen_right_mul)) {

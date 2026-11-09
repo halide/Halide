@@ -5,6 +5,7 @@
  * Tools to replace common patterns with more readily recognizable intrinsics.
  */
 
+#include "Bounds.h"
 #include "IR.h"
 
 namespace Halide {
@@ -40,8 +41,11 @@ Expr lower_fixed_to_float(const Type &t, const Expr &x, const Expr &k);
 /** Replace one of the above ops with equivalent arithmetic. */
 Expr lower_intrinsic(const Call *op);
 
-/** Replace common arithmetic patterns with intrinsics. */
-Stmt find_intrinsics(const Stmt &s);
+/** Replace common arithmetic patterns with intrinsics. Given the bounds on
+ * the values of the Funcs whose realizations the Stmt loads, also annotate a
+ * byte multiply by a factor in [-1, 1] with them (unsafe_promise_clamped) for
+ * codegen. */
+Stmt find_intrinsics(const Stmt &s, const FuncValueBounds *func_bounds = nullptr);
 Expr find_intrinsics(const Expr &e);
 
 /** The reverse of find_intrinsics. */

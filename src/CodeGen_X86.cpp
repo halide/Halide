@@ -55,6 +55,7 @@ protected:
     // @{
     void visit(const Add *) override;
     void visit(const Sub *) override;
+    void visit(const Mul *) override;
     void visit(const Cast *) override;
     void visit(const Call *) override;
     void visit(const GT *) override;
@@ -110,6 +111,10 @@ const x86Intrinsic intrinsic_defs[] = {
     {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
     {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
     {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
+
+    // a * sign(b) (zero where b is). AVX-512 has no zmm version.
+    {"llvm.x86.avx2.psign.b", Int(8, 32), "sign", {Int(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.x86.ssse3.psign.b.128", Int(8, 16), "sign", {Int(8, 16), Int(8, 16)}, Target::SSE41},
 
     {"round_f32x4", Float(32, 4), "round", {Float(32, 4)}, Target::SSE41},
     {"round_f64x2", Float(64, 2), "round", {Float(64, 2)}, Target::SSE41},
@@ -468,6 +473,26 @@ void CodeGen_X86::visit(const GE *op) {
 
 void CodeGen_X86::visit(const NE *op) {
     codegen(!(op->a == op->b));
+}
+
+void CodeGen_X86::visit(const Mul *op) {
+    // x86 has no byte multiply. By a factor in [-1, 1], it is psignb.
+    if (op->type.is_int() && op->type.bits() == 8 && op->type.is_vector()) {
+        auto is_sign = [](const Expr &e) {
+            return ConstantInterval(-1, 1).contains(constant_integer_bounds(e));
+        };
+        Value *v = nullptr;
+        if (is_sign(op->b)) {
+            v = call_overloaded_intrin(op->type, "sign", {op->a, op->b});
+        } else if (is_sign(op->a)) {
+            v = call_overloaded_intrin(op->type, "sign", {op->b, op->a});
+        }
+        if (v) {
+            value = v;
+            return;
+        }
+    }
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_X86::visit(const Select *op) {
@@ -909,6 +934,37 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (non_negative(a)) {
             Expr d = dot(cast(u8_type, a), b);
             codegen_vector_reduce(d.as<VectorReduce>(), init);
+            return;
+        }
+        // With an operand known not to be -128, move the other's sign onto
+        // it: a * b = |a| * (a < 0 ? -b : b), exact, one dot (vpsignb).
+        auto not_int8_min = [](const Expr &e) {
+            ConstantInterval c = constant_integer_bounds(e);
+            return c.min_defined && c.min > -128;
+        };
+        // Not when an operand is itself a sign (in [-1, 1]): the bias form's
+        // correction depends on the other operand alone and is shared across
+        // a gemm tile, where a psignb per product measured slower.
+        auto is_sign = [](const Expr &e) {
+            return ConstantInterval(-1, 1).contains(constant_integer_bounds(e));
+        };
+        const bool use_sign = !is_sign(a) && !is_sign(b);
+        if (use_sign && not_int8_min(a) && !not_int8_min(b)) {
+            std::swap(a, b);
+        }
+        if (use_sign && not_int8_min(b)) {
+            const std::string a_name = unique_name('a'), b_name = unique_name('b');
+            sym_push(a_name, codegen(a));
+            a = Variable::make(a.type(), a_name);
+            Value *signed_b = call_overloaded_intrin(b.type(), "sign", {b, a});
+            if (!signed_b) {
+                signed_b = codegen(select(a < make_zero(a.type()), -b, b));
+            }
+            sym_push(b_name, signed_b);
+            Expr d = dot(abs(a), Variable::make(b.type(), b_name));
+            codegen_vector_reduce(d.as<VectorReduce>(), init);
+            sym_pop(b_name);
+            sym_pop(a_name);
             return;
         }
         const Expr bias = make_const(u8_type, 128);

@@ -3496,16 +3496,74 @@ Box box_touched(Stmt s, const string &fn, const Scope<Interval> &scope, const Fu
 }
 
 namespace {
-// Compute interval of all possible function's values (default + specialized values)
-Interval compute_pure_function_definition_value_bounds(
-    const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim) {
+// The interval of the values in an integer Buffer with host data (or
+// everything).
+Interval bounds_of_contents(const Buffer<> &b) {
+    int64_t lo = 0, hi = 0;
+    bool any = false;
+    auto scan = [&](auto zero) {
+        using T = decltype(zero);
+        b.as<T>().for_each_value([&](T v) {
+            lo = any ? std::min<int64_t>(lo, v) : v;
+            hi = any ? std::max<int64_t>(hi, v) : v;
+            any = true;
+        });
+    };
+    const Type t = b.type();
+    if (!b.data() || !(t.is_int() || (t.is_uint() && t.bits() < 64))) {
+        return Interval::everything();
+    }
+    switch (t.bits()) {
+    case 8:
+        t.is_int() ? scan(int8_t{}) : scan(uint8_t{});
+        break;
+    case 16:
+        t.is_int() ? scan(int16_t{}) : scan(uint16_t{});
+        break;
+    case 32:
+        t.is_int() ? scan(int32_t{}) : scan(uint32_t{});
+        break;
+    case 64:
+        scan(int64_t{});
+        break;
+    default:
+        return Interval::everything();
+    }
+    if (!any) {
+        return Interval::everything();
+    }
+    return Interval(make_const(t, lo), make_const(t, hi));
+}
 
-    Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
+// Compute interval of all possible function's values (default + specialized values)
+// With constant_images, the Buffers the definition reads are as they are now
+// (a Func evaluated at compile time: Func::precompute()), so their reads are
+// bounded by their contents.
+Interval compute_pure_function_definition_value_bounds(
+    const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim, bool constant_images) {
+
+    Expr value = def.values()[dim];
+    Scope<Interval> image_scope;
+    image_scope.set_containing_scope(&scope);
+    if (constant_images) {
+        value = mutate_with(value, [&](auto *self, const Call *op) -> Expr {
+            if (op->call_type == Call::Image && op->image.defined()) {
+                Interval i = bounds_of_contents(op->image);
+                if (i.is_bounded()) {
+                    std::string name = unique_name('v');
+                    image_scope.push(name, i);
+                    return Variable::make(op->type, name);
+                }
+            }
+            return self->visit_base(op);
+        });
+    }
+    Interval result = bounds_of_expr_in_scope(value, image_scope, fb);
 
     // Pure function might have different values due to specialization.
     // We need to take the union of min and max bounds of all those possible values.
     for (const Specialization &s : def.specializations()) {
-        Interval s_interval = compute_pure_function_definition_value_bounds(s.definition, scope, fb, dim);
+        Interval s_interval = compute_pure_function_definition_value_bounds(s.definition, scope, fb, dim, constant_images);
         result.include(s_interval);
     }
     return result;
@@ -3532,7 +3590,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                     arg_scope.push(f_args[k], Interval::everything());
                 }
 
-                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
+                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j,
+                                                                       f.schedule().precomputed());
                 // These can expand combinatorially as we go down the
                 // pipeline if we don't run CSE on them.
                 bool fixed = result.is_single_point();

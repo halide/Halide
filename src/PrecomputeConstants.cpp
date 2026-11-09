@@ -415,7 +415,8 @@ Stmt precompute_constants(const Stmt &s,
                           const map<string, Function> &env,
                           const vector<Argument> &args,
                           const Target &t,
-                          const Module &result_module) {
+                          const Module &result_module,
+                          FuncValueBounds &func_bounds) {
     map<string, Function> precomputed;
     for (const string &name : order) {
         const Function &f = env.at(name);
@@ -528,6 +529,9 @@ Stmt precompute_constants(const Stmt &s,
                 }
                 b.set_name(unique_name(base + "_precomputed"));
                 known.push_back(b);
+            }
+            if (auto it = func_bounds.find({name, (int)i}); it != func_bounds.end()) {
+                func_bounds[{b.name(), 0}] = it->second;
             }
         }
         replacements.emplace(name, std::move(buffers));
