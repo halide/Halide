@@ -102,8 +102,9 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   (order statistics), `ci_pct` = CI width / median, GB/s, GOP/s.
   `--early-stop` (for iterating, not for reported numbers) ends a case's rounds
   after 5 once, for every Halide/GGML pair, the 95% CI of the median per-round
-  ratio of their times lies outside [0.8, 1.25]; `samples` records the rounds
-  run.
+  ratio of their times (GGML/Halide) lies outside [0.92, 1.03] (or
+  `--early-stop=LO,HI`): clearly on one side of the 0.95 match threshold.
+  `samples` records the rounds run.
 - macOS has no clock pinning: `ci_pct` is the noise report. Serialize timing
   runs machine-wide (`~/dev/Halide/.bench.lock`).
 - Layout sensitivity: at startup the bench reads one byte of every page of every

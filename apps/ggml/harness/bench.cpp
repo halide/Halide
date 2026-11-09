@@ -29,13 +29,12 @@ double time_ns(Kernel *k, int reps) {
 //
 // Early stop (side non-empty): after early_min_rounds, stop once, for every
 // pair of an ours kernel (side 1) and a GGML one (side 0), the 95% CI of the
-// median per-round ratio GGML/ours lies wholly outside [early_lo, early_hi]:
+// median per-round ratio GGML/ours lies wholly outside the band [lo, hi]:
 // the case is clearly a match or clearly not, whatever the remaining rounds
 // would add. Cases near parity run every round.
 namespace {
 
 constexpr int early_min_rounds = 5;
-constexpr double early_lo = 0.8, early_hi = 1.25;
 
 // 95% CI of the median of v (sorted in place): indices into v.
 std::pair<int, int> median_ci(std::vector<double> &v) {
@@ -45,7 +44,7 @@ std::pair<int, int> median_ci(std::vector<double> &v) {
     return {std::max(0, (int)std::floor(n / 2.0 - half)), std::min(n - 1, (int)std::ceil(n / 2.0 + half))};
 }
 
-bool decided(const std::vector<std::vector<double>> &s, const std::vector<int> &side) {
+bool decided(const std::vector<std::vector<double>> &s, const std::vector<int> &side, std::pair<double, double> band) {
     for (size_t h = 0; h < s.size(); h++) {
         if (side[h] != 1) continue;
         for (size_t g = 0; g < s.size(); g++) {
@@ -54,7 +53,7 @@ bool decided(const std::vector<std::vector<double>> &s, const std::vector<int> &
             for (size_t i = 0; i < r.size(); i++)
                 r[i] = s[g][i] / s[h][i];
             auto [lo, hi] = median_ci(r);
-            if (r[hi] >= early_lo && r[lo] <= early_hi) return false;
+            if (r[hi] >= band.first && r[lo] <= band.second) return false;
         }
     }
     return true;
@@ -62,7 +61,7 @@ bool decided(const std::vector<std::vector<double>> &s, const std::vector<int> &
 
 }  // namespace
 
-std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms, const std::vector<int> &side) {
+std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms, const std::vector<int> &side, std::pair<double, double> band) {
     std::vector<int> reps(ks.size(), 1);
     for (size_t i = 0; i < ks.size(); i++) {
         double t = time_ns(ks[i], 1) * ks[i]->batch;  // per rep
@@ -81,7 +80,7 @@ std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds
         std::shuffle(order.begin(), order.end(), rng);
         for (int i : order)
             s[i].push_back(time_ns(ks[i], reps[i]));
-        if (!side.empty() && r + 1 >= early_min_rounds && decided(s, side)) break;
+        if (!side.empty() && r + 1 >= early_min_rounds && decided(s, side, band)) break;
     }
     std::vector<Timing> out;
     for (size_t i = 0; i < ks.size(); i++) {
