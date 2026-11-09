@@ -4,7 +4,9 @@
 // storage may be in the other layout from its source (here, the default
 // storage of a Func that reads a transposed input), which must not leak into
 // the multiply. Compiling for CUDA embeds the PTX in the host assembly, so no
-// device is needed to check this.
+// device is needed to check this. On an x86 host with AMX, the fragments'
+// Tile allocations must also be left to the CUDA backend, not taken for AMX
+// tiles.
 
 #include "Halide.h"
 #include "halide_test_dirs.h"
@@ -12,6 +14,7 @@
 #include <set>
 #include <sstream>
 #include <stdio.h>
+#include <vector>
 
 using namespace Halide;
 
@@ -36,7 +39,7 @@ std::set<std::string> layouts(const std::string &assembly, const std::string &pr
 // A 32x32x32 matrix multiply in 16x16x16 tiles, with both operands staged in
 // fragments. Each input is stored either the way its fragment is (A with K
 // dense, B with N dense) or transposed.
-bool test(bool a_transposed, bool b_transposed) {
+bool test(bool a_transposed, bool b_transposed, Target host) {
     const int M = 32, N = 32, K = 32, tile = 16;
 
     ImageParam A(Float(16), 2, "A"), B(Float(16), 2, "B");
@@ -99,8 +102,7 @@ bool test(bool a_transposed, bool b_transposed) {
             .vectorize(bi);
     }
 
-    Target t = get_host_target()
-                   .with_feature(Target::CUDA)
+    Target t = host.with_feature(Target::CUDA)
                    .with_feature(Target::CUDACapability70);
     std::string path = Internal::get_test_tmp_dir() + "wmma_fragment_layout.s";
     out.compile_to_assembly(path, {A, B}, "out", t);
@@ -138,11 +140,17 @@ bool test(bool a_transposed, bool b_transposed) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    for (bool a_transposed : {false, true}) {
-        for (bool b_transposed : {false, true}) {
-            if (!test(a_transposed, b_transposed)) {
-                printf("Failed!\n");
-                return 1;
+    std::vector<Target> hosts{get_host_target()};
+    if (hosts[0].arch == Target::X86 && hosts[0].bits == 64) {
+        hosts.push_back(hosts[0].with_feature(Target::AVX512_SapphireRapids));
+    }
+    for (const Target &host : hosts) {
+        for (bool a_transposed : {false, true}) {
+            for (bool b_transposed : {false, true}) {
+                if (!test(a_transposed, b_transposed, host)) {
+                    printf("Failed!\n");
+                    return 1;
+                }
             }
         }
     }
