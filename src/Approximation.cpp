@@ -3017,8 +3017,9 @@ public:
             if (exact_float(f->value, r)) {
                 return constant(r);
             }
+            // Key on the exact value: the printed form rounds tiny values.
             std::ostringstream s;
-            s << e;
+            s << std::hexfloat << f->value;
             return factor(atom(s.str(), {}, ConstantInterval::everything()));
         }
         if (const Variable *v = e.as<Variable>()) {

@@ -804,6 +804,26 @@ int test_intrinsic_width() {
     return 0;
 }
 
+// Constants that are not exact rationals must not be identified by their
+// printed form.
+int test_float_constant_atoms() {
+    Var b("b");
+    const float big = 1e-20f, next = std::nextafter(1e-20f, INFINITY);
+    CodesPort scaled("big_scaled", [=](const std::vector<Func> &from) {
+        Func d("big_scaled_stored");
+        Var b("b");
+        d(b) = cast<float>(from[0](0, b)) * big;
+        return d;
+    });
+    Func other("big_other_term");
+    other(b) = cast<float>(scaled.port.from[0](0, b)) * next;
+    CHECK(!match_derived_port(other, scaled.port).matched);
+    Func same("big_same_term");
+    same(b) = cast<float>(scaled.port.from[0](0, b)) * big;
+    CHECK(match_derived_port(same, scaled.port).matched);
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -994,6 +1014,7 @@ int main(int argc, char **argv) {
                                            {"poly_range", test_poly_range},
                                            {"narrow_sum", test_narrow_sum},
                                            {"intrinsic_width", test_intrinsic_width},
+                                           {"float_constant_atoms", test_float_constant_atoms},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},
