@@ -44,6 +44,9 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
 #ifdef WINDOWS
         "nvcuda.dll",
 #else
+        // The driver's soname first: the unversioned name is a development
+        // symlink, which e.g. WSL's driver doesn't put on the loader path.
+        "libcuda.so.1",
         "libcuda.so",
         "libcuda.dylib",
         "/Library/Frameworks/CUDA.framework/CUDA",
