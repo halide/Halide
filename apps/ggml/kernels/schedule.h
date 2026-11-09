@@ -1287,6 +1287,70 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo), t, index_words);
 }
 
+// AMX tiles (x86 tdpbssd/tdpbusd), as GGML's AMX backend: out's stage st
+// under cond on ts tiles of 16 rows of N, each block's codes' dot one 16 x 16
+// int32 tile op per 64 bytes (the act's rows the A tile, the weight's codes
+// the B tile, staged in its 4-byte interleave), then scaled into f32
+// accumulators. ts.mt / 16 tiles of M share each block's staged weights.
+inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block,
+                        const std::vector<ApproximationResult> &rs, const Target &t) {
+    Stage s = tile_out(out, st, dot, cond, ts, r);
+    Var n = dot.args()[0], m = dot.args()[1], u("u");
+    RVar ry = r.y, rx = r.x;
+    std::vector<Func> wc = rs[0].decoded_components(tag::codes), ac = rs[1].decoded_components(tag::codes);
+    Func blk = s.rfactor(ry, u);
+    std::vector<Func> keep = wc;
+    keep.insert(keep.end(), ac.begin(), ac.end());
+    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, false, keep);
+    // the accumulators: ts.mt / 16 tiles of 16 x 16 f32, each block's weights
+    // staged once for them all
+    VarOrRVar at = ry;
+    if (ts.mt > 16) {
+        Var mo("mt"), mi("mi");
+        s.split(m, mo, mi, 16).reorder(n, mi, mo, ry).vectorize(n).unroll(mi);
+        at = mo;
+    } else {
+        s.reorder(n, m, ry).vectorize(n).unroll(m);
+    }
+    LoopLevel tile(dot, at);
+    blk.compute_at(tile).vectorize_all_stages(n).unroll_all_stages(m);
+    // the codes' dot: one tile op per 64 values of the block (K <= 64 bytes)
+    RVar rxo("rxo"), rxi("rxi");
+    codes.compute_at(tile).store_in(MemoryType::Tile).vectorize(n).vectorize(m);
+    Stage cu = codes.update();
+    if (block > 64) {
+        cu.split(rx, rxo, rxi, 64).reorder(rxi, n, m, rxo).atomic().vectorize(rxi).vectorize(n).vectorize(m);
+    } else {
+        cu.reorder(rx, n, m).atomic().vectorize(rx).vectorize(n).vectorize(m);
+    }
+    Func cs = codes.in(blk);
+    cs.compute_at(tile).vectorize(n).vectorize(m);
+    // operands staged per block: the weight's codes in AMX's layout
+    // (4 values of a row, then the rows, then the next 4), the act's dense
+    // (the weight's codes, or their offline staged input: what codes calls
+    // but the act's)
+    Var ko("ko"), ki("ki");
+    std::vector<Func> wops;
+    for (const auto &kv : Internal::find_direct_calls(codes.function())) {
+        bool act = kv.first == codes.name();
+        for (Func f : ac)
+            act = act || kv.first == f.name();
+        if (!act) wops.emplace_back(kv.second);
+    }
+    for (Func f : wops) {
+        // decoded in rows (dense, vectorized), then transposed in words
+        Func d = f.in(codes), w = d.in(codes);
+        Var k = w.args()[0], b = w.args()[1], row = w.args()[2];
+        d.compute_at(dot, ry).vectorize(d.args()[0]).unroll(d.args()[2]);
+        w.compute_at(dot, ry).split_storage(k, ko, ki, 4).reorder_storage(ki, row, ko, b);
+        w.split(k, ko, ki, 4).reorder(ki, row, ko, b).vectorize(ki).vectorize(row).vectorize(ko);
+    }
+    for (Func f : ac) {
+        Func a = f.in(codes);
+        a.compute_at(tile).vectorize(a.args()[0]).unroll(a.args()[2]);
+    }
+}
+
 // The Funcs of e's encoder: those of the result that encodes e.
 inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationResult> &rs) {
     for (const ApproximationResult &res : rs) {
@@ -2068,6 +2132,11 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     Tiles mmla8{4, 8, 1, 32, 32, true}, gemm{4, 4, 1, 32, 32, true}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
+    // AMX: integer weights of one row per record, no sub-blocks or code-free
+    // terms (blocked_amx())
+    Tiles amx{16, 16, 1, 32, 32, true}, amx4{16, 64, 1, 32, 64, true};
+    bool amx_ok = integer && t.has_feature(Target::AVX512_SapphireRapids) && !whole && fmt.rows == 1 && !fmt.sub && fmt.per == 1 &&
+                  fmt.block % 4 == 0 && (fmt.block <= 64 || fmt.block % 64 == 0) && !affine(rs);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
     bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
@@ -2108,6 +2177,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, fmt.block, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, k);
     } else if (mmla_ok) {
         blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, fmt.block, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, k);
+    } else if (amx_ok) {
+        blocked_amx(out, 0, dr, fits(amx4, M), amx4, r, fmt.block, rs, t);
+        blocked_amx(out, 0, dr, fits(amx, M), amx, r, fmt.block, rs, t);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
