@@ -633,7 +633,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     MemoryRequest request = {0};
     request.size = halide_buffer->size_in_bytes();
     request.properties.usage = MemoryUsage::TransferDst;
-    request.properties.caching = MemoryCaching::UncachedCoherent;
+    request.properties.caching = MemoryCaching::CachedCoherent;  // The host reads it.
     request.properties.visibility = MemoryVisibility::DeviceToHost;
 
     // allocate a new region for staging the transfer
@@ -870,7 +870,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
             // NOTE: We may re-use this buffer so enable both src and dst
             request.properties.usage = MemoryUsage::TransferSrcDst;
-            request.properties.caching = MemoryCaching::UncachedCoherent;
+            request.properties.caching = MemoryCaching::CachedCoherent;  // The host reads it.
             request.properties.visibility = MemoryVisibility::DeviceToHost;
 
             // allocate a new region
