@@ -21,6 +21,9 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 #endif
+#ifdef __linux__
+#include <fstream>
+#endif
 
 namespace gq {
 
@@ -60,7 +63,7 @@ const char *usage =
     "  --acts dot,f16,f32       activation types; dot = the weight's vec_dot_type\n"
     "  --shapes PRESET          smoke|gemv|full|<model>-gemv|<model>-full|denoiser|KxNxM|<n> (default smoke)\n"
     "  --providers a,b          only providers whose name contains one of these\n"
-    "  --threads N              (default: performance cores)\n"
+    "  --threads N              (default: performance cores; Linux: physical cores)\n"
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
     "  --check                  correctness only, exit 1 on any failure\n"
     "  --outputs all|sampled    outputs the oracle checks: every one, or up to 64 rows x 4\n"
@@ -81,6 +84,15 @@ int perf_cores() {
     int n = 0;
     size_t len = sizeof(n);
     if (sysctlbyname("hw.perflevel0.physicalcpu", &n, &len, nullptr, 0) == 0 && n > 0) return n;
+#elif defined(__linux__)
+    // physical cores: one per distinct set of SMT siblings
+    std::set<std::string> cores;
+    for (unsigned c = 0; c < std::thread::hardware_concurrency(); c++) {
+        std::ifstream f("/sys/devices/system/cpu/cpu" + std::to_string(c) + "/topology/thread_siblings_list");
+        std::string l;
+        if (std::getline(f, l)) cores.insert(l);
+    }
+    if (!cores.empty()) return (int)cores.size();
 #endif
     return 4;
 }
@@ -207,7 +219,7 @@ std::string fmt(double x, const char *f = "%.4g") {
 
 int main(int argc, char **argv) {
     self_exe = argv[0];
-    if (argc > 1 && !strcmp(argv[1], "--probe-metal")) return probe_metal(argc - 2, argv + 2);
+    if (argc > 1 && !strcmp(argv[1], "--probe-gpu")) return probe_gpu(argc - 2, argv + 2);
 #ifdef __APPLE__
     // Prefer performance cores for the timing thread and the pools it spawns.
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);

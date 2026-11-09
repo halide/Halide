@@ -229,6 +229,32 @@ if (NOT GGML_SCHEDULE_KNOBS)
     set(GGML_SCHEDULE_PARAMS "")
 endif ()
 
+# CUDA rows (-DGGML_HALIDE_CUDA=ON; the default where GGML has its CUDA
+# backend, GGML_CUDA from find_package(ggml)): GGML_FORMATS rows, built for
+# GGML_HALIDE_CUDA_FEATURES, registered with the harness and run, checked
+# and timed like the Metal rows. The tensor-core gemm is the Metal gemm's
+# schedule (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
+# (cuda_shapes). Each bench library's test checks that its PTX multiplies
+# on the tensor cores.
+set(GGML_HALIDE_CUDA_FORMATS "f16 mul_mat f16" "q4_0:f16 mul_mat f16")
+set(GGML_HALIDE_CUDA_FEATURES cuda cuda_capability_80)
+# Metal rows need Apple's GPU; CUDA rows GGML's CUDA backend (to compare with)
+option(GGML_HALIDE_CUDA "Build, register and run the CUDA libraries" ${GGML_CUDA})
+set(_rows "")
+foreach (row IN LISTS GGML_FORMATS)
+    if (row MATCHES " metal$" AND NOT APPLE)
+        continue ()
+    endif ()
+    list(APPEND _rows "${row}")
+endforeach ()
+if (GGML_HALIDE_CUDA)
+    string(REPLACE ";" "," _cuda "${GGML_HALIDE_CUDA_FEATURES}")
+    foreach (row IN LISTS GGML_HALIDE_CUDA_FORMATS)
+        list(APPEND _rows "${row} ${_cuda}")
+    endforeach ()
+endif ()
+set(GGML_FORMATS "${_rows}")
+
 set(GGML_HALIDE_LIBRARIES "")
 set(registry "")
 
@@ -294,7 +320,9 @@ foreach (row IN LISTS GGML_FORMATS)
             list(GET at -1 compute)
             string(REPLACE ":" "_to_" name "${id}_${act}_${op}")
             if (NOT features STREQUAL "-")
-                string(REPLACE "," "_" suffix "${features}")
+                # (the CUDA capability is not part of the name)
+                string(REGEX REPLACE ",?cuda_capability_[0-9]+" "" suffix "${features}")
+                string(REPLACE "," "_" suffix "${suffix}")
                 string(APPEND name "_${suffix}")
             endif ()
             string(MAKE_C_IDENTIFIER "${name}" name)
@@ -324,34 +352,11 @@ foreach (row IN LISTS GGML_FORMATS)
             string(APPEND registry
                 "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
+            if ("cuda" IN_LIST features_list)
+                add_test(NAME ${name}_ptx COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}_bench>)
+                set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
+            endif ()
         endforeach ()
     endforeach ()
 endforeach ()
 file(CONFIGURE OUTPUT halide_kernels.inc CONTENT "${registry}")
-
-# Compile-only CUDA tensor-core gemm (-DGGML_HALIDE_CUDA=ON, off by default;
-# not GGML_CUDA, which find_package(ggml) sets): the Metal gemm's schedule
-# (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
-# (cuda_shapes), built for host-cuda-cuda_capability_80, never linked or run
-# (no NVIDIA hardware). Rows: `type act`, as GGML_FORMATS' mul_mat. Each
-# library's test checks that its PTX multiplies on the tensor cores.
-option(GGML_HALIDE_CUDA "Build the compile-only CUDA tensor-core gemm libraries" OFF)
-set(GGML_HALIDE_CUDA_FORMATS "f16 f16" "q4_0:f16 f16")
-set(GGML_HALIDE_CUDA_FEATURES cuda cuda_capability_80)
-if (GGML_HALIDE_CUDA)
-    foreach (row IN LISTS GGML_HALIDE_CUDA_FORMATS)
-        separate_arguments(row UNIX_COMMAND "${row}")
-        list(POP_FRONT row type act)
-        string(REPLACE ":" "_to_" name "${type}_${act}_mul_mat_cuda")
-        string(MAKE_C_IDENTIFIER "${name}" name)
-        add_halide_library(
-            ${name}
-            FROM ggml.generators
-            GENERATOR matmul
-            FEATURES ${GGML_HALIDE_CUDA_FEATURES}
-            PARAMS weight=${type} act=${act} op=mul_mat
-        )
-        add_test(NAME ${name}_ptx COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}>)
-        set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
-    endforeach ()
-endif ()

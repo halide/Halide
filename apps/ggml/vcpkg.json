@@ -4,6 +4,13 @@
   "license": "MIT",
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
   "dependencies": [
-    "ggml"
+    "ggml",
+    {
+      "name": "ggml",
+      "features": [
+        "cuda"
+      ],
+      "platform": "(linux | windows) & x64"
+    }
   ]
 }

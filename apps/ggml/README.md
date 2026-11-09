@@ -49,14 +49,18 @@ the plain CPU path is GGML's own `vec_dot` loop.
 
 A provider is skipped for a case it does not support: the backend's
 `supports_op` (checked before uploading W: extra buffer types repack in
-`set_tensor`) or, for Metal, the probe below. Dispatch is reported from public
+`set_tensor`) or, for GPUs, the probe below. Dispatch is reported from public
 signals: the buffer type W was allocated in (as llama.cpp chooses it), GGML's
 log (captured with `ggml_log_set`: repack logs
-`repack tensor ... with <type>_<rows>x<cols>`), and for Metal, a child process
-(`--probe-metal`) that runs the case once and prints the `kernel_mul_m*`
-pipelines it compiled (pipelines are compiled once per process, so attribution
-needs a fresh one; Metal's `supports_op` ignores src1's type, so a crashing
-probe also marks the case unsupported). KleidiAI's kernel names are inferred
+`repack tensor ... with <type>_<rows>x<cols>`, AMX
+`amx repack tensor ... of type <type>`), and for GPUs, a child process
+(`--probe-gpu`) that runs the case once and prints its kernels: Metal's
+`kernel_mul_m*` pipelines it compiled (pipelines are compiled once per
+process, so attribution needs a fresh one), CUDA's launched kernels (from
+CUPTI's launch callbacks; `cuda:mmvq`, `mmq`, `mmvf`, `mmf` or `cublas`).
+The GPU backends' `supports_op` accept cases they abort on (Metal's ignores
+src1's type; CUDA's batched cuBLAS has no q4_0 x f16 conversion), so a
+crashing probe also marks the case unsupported. KleidiAI's kernel names are inferred
 from the weight type (`qsi8d32_qsi4c32` for q4_0, `qai8dx_qsi8cx` for q8_0).
 
 ## Oracle

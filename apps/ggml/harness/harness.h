@@ -191,7 +191,7 @@ const float *importance(ggml_type t, int64_t K);
 
 // Logging: GGML log lines captured since the last call.
 std::vector<std::string> take_log();
-int probe_metal(int argc, char **argv);
+int probe_gpu(int argc, char **argv);
 extern bool verbose;
 extern std::string self_exe;
 // Hold the Halide thread pool's keep-awake count while timing Halide kernels
