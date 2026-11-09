@@ -167,6 +167,7 @@ tests(
     dense_multiramp_index.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
+    device_buffer_copy_strided.cpp
     device_copy_at_inner_loop.cpp
     device_crop.cpp
     device_dirty_with_no_device_support.cpp

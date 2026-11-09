@@ -42,6 +42,7 @@ CUDA_FN_3020(CUresult, cuMemcpyDtoHAsync, cuMemcpyDtoHAsync_v2, (void *dstHost, 
 CUDA_FN_3020(CUresult, cuMemcpyDtoDAsync, cuMemcpyDtoDAsync_v2, (CUdeviceptr dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream stream));
 
 CUDA_FN_3020(CUresult, cuMemcpy3D, cuMemcpy3D_v2, (const CUDA_MEMCPY3D *pCopy));
+CUDA_FN_3020(CUresult, cuMemcpy3DAsync, cuMemcpy3DAsync_v2, (const CUDA_MEMCPY3D *pCopy, CUstream stream));
 CUDA_FN(CUresult, cuLaunchKernel, (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra));
 CUDA_FN(CUresult, cuCtxSynchronize, ());
 
