@@ -38,16 +38,16 @@ struct MXFP4Quant {
     }
     // best_index_mxfp4(x(j, b, ...), d) (d an Expr in j, b; k: RDom(1, 15),
     // the codes searched after the first): the code, by
-    // GGML's scan as its arm64 build computes it: |kv * d - x| fused (clang
-    // contracts it), so exact but for its rounding once kv * d passes f32's
-    // range
+    // GGML's scan as its build computes it: |kv * d - x| fused on arm64
+    // (clang contracts it; madd), so exact but for its rounding once kv * d
+    // passes f32's range
     static Expr best_index(const Func &x, const Expr &d, const Var &j, const Var &b, const RDom &k) {
         Func search("code_search");
         std::vector<Expr> kvs;
         for (int v : kvalues()) {
             kvs.push_back(cast<int8_t>(v));
         }
-        auto err = [&](const Expr &kv) { return strict_float(abs(fma(cast<float>(kv), d, -x(j, b, _)))); };
+        auto err = [&](const Expr &kv) { return strict_float(abs(madd(cast<float>(kv), d, -x(j, b, _)))); };
         search(j, b, _) = Tuple(kvs[0], err(kvs[0]));
         Expr kv = mux(k, kvs), better = strict_float(err(kv) < search(j, b, _)[1]);
         search(j, b, _) = Tuple(select(better, kv, search(j, b, _)[0]), select(better, err(kv), search(j, b, _)[1]));
