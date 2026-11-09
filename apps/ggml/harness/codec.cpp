@@ -50,7 +50,7 @@ std::unique_ptr<Kernel> lambda(std::string path, std::function<void()> f) {
     return k;
 }
 
-void adversarial(float *x, int64_t K) {
+void adversarial(float *x, int64_t K, bool subnormal_max = true) {
     for (int j = 0; j < 32 && K >= 32 * 8; j++) {
         x[j] = j == 0 ? -0.0f : 0.0f;
         x[32 + j] = (j % 2 ? -1 : 1) * 0.25f * (j % 8);
@@ -60,6 +60,15 @@ void adversarial(float *x, int64_t K) {
         x[160 + j] = 1e6f * (j - 9);
         x[192 + j] = j == 5 ? -3.0f : 3.0f;
         x[224 + j] = 7e4f;
+    }
+    // Then runs of 64 (q2_0's blocks): f32 subnormals, whose max's inverse
+    // is inf (with `subnormal_max`); ties at half the max; a max that rounds
+    // to the fp16 inf (65520), and one that rounds to the fp16 0 (2^-25).
+    for (int j = 0; j < 64 && K >= 512; j++) {
+        x[256 + j] = subnormal_max ? 1e-45f * (j % 9 - 3) : 0.0f;
+        x[320 + j] = j == 0 ? 2.0f : (j % 2 ? -1 : 1) * 0.5f * (j % 5);
+        x[384 + j] = j == 7 ? 65520.0f : 32760.0f * (j % 3 - 1);
+        x[448 + j] = j == 3 ? -0x1p-25f : 0x1p-26f * (j % 3 - 1);
     }
 }
 
@@ -407,7 +416,9 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             std::vector<float> x(K * R), y(K * R), ref_y(K * R);
             for (float &v : x)
                 v = normal(rng);
-            adversarial(x.data(), K);
+            // (GGML's q4_0 and q4_1 convert x * inf + 8.5 to int8, out of
+            // range: undefined, and what its build computes is not modeled)
+            adversarial(x.data(), K, t != GGML_TYPE_Q4_0 && t != GGML_TYPE_Q4_1);
             std::vector<uint8_t> q(bytes), ref(bytes);
             quantize_ref(t, x.data(), ref.data(), R, K);
             if (t == GGML_TYPE_Q8_1 && check) {
