@@ -245,10 +245,43 @@ bool test_generic_dynamic_shuffle(const Target &target) {
     return check<int16_t>(out, [&](int x) { return (int16_t)((in(x) % n) * 1000 - 5000); }, "generic dynamic_shuffle");
 }
 
+// On x86, a gather whose lanes are each its first lane's index plus a
+// constant is a dense load from the least to the greatest index and a shuffle.
+bool test_constant_offset_gather() {
+    auto lowered_loads = [](const Stmt &s) {
+        std::vector<int> lanes;
+        visit_with(s, [&](auto *self, const Load *op) {
+            lanes.push_back(op->index.as<Ramp>() ? op->type.lanes() : -op->type.lanes());
+            self->visit_base(op);
+        });
+        return lanes;
+    };
+    Expr base = Variable::make(Int(32), "base");
+    Expr ramp = Ramp::make(0, 1, 16);
+    Stmt gather = Evaluate::make(Load::make(UInt(8, 16), "buf", Broadcast::make(base, 16) + ramp % 4));
+    Stmt varying = Evaluate::make(Load::make(UInt(8, 16), "buf", ramp * Broadcast::make(base, 16)));
+    if (lowered_loads(optimize_small_table_lookups(gather, Target("x86-64-linux-sse41"))) != std::vector<int>{4} ||
+        lowered_loads(optimize_small_table_lookups(gather, Target("arm-64-linux"))) != std::vector<int>{-16} ||
+        lowered_loads(optimize_small_table_lookups(varying, Target("x86-64-linux-sse41"))) != std::vector<int>{-16}) {
+        std::cerr << "Unexpected lowering of a gather at constant offsets\n";
+        return false;
+    }
+
+    Target target = get_jit_target_from_environment();
+    Buffer<uint8_t> in(W);
+    in.for_each_value([](uint8_t &v) { v = (uint8_t)rng(); });
+    Var x;
+    Func f;
+    f(x) = in((x / 16) * 4 + max(x % 16, 8) % 4) + in(min(x + 5, W - 1));
+    f.vectorize(x, 16, TailStrategy::GuardWithIf);
+    Buffer<uint8_t> out = f.realize({W - 20}, target);
+    return check<uint8_t>(out, [&](int x) { return (uint8_t)(in((x / 16) * 4 + std::max(x % 16, 8) % 4) + in(std::min(x + 5, W - 1))); }, "gather at constant offsets");
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (!test_lowering()) {
+    if (!test_lowering() || !test_constant_offset_gather()) {
         return 1;
     }
 
