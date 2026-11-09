@@ -358,12 +358,14 @@ X86Detection detect_x86_features(Ops &ops) {
                 constexpr uint32_t amx_tile = 1U << 24;  // amx_tile result in edx, with cpuid(eax=7, ecx=0)
                 constexpr uint32_t amx_int8 = 1U << 25;  // amx_int8 result in edx, with cpuid(eax=7, ecx=0)
                 constexpr uint32_t amx = amx_bf16 | amx_tile | amx_int8;
+                constexpr uint32_t avx512fp16 = 1U << 23;  // avx512fp16 result in edx, with cpuid(eax=7, ecx=0)
                 // TODO: port to family/model -based detection.
                 if ((info3.eax & avxvnni) == avxvnni) {
                     ops.set_feature(halide_target_feature_avxvnni);
-                    // avx512_sapphirerapids implies AMX instruction support, which
-                    // requires the OS to have enabled the AMX XCR0 state components.
-                    if ((info2.edx & amx) == amx && os_amx) {
+                    // avx512_sapphirerapids implies AMX and AVX512-FP16
+                    // instruction support; AMX requires the OS to have enabled
+                    // the AMX XCR0 state components.
+                    if ((info2.edx & (amx | avx512fp16)) == (amx | avx512fp16) && os_amx) {
                         ops.set_feature(halide_target_feature_avx512_sapphirerapids);
                     }
                 }

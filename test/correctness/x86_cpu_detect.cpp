@@ -284,11 +284,12 @@ int main(int argc, char **argv) {
                     halide_target_processor_generic, 512);
     }
 
-    // Sapphire Rapids requires AMX support in both the CPU and the OS.
+    // Sapphire Rapids requires AMX support in both the CPU and the OS, and
+    // AVX512-FP16.
     {
         const uint32_t leaf7_ebx =
             bit(5) | bit(16) | bit(17) | bit(21) | bit(28) | bit(30) | bit(31);
-        const uint32_t leaf7_edx_amx = bit(22) | bit(24) | bit(25);
+        const uint32_t leaf7_edx_amx = bit(22) | bit(23) | bit(24) | bit(25);  // AMX, AVX512-FP16
         const auto sapphire_leaves = [&](uint32_t edx) {
             return std::vector<Leaf>{
                 {0, 0, intel_vendor},
@@ -331,6 +332,13 @@ int main(int argc, char **argv) {
             ops.leaves = sapphire_leaves(leaf7_edx_amx);
             ops.xcr0 = xcr0_avx512;  // OS has not enabled the AMX state
             ok &= check("Sapphire Rapids without OS AMX support", ops, without_amx,
+                        halide_target_processor_generic, 0);
+        }
+        {
+            FakeOps ops;
+            ops.leaves = sapphire_leaves(leaf7_edx_amx & ~bit(23));
+            ops.xcr0 = xcr0_avx512 | 0x60000;
+            ok &= check("AMX without AVX512-FP16", ops, without_amx,
                         halide_target_processor_generic, 0);
         }
     }

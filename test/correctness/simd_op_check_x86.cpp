@@ -595,6 +595,11 @@ public:
                 check("vcvtps2ph", 8, cast(Float(16), f32_1));
                 check("vcvtph2ps", 8, cast(Float(32), f16_1));
             }
+            if (target.has_feature(Target::AVX512_SapphireRapids)) {
+                // AVX512-FP16's scalar load zeroes the upper lanes (F16C's
+                // vpinsrw merges into a live register)
+                check("vcvtsh2ss", 1, cast(Float(32), f16_1));
+            }
 
             check(use_avx512 ? "vpaddq*zmm" : "vpaddq*ymm", 8, i64_1 + i64_2);
             check(use_avx512 ? "vpsubq*zmm" : "vpsubq*ymm", 8, i64_1 - i64_2);

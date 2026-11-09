@@ -1930,6 +1930,7 @@ string CodeGen_X86::mattrs() const {
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         attrs.emplace_back("+amx-int8");
         attrs.emplace_back("+amx-bf16");
+        attrs.emplace_back("+avx512fp16");
     }
     if (gather_might_be_slow(target)) {
         attrs.emplace_back("+prefer-no-gather");

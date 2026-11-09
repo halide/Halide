@@ -1572,7 +1572,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_cannonlake,      ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_avx512_zen4,            ///< Enable the AVX512 features supported by Zen4 processors. This include all of the Cannonlake features, plus AVX512-VNNI, AVX512-BF16, and more.
     halide_target_feature_avx512_zen5,            ///< Enable the AVX512 features supported by Zen5 processors. This include all of the Cannonlake features, plus AVX512-VNNI, AVX512-BF16, AVX-VNNI and more.
-    halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Zen4 features, plus AVX-VNNI and AMX instructions.
+    halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Zen4 features, plus AVX-VNNI, AVX512-FP16 and AMX instructions.
     halide_target_feature_trace_loads,            ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
