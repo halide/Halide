@@ -369,11 +369,12 @@ as `struct layout mismatches` instead of as memory corruption at runtime.
 
 This is not hypothetical. The `20260624.223603` -> `20260911.162847` re-pin
 removed three fields (`loadDataFunction`, `storeDataFunction`,
-`functionUserdata`) from the *middle* of `WGPUDawnCacheDeviceDescriptor`, renamed
-`wgpuResourceTable{Insert,Remove}Binding` to `wgpuResourceTable{Insert,Remove}`
-and dropped five entry points while adding four -- while leaving every entry point
-Halide actually calls intact. A stale header against a newer `libwebgpu_dawn`
-would have parsed that descriptor at the wrong offsets, silently.
+`functionUserdata`) from the *middle* of `WGPUDawnCacheDeviceDescriptor`,
+renamed `wgpuResourceTable{Insert,Remove}Binding` to
+`wgpuResourceTable{Insert,Remove}` and dropped five entry points while adding
+four -- while leaving every entry point Halide actually calls intact. A stale
+header against a newer `libwebgpu_dawn` would have parsed that descriptor at the
+wrong offsets, silently.
 
 <details>
 <summary>Manual fallback (what the sync tool does)</summary>
