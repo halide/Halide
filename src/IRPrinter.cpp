@@ -1,3 +1,4 @@
+#include <functional>
 #include <iostream>
 #include <sstream>
 
@@ -102,9 +103,30 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
     return stream;
 }
 
-ostream &operator<<(ostream &stream, const Module &m) {
+namespace Internal {
+namespace {
+
+// Print a LoweredFunc, with its body printed by print_body.
+void print_lowered_func(ostream &stream, const LoweredFunc &function,
+                        const std::function<void(const Stmt &)> &print_body) {
+    stream << function.linkage << " func " << function.name << " (";
+    for (size_t i = 0; i < function.args.size(); i++) {
+        stream << function.args[i].name;
+        if (i + 1 < function.args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    print_body(function.body);
+    stream << "}\n\n";
+}
+
+// Print a Module, with the bodies of its functions printed by print_body.
+void print_module(ostream &stream, const Module &m,
+                  const std::function<void(const Stmt &)> &print_body) {
     for (const auto &s : m.submodules()) {
-        stream << s << "\n";
+        print_module(stream, s, print_body);
+        stream << "\n";
     }
 
     // The module retains implied features, but print it in minimal form.
@@ -113,8 +135,16 @@ ostream &operator<<(ostream &stream, const Module &m) {
         stream << b << "\n";
     }
     for (const auto &f : m.functions()) {
-        stream << f << "\n";
+        print_lowered_func(stream, f, print_body);
+        stream << "\n";
     }
+}
+
+}  // namespace
+}  // namespace Internal
+
+ostream &operator<<(ostream &stream, const Module &m) {
+    Internal::print_module(stream, m, [&](const Internal::Stmt &s) { stream << s; });
     return stream;
 }
 
@@ -425,16 +455,7 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
 }
 
 ostream &operator<<(ostream &stream, const LoweredFunc &function) {
-    stream << function.linkage << " func " << function.name << " (";
-    for (size_t i = 0; i < function.args.size(); i++) {
-        stream << function.args[i].name;
-        if (i + 1 < function.args.size()) {
-            stream << ", ";
-        }
-    }
-    stream << ") {\n";
-    stream << function.body;
-    stream << "}\n\n";
+    print_lowered_func(stream, function, [&](const Stmt &s) { stream << s; });
     return stream;
 }
 
@@ -629,86 +650,126 @@ IRPrinter::IRPrinter(ostream &s)
     }
 }
 
-#define ansi_helper(name)                                                          \
-    template<typename T>                                                           \
-    Ansi<T> IRPrinter::name(const T &t) {                                          \
-        return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset_col : nullptr}; \
-    }
-#define ansi_helper_r(name)                                                    \
-    template<typename T>                                                       \
-    Ansi<T> IRPrinter::name(const T &t) {                                      \
-        return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset : nullptr}; \
+#define styled_helper(name, style, reset)                  \
+    template<typename T>                                   \
+    StyledText<T> IRPrinter::name(const T &t) {            \
+        return {t, this, IRPrinterStyle::style, 0, reset}; \
     }
 
-ansi_helper_r(hl);
-ansi_helper_r(kw);
-ansi_helper(imm_int);
-ansi_helper(imm_float);
-ansi_helper(imm_str);
-ansi_helper(var);
-ansi_helper(buf);
-ansi_helper(fn);
-ansi_helper(type);
+styled_helper(hl, Highlight, true);
+styled_helper(kw, Keyword, true);
+styled_helper(imm_int, ImmInt, false);
+styled_helper(imm_float, ImmFloat, false);
+styled_helper(imm_str, ImmString, false);
+styled_helper(var, Var, false);
+styled_helper(buf, Buffer, false);
+styled_helper(fn, Function, false);
+styled_helper(type, Type, false);
+styled_helper(typep, TypeParens, true);
 
 template<typename T>
-Ansi<T> IRPrinter::typep(const T &t) {
-    return {t, ansi ? "\033[34m(" : "(", ansi ? ")\033[0m" : ")"};
+StyledText<T> IRPrinter::paren(const T &t, bool bold, int depth) {
+    return {t, this, bold ? IRPrinterStyle::BoldParen : IRPrinterStyle::Paren,
+            depth == -1 ? paren_depth : depth, true};
 }
 
-template<typename T>
-Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
+void IRPrinter::begin_style(IRPrinterStyle style, int depth) const {
     if (!ansi) {
-        return {t, nullptr, nullptr};
-    }
-    if (depth == -1) {
-        depth = paren_depth;
-    }
-    const char *open = "";
-    if (bold) {
-        // clang-format off
-        switch (depth % 6) {
-        case 0: open = "\033[91;1m"; break;
-        case 1: open = "\033[92;1m"; break;
-        case 2: open = "\033[93;1m"; break;
-        case 3: open = "\033[94;1m"; break;
-        case 4: open = "\033[95;1m"; break;
-        case 5: open = "\033[96;1m"; break;
-        default: break;
+        if (style == IRPrinterStyle::TypeParens) {
+            stream << "(";
         }
-        // clang-format on
-    } else {
-        // clang-format off
-        switch (depth % 6) {
-        case 0: open = "\033[91m"; break;
-        case 1: open = "\033[92m"; break;
-        case 2: open = "\033[93m"; break;
-        case 3: open = "\033[94m"; break;
-        case 4: open = "\033[95m"; break;
-        case 5: open = "\033[96m"; break;
-        default: break;
-        }
-        // clang-format on
+        return;
     }
-    return {t, open, ansi_reset};
+    // clang-format off
+    static const char *const parens[2][6] = {
+        {"\033[91m", "\033[92m", "\033[93m", "\033[94m", "\033[95m", "\033[96m"},
+        {"\033[91;1m", "\033[92;1m", "\033[93;1m", "\033[94;1m", "\033[95;1m", "\033[96;1m"}};
+    // clang-format on
+    switch (style) {
+    case IRPrinterStyle::Highlight:
+        stream << ansi_hl;
+        break;
+    case IRPrinterStyle::Dim:
+        stream << ansi_dim;
+        break;
+    case IRPrinterStyle::Keyword:
+        stream << ansi_kw;
+        break;
+    case IRPrinterStyle::ImmInt:
+        stream << ansi_imm_int;
+        break;
+    case IRPrinterStyle::ImmFloat:
+        stream << ansi_imm_float;
+        break;
+    case IRPrinterStyle::ImmString:
+        stream << ansi_imm_str;
+        break;
+    case IRPrinterStyle::Var:
+        stream << ansi_var;
+        break;
+    case IRPrinterStyle::Buffer:
+        stream << ansi_buf;
+        break;
+    case IRPrinterStyle::Function:
+        stream << ansi_fn;
+        break;
+    case IRPrinterStyle::Type:
+        stream << ansi_type;
+        break;
+    case IRPrinterStyle::TypeParens:
+        stream << "\033[34m(";
+        break;
+    case IRPrinterStyle::Paren:
+    case IRPrinterStyle::BoldParen:
+        stream << parens[style == IRPrinterStyle::BoldParen][depth % 6];
+        break;
+    }
+}
+
+void IRPrinter::end_style(IRPrinterStyle style, bool reset) const {
+    if (style == IRPrinterStyle::TypeParens) {
+        stream << ")";
+    }
+    if (ansi) {
+        stream << (reset ? ansi_reset : ansi_reset_col);
+    }
 }
 
 void IRPrinter::print(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, false);
+    begin_node(ir.get());
     ir.accept(this);
+    end_node(ir.get());
 }
 
 void IRPrinter::print_no_parens(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, true);
+    begin_node(ir.get());
     ir.accept(this);
+    end_node(ir.get());
 }
 
 void IRPrinter::print(const Stmt &ir) {
+    begin_node(ir.get());
     ir.accept(this);
+    end_node(ir.get());
 }
 
 void IRPrinter::print_summary(const Stmt &ir) {
     ScopedValue<bool> old(is_summary, true);
+    begin_node(ir.get());
     ir.accept(this);
+    end_node(ir.get());
+}
+
+void IRPrinter::print(const Module &m) {
+    print_module(stream, m, [&](const Stmt &s) {
+        if (s.defined()) {
+            print(s);
+        } else {
+            stream << s;
+        }
+    });
 }
 
 void IRPrinter::print_list(const std::vector<Expr> &exprs) {
@@ -724,15 +785,21 @@ void IRPrinter::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         stream << imm_int(op->value);
     } else {
-        stream << ansi_imm_int << op->value << "_i" << op->type.bits() << ansi_reset;
+        begin_style(IRPrinterStyle::ImmInt, 0);
+        stream << op->value << "_i" << op->type.bits();
+        end_style(IRPrinterStyle::ImmInt, true);
     }
 }
 
 void IRPrinter::visit(const UIntImm *op) {
     if (op->type.bits() == 1) {
-        stream << ansi_imm_int << (op->value ? "true" : "false") << ansi_reset;
+        begin_style(IRPrinterStyle::ImmInt, 0);
+        stream << (op->value ? "true" : "false");
+        end_style(IRPrinterStyle::ImmInt, true);
     } else {
-        stream << ansi_imm_int << op->value << "_u" << op->type.bits() << ansi_reset;
+        begin_style(IRPrinterStyle::ImmInt, 0);
+        stream << op->value << "_u" << op->type.bits();
+        end_style(IRPrinterStyle::ImmInt, true);
     }
 }
 
@@ -742,7 +809,7 @@ void IRPrinter::visit(const FloatImm *op) {
         stream << std::scientific;
     }
 
-    stream << ansi_imm_float;
+    begin_style(IRPrinterStyle::ImmFloat, 0);
 
     switch (op->type.bits()) {
     case 64:
@@ -758,7 +825,7 @@ void IRPrinter::visit(const FloatImm *op) {
         internal_error << "Bad bit-width for float: " << op->type << "\n";
     }
 
-    stream << ansi_reset;
+    end_style(IRPrinterStyle::ImmFloat, true);
 
     if (use_scientific_format) {
         stream << std::fixed;
@@ -766,7 +833,7 @@ void IRPrinter::visit(const FloatImm *op) {
 }
 
 void IRPrinter::visit(const StringImm *op) {
-    stream << ansi_imm_str;
+    begin_style(IRPrinterStyle::ImmString, 0);
     stream << "\"";
     for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
@@ -796,7 +863,7 @@ void IRPrinter::visit(const StringImm *op) {
         }
     }
     stream << "\"";
-    stream << ansi_reset;
+    end_style(IRPrinterStyle::ImmString, true);
 }
 
 void IRPrinter::visit(const Cast *op) {
@@ -1006,12 +1073,12 @@ void IRPrinter::visit(const Load *op) {
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        stream << ansi_dim;
+        begin_style(IRPrinterStyle::Dim, 0);
         stream << " aligned("
                << imm_int(op->alignment.modulus)
                << ", "
                << imm_int(op->alignment.remainder) << ")";
-        stream << ansi_reset;
+        end_style(IRPrinterStyle::Dim, true);
     }
     stream << paren("]");
     paren_depth--;
@@ -1032,10 +1099,10 @@ void IRPrinter::visit(const Ramp *op) {
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << ansi_kw;
+    begin_style(IRPrinterStyle::Keyword, 0);
     stream << "x" << op->lanes;
     stream << "(";
-    stream << ansi_reset;
+    end_style(IRPrinterStyle::Keyword, true);
     paren_depth++;
     print_no_parens(op->value);
     paren_depth--;
@@ -1063,7 +1130,7 @@ void IRPrinter::visit(const Call *op) {
         print(op->args[1]);
         close();
     } else if (op->is_intrinsic(Call::bitwise_not)) {
-        stream << ansi_kw << "~(" << ansi_reset;
+        stream << kw("~(");
         paren_depth++;
         print_no_parens(op->args[0]);
         paren_depth--;
@@ -1166,6 +1233,7 @@ void IRPrinter::visit(const Acquire *op) {
 }
 
 void IRPrinter::print_lets(const Let *let) {
+    begin_node(let);
     stream << get_indent();
     ScopedBinding<> bind(known_type, let->name);
     stream << kw("let ") << var(let->name) << kw(" = ");
@@ -1180,6 +1248,7 @@ void IRPrinter::print_lets(const Let *let) {
         print_no_parens(let->body);
         stream << "\n";
     }
+    end_node(let);
 }
 
 void IRPrinter::print_braced_stmt(const Stmt &stmt, int extra_indent) {
@@ -1215,12 +1284,12 @@ void IRPrinter::visit(const Store *op) {
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        stream << ansi_dim;
+        begin_style(IRPrinterStyle::Dim, 0);
         stream << " aligned("
                << imm_int(op->alignment.modulus)
                << ", "
                << imm_int(op->alignment.remainder) << ")";
-        stream << ansi_reset;
+        end_style(IRPrinterStyle::Dim, true);
     }
     stream << paren("] = ");
     if (const Let *let = op->value.as<Let>()) {
@@ -1417,6 +1486,8 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
+    // The ifs chained in as else cases, which end with the chain.
+    std::vector<const IfThenElse *> chained_ifs;
     while (true) {
         stream << paren("if (");
         print_no_parens(op->condition);
@@ -1433,6 +1504,8 @@ void IRPrinter::visit(const IfThenElse *op) {
 
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
             stream << get_indent() << paren("} else ");
+            begin_node(nested_if);
+            chained_ifs.push_back(nested_if);
             op = nested_if;
         } else {
             stream << get_indent() << paren("}") << (" else {\n");
@@ -1446,6 +1519,9 @@ void IRPrinter::visit(const IfThenElse *op) {
     }
 
     stream << get_indent() << paren("}\n");
+    for (auto it = chained_ifs.rbegin(); it != chained_ifs.rend(); it++) {
+        end_node(*it);
+    }
 }
 
 void IRPrinter::visit(const Evaluate *op) {
