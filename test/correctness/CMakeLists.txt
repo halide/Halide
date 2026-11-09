@@ -372,6 +372,7 @@ tests(
     memoize_cloned.cpp
     memoize_different_compute_store.cpp
     memoize_output_invalid.cpp
+    memoize_prune_in_use.cpp
     memoize_redefine_eviction_key.cpp
     metal_precompiled_shaders.cpp
     metal_threads_too_large.cpp

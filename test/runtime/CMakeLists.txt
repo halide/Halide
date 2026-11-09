@@ -53,9 +53,6 @@ if (NOT MSVC)
     # linked_list.cpp
     halide_define_runtime_internal_test(linked_list)
 
-    # memoization_cache.cpp
-    halide_define_runtime_internal_test(memoization_cache)
-
     # memory_arena.cpp
     halide_define_runtime_internal_test(memory_arena)
 
