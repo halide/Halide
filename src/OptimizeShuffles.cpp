@@ -5,6 +5,7 @@
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "ConstantBounds.h"
+#include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
 #include "HexagonAlignment.h"
@@ -142,6 +143,7 @@ public:
 class OptimizeSmallTableLookups : public IRMutator {
     const Target &target;
     Scope<ConstantInterval> bounds;
+    Scope<Expr> vector_lets;
     Scope<const Allocate *> allocations;
 
     using IRMutator::visit;
@@ -157,6 +159,7 @@ class OptimizeSmallTableLookups : public IRMutator {
         ScopedBinding<ConstantInterval> bind(t.is_int_or_uint() && !t.is_bool(),
                                              bounds, op->name,
                                              constant_integer_bounds(value, bounds));
+        ScopedBinding<Expr> bind_value(t.is_vector(), vector_lets, op->name, value);
         auto body = mutate(op->body);
         if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
@@ -200,6 +203,52 @@ class OptimizeSmallTableLookups : public IRMutator {
                    ib.max < (*alloc)->constant_allocation_size();
         }
         return false;
+    }
+
+    // A gather whose lanes are each lane 0's index plus a constant is a dense
+    // load from its least to its greatest index and a static shuffle. Like
+    // stage_strided_loads, this reads only between two elements the gather
+    // itself reads, so it is safe for external buffers too.
+    Expr gather_at_constant_offsets(const Load *op, const Expr &index) const {
+        // TODO: likely profitable on other architectures; gathers with no
+        // native instruction become a load per lane.
+        const int lanes = index.type().lanes();
+        if (target.arch != Target::X86 || lanes > 64) {
+            return Expr();
+        }
+        Expr full = index;
+        for (int i = 0; i < 8 && expr_uses_vars(full, vector_lets); i++) {
+            full = mutate_with(full, [&](auto *self, const Variable *v) {
+                const Expr *value = vector_lets.find(v->name);
+                return value ? *value : Expr(v);
+            });
+        }
+        if (expr_uses_vars(full, vector_lets)) {
+            return Expr();
+        }
+        Expr base = simplify(extract_lane(full, 0));
+        std::vector<int64_t> offsets(lanes);
+        int64_t lo = 0, hi = 0;
+        for (int i = 1; i < lanes; i++) {
+            auto c = as_const_int(simplify(extract_lane(full, i) - base));
+            if (!c) {
+                return Expr();
+            }
+            offsets[i] = *c;
+            lo = std::min(lo, *c);
+            hi = std::max(hi, *c);
+        }
+        const int64_t span = hi - lo + 1;
+        if (span <= 1 || span > 2 * (int64_t)lanes) {
+            return Expr();
+        }
+        Expr dense = op->with(Ramp::make(simplify(base + make_const(base.type(), lo)), make_one(base.type()), (int)span),
+                              const_true((int)span), ModulusRemainder());
+        std::vector<int> indices(lanes);
+        for (int i = 0; i < lanes; i++) {
+            indices[i] = (int)(offsets[i] - lo);
+        }
+        return Shuffle::make({dense}, indices);
     }
 
     static Expr make_lookup(const Type &t, const Expr &table, const Expr &index) {
@@ -260,6 +309,9 @@ class OptimizeSmallTableLookups : public IRMutator {
         }
 
         Expr index = mutate(op->index);
+        if (Expr e = gather_at_constant_offsets(op, index); e.defined()) {
+            return e;
+        }
         ConstantInterval ib = constant_integer_bounds(index, bounds);
         if (ib.is_bounded() && ib.min < ib.max && ib.max - ib.min < max_n &&
             can_prove_index_span_safe_to_load(op, ib)) {
