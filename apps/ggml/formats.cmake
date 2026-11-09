@@ -230,6 +230,14 @@ set(GGML_SCHEDULE_PARAMS
     "[x86] iq2_s mul_mat * slp=false"
     "[x86] iq3_s vec_dot q8_K slp=false"
     "[x86] iq3_s mul_mat * slp=false"
+    # SPR: iq3_xxs's grid index bytes staged in GPR words cost a mov, shift
+    # and mask each (and the words spill); a byte load each instead, as
+    # GGML's (vec_dot 103 -> 79 cycles a block by llvm-mca, GGML's 69; gemv
+    # without sublanes 101 -> 76: sublanes build the grid rows on the stack)
+    "[x86] iq3_xxs vec_dot q8_K plain_index_words=false"
+    "[x86] iq3_xxs mul_mat * plain_index_words=false"
+    "[x86] iq3_xxs mul_mat q8_K sublanes=false"
+    "[x86] iq3_xxs mul_mat f32:q8_K sublanes=false"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the
