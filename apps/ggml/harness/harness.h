@@ -106,8 +106,9 @@ struct Timing {
     double median, lo, hi;  // ns per rep; [lo, hi] is a 95% CI of the median
     int samples, reps;
 };
-// side (empty: no early stop): per kernel, 0 GGML's, 1 ours, -1 neither.
-std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms, const std::vector<int> &side = {});
+// side (empty: no early stop): per kernel, 0 GGML's, 1 ours, -1 neither;
+// band: the early stop's [lo, hi] of GGML/ours.
+std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms, const std::vector<int> &side = {}, std::pair<double, double> band = {0.92, 1.03});
 
 // Codecs (codec.cpp): a format's Halide quantize (row of f32 -> blocks) and
 // dequantize (blocks -> f32), checked bitwise against GGML's reference
