@@ -120,7 +120,7 @@ Expr random_expr(FuzzingContext &fuzz) {
             e = common_subexpression_elimination(e1);
             break;
         case 7:
-            switch (fuzz.ConsumeIntegralInRange(0, 19)) {
+            switch (fuzz.ConsumeIntegralInRange(0, 20)) {
             case 0:
                 if (may_widen) {
                     e = widening_add(e1, e2);
@@ -196,6 +196,9 @@ Expr random_expr(FuzzingContext &fuzz) {
                 break;
             case 19:
                 e = ~e1;
+                break;
+            case 20:
+                e = e1 & e2;
                 break;
             }
         }
