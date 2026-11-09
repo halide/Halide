@@ -431,6 +431,15 @@ class ExtractTileOperations : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    Stmt visit(const For *op) override {
+        // A GPU kernel's Tile allocations are its own matrix unit's (e.g.
+        // CUDA's wmma fragments), lowered with the device code, not AMX's.
+        if (is_gpu(op->for_type)) {
+            return op;
+        }
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const Free *op) override {
         if (op->name != tile_name) {
             return op;
