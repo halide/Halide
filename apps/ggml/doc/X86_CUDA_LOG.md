@@ -72,3 +72,9 @@ App changes:
 - Bench: `--early-stop[=LO,HI]` ends a case's rounds once every GGML/Halide
   ratio's 95% CI is outside [LO, HI]; the main thread's AMX tile config is
   kept across Halide calls (GGML's AMX kernels load theirs once per thread).
+- `formats.cmake` rows may lead with `[x86]`/`[arm]`, applied only for that
+  host CPU and overriding the untagged (M3) rows' same parameters. On x86,
+  iq2_xs, iq2_s and iq3_s build with `slp=false` (SLP packed their grid
+  indices, then extracted each with `vpextrw`): one-thread gemv 0.41 -> 0.69x,
+  0.36 -> 0.47x, 0.48 -> 0.71x of GGML; vec_dot 0.35 -> 0.50x, 0.29 -> 0.50x,
+  0.47 -> 0.71x.

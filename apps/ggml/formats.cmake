@@ -221,7 +221,27 @@ set(GGML_SCHEDULE_PARAMS
     "iq1_s mul_mat f32:q8_K slp=false"
     "iq4_xs mul_mat q8_K interleave=1"
     "iq4_xs mul_mat f32:q8_K interleave=1"
+    # SPR: LLVM's SLP vectorizer packs the u16 grid indices and then
+    # extracts each with vpextrw; scalar loads instead (one-thread gemv
+    # iq2_xs 0.41 -> 0.69x of GGML, iq2_s 0.36 -> 0.47x, iq3_s 0.48 -> 0.71x)
+    "[x86] iq2_xs vec_dot q8_K slp=false"
+    "[x86] iq2_xs mul_mat * slp=false"
+    "[x86] iq2_s vec_dot q8_K interleave=1 slp=false"
+    "[x86] iq2_s mul_mat * slp=false"
+    "[x86] iq3_s vec_dot q8_K slp=false"
+    "[x86] iq3_s mul_mat * slp=false"
 )
+# A row may lead with an architecture, `[x86] type op act params...` or
+# `[arm]`: it applies only when building for that host CPU, and overrides the
+# untagged rows' values of the same parameters. The untagged rows were
+# measured on Apple M3.
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i.86)$")
+    set(GGML_SCHEDULE_ARCH x86)
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+    set(GGML_SCHEDULE_ARCH arm)
+else ()
+    set(GGML_SCHEDULE_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+endif ()
 # OFF: every library at the GeneratorParams' defaults, the schedule a new
 # format gets (to measure what the table adds).
 option(GGML_SCHEDULE_KNOBS "Apply GGML_SCHEDULE_PARAMS" ON)
@@ -327,8 +347,19 @@ foreach (row IN LISTS GGML_FORMATS)
             endif ()
             string(MAKE_C_IDENTIFIER "${name}" name)
             set(params "")
+            set(arch_params "")
             foreach (sp IN LISTS GGML_SCHEDULE_PARAMS)
                 separate_arguments(sp UNIX_COMMAND "${sp}")
+                list(GET sp 0 sp_arch)
+                if (sp_arch MATCHES "^\\[(.*)\\]$")
+                    list(POP_FRONT sp)
+                    if (NOT CMAKE_MATCH_1 STREQUAL GGML_SCHEDULE_ARCH)
+                        continue ()
+                    endif ()
+                    set(sp_list arch_params)
+                else ()
+                    set(sp_list params)
+                endif ()
                 list(POP_FRONT sp sp_type sp_op sp_act)
                 if (
                     sp_type STREQUAL type
@@ -336,8 +367,14 @@ foreach (row IN LISTS GGML_FORMATS)
                     AND (sp_act STREQUAL act
                         OR sp_act STREQUAL "*")
                 )
-                    list(APPEND params ${sp})
+                    list(APPEND ${sp_list} ${sp})
                 endif ()
+            endforeach ()
+            # an architecture's row overrides the untagged rows' same keys
+            foreach (ap IN LISTS arch_params)
+                string(REGEX REPLACE "=.*" "" key "${ap}")
+                list(FILTER params EXCLUDE REGEX "^${key}=")
+                list(APPEND params ${ap})
             endforeach ()
             unset(_ggml_env)
             if ("slp=false" IN_LIST params)
