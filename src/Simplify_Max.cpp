@@ -238,6 +238,18 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
 
          (no_overflow(op->type) &&
           (rewrite(max(min(x, c0), min(y, c1) + c2), min(max(x, y + c2), c0), c0 == c1 + c2) ||
+           rewrite(max(min(x + c0, y), min(x, y) + c1), min(x + c0, y), c1 <= c0 && c1 <= 0) ||
+           rewrite(max(min(y, x + c0), min(y, x) + c1), min(y, x + c0), c1 <= c0 && c1 <= 0) ||
+           rewrite(max(min(x + c0, y), min(x, y) + c1), min(x, y) + c1, c0 <= c1 && 0 <= c1) ||
+           rewrite(max(min(y, x + c0), min(y, x) + c1), min(y, x) + c1, c0 <= c1 && 0 <= c1) ||
+           rewrite(max(min(x + c0, y), min(x + c2, y) + c1), min(x + c0, y), c1 + c2 <= c0 && c1 <= 0) ||
+           rewrite(max(min(y, x + c0), min(y, x + c2) + c1), min(y, x + c0), c1 + c2 <= c0 && c1 <= 0) ||
+           rewrite(max(min(x + c0, y), min(x + c2, y) + c1), min(x + c2, y) + c1, c0 <= c1 + c2 && 0 <= c1) ||
+           rewrite(max(min(y, x + c0), min(y, x + c2) + c1), min(y, x + c2) + c1, c0 <= c1 + c2 && 0 <= c1) ||
+           rewrite(max(x, select(y, x + c0, z)), select(y, x, max(x, z)), c0 < 0) ||
+           rewrite(max(x, select(y, x + c0, z)), select(y, x + c0, max(x, z)), c0 > 0) ||
+           rewrite(max(select(x, y + c0, z), y), select(x, y, max(y, z)), c0 < 0) ||
+           rewrite(max(select(x, y + c0, z), y), select(x, y + c0, max(y, z)), c0 > 0) ||
 
            rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
            rewrite(max(max(x, y + z), (w + z) + u), max(x, max(y, w + u) + z)) ||
@@ -261,6 +273,14 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
            rewrite(max(max(x, y), x + c0), max(x, y), c0 < 0) ||
            rewrite(max(max(y, x), x + c0), max(y, x + c0), c0 > 0) ||
            rewrite(max(max(y, x), x + c0), max(y, x), c0 < 0) ||
+           rewrite(max(max(x + c0, y), x), max(x + c0, y), c0 > 0) ||
+           rewrite(max(max(x + c0, y), x), max(x, y), c0 < 0) ||
+           rewrite(max(max(y, x + c0), x), max(y, x + c0), c0 > 0) ||
+           rewrite(max(max(y, x + c0), x), max(y, x), c0 < 0) ||
+           rewrite(max(x, max(x + c0, y)), max(x + c0, y), c0 > 0) ||
+           rewrite(max(x, max(x + c0, y)), max(x, y), c0 < 0) ||
+           rewrite(max(x, max(y, x + c0)), max(y, x + c0), c0 > 0) ||
+           rewrite(max(x, max(y, x + c0)), max(x, y), c0 < 0) ||
 
            rewrite(max(x + y, x + z), x + max(y, z)) ||
            rewrite(max(x + y, z + x), x + max(y, z)) ||
