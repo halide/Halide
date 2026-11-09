@@ -298,7 +298,7 @@ WEAK void prune_cache() {
                 most_recently_used = prune_candidate->less_recent;
             }
             if (prune_candidate->less_recent != nullptr) {
-                prune_candidate->less_recent = more_recent;
+                prune_candidate->less_recent->more_recent = more_recent;
             }
 
             // Decrease cache used amount.
