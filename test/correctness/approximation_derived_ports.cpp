@@ -784,6 +784,26 @@ int test_narrow_sum() {
     return 0;
 }
 
+// A width-dependent intrinsic on narrow operands is not the same as on
+// widened ones, even where the widening casts are exact.
+int test_intrinsic_width() {
+    Var b("b");
+    CodesPort sat("sat_i8", [](const std::vector<Func> &from) {
+        Func d("sat_i8_stored");
+        Var b("b");
+        d(b) = cast<int32_t>(saturating_add(from[0](0, b), from[0](1, b)));
+        return d;
+    });
+    Func wide("sat_wide_term");
+    wide(b) = cast<int32_t>(saturating_add(cast<int16_t>(sat.port.from[0](0, b)),
+                                           cast<int16_t>(sat.port.from[0](1, b))));
+    CHECK(!match_derived_port(wide, sat.port).matched);
+    Func same("sat_same_term");
+    same(b) = cast<int32_t>(saturating_add(sat.port.from[0](0, b), sat.port.from[0](1, b)));
+    CHECK(match_derived_port(same, sat.port).matched);
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -973,6 +993,7 @@ int main(int argc, char **argv) {
                                            {"free_sum_extent", test_free_sum_extent},
                                            {"poly_range", test_poly_range},
                                            {"narrow_sum", test_narrow_sum},
+                                           {"intrinsic_width", test_intrinsic_width},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},

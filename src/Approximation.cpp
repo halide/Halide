@@ -2826,7 +2826,9 @@ public:
         for (const Expr &a : op->args) {
             args.push_back(normalize(a));
         }
-        return opaque(op->name, op->type, std::move(args));
+        // Intrinsics such as saturating_add depend on the operand width,
+        // which exact casts elide from the children.
+        return opaque(op->name + "<" + type_name(op->type) + ">", op->type, std::move(args));
     }
 
     // A sum reduction: f(pure) = init; f(pure) = f(pure) + body over its RDom.
