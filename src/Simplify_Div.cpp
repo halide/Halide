@@ -240,6 +240,14 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
                    broadcast(x * fold(c1 / c2) + fold(c5 / c2), lanes),
                    c2 > 0 && c1 % c2 == 0 && c0 >= 0 &&
                        c5 % c2 + c0 * (lanes - 1) < c2) ||
+           // More generally, every lane gives the same quotient when the ramp
+           // stays within one multiple of the denominator. This is the Div
+           // twin of Mod's ramp rule, and catches bases whose alignment is
+           // only known via the simplifier's ExprInfo (e.g. sums of
+           // products), which the syntactic rules above can't see.
+           rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes),
+                   broadcast(x / c1, lanes),
+                   can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)) ||
            // The rules above require the numerator and the denominator to be
            // vectorized the same way, which they aren't when the numerator is
            // a nested vector. Push the division inwards to line them up.
