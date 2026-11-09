@@ -78,9 +78,9 @@ click assembly to go to the IR it came from. The assembly pane shows the line
 numbers of the assembly file, without the lines that hold the debug info.
 
 This needs every IR node to be printed in one place only, so for the html
-outputs (and with the debug symbols features), lowering copies the IR nodes
-that the stmt uses in more than one place. `compile_to` and generators do this
-when an html output is requested; when calling `compile_to_module` and
+outputs (and with the debug symbols features), lowering copies the IR nodes that
+the stmt uses in more than one place. `compile_to` and generators do this when
+an html output is requested; when calling `compile_to_module` and
 `Module::compile` yourself, pass `for_html_outputs` to `compile_to_module`.
 
 ## Caveats
