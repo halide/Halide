@@ -1,5 +1,6 @@
 #include "ConstantBounds.h"
 #include "IR.h"
+#include <algorithm>
 #include <cfloat>
 #include <map>
 #include <mutex>
@@ -56,6 +57,18 @@ bool StructTypeInfo::field_is_aligned(int field_index) const {
     internal_assert(field_bytes > 0);
     return offsets[field_index] % field_bytes == 0 &&
            total_bytes % field_bytes == 0;
+}
+
+int StructTypeInfo::alignment() const {
+    int a = 1;
+    for (int i = 0; i < (int)fields.size(); i++) {
+        const Type &t = fields[i].type;
+        int f = t.is_struct() ? t.struct_type()->alignment() : t.bytes();
+        if (offsets[i] % f == 0 && total_bytes % f == 0) {
+            a = std::max(a, f);
+        }
+    }
+    return a;
 }
 
 int Type::bytes() const {

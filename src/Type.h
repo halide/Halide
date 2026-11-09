@@ -730,6 +730,11 @@ struct StructTypeInfo {
     /** True if every instance of this field in an array of this struct is
      * naturally addressable in units of the field's scalar type. */
     bool field_is_aligned(int field_index) const;
+
+    /** The alignment a C compiler gives this struct: that of its most
+     * aligned naturally aligned field (field_is_aligned), at least 1. Not
+     * total_bytes: the struct is packed. */
+    int alignment() const;
 };
 
 /** Constructing a signed integer type */
