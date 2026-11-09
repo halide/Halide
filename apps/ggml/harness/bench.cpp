@@ -26,7 +26,43 @@ double time_ns(Kernel *k, int reps) {
 // sample of every kernel, in a fresh random order, so that drift (thermal,
 // frequency, other load) hits all kernels alike. Report the median and a
 // distribution-free 95% CI of the median (order statistics, binomial).
-std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms) {
+//
+// Early stop (side non-empty): after early_min_rounds, stop once, for every
+// pair of an ours kernel (side 1) and a GGML one (side 0), the 95% CI of the
+// median per-round ratio GGML/ours lies wholly outside [early_lo, early_hi]:
+// the case is clearly a match or clearly not, whatever the remaining rounds
+// would add. Cases near parity run every round.
+namespace {
+
+constexpr int early_min_rounds = 5;
+constexpr double early_lo = 0.8, early_hi = 1.25;
+
+// 95% CI of the median of v (sorted in place): indices into v.
+std::pair<int, int> median_ci(std::vector<double> &v) {
+    std::sort(v.begin(), v.end());
+    int n = v.size();
+    double half = 0.98 * std::sqrt((double)n);  // 1.96 * sqrt(n) / 2
+    return {std::max(0, (int)std::floor(n / 2.0 - half)), std::min(n - 1, (int)std::ceil(n / 2.0 + half))};
+}
+
+bool decided(const std::vector<std::vector<double>> &s, const std::vector<int> &side) {
+    for (size_t h = 0; h < s.size(); h++) {
+        if (side[h] != 1) continue;
+        for (size_t g = 0; g < s.size(); g++) {
+            if (side[g] != 0) continue;
+            std::vector<double> r(s[h].size());
+            for (size_t i = 0; i < r.size(); i++)
+                r[i] = s[g][i] / s[h][i];
+            auto [lo, hi] = median_ci(r);
+            if (r[hi] >= early_lo && r[lo] <= early_hi) return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms, const std::vector<int> &side) {
     std::vector<int> reps(ks.size(), 1);
     for (size_t i = 0; i < ks.size(); i++) {
         double t = time_ns(ks[i], 1) * ks[i]->batch;  // per rep
@@ -45,15 +81,13 @@ std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds
         std::shuffle(order.begin(), order.end(), rng);
         for (int i : order)
             s[i].push_back(time_ns(ks[i], reps[i]));
+        if (!side.empty() && r + 1 >= early_min_rounds && decided(s, side)) break;
     }
     std::vector<Timing> out;
     for (size_t i = 0; i < ks.size(); i++) {
         auto &v = s[i];
-        std::sort(v.begin(), v.end());
+        auto [lo, hi] = median_ci(v);
         int n = v.size();
-        double half = 0.98 * std::sqrt((double)n);  // 1.96 * sqrt(n) / 2
-        int lo = std::max(0, (int)std::floor(n / 2.0 - half));
-        int hi = std::min(n - 1, (int)std::ceil(n / 2.0 + half));
         double med = n % 2 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
         out.push_back({med, v[lo], v[hi], n, reps[i]});
     }
