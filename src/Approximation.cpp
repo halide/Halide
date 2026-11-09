@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iterator>
 #include <map>
 #include <numeric>
@@ -2523,7 +2524,9 @@ public:
     // Keys. env maps placeholders to canonical binder names.
     std::string expr_key(const Expr &e, const std::map<std::string, Expr> &env) {
         std::ostringstream s;
-        s << Internal::simplify(Internal::substitute(env, e));
+        // IRPrinter prints floats with the stream's precision (six digits
+        // by default); print enough that distinct constants differ.
+        s << std::setprecision(40) << Internal::simplify(Internal::substitute(env, e));
         return s.str();
     }
 

@@ -824,6 +824,28 @@ int test_float_constant_atoms() {
     return 0;
 }
 
+// Index expressions are compared exactly, including their float constants.
+int test_float_constant_indices() {
+    Var b("b");
+    Buffer<float> lut(64);
+    lut.fill(1.0f);
+    const float c = 0.1f, next = std::nextafter(0.1f, 1.0f);
+    auto index = [](const Expr &b, float k) { return cast<int>(cast<float>(b) * k); };
+    CodesPort looked("lut_scaled", [=](const std::vector<Func> &from) {
+        Func d("lut_scaled_stored");
+        Var b("b");
+        d(b) = cast<float>(from[0](0, b)) * lut(index(b, c));
+        return d;
+    });
+    Func other("lut_other_term");
+    other(b) = cast<float>(looked.port.from[0](0, b)) * lut(index(b, next));
+    CHECK(!match_derived_port(other, looked.port).matched);
+    Func same("lut_same_term");
+    same(b) = cast<float>(looked.port.from[0](0, b)) * lut(index(b, c));
+    CHECK(match_derived_port(same, looked.port).matched);
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -1015,6 +1037,7 @@ int main(int argc, char **argv) {
                                            {"narrow_sum", test_narrow_sum},
                                            {"intrinsic_width", test_intrinsic_width},
                                            {"float_constant_atoms", test_float_constant_atoms},
+                                           {"float_constant_indices", test_float_constant_indices},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},
