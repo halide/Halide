@@ -425,6 +425,7 @@ tests(
     popc_clz_ctz_bounds.cpp
     powerpc_cpu_detect.cpp
     predicate_loads_used_in_inner_splits.cpp
+    predicated_gather.cpp
     predicated_store_load.cpp
     predicated_store_load_single_lane.cpp
     prefetch.cpp
