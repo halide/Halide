@@ -281,3 +281,11 @@ App changes:
   launch, is not visible), GGML's ~3 (~30us); at 4096^2 every case's
   kernel takes longer than a launch (M = 1: 20-45us), so the timings above
   are kernel bound.
+- CUDA gemm at M = 64..128 on blocked weights (f16: M = 64..79) in 32 x 64
+  tiles of 2 x 2 warps (was 128 x 64 of 4 x 1): 4x the blocks (M = 64:
+  128 for 46 SMs, was 32). 4096^2, f16 acts, us: M = 64 q6_K 204 -> 111,
+  iq4_xs 190 -> 103, q3_K 153 -> 102, q4_0 175 -> 132, f16 117 -> 93;
+  M = 128 q6_K 232 -> 185, q5_0 217 -> 172. GGML (mmq) / Halide at M = 64
+  0.47-0.75 -> 0.57-0.89 (q2_K 1.04), at M = 128 0.55-0.82 -> 0.60-0.90
+  (q2_K 1.57). (16 x 64 of 1 x 2 warps: as good at M = 64, 2x slower at
+  96; 32 x 32 of 2 x 2: 1.05-1.2x slower.)
