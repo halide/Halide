@@ -257,8 +257,16 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     // Updates: whole tiles in n (cond knows N % nt == 0); m an RVar.
     s.split(n, no, ni, ts.nt, st || whole_n ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
     s.split(m, mo, mi, ts.mt, st || guard_m ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
-    s.reorder(ni, mi, mo, no).unroll(mi);
-    ts.nt > 1 ? s.vectorize(ni) : s.unroll(ni);
+    s.reorder(ni, mi, mo, no);
+    if (ts.nt > 16 || ts.mt > 32) {
+        // (a macro tile, blocked_cols(): its copy in 16 x 8 pieces)
+        VarOrRVar mii = row_var(out, st, "mii");
+        Var nii("nii");
+        s.split(ni, ni, nii, 16).split(mi, mi, mii, 8).reorder(nii, mii, ni, mi).vectorize(nii).unroll(mii);
+    } else {
+        s.unroll(mi);
+        ts.nt > 1 ? s.vectorize(ni) : s.unroll(ni);
+    }
     dot.compute_at(tile_at(out, st));
     if (ts.cols) {
         s.split(mo, mc, mo, ts.cols / ts.mt, TailStrategy::GuardWithIf);
@@ -457,7 +465,15 @@ inline std::pair<Func, Func> offset_codes(Func dot, const std::vector<Approximat
     }
     if (path.empty() && bias && qs.size() == 1) q = qs[0];
     auto calls = Internal::find_direct_calls(dot.function());
-    if (!q.defined() || !calls.count(q.name())) return {};
+    if (!q.defined()) return {};
+    // (redirected already, by an earlier tile's call: the same pair)
+    for (const auto &[name, f] : calls) {
+        if (name.rfind(q.name() + "_offset", 0)) continue;
+        for (const auto &[un, uf] : Internal::find_direct_calls(f)) {
+            if (!un.rfind(q.name() + "_unsigned", 0)) return {Func(f), Func(uf)};
+        }
+    }
+    if (!calls.count(q.name())) return {};
     std::vector<Var> as = q.args();
     std::vector<Expr> es(as.begin(), as.end());
     Func full(Internal::unique_name(q.name() + "_full"));
@@ -1468,7 +1484,7 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
 // columns, then the next 4), the weight's decoded per block. Sub-blocks'
 // scales (and a derived_sums() term) per row and sub-block, broadcast.
 inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block,
-                         const std::vector<ApproximationResult> &rs, const Target &t, int sub = 0, int act_sub = 0, const Knobs &k = Knobs()) {
+                         const std::vector<ApproximationResult> &rs, const Target &t, int sub = 0, int act_sub = 0, const Knobs &k = Knobs(), bool first = true) {
     const int per = 4, lanes = 16;
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], u("u"), v("v");
@@ -1489,13 +1505,29 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxi, per) : s.split(r.x, rxc, rxi, per);
     Func blk = s.rfactor(ry, u);
     Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, false, keep);
-    // per block, per 16 columns (mc): the rows unrolled
-    Var mo("mc"), mi("mv");
-    s.split(m, mo, mi, lanes).reorder(mi, n, mo, ry).vectorize(mi).unroll(n);
+    // per block, per 16 columns (mc): the rows unrolled. A macro tile (more
+    // than 8 rows), as GGML's 256 x 256 windows: per block, its 8-row strips
+    // (nb) across all its columns, each block's weights decoded once for them.
+    Var mo("mc"), mi("mv"), nb("nb");
+    const bool macro = ts.nt > 8;
+    // (the macro's own loops under cond: s, acc and the sums are hoisted out
+    // of dot, so their stages are every branch's)
+    s.split(m, mo, mi, lanes);
+    if (macro) s.specialize(cond).split(n, nb, n, 8).reorder(mi, n, mo, nb, ry).vectorize(mi).unroll(n);
+    s.reorder(mi, n, mo, ry).vectorize(mi).unroll(n);
     std::vector<Func> accs{dot};
     if (acc.name() != dot.name()) accs.push_back(acc);
+    // (dot's pure stage is every tile's: scheduled once, by the first call;
+    // in 8-row strips only in a macro tile's own acc)
     for (Func f : accs) {
-        f.reorder_storage(m, n).vectorize(m, lanes).unroll(n);
+        bool shared = f.name() == dot.name();
+        if (shared && !first) continue;
+        f.reorder_storage(m, n);
+        if (macro && !shared) {
+            Var v16("mv16");
+            f.specialize(cond).split(m, m, v16, lanes).split(n, nb, n, 8).reorder(v16, n, m, nb).vectorize(v16).unroll(n);
+        }
+        f.vectorize(m, lanes).unroll(n);
     }
     LoopLevel cols(acc, mo), blocks(acc, ry);
     std::vector<Func> readers{blk, codes};
@@ -1523,7 +1555,8 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         // shift per lane widened to 32 bits: q6_K 7.1 -> 4.5 ms, q2_K 5.0 ->
         // 4.3, q5_K 4.8 -> 4.1; not a table's index: iq3_s 3% slower)
         Var wk = w.args()[0], wko("wko"), wki("wki");
-        w.compute_at(blocks).split(wk, wko, wki, t.natural_vector_size<int8_t>()).vectorize(wki).unroll(w.args()[2]);
+        w.compute_at(blocks).split(wk, wko, wki, t.natural_vector_size<int8_t>()).vectorize(wki);
+        if (!macro) w.unroll(w.args()[2]);
         if (!lut) w.unroll(wko);
     }
     for (Func f : ac) {
@@ -1535,8 +1568,15 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     if (d.sums.defined()) {
         Var smo("smo"), smi("smi");
-        d.sums.compute_at(tile_at(out, st)).reorder_storage(m, n).vectorize(m, lanes).unroll(n);
-        d.sums.update().split(m, smo, smi, lanes).reorder(smi, n, smo, ry).vectorize(smi).unroll(n);
+        d.sums.compute_at(tile_at(out, st)).reorder_storage(m, n);
+        Stage su = d.sums.update();
+        su.split(m, smo, smi, lanes);
+        if (macro) {
+            d.sums.specialize(cond).split(m, m, smi, lanes).split(n, nb, n, 8).reorder(smi, n, m, nb).vectorize(smi).unroll(n);
+            su.specialize(cond).split(n, nb, n, 8).reorder(smi, n, smo, nb, ry).vectorize(smi).unroll(n);
+        }
+        d.sums.vectorize(m, lanes).unroll(n);
+        su.reorder(smi, n, smo, ry).vectorize(smi).unroll(n);
         for (Func f : {d.blk, d.sum, d.part, d.pair}) {
             if (!f.defined()) continue;
             f.compute_at(d.sums, smo).reorder_storage(m, n).vectorize_all_stages(m);
@@ -2464,12 +2504,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     // AVX-512 VNNI: blocks of 256 (GGML's tiled gemm's formats) on tiles
     // vectorized across M (blocked_cols())
-    Tiles cols32{8, 32, 1, 64, 32, true}, cols16{8, 16, 1, 64, 16, true};
+    Tiles colsM{64, 256, 1, 64, 256, true}, cols32{8, 32, 1, 64, 32, true}, cols16{8, 16, 1, 64, 16, true};
     bool cols_ok = integer && !amx_ok && !tiled && !whole && fmt.rows == 1 && fmt.per == 1 && fmt.block == 256 &&
                    t.has_feature(Target::AVX512_SapphireRapids) && staged.size() <= 1;
     if (cols_ok) {
-        blocked_cols(out, 0, dr, fits(cols32, M), cols32, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k);
-        blocked_cols(out, 0, dr, fits(cols16, M), cols16, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k);
+        blocked_cols(out, 0, dr, fits(colsM, M), colsM, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k);
+        blocked_cols(out, 0, dr, fits(cols32, M), cols32, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k, false);
+        blocked_cols(out, 0, dr, fits(cols16, M), cols16, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k, false);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
