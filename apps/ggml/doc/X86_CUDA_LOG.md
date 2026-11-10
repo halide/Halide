@@ -209,3 +209,20 @@ App changes:
   on CUDA they're padded by 8 (144 bytes), a block's rows adjacent. 4096^2,
   us (cuBLAS): f16 M = 32 181 -> 99 (77), M = 512 1025 -> 409 (303);
   q4_0:f16 M = 32 319 -> 185, M = 512 854 -> 465.
+- On CUDA a lane stages 16 bytes of each shared copy's row (Metal: 4
+  values): 4096^2, us, f16 M = 32 99 -> 82 (cuBLAS 77), M = 512 409 -> 322
+  (295); q4_0:f16 M = 32 185 -> 110. Asynchronous copies
+  (`GPUSharedAsync`, cp.async) without double buffering, and other block
+  shapes (see `cuda_shapes()`), were slower.
+- CUDA rows for every blocked format GGML's CUDA backend runs (q8 acts and
+  `:f16`). q2_0's integer dot tripped a Deinterleave internal error (a
+  ramp % 2 inside a vector reduction to fewer lanes; fixed in core). 4096^2,
+  us, best Halide row (q8 acts or `:f16`) vs GGML (f32 acts; mmvq at M <=
+  8, mmq above), GGML / Halide:
+  M = 1: 0.80 (q3_K, 42.3 vs 33.9) to 1.52 (q4_0, 23.1 vs 35.0); below 1
+  only q5_K 0.92, q3_K 0.80.
+  M = 8 (q8 acts): 0.52 (q5_K, 117 vs 61) to 1.39 (q3_K); q4_1, q5_1,
+  q4_K, q5_K (two-scale formats) near 0.5-0.6.
+  M = 32 (`:f16`): 0.43 (q4_K, 134 vs 58) to 0.85 (q2_K).
+  M = 512 (`:f16`): 0.61 (q5_0) to 1.45 (q2_K, 409 vs 595).
+  mmq is int8 MMA on q8_1 acts; ours dequantizes to f16 for wmma.
