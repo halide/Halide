@@ -592,6 +592,19 @@ class Interleaver : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    Expr visit(const VectorReduce *op) override {
+        // The reduction changes the lane count, so a request to
+        // deinterleave its input must not escape to the enclosing
+        // expression, which may have too few lanes (or be scalar).
+        // Loads inside the reduction are still deinterleaved locally.
+        bool old_should_deinterleave = should_deinterleave;
+        int old_num_lanes = num_lanes;
+        Expr e = IRMutator::visit(op);
+        should_deinterleave = old_should_deinterleave;
+        num_lanes = old_num_lanes;
+        return e;
+    }
+
     Expr visit(const Load *op) override {
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;

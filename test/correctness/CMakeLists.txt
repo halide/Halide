@@ -178,6 +178,7 @@ tests(
     deinterleave_lets.cpp
     deinterleave_vector.cpp
     deinterleave_vector_based_ramp.cpp
+    deinterleave_vector_reduce.cpp
     dense_multiramp_index.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
