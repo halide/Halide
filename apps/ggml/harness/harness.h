@@ -10,8 +10,10 @@
 #include "ggml-cpu.h"
 #include "ggml.h"
 
+#include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -74,21 +76,27 @@ void register_halide_providers();
 // vec_dot through GGML's CPU ABI (ggml_vec_dot_t); shared by GGML and Halide.
 std::unique_ptr<Kernel> vec_dot_kernel(ggml_vec_dot_t f, const Inputs &in);
 
-// Oracle (oracle.cpp): f64 dot products of GGML's own decoding (to_float) of
-// the inputs, on every output (all) or on a sample of them (up to 64 rows x 4
-// columns, evenly spread, both ends included).
+// Oracle (oracle.cpp): the f64 product (BLAS's dgemm) of GGML's own decoding
+// (to_float) of the inputs, on every output (all) or on a sample of them (up
+// to 64 rows x 4 columns, evenly spread, both ends included).
 struct Reference {
     int64_t K;
     std::vector<int64_t> ns, ms;  // the outputs checked (all of them if `all` or for small shapes)
     std::vector<float> w, a, a0;  // decoded sampled rows of W and A; A before conversion to in.at
     std::vector<double> out;      // [m * ns.size() + n]
+    // The tolerance's sums over k, per output as `out`: of |W| |A|, and of
+    // max_block|W| |A| (the max over the weight type's block around k).
+    std::vector<double> sum_wa, sum_wmax_a;
+    // ... and of the re-quantization error, by the Precision fields it is a
+    // function of (filled by error_ratio).
+    std::map<std::array<int64_t, 4>, std::vector<double>> requant;
 };
 Reference reference(const Inputs &in, const std::vector<float> &a_f32, bool all = false);
 // GGML's decoding of K values of type t: its to_float, or for the types it has
 // none for (activation-only q8_1, q8_K) their block layouts.
 void to_float(ggml_type t, const uint8_t *p, float *out, int64_t K);
 // max over the reference's outputs of |got - ref| / tolerance; <= 1 passes.
-double error_ratio(const Inputs &in, const Reference &ref, const Precision &p, const float *got);
+double error_ratio(const Inputs &in, Reference &ref, const Precision &p, const float *got);
 
 // Shapes (shapes.cpp).
 std::vector<Shape> shapes(const std::string &preset, int op);
