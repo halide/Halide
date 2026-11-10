@@ -216,7 +216,7 @@ struct Knobs {
     int interleave = 2;
     bool sublanes = false, gpr_scales = false;
     Fold fold = Fold::All;
-    bool row_pairs = true, index_words = false, plain_index_words = true;
+    bool row_pairs = true, index_words = false, plain_index_words = true, gemm_wide_subs = true;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -826,9 +826,10 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // (pmaddubsw, then pmaddwd by the scales; one-thread vec_dot 0.45 ->
     // 0.77x of GGML for q2_K, 0.48 -> 0.79x for q6_K). Not tables' (iq2_xs:
     // signed codes, 5% more), nor with offsets not to fold (q3_K's: its
-    // one-thread gemv 0.78 -> 0.51x of GGML)
+    // one-thread gemv 0.78 -> 0.51x of GGML); in gemm tiles, where k's
+    // gemm_wide_subs (q6_K's on SPR: two a step, 1.3x faster)
     if (integer && vnni && t.natural_vector_size<int8_t>() >= 64 && sub == 16 && !float_sub_scales(rs) &&
-        staged_tables(rs).empty() && k.fold != Fold::None) {
+        staged_tables(rs).empty() && k.fold != Fold::None && (gemv || k.gemm_wide_subs)) {
         wide = 64;
     }
     int per = integer ? 4 : 1, vec = std::min(t.natural_vector_size<int8_t>(), wide);

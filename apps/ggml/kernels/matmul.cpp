@@ -43,6 +43,9 @@ public:
     // grid index bytes read as is (iq3_xxs's qs) staged a word at a time in
     // GPRs (see ggml::staged_indices; else a load each)
     GeneratorParam<bool> plain_index_words{"plain_index_words", true};
+    // mul_mat's gemm tiles' 16-value sub-blocks four a vector step where
+    // vec_dot's are (AVX-512 VNNI; see ggml::blocked; else two)
+    GeneratorParam<bool> gemm_wide_subs{"gemm_wide_subs", true};
 
     void configure() {
         // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
@@ -219,7 +222,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, gemm_wide_subs};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {
