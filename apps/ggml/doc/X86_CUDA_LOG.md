@@ -122,6 +122,8 @@ App changes:
   sub-blocks on ymm steps (gemv/vec_dot keep the zmm). On x86, q6_K takes it
   (4096^2, M = 32, 12 threads: 1.91 -> 1.4-1.5 ms); q2_K is faster wide
   (1.16 ms against 1.97).
+  (Removed after the AMX repack: M = 32 now runs `blocked_cols()`, and at
+  M = 4..7, the knob's only reach, q6_K is 1.1x faster wide.)
 - `blocked_cols()`: with AVX-512 VNNI, gemm tiles (M >= 16) of 256-value
   blocks vectorized across 16 columns (M), as GGML's tiled 8x16 microkernel:
   each weight byte group broadcast against 16 columns' act bytes (staged
@@ -586,3 +588,17 @@ q4_K/q5_K at M = 16. Remaining gaps: M = 9..15 (rows path, 0.5-0.8),
 q4_K/q5_K at M = 16 (0.77/0.91: one 16x16 accumulator's serial
 zero/load/dpbssd/store chain per sub-block; GGML pairs two B tiles per A),
 q4_K at M >= 8 (0.90-0.95) and q5_K at M = 8/256 (0.93-0.95).
+
+## Self-review cleanup
+
+- `gemm_wide_subs` and its two `[x86]` q6_K rows removed. The `q6_K.8x8`
+  row was dead (identical stmt either way: that layout's gemm on x86 is the
+  record gemv); the `q6_K` row reached only M = 4..7 (the generic gemm
+  tiles; M >= 8 is `blocked_cols()`), where it now cost 9-13%. q6_K, 4096^2,
+  best of 3, us, row / default: one thread M = 4 2284 / 2075, M = 5..7
+  4440-4566 / 4051-4102, M = 32 4403 / 4413; twelve threads M = 4 245 /
+  213, M = 5..7 459-468 / 409-422, M = 32 485 / 462.
+- `column_sums()`: the column-vectorized code-free sums, duplicated in
+  `blocked_cols()` and `blocked_amx()`, are one helper. Stmts of q4_K, q5_K,
+  q6_K, q2_K, q4_K.16x4, iq4_xs.16x4 mul_mat identical (up to generated
+  temporaries' numbering).
