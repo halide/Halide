@@ -337,3 +337,33 @@ mxfp4/q2_0 0.5-0.92, from GPU clock drops while CPU providers interleaved).
      52) blocked by rfactor's tail guard (above).
   3. Table formats (iq4_nl, iq4_xs, mxfp4) 0.5-0.75: their luts in shared
      memory per block, a lookup per value against q4_0's arithmetic decode.
+
+## Phase 1 follow-up: CPU gaps (after the Phase 2 report)
+
+CPU run at `63cd29ebb` (GGML / Halide, the fastest path each side, 4096^2
+unless noted; geomean per format): the widest gaps were q4_1 everywhere
+(0.30-0.61: GGML's AMX buffer, our AMX gemm refused affine weights), M = 8
+(q4_0 0.51, q4_1 0.48, q8_0 0.79 on 12 threads: GGML's AMX runs partial
+tiles, ours started at M = 16), and M = 512 on the 256-value formats (0.5-0.7
+against GGML's tiled gemm, which decodes a weight panel once for all of M).
+
+Core:
+
+- `ExtractTileOperations`: each Tile allocation's sub-tiles and shape were
+  kept across allocations, so a pipeline with two tile shapes (two
+  specializations' accumulators: 16 x 16 and 16 x 8) failed ("Access to AMX
+  tile has different size and strides"). Now scoped per allocation.
+
+App changes:
+
+- `blocked_amx()` takes affine weights (q4_1, q5_1): their min term split off
+  by `derived_sums()` (min times the act's `s` port), one f32 product per block
+  and output alongside the tile ops, as GGML's AMX `acc_C`. 4096^2, f32 acts,
+  ms (GGML's AMX): q4_1 M = 32 one thread 12.7 -> 4.65 (3.81); twelve threads
+  M = 32 1.39 -> 0.52 (0.64), M = 512 22.3 -> 8.2 (9.9). q5_1 (no GGML AMX
+  kernel) M = 32 one thread 15.1 -> 6.4, twelve threads 1.80 -> 0.70, M = 512
+  30.5 -> 9.3.
+- `blocked_amx()` on 8-column tiles (amx8: 8 rows of the A tile) for 8 <= M <
+  16. 4096^2, M = 8, twelve threads, us (GGML's AMX): q4_0 415 -> 177 (165),
+  q4_1 391 -> 192 (186), q8_0 356 -> 146 (160); one thread 0.70-0.88 of
+  GGML.
