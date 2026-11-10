@@ -315,6 +315,81 @@ auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
+// Two tile allocations of different shapes in one pipeline (e.g. two
+// specializations of a matmul): each is lowered with its own shape.
+bool two_tile_shapes() {
+    const int col = 16, row = 16, acc = 16;
+    Buffer<int8_t> A_buf(acc, row), B_buf(col, acc);
+    fill_buffer_a(A_buf, row, acc);
+    fill_buffer_a(B_buf, acc, col);
+
+    Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+    RDom r(0, acc);
+    Func out("out");
+    std::vector<Func> ws;
+    std::vector<Func> mms, bs;
+    for (int i = 0; i < 2; i++) {
+        Func Bf, mm;
+        Bf(x, y) = B_buf(x, y);
+        mm(x, y) = 0;
+        mm(x, y) += widening_mul(A_buf(r, y), Bf(x, r));
+        mms.push_back(mm);
+        bs.push_back(Bf);
+        ws.push_back(mm.in());
+    }
+    out(x, y) = ws[0](x, y) - ws[1](x, y) * 2;
+    out.tile(x, y, xo, yo, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    for (int i = 0; i < 2; i++) {
+        int ty = i ? 4 : 8;
+        Func Bf = bs[i], mm = mms[i], w = ws[i];
+
+        Var ixi("ixi"), iyi("iyi"), ko("ko"), ki("ki");
+        RVar rri("rri"), rro("rro");
+        w.compute_at(out, xo).tile(x, y, ixi, iyi, 8, ty).vectorize(ixi).vectorize(iyi);
+        mm.compute_at(w, x)
+            .store_in(MemoryType::Tile)
+            .tile(x, y, ixi, iyi, 8, ty)
+            .vectorize(ixi)
+            .vectorize(iyi);
+        mm.update()
+            .tile(x, y, ixi, iyi, 8, ty)
+            .split(r, rro, rri, 4)
+            .reorder(rri, ixi, iyi, rro, x, y)
+            .atomic()
+            .vectorize(rri)
+            .vectorize(ixi)
+            .vectorize(iyi);
+        Bf.compute_at(out, xo)
+            .split_storage(y, ko, ki, 4)
+            .reorder_storage(ki, x, ko)
+            .split(y, ko, ki, 4)
+            .reorder(ki, x, ko)
+            .vectorize(ki)
+            .vectorize(x);
+    }
+
+    Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::AVX512_SapphireRapids)) {
+        out.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_two_tile_shapes.s", {},
+                                Target{"x86-64-linux-avx512_sapphirerapids-no_asserts-no_runtime-no_bounds_query"});
+        return true;
+    }
+    Buffer<int32_t> o = out.realize({col, row});
+    for (int j = 0; j < row; j++) {
+        for (int i = 0; i < col; i++) {
+            int32_t val = 0;
+            for (int k = 0; k < acc; k++) {
+                val += static_cast<int32_t>(A_buf(k, j)) * static_cast<int32_t>(B_buf(i, k));
+            }
+            if (o(i, j) != -val) {
+                std::cerr << "Two tile shapes: invalid result at " << i << ", " << j << ": " << o(i, j) << " != " << -val << "\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool run_tests(bool (*fn)(int, int, int, int, int, int, bool), int element_width) {
     struct Cfg {
         int col, row, acc, tx, ty, tr;
@@ -393,6 +468,11 @@ int main(int argc, char **argv) {
 
     printf("Running AMX matmul (bf16)\n");
     if (!run_tests(matmul_bf16, 2)) {
+        return 1;
+    }
+
+    printf("Running AMX matmul (two tile shapes)\n");
+    if (!two_tile_shapes()) {
         return 1;
     }
 

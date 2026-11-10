@@ -411,6 +411,9 @@ class ExtractTileOperations : public IRMutator {
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx.");
             ScopedValue<string> old_tile_name(tile_name, op->name);
             ScopedValue<bool> old_in_alloc(in_allocate, true);
+            // Each allocation has its own shape and sub-tiles.
+            ScopedValue<std::vector<MultiRamp>> old_subtiles(amx_subtiles, {});
+            ScopedValue<int> old_I(found_I, -1), old_J(found_J, -1), old_K(found_K, -1);
             Stmt body = op->body;
 
             pass = 0;
