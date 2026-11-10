@@ -17,6 +17,7 @@
 #include "HalideRuntime.h"
 #include "thread_pool.h"
 
+#include <cctype>
 #include <cstring>
 #if defined(__x86_64__)
 #include <cpuid.h>
@@ -381,6 +382,38 @@ void register_halide_providers() {
                                        return k;
                                    }});
         }
+    }
+    // halide-by-m-<type>_f32_cuda: a blocked weight's CUDA libraries on f32
+    // acts by M, as GGML's CUDA backend picks mmvq or mmq (and as an
+    // integration would dispatch): below 16 rows the dp4a rows on acts
+    // quantized to q8_1 (<type> on f32:q8_1); from 16 the integer gemm
+    // (<type> on f32:q8_0.soa) where the type has one, else, above 16, the
+    // f16 gemm (<type>:f16 on f32:f16; at M = 16 the rows are 1.1-1.5x
+    // faster than it on 4096 x 4096; RTX 3090).
+    auto make = [](const std::string &name) {
+        for (const Provider &p : providers()) {
+            if (p.timed && p.ops & GQ_mul_mat && p.name == "halide-" + name) return p.make;
+        }
+        return std::function<std::unique_ptr<Kernel>(const Inputs &)>();
+    };
+    for (const Row &c : rows()) {
+        FormatSpec fs = parse_format(c.wt);
+        if (!(c.ops & GQ_mul_mat) || !fs.compute.empty() || !strstr(c.features, "cuda") || strcmp(c.at, "f32") || strcmp(c.aq, "q8_1")) continue;
+        std::string type = c.wt, id = type;
+        for (char &ch : id) {
+            if (!isalnum((unsigned char)ch)) ch = '_';
+        }
+        const std::string rows_name = c.name, int_name = id + "_f32_to_q8_0_soa_mul_mat_cuda", f16_name = id + "_to_f16_f32_to_f16_mul_mat_cuda";
+        const bool has_int = (bool)make(int_name);
+        const std::string gemm_name = has_int ? int_name : f16_name;
+        if (!make(gemm_name)) continue;
+        providers().push_back({"halide-by-m-" + id + "_f32_cuda", GQ_mul_mat, true,
+                               [mv = make(rows_name), mm = make(gemm_name), rows_name, gemm_name, has_int](const Inputs &in) {
+                                   bool big = in.s.M >= (has_int ? 16 : 17);
+                                   auto k = (big ? mm : mv)(in);
+                                   if (k) k->path = "halide:cuda:" + (big ? gemm_name : rows_name);
+                                   return k;
+                               }});
     }
 }
 
