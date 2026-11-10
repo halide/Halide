@@ -45,7 +45,7 @@ the plain CPU path is GGML's own `vec_dot` loop.
 | `ggml-blas`             | BLAS (Accelerate) backend; M, N, K >= 32 only                                                         | `blas:sgemm(dequant)`                          |
 | `halide-<name>`         | `formats.cmake` row, bench build                                                                      | `halide`                                       |
 | `halide-<name>:checked` | same, checked build; `--check` only                                                                   | `halide`                                       |
-| `halide-by-m-<name>`    | Metal: weight compute format `<name>` (e.g. `q4_0:f16`) for M > 16, else the exact library's          | `halide:metal:<library>`                       |
+| `halide-by-m-<name>`    | Metal: compute format `<name>` (e.g. `q4_0:f16`) for M > 16, else the exact library's; CUDA: below    | `halide:metal:<library>`, `halide:cuda:<lib>`  |
 
 A provider is skipped for a case it does not support: the backend's
 `supports_op` (checked before uploading W: extra buffer types repack in
@@ -543,20 +543,72 @@ registers (`thread_elements()`, no threadgroup memory), multiplies the codes
 `MemoryType::Tile` fragments are only loaded from memory, take one element type,
 and can't be scaled, so that kernel has no Halide schedule yet.
 
-`-DGGML_HALIDE_CUDA=ON` (off by default) adds compile-only CUDA libraries
-(`GGML_HALIDE_CUDA_FORMATS`: `f16` and `q4_0:f16` weights on f16 acts, for
-`host-cuda-cuda_capability_80`): the same `gpu_staged` and `fragments` on wmma's
-16 x 16 x 16 fragments (`cuda_shapes`: tiles of 128 x 64, 32 x 32, 32 x 16).
-They aren't registered with the harness or run (there's no NVIDIA hardware
-here); their tests (`ctest -L ggml_cuda`) check that the PTX multiplies with
-`wmma.mma.sync`. Build them by name (`f16_f16_mul_mat_cuda`,
-`q4_0_to_f16_f16_mul_mat_cuda`). Their staging is Metal's: the weights' shared
-copy is K-dense, its fragments [row, k], so `wmma.load.b` reads it column-major
-and `wmma.mma` is told so (`row.col`).
+`-DGGML_HALIDE_CUDA=ON` (the default where GGML has its CUDA backend) adds the
+CUDA libraries (`GGML_HALIDE_CUDA_FORMATS`, for `host-cuda-cuda_capability_80`),
+registered, checked and timed next to `ggml-cuda`. GGML's CUDA backend runs
+quantized weights on f32 acts only, re-quantized on the GPU to q8_1: for M \<= 8
+`mmvq` (`__dp4a` dots per block), above it `mmq` (int8 tensor cores; iq1_m:
+cuBLAS on f16 weights); f16, bf16 and f32 weights run `mmvf`, `mmf` (M \<= 16)
+and cuBLAS. The Halide counterparts of a blocked type are:
+
+- `<type>` on `f32:q8_1` acts: the acts quantized by a kernel of their own (a
+  thread per record), then `metal_rows` with integer acts: each lane's run of 8
+  codes two `dp4a`. Every blocked type but nvfp4. (On pre-quantized `q8_0`,
+  `q8_1` or `q8_K` acts the same rows, without the kernel.)
+- `<type>` on `f32:q8_0.soa` acts (q4_0, q5_0, q8_0, iq4_nl, mxfp4):
+  `gpu_int_gemm`, the weights' int8 codes times the acts' on wmma's int8
+  fragments, each block's int32 tile scaled into the f32 accumulator by the
+  lanes that hold it; for M >= 16 and N % 8 == 0, K split in 4 below M = 128
+  (four gemms on every fourth step of K, summed by a second kernel), else the
+  rows.
+- `<type>:f16` on `f32:f16` (or `f16`) acts: `gpu_gemm` with the same
+  `gpu_staged` and `fragments` as Metal's on wmma's 16 x 16 x 16 fragments for M
+  \>= 16 and N % 8 == 0 (`wmma.store` writes a tile straight to out and faults on
+  fragment rows not 8 bytes aligned), else the rows on its f16-rounded weights.
+- `<type>` on `f32` acts: the exact rows.
+
+`halide-by-m-<type>_f32_cuda` picks among them by M as GGML picks its kernel:
+the `f32:q8_1` rows below 16 rows, then the integer gemm where the type has one,
+else (above 16) the f16 gemm.
+
+The f16 gemm's staging is Metal's, on 16 bytes per lane and rows padded by 8
+values (a fragment's rows, 128 bytes apart, share their banks): the weights'
+shared copy is K-dense, its fragments [row, k], so `wmma.load.b` reads it
+column-major and `wmma.mma` is told so (`row.col`). `f16` and `bf16` weights run
+it on acts of their type (`f16`, `f32:f16`; `bf16`, `f32:bf16`, on wmma's bf16
+fragments) for K % 32 == 0 and M * N >= 2^13, from M = 2: their operands are
+copied to shared memory as stored (`MemoryType::GPUSharedAsync`: `cp.async`), by
+blocks of 2 warps of 16 x 16 in steps of 256 values of K (M < 32) or 128, of 4
+warps of 16 x 32 (M >= 64) or 16 x 64 (M >= 128, 64-value steps): a step's loads
+take 1-2 us to arrive whatever their size, so few rows of M take long steps and
+many blocks. Below 16 rows, and from 17 to 31, one guarded tile of 16 or 32
+rows. Acts encoded in the pipeline (`f32:f16`) are encoded by a kernel of their
+own and copied likewise. Blocked weights, decoded in the kernel, take tiles of
+16 x 16 (one warp, 128-value steps) below M = 32, then 16 x 32, 32 x 64, 128 x
+64 and 64 x 128 (M >= 256) of 2 to 4 warps (`cuda_shapes`). `metal_flat`'s rows
+run otherwise and on exact f32 acts (wmma has no f32 operand fragments). f32
+weights are W itself (`f32` on f32 acts: `metal_flat`) or W rounded to f16 for
+the gemm (`f32:f16` on `f32:f16` acts, from M = 8). `--check` derives each
+library's tolerance from its declared roundings (`Precision::w_quant`,
+`act_quant`, `act_nearest`). The gemm libraries' tests (`ctest -L ggml_cuda`)
+check that their PTX multiplies with `wmma.mma.sync`.
+
+On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
+64, 128, 512: f16 x f16 1.05, 1.06, 1.07, 0.97, 1.02, 1.04, 0.87, 0.78, 0.60;
+f16 on f32 acts (`f32:f16`) 0.89, 0.89, 0.89, 0.89, 0.94, 1.07, 0.89, 0.80,
+0.64; bf16 x bf16 1.02, 0.99, 0.99, 0.98, 1.05, 0.97, 0.90, 0.77, 0.99; f32
+weights (`f32:f16`) 0.89, 0.91, 0.92, 0.82, 0.96, 1.05, 0.95, 0.90, 1.36; on f32
+acts, the best library, q4_0 0.92, 0.91, 0.90, 1.10, 0.88, 0.86, 0.75, 0.77,
+0.65; q8_0 0.93, 0.94, 0.83, 0.96, 0.87, 0.78, 0.78, 0.63, 0.62; q4_K 0.77,
+0.72, 0.83, 0.96, 0.63, 0.62, 0.60, 0.70, 0.50; iq2_xs 0.48, 0.49, 0.59, 0.71,
+0.53, 0.54, 0.57, 0.55, 0.61. `doc/X86_CUDA_LOG.md` (Phase 3) has every type,
+the `full` preset's layers and where the rest of the time is: the second launch
+and the rows' cost per act column at M \<= 4, the K-quants' and grid formats'
+decodes and missing integer gemm, cuBLAS's f16 accumulators from M = 64.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
 `GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed).
 Halide providers get the default `Precision` (f32 accumulation, no
 re-quantization) plus the re-quantization of `<storage>:<compute>` acts and
-weights.
+weights (q8_0, q8_1 and q8_K acts: rounded to nearest, `act_nearest`).

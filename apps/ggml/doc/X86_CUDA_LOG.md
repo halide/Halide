@@ -1049,3 +1049,174 @@ tq1_0 (`saddlv` reductions -> `addp`/`sadalp`, 5% fewer instructions).
 The Metal kernels also differ (shader source from this branch's changes);
 not investigated, since Metal timings were unchanged. x86 objects are
 unaffected (CodeGen_ARM only). Arm timings not measured here (no hardware).
+
+## Phase 3: CUDA on an RTX 3090 (sm_86, 82 SMs; i9-7900X, Fedora toolbox, CUDA 13.4, native Linux)
+
+The Phase 2 numbers above are an RTX A4500's under WSL2; everything below is
+this GPU's, on b09e9eaf3. GGML / Halide is GGML's time over ours, f32 acts
+unless noted (what GGML's CUDA backend runs), `--rounds 9`, medians of 3 runs.
+
+- Baseline, 4096^2, M = 1, 2, 4, 8, 16, 32, 64, 128, 512: f16 x f16 1.02 0.96
+  0.97 0.88 0.89 0.95 0.58 0.56 0.56; f16 on `f32:f16` acts 0.88 0.81 0.81 0.81
+  0.73 0.72 0.53 0.55 0.49; q4_0, best library (the exact f32 rows to M = 8,
+  `q4_0:f16` on `f32:f16` acts above) 0.63 0.47 0.36 0.43 0.36 0.45 0.41 0.51
+  0.40; q4_K 0.61 0.40 0.44 0.48 0.32 0.48 0.49 0.49 0.44. The dp4a rows ran on
+  pre-quantized acts only (q4_0 x q8_0 at M = 1, 2, 4, 8: 15.2, 16.9, 23.7, 28.2
+  us; GGML's mmvq, its act quantization included, 15.9, 16.2, 17.3, 24.5). f16 x
+  f16 at 4096 x 1031 x 32 aborted (`CUDA_ERROR_MISALIGNED_ADDRESS`: `wmma.store`
+  on rows of out not 8 bytes aligned); the Phase 2 odd shapes were all below M =
+  16 or of N % 8 == 0.
+
+- Core (each with its test, under `HL_JIT_TARGET=host-cuda`):
+
+  - `ExtractWMMAOperations`, `lossless_cast`: a float32 built from a bfloat16's
+    bits is a widened bfloat16 operand of a tensor core multiply
+    (`wmma_bfloat_bits`).
+  - `CodeGen_PTX_Dev`: a dense vector load at an index known to be a multiple of
+    its width is 128-bit (or 64-bit) integer loads
+    (`gpu_global_vector_load_codegen`).
+  - `ExtractWMMAOperations`: int8 products widened from 16 bits
+    (`wmma_widened_product`); elementwise functions of tensor-core accumulators
+    and of matrices loaded as one (`wmma_elementwise`: the integer gemm's
+    scaling of a block's int32 tile into the float32 one).
+  - `VectorizeIn::SWAR` in CUDA kernels, widened fields narrowed
+    (`gpu_swar_codegen`, `vectorize_swar`).
+  - `CodeGen_PTX_Dev`: a dp4a's operands that are sums, differences, shifts and
+    masks of vectors of 8- or 16-bit integers filling a register are computed in
+    the register, also when done wider and narrowed (`cuda_8_bit_add`). The
+    backend computed them an element at a time (prmt, cvt, add.s16, cvt, prmt):
+    q4_0's dp4a gemv loop 875 -> 510 lines of PTX, q4_0 x q8_0 at M = 1 15.2 ->
+    13.5 us, M = 8 28.2 -> 24.2. Only there: where the elements are wanted (the
+    f16 gemm's decode converts each to float) the packed register is unpacked
+    again (q4_0:f16 on `f32:f16` acts at M = 64 0.098 -> 0.122 ms with it).
+
+- Coverage: rows for the nine blocked types GGML's CUDA backend runs that had
+  none (iq2_xxs, iq2_xs, iq2_s, iq3_xxs, iq3_s, iq1_s, iq1_m, q1_0, nvfp4), on
+  f32 acts, on their vec_dot type's (not nvfp4: its sub-block scales leave the
+  integer dot nothing to hoist) and as `<type>:f16`; bf16 (the gemm on wmma's
+  bf16 fragments) and f32 weights (`f32`, `f32:f16`). The Metal rows' recipes
+  ran unchanged.
+
+- The f16 gemm (`gpu_staged`'s `Staging`, `GemmShape::kstep`, `cuda_shapes`):
+  f16 and bf16 operands as stored copied by `cp.async`
+  (`MemoryType::GPUSharedAsync`; slower on the A4500, 0.18 -> 0.13 ms at M = 64
+  here), acts encoded in the pipeline encoded once by a kernel of their own, K
+  steps of 256 or 128 values below M = 64 (a block's time is its steps': a
+  step's loads take 1-2 us to arrive whatever their size), 2 warps of 16 x 16 to
+  4 of 16 x 64 by M, flat weights from M = 2 on guarded tiles. The gemm runs
+  where N % 8 == 0, else the rows. Blocked weights: Phase 2's tiles from M = 32
+  (2 to 4 warps; each weight decoded once per 64 or 128 act rows) with plain
+  loads for the acts' copies (beside a decode, `cp.async` acts were 1.1-1.25x
+  slower), one warp's 16 x 16 on 128-value steps below; `cuda_one_warp`
+  (q8_0:f16, q5_0:f16): one warp below M = 128. The rows: one warp per block of
+  twice the rows (q4_0 gemv 1.2x); the dp4a rows keep two.
+
+- Rows on f32 acts (`<type>` on `f32:q8_1`): the acts quantized to q8_1 by a
+  kernel of their own, a thread per record, then the dp4a rows: GGML's mmvq
+  (which also quantizes inside its timed call). The scale's maximum is a vector
+  reduction (inlined, it was a loop inside every code's: 365 ms on q8_K's
+  256-value records). q8_1 for every type, as GGML: its records are 4 bytes
+  aligned, and a q8_K record is 256 values quantized by one thread (30 us at K =
+  4096: a thread's loads are serial), so the K-quants take 32-value act blocks a
+  sub-block at a time. A second launch costs 2.3 us of host time (256 x 64 x 1:
+  1.9 -> 4.3 us a call; GGML 4.6) and the kernel ~3.5 us at 4096^2 x 1.
+
+- Integer gemm (`gpu_int_gemm`, `<type>` on `f32:q8_0.soa`; q4_0, q5_0, q8_0,
+  iq4_nl, mxfp4): GGML's mmq. Int8 codes on wmma's int8 fragments, a block's
+  int32 tile scaled into the f32 accumulator by the lanes holding it; weight
+  codes staged a block per lane (`code_words`: 8 codes a GPR word); K split in 4
+  below M = 128 (not with a lut). The K split's reduction extent is rounded down
+  to whole steps of the split (`round_extent`; out reads it only where K is
+  whole steps), so rfactor's split of it is exact (the Phase 2 blocker): no core
+  change is needed. q2_0 (64-value blocks) reads `w` two blocks past its end at
+  K = 1024 (checked build: "accessed at 17, which is beyond the max (15)"): not
+  registered. No K-quant (sub-block scales, min terms) or offset integer gemm; M
+  = 9..15 take the rows.
+
+- `halide-by-m-<type>_f32_cuda`: the `f32:q8_1` rows below M = 16, then the
+  integer gemm, else `<type>:f16` on `f32:f16` acts.
+
+- Gate: `--check` of every CUDA library (checked and bench) on M in {1, 2, 8, 9,
+  15, 16, 17, 31, 32, 33, 63, 64, 65, 128, 200} x N in {31, 33, 36, 40, 127,
+  512} x K in {96, 544, 1024, 768, 1280, 33, 1000}: 95400 results, 0 failures, 0
+  unchecked. `ctest -L ggml` 67/67 (`ggml_check`: 3116 results, 0 failures, 53
+  unchecked: GGML's cuBLAS f16 chains, the KleidiAI and `acc16` rows), `-L
+  ggml_cuda` 56/56; the core tests matching
+  `gpu_|wmma_|warp_|cuda_|register_shuffle|atomics|lossless_cast|rfactor|vectorize_swar|specialize|deinterleave`
+  under `HL_JIT_TARGET=host-cuda`: 111/111. The 82 Metal libraries' `.stmt`
+  (`arm-64-osx-metal`) are byte-identical to b09e9eaf3's; a sample of 36 x86 CPU
+  libraries' too, but for the numbering of temporaries in 3.
+
+- Results, 4096^2, GGML / Halide on f32 acts, the best Halide library per cell
+  (r: the `f32:q8_1` rows; i: the integer gemm; h: `<type>:f16` on `f32:f16`
+  acts; x: the exact f32 rows; bold: >= 0.95; three runs' spread under 5% in
+  all but one of 1062 cells, median 0.3%):
+
+| type    | M = 1 | 2     | 4     | 8         | 16        | 32        | 64    | 128       | 512       |
+| ------- | ----- | ----- | ----- | --------- | --------- | --------- | ----- | --------- | --------- |
+| q4_0    | 0.92r | 0.91r | 0.90r | **1.10**i | 0.88r     | 0.86i     | 0.75i | 0.77i     | 0.65i     |
+| q4_1    | 0.93r | 0.92r | 0.83r | 0.95r     | 0.87r     | 0.56r     | 0.52h | 0.71h     | 0.52h     |
+| q5_0    | 0.91r | 0.89r | 0.86r | **1.05**r | 0.86i     | 0.80i     | 0.78i | 0.69i     | 0.63i     |
+| q5_1    | 0.92r | 0.89r | 0.78r | **0.97**r | 0.90r     | 0.53r     | 0.45h | 0.68h     | 0.53h     |
+| q8_0    | 0.93x | 0.94r | 0.83i | **0.96**r | 0.87i     | 0.78i     | 0.78i | 0.63h     | 0.62i     |
+| mxfp4   | 0.71r | 0.70r | 0.75i | 0.94i     | 0.63r     | 0.59i     | 0.47i | 0.54i     | 0.58i     |
+| iq4_nl  | 0.83r | 0.78r | 0.75r | 0.93i     | 0.71r     | 0.68i     | 0.57i | 0.66i     | 0.60i     |
+| q2_0    | 0.66r | 0.66r | 0.87r | **0.99**r | 0.65r     | 0.63h     | 0.54h | 0.65h     | 0.46h     |
+| q4_K    | 0.77r | 0.72r | 0.83r | **0.96**r | 0.63r     | 0.62h     | 0.60h | 0.70h     | 0.50h     |
+| q5_K    | 0.70x | 0.56r | 0.55r | 0.75r     | 0.52h     | 0.54h     | 0.60h | 0.65h     | 0.52h     |
+| q6_K    | 0.77h | 0.68x | 0.66r | 0.84r     | 0.56r     | 0.69h     | 0.70h | 0.67h     | 0.53h     |
+| q2_K    | 0.85x | 0.65r | 0.87r | **0.97**r | 0.63h     | 0.81h     | 0.75h | **1.16**h | **0.97**h |
+| q3_K    | 0.82x | 0.60x | 0.80r | 0.92r     | 0.45r     | 0.59h     | 0.64h | 0.69h     | 0.59h     |
+| iq4_xs  | 0.77r | 0.74r | 0.77r | 0.88r     | 0.62r     | 0.57h     | 0.62h | 0.62h     | 0.46h     |
+| q1_0    | 0.72r | 0.69r | 0.89r | **0.98**r | 0.60r     | 0.61h     | 0.50h | 0.59h     | 0.51h     |
+| iq2_xxs | 0.39h | 0.36r | 0.50r | 0.57r     | 0.38h     | 0.51h     | 0.46h | 0.50h     | 0.47h     |
+| iq2_xs  | 0.48r | 0.49r | 0.59r | 0.71r     | 0.53r     | 0.54h     | 0.57h | 0.55h     | 0.61h     |
+| iq2_s   | 0.47r | 0.51r | 0.61r | 0.72r     | 0.52r     | 0.42h     | 0.46h | 0.47h     | 0.58h     |
+| iq3_xxs | 0.55x | 0.38r | 0.47r | 0.56r     | 0.41r     | 0.55h     | 0.49h | 0.51h     | 0.46h     |
+| iq3_s   | 0.52x | 0.41r | 0.47r | 0.59r     | 0.44r     | 0.50h     | 0.49h | 0.35h     | 0.43h     |
+| iq1_s   | 0.62r | 0.58r | 0.70r | 0.78r     | 0.54r     | 0.38r     | 0.43h | 0.39h     | 0.51h     |
+| iq1_m   | 0.54r | 0.54r | 0.66r | 0.74r     | **1.84**r | **1.11**r | 0.77h | 0.63h     | 0.57h     |
+| nvfp4   | 0.56x | 0.42x | 0.47x | 0.51x     | 0.59h     | 0.75h     | 0.59h | 0.87h     | 0.67h     |
+
+`halide-by-m-<type>_f32_cuda` is that column except where x wins, h below M = 17
+or r above 16 (nvfp4 has none). 12 of 207 cells reach 0.95, 8 of them at M = 8.
+f16 x f16 1.05 1.06 1.07 0.97 1.02 1.04 0.87 0.78 0.60; f16 on `f32:f16` acts
+0.89 0.89 0.89 0.89 0.94 1.07 0.89 0.80 0.64; bf16 x bf16 1.02 0.99 0.99 0.98
+1.05 0.97 0.90 0.77 0.99; bf16 on `f32:bf16` acts 0.89 0.90 0.90 0.90 0.94 0.99
+0.88 0.79 1.01; f32 as `f32:f16` 0.89 0.91 0.92 0.82 0.96 1.05 0.95 0.90 1.36
+(GGML: cuBLAS in f32).
+
+- The `full` preset's 12 layers (K x N from 2048 x 512 to 18944 x 3584), M = 32
+  / 512, GGML / Halide: f16 x f16 0.44-1.09 / 0.38-0.59, f16 on f32 acts
+  0.47-1.10 / 0.47-0.63, q4_0 (by-M) 0.67-1.14 / 0.55-0.89, q8_0 0.58-1.03 /
+  0.51-0.82, q4_K 0.35-0.85 / 0.44-0.73, iq2_xs 0.27-0.66 / 0.46-0.84. At M = 32
+  the square layers from 2048 to 4096 reach 0.86-1.07 on f16 and q4_0; N = 512
+  and 1024 0.44-0.75 on f16 (few tiles, each bound by its steps of K: the
+  integer gemm's K split takes q4_0 to 0.90-1.14 there); K or N >= 14336
+  0.54-0.92.
+- Where the rest is:
+  - M \<= 4, q4_0, q4_1, q5_0, q5_1, q8_0 (0.78-0.94): the act kernel. A call is
+    two launches; at 4096^2 x 1 q4_0's rows alone take 13.5 us (9.2 MB of
+    weights: ~10 us at the card's bandwidth), GGML's two kernels 15.9, ours
+    17.4. The act kernel is a thread per 36-byte record (its 32 loads and stores
+    in series); GGML's a thread per value. M = 2, 4: the rows' cost per act
+    column (q4_0 x q8_0 13.5, 14.2, 21.9 us at M = 1, 2, 4; GGML's mmvq with its
+    act kernel 15.9, 16.2, 17.3).
+  - M \<= 8, K-quants and grid formats (0.36-0.97): on q8_1 acts each 32-value
+    sub-block's int32 dot is scaled in f32 (on q8_K acts, int32 across the
+    block: q4_K at M = 1 13.5 us on q8_K acts, 20.9 on `f32:q8_1`, ~3.5 of them
+    its act kernel), and their decodes still have per-element PTX (q5_K's high
+    bits by variable shifts, the grid lookups: 280 prmt in q5_K's gemv loop). A
+    q8_K act kernel needs a thread per value or lane-parallel reductions; a
+    struct-typed record Func is a thread's.
+  - M = 9..15 (GGML's mmq): the rows (q4_0 at M = 12 0.87). The integer gemm has
+    no guarded tile.
+  - M >= 16, q4_0, q5_0, q8_0 (0.62-0.88): one staging buffer per step (the
+    copies are awaited before the multiplies), weight codes decoded per tile of
+    M; iq4_nl, mxfp4 (0.47-0.71): their lut per block, and no K split.
+  - M >= 16, the other 18 types (0.35-0.90; q2_K 0.97-1.13 from 128, iq1_m,
+    cuBLAS in GGML, 1.11-1.85 at 16..32): the f16 gemm (decode to f16 per tile,
+    f32 accumulators) against int8 mma. Needs sub-block scales and the min term
+    (rank 1, from the acts' partial sums) in `gpu_int_gemm`.
+  - f16 from M = 64 (0.60-0.89): cuBLAS's f16 accumulators (f32 ones bound M =
+    512 at 0.84x on this card).
