@@ -915,6 +915,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdEqual;
+    } else if (op->a.type().is_bool()) {
+        op_code = SpvOpLogicalEqual;
     } else {
         op_code = SpvOpIEqual;
     }
@@ -935,6 +937,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op) {
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdNotEqual;
+    } else if (op->a.type().is_bool()) {
+        op_code = SpvOpLogicalNotEqual;
     } else {
         op_code = SpvOpINotEqual;
     }
