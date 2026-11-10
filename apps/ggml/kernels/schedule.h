@@ -445,26 +445,51 @@ inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs)
 // stage the unsigned ones: {offset + u, u} (u decoded from the path's inputs,
 // the offset cancelled), dot's calls of the codes (once it calls them
 // directly) redirected to the former; or none.
-inline std::pair<Func, Func> offset_codes(Func dot, const std::vector<ApproximationResult> &rs) {
+// With `bias` (no offset path: the iq formats' signed grid values), codes
+// whose bounds span at most 256 values are biased to unsigned bytes instead
+// (u = q - min), as GGML's tiled gemm stages them.
+inline std::pair<Func, Func> offset_codes(Func dot, const std::vector<ApproximationResult> &rs, bool bias = false) {
     std::vector<Func> path = offset_path(rs);
-    if (path.empty()) return {};
     Func q;
+    if (path.empty()) {
+        std::vector<Func> qs = rs[0].decoded_components(tag::codes);
+        if (!bias || qs.size() != 1) return {};
+        q = qs[0];
+    }
     for (Func f : rs[0].decoded_components(tag::codes)) {
         if (has(path, f.name())) q = f;
     }
     auto calls = Internal::find_direct_calls(dot.function());
-    if (!calls.count(q.name())) return {};
+    if (!q.defined() || !calls.count(q.name())) return {};
     std::vector<Var> as = q.args();
     std::vector<Expr> es(as.begin(), as.end());
-    Func full(Internal::unique_name(q.name() + "_full"));
-    full(as) = q(es);
-    full.eager_inline(path);
-    Expr e = simplify(full.value());
-    const auto *a = e.as<Internal::Add>();
-    if (!a || !Internal::is_const(a->b)) return {};
     Func u(Internal::unique_name(q.name() + "_unsigned")), o(Internal::unique_name(q.name() + "_offset"));
-    u(as) = a->a;
-    o(as) = u(es) + a->b;
+    if (path.empty()) {
+        if (!q.type().is_int()) return {};
+        Internal::Interval b = Internal::bounds_of_expr_in_scope(q(es), Internal::Scope<Internal::Interval>());
+        auto lo = b.has_lower_bound() ? Internal::as_const_int(simplify(b.min)) : std::nullopt;
+        auto hi = b.has_upper_bound() ? Internal::as_const_int(simplify(b.max)) : std::nullopt;
+        int64_t l = lo ? *lo : q.type().bits() == 8 ? -128 :
+                                                      1,
+                h = hi ? *hi : q.type().bits() == 8 ? 127 :
+                                                      0;
+        if (h - l > 255 || l >= 0) return {};
+        // (q's definition inlined: u calls the tables, cloned per tile)
+        Func full(Internal::unique_name(q.name() + "_full"));
+        full(as) = q(es);
+        full.eager_inline({q});
+        u(as) = cast<uint8_t>(cast(Int(32), full.value()) - (int)l);
+        o(as) = cast<int16_t>(u(es)) + cast<int16_t>((int)l);
+    } else {
+        Func full(Internal::unique_name(q.name() + "_full"));
+        full(as) = q(es);
+        full.eager_inline(path);
+        Expr e = simplify(full.value());
+        const auto *a = e.as<Internal::Add>();
+        if (!a || !Internal::is_const(a->b)) return {};
+        u(as) = a->a;
+        o(as) = u(es) + a->b;
+    }
     dot.function().substitute_calls(calls.at(q.name()), o.function());
     return {o, u};
 }
@@ -552,11 +577,18 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     std::vector<Func> path = fold ? offset_path(rs) : std::vector<Func>{};
     std::vector<Func> group = decoders(rs, only({tag::codes}), 0, 1);
     bool offsets = !path.empty();
-    if (!offsets && !affine(rs)) return false;
-    d.offsets = offsets;
+    // (no offset path: the codes biased unsigned where owner's, not affine)
+    bool bias = fold && !offsets && owner.defined() && !affine(rs);
+    if (!offsets && !bias && !affine(rs)) return false;
+    d.offsets = offsets || bias;
     s.eager_inline(dec);
-    if (offsets && owner.defined()) {
-        auto [o, u] = offset_codes(owner, rs);
+    if ((offsets || bias) && owner.defined()) {
+        auto [o, u] = offset_codes(owner, rs, bias);
+        if (bias && !o.defined()) {
+            d = Sums();
+            return false;
+        }
+        offsets = true;
         if (o.defined()) {
             path = {o};
             group = {u};
