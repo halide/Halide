@@ -199,6 +199,9 @@ struct Formats {
     // q4_0:f16): by rs.back()
     bool wcompute = false;
     Expr row_bytes;  // a weight row's (record row's) bytes, if known
+    // plain f32 weights: no scheme, so rs holds no approximation of their
+    // storage (rs[0] is not the weight's)
+    bool wplain = false;
 };
 
 // Where a weight's constant code offsets fold into the act's sub-block sums
@@ -2207,16 +2210,17 @@ inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func
 // The f16 operands of a Metal gemm: the weight's compute format's encoded
 // values (wh: its decoded values rounded to f16, e.g. q4_0:f16) or f16
 // storage's, and the act's (xh: an f16 compute format's, staged, or f16
-// storage's), else false.
-inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
-    const ApproximationResult *w = fmt.wcompute ? &rs.back() : fmt.block == 1 && !rs.empty() ? &rs[0] :
-                                                                                               nullptr;
+// storage's), else false. With `bf16` (CUDA's wmma has bf16 fragments), bf16
+// operands alike.
+inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh, bool bf16 = false) {
+    const ApproximationResult *w = fmt.wcompute ? &rs.back() : fmt.block == 1 && !rs.empty() && !fmt.wplain ? &rs[0] :
+                                                                                                              nullptr;
     size_t acts = rs.size() - fmt.wcompute;
     if (!w || w->encoded.size() != 1) return false;
     wh = w->encoded[0];
     xh = staged.size() == 1 ? staged[0] : acts == 2 && rs[1].encoded.size() == 1 ? rs[1].encoded[0] :
                                                                                    Func();
-    return wh.type() == Float(16) && xh.defined() && xh.type() == Float(16);
+    return xh.defined() && wh.type() == xh.type() && (wh.type() == Float(16) || (bf16 && wh.type() == BFloat(16)));
 }
 
 // The f32 operands of a Metal gemm on exact weights (wh: the weights' decoded
@@ -2225,7 +2229,7 @@ inline bool f16_operands(const std::vector<ApproximationResult> &rs, const std::
 // fragments; on f32 ones the gemm takes 0.11-0.5x flat's rows' time at M =
 // 32..512; M3 Max)
 inline bool f32_operands(Func dot, Func x, const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Formats &fmt, Func &wh, Func &xh) {
-    if (fmt.wcompute || rs.empty() || (fmt.block % 8 || !staged.empty()) && fmt.block != 1) return false;
+    if (fmt.wcompute || fmt.wplain || rs.empty() || (fmt.block % 8 || !staged.empty()) && fmt.block != 1) return false;
     wh = rs[0].replacement;
     xh = fmt.block == 1 && rs.size() > 1 ? rs.back().replacement : x;
     return dot.type() == Float(32) && wh.type() == Float(32) && xh.type() == Float(32);
@@ -2635,7 +2639,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (acc.defined()) throw std::invalid_argument(gpu + "dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
         Func wh, xh;
-        if (f16_operands(rs, staged, fmt, wh, xh)) {
+        if (f16_operands(rs, staged, fmt, wh, xh, !metal)) {
             gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged, metal ? 0 : 8);
             return;
         }

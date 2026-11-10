@@ -280,8 +280,11 @@ endif ()
 # GGML_HALIDE_CUDA_FEATURES, registered with the harness and run, checked
 # and timed like the Metal rows. The tensor-core gemm is the Metal gemm's
 # schedule (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
-# (cuda_shapes). Each f16-act bench library's test checks that its PTX
-# multiplies on the tensor cores (the other acts take dp4a or f32 rows).
+# (cuda_shapes), on f16 operands or, for bf16 weights on bf16 acts, wmma's
+# bf16 fragments. f32 weights (no scheme) are W itself, or rounded to f16
+# for the gemm (f32:f16). Each f16- or bf16-act bench library's test checks
+# that its PTX multiplies on the tensor cores (the other acts take dp4a or
+# f32 rows).
 set(GGML_HALIDE_CUDA_FORMATS
     "q4_0 mul_mat f32,q8_0"
     "q8_0 mul_mat f32,q8_0"
@@ -297,7 +300,19 @@ set(GGML_HALIDE_CUDA_FORMATS
     "iq4_xs mul_mat f32,q8_K"
     "q2_K mul_mat f32,q8_K"
     "q3_K mul_mat f32,q8_K"
-    "f16 mul_mat f16,f32:f16"
+    "nvfp4 mul_mat f32"
+    "q1_0 mul_mat f32,q8_0"
+    "iq2_xxs mul_mat f32,q8_K"
+    "iq2_xs mul_mat f32,q8_K"
+    "iq2_s mul_mat f32,q8_K"
+    "iq3_xxs mul_mat f32,q8_K"
+    "iq3_s mul_mat f32,q8_K"
+    "iq1_s mul_mat f32,q8_K"
+    "iq1_m mul_mat f32,q8_K"
+    "f16 mul_mat f16,f32,f32:f16"
+    "bf16 mul_mat bf16,f32,f32:bf16"
+    "f32 mul_mat f32"
+    "f32:f16 mul_mat f32:f16"
     "q4_0:f16 mul_mat f32:f16,f16"
     "q8_0:f16 mul_mat f32:f16,f16"
     "q4_K:f16 mul_mat f32:f16,f16"
@@ -312,6 +327,15 @@ set(GGML_HALIDE_CUDA_FORMATS
     "mxfp4:f16 mul_mat f32:f16,f16"
     "iq4_nl:f16 mul_mat f32:f16,f16"
     "q2_0:f16 mul_mat f32:f16,f16"
+    "nvfp4:f16 mul_mat f32:f16,f16"
+    "q1_0:f16 mul_mat f32:f16,f16"
+    "iq2_xxs:f16 mul_mat f32:f16,f16"
+    "iq2_xs:f16 mul_mat f32:f16,f16"
+    "iq2_s:f16 mul_mat f32:f16,f16"
+    "iq3_xxs:f16 mul_mat f32:f16,f16"
+    "iq3_s:f16 mul_mat f32:f16,f16"
+    "iq1_s:f16 mul_mat f32:f16,f16"
+    "iq1_m:f16 mul_mat f32:f16,f16"
 )
 set(GGML_HALIDE_CUDA_FEATURES cuda cuda_capability_80)
 # Metal rows need Apple's GPU; CUDA rows GGML's CUDA backend (to compare with)
@@ -446,7 +470,10 @@ foreach (row IN LISTS GGML_FORMATS)
                 "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
             if ("cuda" IN_LIST features_list AND act MATCHES "f16$")
-                add_test(NAME ${name}_ptx COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}_bench>)
+                add_test(
+                    NAME ${name}_ptx
+                    COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}_bench>
+                )
                 set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
             endif ()
         endforeach ()

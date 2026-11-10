@@ -12,7 +12,9 @@
 // weight = "<storage>[:<compute>]" likewise: W's decoded values (its storage
 // scheme's round trip) are approximated again by the compute format (a float
 // of one value per record: e.g. q4_0:f16, each decoded weight rounded to f16,
-// as GGML's Metal gemm dequantizes to half; GPU only).
+// as GGML's Metal gemm dequantizes to half; GPU only). f32 weights (no
+// scheme; GPU only) are W itself, or with a compute format (f32:f16) W
+// approximated by it.
 #include "kernels/schedule.h"
 #include "schemes/schemes.h"
 
@@ -105,8 +107,10 @@ public:
         }
         std::vector<Func> cut;
         std::vector<ImageParam> bound;
-        // approx[0] is the weight's (the schedules rely on it)
-        if (!fw.scheme.defined()) throw std::invalid_argument("weight: a quantized format");
+        // approx[0] is the weight's (the schedules rely on it), unless it is
+        // plain f32 (fmt.wplain)
+        const bool wplain = !fw.scheme.defined();
+        if (wplain && (op != "mul_mat" || !get_target().has_gpu_feature())) throw std::invalid_argument("weight: a quantized format (f32: a GPU's mul_mat only)");
         for (auto [F, Ff, f, p] : {std::tuple{W, Wf, fw, w}, std::tuple{X, Xf, fa, a}}) {
             if (f.scheme.defined()) {
                 approx.push_back(approximate(F, Ff, f, dots, F.name() == W.name() ? wblock : block));
@@ -128,7 +132,7 @@ public:
             // round trip), approximated again: the last approximation
             ggml::Format f = ggml::format(wc);
             if (!f.scheme.defined() || f.block != 1 || f.rows != 1 || f.acc.defined()) throw std::invalid_argument("weight " + std::string(weight) + ": a compute format of one value per record");
-            approx.push_back(approx[0].replacement.approximate_by(f.scheme, dots));
+            approx.push_back(wplain ? Wf.approximate_by(f.scheme, {W}) : approx[0].replacement.approximate_by(f.scheme, dots));
         }
         // Derived ports (e.g. q8_1's block sums) are dead in the decode until a
         // schedule reads them instead of a term they equal: sever them too.
@@ -219,7 +223,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block, wc != wn, row_bytes};
+        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block, wc != wn, row_bytes, wplain};
         acc = fw.acc;
         // The accumulation's order is part of its numerics: without
         // strict_float, LLVM may reassociate the partial sums' tree
