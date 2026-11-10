@@ -1689,7 +1689,9 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // whether dot reads rs[0]'s codes (not a weight compute format's values,
 // e.g. q4_K:f16's), from which the scales and offsets hoist. `integer`
 // (integer acts): the codes' dot in int32, each lane's run of 8 values one
-// vector reduction (CUDA: two dp4a).
+// vector reduction (CUDA: two dp4a), as is an affine weight's sum of the act's
+// codes (its min's term; CUDA: dp4a by ones, reusing the codes' loads: q4_1,
+// q5_1, q4_K, q5_K at M = 8 1.6-2.4x).
 inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
                        bool integer = false) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
@@ -1783,10 +1785,11 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     lane_vars.emplace_back(ry, u);
     Func blk = s.rfactor(lane_vars), rest, mid;
     Func codes = block_dot(blk, rs, integer, rest, mid, on_codes && affine(rs));
-    // the codes' runs (int32 dots) reduced as vectors, else unrolled
-    auto inner_loops = [&](Stage fs, bool dots) {
+    // the runs (int32 dots, and an affine weight's act code sums) reduced as
+    // vectors, else unrolled
+    auto inner_loops = [&](Stage fs) {
         for (const RVar &v : inner_rs) {
-            if (dots && integer && v.name() == inner_rs[0].name() && segs[0].kind == Run) {
+            if (integer && v.name() == inner_rs[0].name() && segs[0].kind == Run) {
                 fs.atomic().vectorize(v);
             } else {
                 fs.unroll(v);
@@ -1848,7 +1851,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         std::vector<VarOrRVar> o{f.args()[0]};
         o.insert(o.end(), inner_rs.begin(), inner_rs.end());
         fs.reorder(o).unroll(f.args()[0]);
-        inner_loops(fs, f.name() == codes.name());
+        inner_loops(fs);
     }
     for (auto [f, part, inner] : subs) {
         for (Func g : {part, inner}) {
@@ -1863,7 +1866,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         std::vector<VarOrRVar> o{inner.args()[0]};
         o.insert(o.end(), inner_rs.begin(), inner_rs.end());
         inner.update().reorder(o);
-        inner_loops(inner.update(), f.name() == codes.name());
+        inner_loops(inner.update());
     }
     // (integer: every column of the tile, registers)
     if (integer) {
