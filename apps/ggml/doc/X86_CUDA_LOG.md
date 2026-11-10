@@ -148,3 +148,10 @@ App changes:
   thread, 4096^2, M = 32, ms (GGML): q6_K 9.2 -> 4.7 (5.9), q3_K 8.6 -> 5.7
   (5.1), q2_K 5.0 -> 4.4 (5.1), q5_K 4.8 -> 4.1 (4.0), q4_K 3.7 (3.6); iq
   formats unchanged.
+- Signed codes without an offset (the iq formats' grid values) in
+  `blocked_cols()`: `offset_codes(..., bias)` stages them biased to unsigned
+  bytes (u = q + 128, from q's type bounds), the -128 folded through the
+  act's bsums, as GGML's tiled gemm. One thread, 4096^2, M = 32, ms (GGML):
+  iq2_xxs 6.7 -> 4.3 (4.6), iq2_xs 7.2 -> 5.2 (5.5), iq2_s 7.7 -> 6.7 (5.5),
+  iq3_xxs 7.2 -> 4.8 (4.9), iq3_s 8.1 -> 5.8 (5.3), iq4_xs 6.3 -> 4.1 (3.3);
+  iq1_s/iq1_m unchanged (9.5, 10.7 against 4.9, 6.5).
