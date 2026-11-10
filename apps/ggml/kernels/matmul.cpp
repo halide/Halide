@@ -205,6 +205,16 @@ public:
             if (p.dimensions() > 1) record(p).set_extent(record(w[0]).extent() * (fw.block / fa.block));
             row(p).set_extent(o.dim(1).extent());
         }
+        // CUDA: device buffers 16-byte aligned (cudaMalloc's 256; GGML's
+        // CUDA buffers 128), so the gemm's staging loads are vectors
+        if (get_target().has_feature(Target::CUDA)) {
+            for (ImageParam p : w) {
+                p.set_host_alignment(16);
+            }
+            for (ImageParam p : a) {
+                p.set_host_alignment(16);
+            }
+        }
         for (ImageParam p : w) {
             add_input(p);
         }
