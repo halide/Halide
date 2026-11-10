@@ -77,6 +77,15 @@ add_executable(
 )
 target_include_directories(ggml-quant-bench PRIVATE harness "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ggml_thread_pool ${GGML_HALIDE_LIBRARIES})
+# The oracle's products run on the system's BLAS, through its C interface:
+# Accelerate's own header on macOS, elsewhere cblas.h (which e.g. Fedora
+# installs in a directory per implementation).
+find_package(BLAS REQUIRED)
+target_link_libraries(ggml-quant-bench PRIVATE BLAS::BLAS)
+if (NOT APPLE)
+    find_path(GGML_CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES flexiblas openblas REQUIRED)
+    target_include_directories(ggml-quant-bench PRIVATE "${GGML_CBLAS_INCLUDE_DIR}")
+endif ()
 if (GGML_CPU_KLEIDIAI)
     # KleidiAI's packers, the reference of the qsi8cx and qai8dx codecs
     target_compile_definitions(ggml-quant-bench PRIVATE GQ_KLEIDIAI)
