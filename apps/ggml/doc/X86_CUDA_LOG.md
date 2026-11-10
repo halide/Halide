@@ -402,3 +402,20 @@ App changes:
   were already 0.97-1.51 of GGML after the macro tiles. The remaining M = 8
   gaps are against GGML's AMX kernels for q4_K, q5_K and iq4_xs: AMX with
   sub-block scales (`amx_ok` excludes `fmt.sub`).
+- `blocked_amx()` with sub-block scales, as GGML's AMX K-quant kernels: one
+  tile op per sub-block (rfactor across the sub-blocks), its int32 result
+  times the sub-block's scale; the mins' term across the columns, as
+  `blocked_cols()`. Steps at q4_K, M = 8, twelve threads, us: first cut 707
+  (byte gathers of the scales, sums vectorized across n) -> 254 (sums across
+  m, rows unrolled: the act's sub-block sums CSE) -> 238 (the scale decoders
+  cloned per consumer, a row's sub-blocks per vector) -> 232 (the act's bsums
+  staged, columns innermost). Interleaved A/B against `cols8`, 4096^2, M = 8,
+  ratio AMX / cols8: 32-value sub-blocks iq1_s, iq4_xs, q4_K 0.81, q5_K 0.90,
+  iq2_xxs, iq3_s 0.97, iq3_xxs 0.98; 16-value ones q3_K 1.08, iq2_s 1.06,
+  q6_K 1.17, iq2_xs 1.19, q2_K 1.31, iq1_m 1.34 (twice the tile ops and
+  rescales). So the 8 <= M < 16 tile takes AMX when `fmt.sub >= 32`. Against
+  GGML, us (GGML's best; ratio after cols8 -> now): q4_K 229 (226 AMX; 0.81
+  -> 0.99), q5_K 223 (202 AMX; 0.77 -> 0.90), iq4_xs 204 (187 AMX; 0.71 ->
+  0.92), iq1_s 300 (493; 1.64), iq2_xxs 300 (436; 1.45), iq3_s 470 (538;
+  1.15), iq3_xxs 403 (460; 1.14). The rest is structural: the weight operand transposed per
+  sub-block at run time (GGML repacks offline), the act staged per sub-block.
