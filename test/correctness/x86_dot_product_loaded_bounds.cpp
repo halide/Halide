@@ -15,20 +15,24 @@ namespace {
 // operand xor 0x80, less 128 times the other's sums. When the staged Func's
 // values are known to be non-negative (here, in [0, 15]), its loads should
 // be the unsigned operand directly, with no bias, even though the loads
-// themselves are int8.
-std::string compile(bool bounded) {
+// themselves are int8. Likewise when the product is an explicit widening_mul.
+std::string compile(bool bounded, bool explicit_mul = false) {
     ImageParam w(UInt(8), 1, "w"), a(Int(8), 1, "a");
     Var x("x");
     RDom r(0, 4);
     Func staged("staged"), f("f");
     staged(x) = bounded ? cast<int8_t>(w(x) & 15) : cast<int8_t>(w(x));
     f(x) = 0;
-    f(x) += cast<int32_t>(staged(4 * x + r)) * cast<int32_t>(a(4 * x + r));
+    if (explicit_mul) {
+        f(x) += cast<int32_t>(widening_mul(staged(4 * x + r), a(4 * x + r)));
+    } else {
+        f(x) += cast<int32_t>(staged(4 * x + r)) * cast<int32_t>(a(4 * x + r));
+    }
     staged.compute_root().vectorize(x, 64);
     f.vectorize(x, 16);
     f.update().atomic().vectorize(r).vectorize(x, 16);
 
-    std::string name = std::string("x86_dot_product_loaded_bounds_") + (bounded ? "bounded" : "unbounded");
+    std::string name = std::string("x86_dot_product_loaded_bounds_") + (bounded ? "bounded" : "unbounded") + (explicit_mul ? "_explicit" : "");
     std::string file = Internal::get_test_tmp_dir() + name + ".s";
     Target target("x86-64-linux-avx512_sapphirerapids-no_runtime-no_asserts-no_bounds_query");
     f.compile_to_assembly(file, {w, a}, name, target);
@@ -52,9 +56,11 @@ int main(int argc, char **argv) {
         printf("Expected the bias form (vpdpbusd, vpsubd) without bounds. Assembly:\n%s\n", unbounded.c_str());
         return 1;
     }
-    if (!has(bounded, "vpdpbusd") || has(bounded, "vpsubd")) {
-        printf("Expected vpdpbusd without the bias form's vpsubd. Assembly:\n%s\n", bounded.c_str());
-        return 1;
+    for (const std::string &b : {bounded, compile(true, true)}) {
+        if (!has(b, "vpdpbusd") || has(b, "vpsubd")) {
+            printf("Expected vpdpbusd without the bias form's vpsubd. Assembly:\n%s\n", b.c_str());
+            return 1;
+        }
     }
     printf("Success!\n");
     return 0;
