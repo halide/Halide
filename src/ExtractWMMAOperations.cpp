@@ -404,6 +404,16 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     // The vector reduce must be of a widening multiply. FindIntrinsics does
     // not lift float widening muls, so we just expect a multiply of two casts.
     Expr reduce_value = simplify(lower_intrinsics(reduce->value));
+    // A product of 8-bit integers may have been computed in 16 bits and then
+    // widened to the accumulator's type, which is the same product so long as
+    // 16 bits hold it.
+    Type narrow_product;
+    if (const Cast *c = reduce_value.as<Cast>();
+        c && c->value.as<Mul>() && c->value.type().is_int_or_uint() &&
+        c->type.is_int() && c->type.bits() > c->value.type().bits()) {
+        narrow_product = c->value.type().element_of();
+        reduce_value = c->value;
+    }
     const auto *mul = reduce_value.as<Mul>();
     if (!mul) {
         return fail("the vector reduction is not of a multiply");
@@ -430,6 +440,11 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     const Type operand_type = info.lhs.load->type.element_of();
     if (info.rhs.load->type.element_of() != operand_type) {
         return fail("the matrix multiply operands do not have the same type");
+    }
+    if (narrow_product.bits() &&
+        !(operand_type == Int(8) && narrow_product == Int(16)) &&
+        !(operand_type == UInt(8) && (narrow_product == UInt(16) || narrow_product.bits() > 16))) {
+        return fail("the product is computed in a type that may not hold it");
     }
     if (!unit.types_supported(operand_type, info.accumulator_type)) {
         user_error << "Matrix multiply not recognized. There is no " << unit.name

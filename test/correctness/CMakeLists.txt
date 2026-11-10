@@ -672,6 +672,7 @@ tests(
     wmma_fragment_layout.cpp
     wmma_matmul.cpp
     wmma_row_max.cpp
+    wmma_widened_product.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
     wrapper_never_used.cpp
