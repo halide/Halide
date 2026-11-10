@@ -384,3 +384,10 @@ App changes:
   slower at both M = 128 and 512 (iq4_xs 512: 13 ms).
 - `offset_codes()` hands later tiles the pair an earlier tile's call made, so
   every `blocked_cols()` tile stages the unsigned codes (only the first did).
+- `q4_1.4x8`: a layout row for q4_1 (its definition unchanged: four rows'
+  records interleaved in 8-byte pieces, as `q4_0.i4.4x8`), for GGML's AMX
+  q4_1 gemv's M = 1. GGML has no q4_1 repack; the harness's own
+  `make_block_q4_1x4` lays out the oracle's records. `blocked_rows()` takes
+  affine weights without sub-blocks: the min term from the act's `s` port
+  (`derived_sums()`, as `blocked_amx()`). 4096^2, M = 1, us (GGML's AMX
+  gemv): one thread 641 -> 402 (393), twelve threads 82 -> 48.4 (44.0).

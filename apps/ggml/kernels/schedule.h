@@ -1116,7 +1116,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), v("v"), bacc("bacc"), mo("mog"), mi("mig");
     RVar ry = r.y, rx = r.x, rxs("rxs"), rxc("rxc"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi");
     Sums d;
-    if (affine(rs) && !(sub && derived_sums(out, st, s, r, rs, d, act_sub, sub))) throw std::invalid_argument("blocked_rows: affine weights need sub-blocks and an act with derived sums");
+    if (affine(rs) && !derived_sums(out, st, s, r, rs, d, act_sub, sub)) throw std::invalid_argument("blocked_rows: affine weights need an act with derived sums");
     if (sub) {
         s.split(rx, rxs, rxc, sub);
         rx = rxc;
