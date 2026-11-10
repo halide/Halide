@@ -1422,7 +1422,7 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     // (the weight's codes, or their offline staged input: what codes calls
     // but the act's)
     Var ko("ko"), ki("ki");
-    std::vector<Func> wops;
+    std::vector<Func> wops, ds;
     for (const auto &kv : Internal::find_direct_calls(codes.function())) {
         bool act = kv.first == codes.name();
         for (Func f : ac)
@@ -1431,12 +1431,16 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     }
     for (Func f : wops) {
         // decoded in rows (dense, vectorized), then transposed in words
-        Func d = f.in(codes), w = d.in(codes);
+        // (a clone with tables: their rows staged for this tile's decode alone)
+        Func d = staged_tables(rs).empty() ? f.in(codes) : f.clone_in(codes), w = d.in(codes);
         Var k = w.args()[0], b = w.args()[1], row = w.args()[2];
         d.compute_at(dot, ry).vectorize(d.args()[0]).unroll(d.args()[2]);
         w.compute_at(dot, ry).split_storage(k, ko, ki, 4).reorder_storage(ki, row, ko, b);
         w.split(k, ko, ki, 4).reorder(ki, row, ko, b).vectorize(ki).vectorize(row).vectorize(ko);
+        ds.push_back(d);
     }
+    // (q5_0's table rows staged per block: dense loads, not a byte gather)
+    tables(rs, ds, LoopLevel(dot, ry), t);
     for (Func f : ac) {
         Func a = f.in(codes);
         a.compute_at(tile).vectorize(a.args()[0]).unroll(a.args()[2]);
