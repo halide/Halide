@@ -157,6 +157,17 @@ protected:
         return unsafe_promise_clamped(e, make_const(e.type().element_of(), b.min), make_const(e.type().element_of(), b.max));
     }
 
+    // A byte loaded from a Func's realization (e.g. weights decoded and
+    // staged), with the bounds of the Func's values made visible, if they're
+    // tighter than e's own (codegen: an unsigned operand of a dot).
+    Expr with_loaded_bounds(const Expr &e) {
+        if (!func_bounds || !e.type().is_int() || e.type().bits() != 8) {
+            return e;
+        }
+        ConstantInterval b = value_bounds(e), own = constant_integer_bounds(e);
+        return own.contains(b) && !(b == own) ? with_value_bounds(e) : e;
+    }
+
 public:
     FindIntrinsics(const FuncValueBounds *func_bounds = nullptr)
         : func_bounds(func_bounds) {
@@ -551,7 +562,7 @@ protected:
         if (narrow_a.defined() && narrow_b.defined() &&
             (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
              narrow_a.type().is_float() == narrow_b.type().is_float())) {
-            Expr result = widening_mul(narrow_a, narrow_b);
+            Expr result = widening_mul(with_loaded_bounds(narrow_a), with_loaded_bounds(narrow_b));
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
             }
@@ -1019,7 +1030,7 @@ protected:
             Expr narrow_a = strip_widening_cast(op->args[0]);
             Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
-                return mutate(Cast::make(op->type, widening_mul(narrow_a, narrow_b)));
+                return mutate(Cast::make(op->type, widening_mul(with_loaded_bounds(narrow_a), with_loaded_bounds(narrow_b))));
             }
         } else if (op->is_intrinsic(Call::widening_add) && (op->type.bits() >= 16)) {
             internal_assert(op->args.size() == 2);

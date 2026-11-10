@@ -670,6 +670,7 @@ tests(
     wrong_dimensionality_extern_stage.cpp
     wrong_type.cpp
     x86_cpu_detect.cpp
+    x86_dot_product_loaded_bounds.cpp
     # keep-sorted end
 )
 
