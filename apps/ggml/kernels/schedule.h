@@ -698,7 +698,14 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         // per act sub-block, vectorized across them: its factor times its sum
         RVar rxt("rxt"), rxj("rxj");
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
-        d.sum.update().atomic().vectorize(rxt).unroll(u).unroll(n).unroll(m);
+        // (x86: at the loop's width, not a zmm of 16 sums in a ymm loop,
+        // which takes port 1's vector ALUs offline)
+        if (vec >= 32) {
+            RVar rto("rto"), rti("rti");
+            d.sum.update().atomic().split(rxt, rto, rti, vec / 4).vectorize(rti).unroll(rto).unroll(u).unroll(n).unroll(m);
+        } else {
+            d.sum.update().atomic().vectorize(rxt).unroll(u).unroll(n).unroll(m);
+        }
         if (d.sub_sums) return;
         Var t = d.part.args().back(), to("to"), ti("ti");
         d.part.compute_at(blocks).reorder_storage(t, u, n, m);
