@@ -18,6 +18,10 @@ build/apps/ggml/ggml-quant-bench --types q4_0 --shapes llama3-8b-gemv >out.csv
 build/apps/ggml/ggml-quant-bench --help
 ```
 
+The harness needs a system BLAS with its C interface for the oracle: Accelerate
+on macOS, elsewhere any that CMake's `FindBLAS` finds and its `cblas.h` (e.g.
+Fedora's `flexiblas-devel`).
+
 The Metal libraries embed a metallib compiled at build time by Apple's Metal
 toolchain (`xcrun metal`, `xcrun metallib`; Xcode's, or
 `xcodebuild -downloadComponent MetalToolchain`), not their Metal source: ~11x
@@ -61,15 +65,18 @@ from the weight type (`qsi8d32_qsi4c32` for q4_0, `qai8dx_qsi8cx` for q8_0).
 
 ## Oracle
 
-The reference is an f64 dot product of GGML's own decoding (`to_float`) of the
-inputs, on every output with `--check` (the `ggml_check` test), or on up to 64 x
-4 sampled outputs otherwise (`--outputs all|sampled` overrides). The tolerance
-is derived from what each provider declares it does (`Precision` in
-`harness/harness.h`), not tuned: accumulator precision and chain length, operand
-rounding, and internal re-quantization of activations or weights (see
-`harness/oracle.cpp`). It passes when error / tolerance \<= 1 (`err_ratio`).
-With pre-quantized activations the bound is tight; providers that re-quantize
-f32 activations get a worst-case requantization term, which is much looser.
+The reference is the f64 product of GGML's own decoding (`to_float`) of the
+inputs, computed by the system BLAS's `dgemm`, on every output with `--check`
+(the `ggml_check` test), or on up to 64 x 4 sampled outputs otherwise
+(`--outputs all|sampled` overrides). The tolerance is derived from what each
+provider declares it does (`Precision` in `harness/harness.h`), not tuned:
+accumulator precision and chain length, operand rounding, internal
+re-quantization of activations or weights, and the reference's own f64 rounding
+(see `harness/oracle.cpp`). Its sums are `dgemm` products too, shared by the
+providers that re-quantize alike. It passes when error / tolerance \<= 1
+(`err_ratio`). With pre-quantized activations the bound is tight; providers that
+re-quantize f32 activations get a worst-case requantization term, which is much
+looser.
 
 Notable GGML behavior: KleidiAI's q8_0 path re-quantizes weights and activations
 per row (it does not compute q8_0 x q8_0); the CPU backend rejects f16
