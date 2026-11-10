@@ -1296,6 +1296,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         enum {
             SwapOps = 1 << 0,  // This happens before narrowing op 1 below.
             NarrowOp1 = 1 << 1,
+            Ones = 1 << 2,  // A sum of one operand: its dot with ones.
         };
     };
     static Expr wild_i8x = Variable::make(Int(8, 0), "*");
@@ -1318,6 +1319,9 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_i16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, i32(wild_i8x), "dp4a", Pattern::Ones},
+        {VectorReduce::Add, 4, i32(wild_u8x), "dp4a", Pattern::Ones},
+        {VectorReduce::Add, 4, u32(wild_u8x), "dp4a", Pattern::Ones},
     };
 
     const int input_lanes = op->value.type().lanes();
@@ -1332,7 +1336,8 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
             continue;
         }
         Expr a = matches[0];
-        Expr b = matches[1];
+        // (ones signed for a signed sum: dp4a's overloads)
+        Expr b = (p.flags & Pattern::Ones) ? make_one(a.type().with_code(op->type.code())) : matches[1];
         if (p.flags & Pattern::SwapOps) {
             std::swap(a, b);
         }
