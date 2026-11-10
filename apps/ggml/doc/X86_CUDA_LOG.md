@@ -183,3 +183,21 @@ App changes:
   (480 vpinsrb in the block loop); its rows are now staged per block
   (`tables()`, on a clone of the decode for each tile size). One thread,
   4096^2, M = 32: 42.1 -> 5.4 ms (GGML 23.3).
+
+## Phase 2: CUDA (RTX A4500, sm_86, WSL2; ncu unavailable: ERR_NVGPUCTRPERM)
+
+- Baseline (4096^2, us, Halide vs GGML): f16 M = 1 77.6 vs 78.3 (cuBLAS),
+  M = 8 153 vs 78.6, M = 32 181 vs 81.7, M = 512 1025 vs 294; q4_0:f16 on
+  f16 acts M = 1 30.1, M = 8 102, M = 32 319, M = 512 854 (GGML q4_0 on f32
+  acts: mmvq 31.4, 46, mmq 55.5, 325).
+- `mul_mat()`'s GPU dispatch is Metal's on CUDA too (wmma's 16 x 16
+  fragments): blocked weights take `metal_rows()`. With integer acts their
+  codes' dot is int32, each lane's run of 8 values a 4-way vector reduction
+  (PTX: dp4a), and every M takes the gemv's lanes, tiled over columns
+  (Metal's lane per value at M > 1 is float per value). CUDA rows: q4_0,
+  q8_0 (f32, q8_0 acts), q4_K (f32, q8_K). 4096^2, us, Halide (q8 acts) vs
+  GGML (f32 acts, mmvq: quantized to q8_1 inside):
+  M = 1 q4_0 22.7 vs 28.1, q8_0 36.9 vs 45.4, q4_K 27.8 vs 36.1;
+  M = 8 q4_0 55.4 vs 48.6, q8_0 65.7 vs 55.1, q4_K 108 vs 57.1.
+  M >= 32 (mmq) remains far off: q4_0 185 vs 67 (M = 32), 3121 vs 353
+  (M = 512).
