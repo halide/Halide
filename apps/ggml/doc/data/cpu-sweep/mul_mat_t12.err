@@ -1,0 +1,16 @@
+# a57a4b4d7 2026-11-10T14:32:21-05:00 --op mul_mat --shapes 4096x4096x1 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:34:47-05:00 --op mul_mat --shapes 4096x4096x8 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:37:00-05:00 --op mul_mat --shapes 4096x4096x16 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:39:04-05:00 --op mul_mat --shapes 4096x4096x32 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:41:21-05:00 --op mul_mat --shapes 4096x4096x64 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:43:57-05:00 --op mul_mat --shapes 4096x4096x128 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:47:19-05:00 --op mul_mat --shapes 4096x4096x256 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures
+# a57a4b4d7 2026-11-10T14:52:19-05:00 --op mul_mat --shapes 4096x4096x512 --threads 12 --early-stop --providers !cuda
+214 results, 0 failures

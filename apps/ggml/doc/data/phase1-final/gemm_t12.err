@@ -1,0 +1,8 @@
+# 469f0d232 2026-11-09T17:56:55-05:00 --op mul_mat --shapes 4096x4096x32 --threads 12 --early-stop
+250 results, 0 failures
+# 469f0d232 2026-11-09T18:00:39-05:00 --op mul_mat --shapes 4096x1024x32 --threads 12 --early-stop
+250 results, 0 failures
+# 469f0d232 2026-11-09T18:03:45-05:00 --op mul_mat --shapes 4096x14336x32 --threads 12 --early-stop
+250 results, 0 failures
+# 469f0d232 2026-11-09T18:09:36-05:00 --op mul_mat --shapes 14336x4096x32 --threads 12 --early-stop
+250 results, 0 failures
