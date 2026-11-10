@@ -367,3 +367,20 @@ App changes:
   16. 4096^2, M = 8, twelve threads, us (GGML's AMX): q4_0 415 -> 177 (165),
   q4_1 391 -> 192 (186), q8_0 356 -> 146 (160); one thread 0.70-0.88 of
   GGML.
+- `blocked_cols()` macro tiles for M >= 256 (64 rows x 256 columns), after
+  GGML's tiled gemm (256 x 256 windows, its accumulator in L2): per 256-value
+  block, the 64 rows' weights decoded once, then swept by 8-row x 16-column
+  micro tiles across all 256 columns (was: 8 x 32 tiles, each block decoded
+  per 32 columns). The macro's own loops are scheduled under its
+  specialization: `s`, its acc and the sums are hoisted out of dot, so their
+  unspecialized stages are every branch's (an 8-row split there over-read
+  `w` on the 2-row gemv tiles). 4096^2, M = 512, twelve threads, ms (GGML
+  tiled; ratio before -> after): q3_K 12.9 -> 9.8 (6.8; 0.54 -> 0.69), q4_K
+  9.0 -> 8.4 (6.2; 0.66 -> 0.74), q5_K 9.6 -> 8.1 (6.3; 0.59 -> 0.78), q6_K
+  11.2 -> 8.4 (7.3; 0.68 -> 0.87), q2_K 10.5 -> 8.8 (8.3; 0.78 -> 0.94),
+  iq4_xs 11.2 -> 8.4 (5.4; 0.50 -> 0.64), iq3_s 13.6 -> 8.2 (6.4; 0.49 ->
+  0.78), iq2_s 13.9 -> 8.5 (7.3; 0.50 -> 0.86), iq1_s 11.5 -> 7.3 (6.0; 0.51
+  -> 0.81). M = 32 and 128 unchanged. A 64 x 128 macro (for M = 128 too) was
+  slower at both M = 128 and 512 (iq4_xs 512: 13 ms).
+- `offset_codes()` hands later tiles the pair an earlier tile's call made, so
+  every `blocked_cols()` tile stages the unsigned codes (only the first did).
