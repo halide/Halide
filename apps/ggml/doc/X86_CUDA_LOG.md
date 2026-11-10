@@ -226,3 +226,13 @@ App changes:
   M = 32 (`:f16`): 0.43 (q4_K, 134 vs 58) to 0.85 (q2_K).
   M = 512 (`:f16`): 0.61 (q5_0) to 1.45 (q2_K, 409 vs 595).
   mmq is int8 MMA on q8_1 acts; ours dequantizes to f16 for wmma.
+- CUDA gemm at 32 <= M < 64: a 16 x 32 tile of 1 x 2 warps (was 32 x 32
+  of 2 x 2; `GemmShape::wm`, the staging's warps split to match), and
+  super-blocks' weights staged 16 values a lane on the one-fragment tiles.
+  Core: PTX computes an f16 product of f16 or 8-bit operands in half
+  (`mul.rn.f16x2`; registers 124 -> 64, time unchanged). Steps of K of 128
+  were no faster overall (and f16's don't unroll). 4096^2, `:f16`, M = 32,
+  GGML / Halide: q4_0 0.80 (64.0 vs 79.6), q8_0 0.71, q4_1 0.66, q5_0
+  0.63, q5_1 0.63, mxfp4 0.67, iq4_nl 0.78, iq4_xs 0.84, q2_0 0.91,
+  q2_K 1.10, q3_K 0.85, q4_K 0.84 (was 0.43), q5_K 0.73, q6_K 0.85; f16
+  vs cuBLAS 1.07. M = 16: 0.48 (q5_0) to 0.93 (q2_0); M = 512 unchanged.
