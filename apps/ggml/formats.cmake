@@ -251,11 +251,6 @@ set(GGML_SCHEDULE_PARAMS
     "[x86] iq3_xxs mul_mat * plain_index_words=false"
     "[x86] iq3_xxs mul_mat q8_K sublanes=false"
     "[x86] iq3_xxs mul_mat f32:q8_K sublanes=false"
-    # SPR: q6_K's gemm tiles with two 16-value sub-blocks a vector step, not
-    # four (its offset sums' registers; gemm 4096x4096x32, 12 threads,
-    # 1.91 -> 1.40 ms; q2_K's are faster with four: 1.97 -> 1.16)
-    "[x86] q6_K mul_mat q8_K gemm_wide_subs=false"
-    "[x86] q6_K.8x8 mul_mat q8_K gemm_wide_subs=false"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the
