@@ -201,3 +201,11 @@ App changes:
   M = 8 q4_0 55.4 vs 48.6, q8_0 65.7 vs 55.1, q4_K 108 vs 57.1.
   M >= 32 (mmq) remains far off: q4_0 185 vs 67 (M = 32), 3121 vs 353
   (M = 512).
+- The CUDA gemm's staging loads were scalar (`ld.global.nc.b16`): the
+  operands' alignment was unknown past their elements'. CUDA libraries now
+  promise 16-byte aligned buffers (`set_host_alignment`; cudaMalloc's 256,
+  GGML's CUDA buffers 128): `ld.global.nc.v2.b32`. And the shared copies'
+  rows were 64 halves (128 bytes: wmma's row loads 8-way bank conflicts);
+  on CUDA they're padded by 8 (144 bytes), a block's rows adjacent. 4096^2,
+  us (cuBLAS): f16 M = 32 181 -> 99 (77), M = 512 1025 -> 409 (303);
+  q4_0:f16 M = 32 319 -> 185, M = 512 854 -> 465.

@@ -1986,9 +1986,11 @@ struct Staged {
 // `shapes` whose cond holds. Under a guarded shape, out reads the tile from a
 // shared copy (edge; a guarded store from Tile memory doesn't lower), its
 // stores guarded; the rows past M it computes read the last act row (the
-// algorithm clamps them).
+// algorithm clamps them). `pad`: the copies' rows that many values longer,
+// a block's rows adjacent (CUDA: rows of an odd number of 16 bytes, wmma's
+// loads free of bank conflicts).
 inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                         const std::vector<GemmShape> &shapes, int frag, int kstep) {
+                         const std::vector<GemmShape> &shapes, int frag, int kstep, int pad = 0) {
     if (fmt.block % frag && fmt.block != 1) throw std::invalid_argument("gpu_staged: flat, or blocks of a multiple of frag values");
     // (names apart from the other specializations' loops, which compute
     // other Funcs at theirs)
@@ -2083,6 +2085,10 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
     dot.compute_at(out, n);
     for (Func f : {ws, xs}) {
         f.compute_at(dot, ks).store_in(MemoryType::GPUShared);
+        if (!pad) continue;
+        std::vector<Var> a = f.args();
+        f.bound_storage(a[0], (a.size() == 2 ? kstep : std::min(fmt.block, kstep)) + pad);
+        if (a.size() == 3) f.reorder_storage(a[0], a[2], a[1]);
     }
     return {ws, xs, wf, xf, ks, ko};
 }
@@ -2119,7 +2125,7 @@ inline void fragments(const Staged &st, Func dot, int frag) {
 // at M = 8..15 the gemm takes 0.59-1.0x of the rows' time, iq4_nl's at M =
 // 8 1.04x; M3 Max).
 inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
-                     const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}) {
+                     const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}, int pad = 0) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
     // once, reading edge (dot's copy, inlined unless guarded); then via reads
@@ -2131,7 +2137,7 @@ inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const 
     Func pass = edge.clone_in(via);
     Func rows = dot.clone_in(pass);
     out.eager_inline(via, pass);
-    fragments(gpu_staged(mm, out, dot, edge, wh, xh, r, fmt, rs, shapes, frag, 64), dot, frag);
+    fragments(gpu_staged(mm, out, dot, edge, wh, xh, r, fmt, rs, shapes, frag, 64, pad), dot, frag);
     // the rows' luts, staged before metal_rows inlines the decoders (else
     // its gemv inlines them: select trees)
     metal_luts(out, rs);
@@ -2306,7 +2312,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged, metal ? 0 : 8);
             return;
         }
         if (metal && f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
