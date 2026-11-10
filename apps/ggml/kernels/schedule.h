@@ -1963,8 +1963,10 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
     return shapes;
 }
 
-// CUDA's shapes, of wmma's 16 x 16 fragments (compile-only: untimed), by M:
-// 128 x 64 (M >= 64, N >= 128), 32 x 32, 32 x 16 (gpu_gemm's min_m: 16).
+// CUDA's shapes, of wmma's 16 x 16 fragments, by M: 128 x 64 (M >= 64, N >=
+// 128), 32 x 32, 32 x 16 (gpu_gemm's min_m: 16). (f16, 4096^2 x 512, us: 128
+// x 64 of 4 warps 322; 256 x 64 of 8 warps 487, 128 x 64 of 8 warps 468,
+// 256 x 32 of 8 warps 527; RTX A4500)
 inline std::vector<GemmShape> cuda_shapes(Func out) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     return {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 2, 2}, {Expr(), 1, 1, 2}};
@@ -2070,7 +2072,7 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
                 Var ju("ju"), jh("jh");
                 s.split(a[0], l, jv, 32).split(jv, jh, jv, 16).split(jv, ju, jv, 4).fuse(jh, l, l).unroll(ju);
             } else {
-                s.split(a[0], l, jv, 4);
+                s.split(a[0], l, jv, pad ? 16 / f.type().bytes() : 4);
             }
             for (size_t i = 1; i < a.size(); i++) {
                 Var fl("l" + std::to_string(i));
