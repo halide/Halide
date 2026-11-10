@@ -64,6 +64,7 @@ const char *usage =
     "  --acts dot,f16,f32       activation types; dot = the weight's vec_dot_type\n"
     "  --shapes PRESET          smoke|gemv|full|<model>-gemv|<model>-full|denoiser|KxNxM|<n> (default smoke)\n"
     "  --providers a,b          only providers whose name contains one of these\n"
+    "                           (!c: none whose name contains c)\n"
     "  --threads N              (default: performance cores; Linux: physical cores)\n"
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
     "  --early-stop[=LO,HI]     end a case's rounds (after 5) once every GGML/Halide\n"
@@ -217,6 +218,21 @@ std::string fmt(double x, const char *f = "%.4g") {
 
 }  // namespace
 
+// --providers: a provider is wanted if its name contains an inclusion (any,
+// if none) and no exclusion ("!cuda")
+bool wanted(const std::vector<std::string> &filters, const std::string &name) {
+    bool include = false, any = false;
+    for (const std::string &f : filters) {
+        if (!f.empty() && f[0] == '!') {
+            if (name.find(f.substr(1)) != std::string::npos) return false;
+        } else {
+            any = true;
+            include |= name.find(f) != std::string::npos;
+        }
+    }
+    return include || !any;
+}
+
 int main(int argc, char **argv) {
     self_exe = argv[0];
     if (argc > 1 && !strcmp(argv[1], "--probe-gpu")) return probe_gpu(argc - 2, argv + 2);
@@ -363,7 +379,7 @@ int main(int argc, char **argv) {
                     for (const Provider &p : providers()) {
                         if (!(p.ops & op)) continue;
                         if (!o.check && !p.timed) continue;
-                        if (!o.filters.empty() && std::none_of(o.filters.begin(), o.filters.end(), [&](const std::string &f) { return p.name.find(f) != std::string::npos; })) continue;
+                        if (!wanted(o.filters, p.name)) continue;
                         auto k = p.make(in);
                         if (!k) continue;
                         k->run(1);
@@ -431,7 +447,7 @@ int main(int argc, char **argv) {
             if (std::find(Ks.begin(), Ks.end(), s.K) == Ks.end()) Ks.push_back(s.K);
         }
         for (const CodecResult &r : run_codecs(Ks, o.types, o.check, o.rounds, o.min_ms)) {
-            if (!o.filters.empty() && std::none_of(o.filters.begin(), o.filters.end(), [&](const std::string &f) { return r.provider.find(f) != std::string::npos; })) continue;
+            if (!wanted(o.filters, r.provider)) continue;
             bool ok = r.detail.empty();
             cases++;
             failures += !ok;
