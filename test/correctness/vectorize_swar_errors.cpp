@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         f.compile_jit();
     });
 
-    ok &= expect_user_error("gpu", "only supported for code that runs on the host CPU", [] {
+    ok &= expect_user_error("gpu", "only supported for code that runs on the host CPU or in a CUDA kernel", [] {
         Func f("f");
         Var x("x"), xo("xo"), xi("xi"), xii("xii");
         f(x) = cast<uint8_t>(x);
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
             .gpu_blocks(xo)
             .gpu_threads(xi)
             .vectorize(xii, 4, VectorizeIn::SWAR);
-        f.compile_to_module({}, "f", get_host_target().with_feature(Target::CUDA));
+        f.compile_to_module({}, "f", get_host_target().with_feature(Target::OpenCL));
     });
 
     ok &= expect_user_error("gpr_storage_too_wide", "does not fit in a", [=] {

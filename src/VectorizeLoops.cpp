@@ -1706,11 +1706,12 @@ protected:
             }
 
             const bool swar = for_loop->for_type == ForType::VectorizedSWAR;
-            if (swar && device_loop) {
+            if (swar && device_loop && device_loop->device_api != DeviceAPI::CUDA) {
                 user_error << "Loop " << for_loop->name
                            << " is vectorized with VectorizeIn::SWAR, but it runs on device API "
                            << device_loop->device_api << " (inside loop " << device_loop->name
-                           << "). VectorizeIn::SWAR is only supported for code that runs on the host CPU.\n";
+                           << "). VectorizeIn::SWAR is only supported for code that runs on the host CPU "
+                           << "or in a CUDA kernel.\n";
             }
 
             Stmt body = for_loop->body;

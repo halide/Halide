@@ -1977,8 +1977,10 @@ public:
      f.split(k, j, i, 4).unroll(j).vectorize(i, 4, VectorizeIn::SWAR);
      \endcode
      *
-     * SWAR vectorization only applies to CPU targets. The vector must fit in
-     * one general-purpose register, its lanes must be integers, and every
+     * SWAR vectorization only applies to code that runs on the host CPU or in
+     * a CUDA kernel (whose registers are all scalar, so the lanes of a
+     * SIMD-vectorized loop are computed one at a time there). The vector must
+     * fit in one general-purpose register, its lanes must be integers, and every
      * operation in the vectorized loop must be one that can be done
      * lane-wise within an integer register (see VectorizeIn::SWAR). Anything
      * else is a compile-time error suggesting SIMD vectorization instead.

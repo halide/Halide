@@ -307,6 +307,7 @@ tests(
     gpu_store_in_register_with_no_lanes_loop.cpp
     gpu_struct_type.cpp
     gpu_sum_scan.cpp
+    gpu_swar_codegen.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
     gpu_thread_extent_under_outer_split.cpp
