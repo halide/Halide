@@ -391,3 +391,14 @@ App changes:
   affine weights without sub-blocks: the min term from the act's `s` port
   (`derived_sums()`, as `blocked_amx()`). 4096^2, M = 1, us (GGML's AMX
   gemv): one thread 641 -> 402 (393), twelve threads 82 -> 48.4 (44.0).
+- `blocked_cols()` on 8-column tiles (`cols8`, 8 rows x 8 columns) for 8 <= M
+  < 16: M = 8 fell to the generic gemm tile, slower than M = 16. 4096^2, M =
+  8, twelve threads, us, best path each side (GGML's; ratio before -> after):
+  iq4_xs 376 -> 262 (185 AMX; 0.53 -> 0.71), q5_K 366 -> 269 (206 AMX; 0.55
+  -> 0.77), q4_K 298 -> 264 (214 AMX; 0.65 -> 0.81), q6_K 461 -> 293 (383 AMX;
+  0.85 -> 1.31), q3_K 548 -> 385 (473; 0.90 -> 1.23), q2_K 300 -> 277 (245
+  repack; 0.86 -> 0.88); the iq2/iq3/iq1 formats 1.14-1.67, tq1_0 0.88,
+  tq2_0 2.55. 16 and 32 rows per tile were slower (303-340). M = 16 and 32
+  were already 0.97-1.51 of GGML after the macro tiles. The remaining M = 8
+  gaps are against GGML's AMX kernels for q4_K, q5_K and iq4_xs: AMX with
+  sub-block scales (`amx_ok` excludes `fmt.sub`).
