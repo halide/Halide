@@ -159,3 +159,9 @@ App changes:
   an offset whose rest is signed; biased instead (from the promised [-9, 9]
   bounds, u = q + 9). One thread, 4096^2, M = 32, ms (GGML): iq1_s 9.5 ->
   5.0 (5.0), iq1_m 10.7 -> 6.3 (6.4).
+- The act bsum reduction in `schedule_sums()` vectorized at 16 int32 lanes
+  (zmm `vpmovsxwd` + `vpaddd`) inside the ymm gemv loop; on SPR a zmm uop
+  takes port 1's vector ALUs offline, which llvm-mca doesn't model (tq2_0:
+  12.7 cycles per block predicted, 15.9 measured). Now split to the loop's
+  width and unrolled. One thread, 4096^2, M = 1, GGML / halide: tq1_0 0.66
+  -> 1.03, tq2_0 0.71 -> 1.08, q6_K 0.90 -> 1.16; others unchanged.
