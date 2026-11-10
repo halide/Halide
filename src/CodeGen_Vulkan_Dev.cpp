@@ -598,43 +598,44 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
     const int true_value = 1;
     const int false_value = 0;
 
-    std::vector<uint8_t> true_data(target_type.bytes(), (uint8_t)0);
-    std::vector<uint8_t> false_data(target_type.bytes(), (uint8_t)0);
+    const size_t total_bytes = size_t(target_type.bytes()) * size_t(target_type.lanes());
+    std::vector<uint8_t> true_data(total_bytes, (uint8_t)0);
+    std::vector<uint8_t> false_data(total_bytes, (uint8_t)0);
 
     if (target_type.is_int_or_uint() && target_type.bits() == 8) {
-        fill_bytes_with_value<int8_t>(&true_data[0], target_type.lanes(), true_value);
-        fill_bytes_with_value<int8_t>(&false_data[0], target_type.lanes(), false_value);
+        fill_bytes_with_value<int8_t>(true_data.data(), target_type.lanes(), true_value);
+        fill_bytes_with_value<int8_t>(false_data.data(), target_type.lanes(), false_value);
     } else if (target_type.is_int_or_uint() && target_type.bits() == 16) {
-        fill_bytes_with_value<int16_t>(&true_data[0], target_type.lanes(), true_value);
-        fill_bytes_with_value<int16_t>(&false_data[0], target_type.lanes(), false_value);
+        fill_bytes_with_value<int16_t>(true_data.data(), target_type.lanes(), true_value);
+        fill_bytes_with_value<int16_t>(false_data.data(), target_type.lanes(), false_value);
     } else if (target_type.is_int_or_uint() && target_type.bits() == 32) {
-        fill_bytes_with_value<int32_t>(&true_data[0], target_type.lanes(), true_value);
-        fill_bytes_with_value<int32_t>(&false_data[0], target_type.lanes(), false_value);
+        fill_bytes_with_value<int32_t>(true_data.data(), target_type.lanes(), true_value);
+        fill_bytes_with_value<int32_t>(false_data.data(), target_type.lanes(), false_value);
     } else if (target_type.is_int_or_uint() && target_type.bits() == 64) {
-        fill_bytes_with_value<int64_t>(&true_data[0], target_type.lanes(), true_value);
-        fill_bytes_with_value<int64_t>(&false_data[0], target_type.lanes(), false_value);
+        fill_bytes_with_value<int64_t>(true_data.data(), target_type.lanes(), true_value);
+        fill_bytes_with_value<int64_t>(false_data.data(), target_type.lanes(), false_value);
     } else if (target_type.is_float() && target_type.bits() == 16) {
         if (target_type.is_bfloat()) {
-            fill_bytes_with_value<bfloat16_t>(&true_data[0], target_type.lanes(), true_value);
-            fill_bytes_with_value<bfloat16_t>(&false_data[0], target_type.lanes(), false_value);
+            fill_bytes_with_value<bfloat16_t>(true_data.data(), target_type.lanes(), true_value);
+            fill_bytes_with_value<bfloat16_t>(false_data.data(), target_type.lanes(), false_value);
         } else {
-            fill_bytes_with_value<float16_t>(&true_data[0], target_type.lanes(), true_value);
-            fill_bytes_with_value<float16_t>(&false_data[0], target_type.lanes(), false_value);
+            fill_bytes_with_value<float16_t>(true_data.data(), target_type.lanes(), true_value);
+            fill_bytes_with_value<float16_t>(false_data.data(), target_type.lanes(), false_value);
         }
     } else if (target_type.is_float() && target_type.bits() == 32) {
-        fill_bytes_with_value<float>(&true_data[0], target_type.lanes(), true_value);
-        fill_bytes_with_value<float>(&false_data[0], target_type.lanes(), false_value);
+        fill_bytes_with_value<float>(true_data.data(), target_type.lanes(), true_value);
+        fill_bytes_with_value<float>(false_data.data(), target_type.lanes(), false_value);
     } else if (target_type.is_float() && target_type.bits() == 64) {
-        fill_bytes_with_value<double>(&true_data[0], target_type.lanes(), true_value);
-        fill_bytes_with_value<double>(&false_data[0], target_type.lanes(), false_value);
+        fill_bytes_with_value<double>(true_data.data(), target_type.lanes(), true_value);
+        fill_bytes_with_value<double>(false_data.data(), target_type.lanes(), false_value);
     } else {
         user_error << "Unhandled type cast from value type '" << value_type << "' to target type '" << target_type << "'!";
     }
 
     SpvId result_id = builder.reserve_id(SpvResultId);
     SpvId target_type_id = builder.declare_type(target_type);
-    SpvId true_value_id = builder.declare_constant(target_type, &true_data[0]);
-    SpvId false_value_id = builder.declare_constant(target_type, &false_data[0]);
+    SpvId true_value_id = builder.declare_constant(target_type, true_data.data());
+    SpvId false_value_id = builder.declare_constant(target_type, false_data.data());
     builder.append(SpvFactory::select(target_type_id, result_id, value_id, true_value_id, false_value_id));
     return result_id;
 }
@@ -681,7 +682,7 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
     // If none of the explicit conversions matched, do a direct bitcast if the total
     // size of both types is the same
     if (op_code == SpvOpNop) {
-        if (target_type.bytes() == value_type.bytes()) {
+        if (target_type.bytes() * target_type.lanes() == value_type.bytes() * value_type.lanes()) {
             op_code = SpvOpBitcast;
         }
     }
@@ -751,7 +752,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
         debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast): scalar type (cast)\n";
         SpvId result_id = cast_type(target_type, value_type, value_id);
         builder.update_id(result_id);
-    } else if (value_type.bytes() == target_type.bytes()) {
+    } else if (value_type.bytes() * value_type.lanes() == target_type.bytes() * target_type.lanes()) {
         SpvId result_id = cast_type(target_type, value_type, value_id);
         builder.update_id(result_id);
     } else {
