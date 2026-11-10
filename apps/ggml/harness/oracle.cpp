@@ -67,11 +67,12 @@ double gamma(double n, int bits) {
 
 // Per-element bound e on |x - deq(q(x))| for re-quantization of a row x to
 // type t (8-bit absmax blocks of `block`, or f16/bf16): d = amax / 127 covers
-// any rounding mode; (1 + 2^-7) covers a bf16- or f16-rounded d. f16/bf16
-// round to nearest: half an ulp, relative (2^-11, 2^-8) down to the
-// subnormals' absolute half ulp (2^-25, 2^-134); x past the largest finite
-// value overflows (INFINITY).
-void requant_err(const float *x, int64_t K, ggml_type t, int64_t block, double *e) {
+// any rounding mode; (1 + 2^-7) covers a bf16- or f16-rounded d. With
+// `nearest`, d / 2, plus 2^-4 d for an f16-rounded d on codes up to 127 (127
+// * 2^-11) and the f32 roundings on the way. f16/bf16 round to nearest: half
+// an ulp, relative (2^-11, 2^-8) down to the subnormals' absolute half ulp
+// (2^-25, 2^-134); x past the largest finite value overflows (INFINITY).
+void requant_err(const float *x, int64_t K, ggml_type t, int64_t block, double *e, bool nearest = false) {
     if (t == GGML_TYPE_F16 || t == GGML_TYPE_BF16) {
         bool h = t == GGML_TYPE_F16;
         for (int64_t k = 0; k < K; k++) {
@@ -84,7 +85,7 @@ void requant_err(const float *x, int64_t K, ggml_type t, int64_t block, double *
         double mx = 0;
         for (int64_t j = i; j < std::min(K, i + block); j++)
             mx = std::max(mx, (double)std::abs(x[j]));
-        std::fill(&e[i], &e[std::min(K, i + block)], mx / 127 * (1 + std::ldexp(1.0, -7)));
+        std::fill(&e[i], &e[std::min(K, i + block)], mx / 127 * (nearest ? 0.5 + std::ldexp(1.0, -4) : 1 + std::ldexp(1.0, -7)));
     }
 }
 
@@ -104,53 +105,93 @@ void product(int64_t N, int64_t M, int64_t K, Left left, const std::vector<doubl
     }
 }
 
-// The re-quantization model of p: {act_quant, its block, w_block, w_quant},
-// 0 for what p does not use.
-std::array<int64_t, 4> requant_key(const Precision &p) {
+// The re-quantization model of p: {act_quant, its block, w_block, w_quant,
+// act_sum and act_nearest}, 0 for what p does not use.
+std::array<int64_t, 5> requant_key(const Precision &p) {
     bool aq = p.act_quant != GGML_TYPE_COUNT, wq = !p.w_block && p.w_quant != GGML_TYPE_COUNT;
-    return {aq ? p.act_quant + 1 : 0, aq ? (p.act_block ? p.act_block : ggml_blck_size(p.act_quant)) : 0, p.w_block, wq ? p.w_quant + 1 : 0};
+    return {aq ? p.act_quant + 1 : 0, aq ? (p.act_block ? p.act_block : ggml_blck_size(p.act_quant)) : 0, p.w_block, wq ? p.w_quant + 1 : 0, aq ? p.act_sum + 2 * p.act_nearest : 0};
 }
 
-// E of error_ratio's comment for each of ref's outputs, as products: da is of
-// an act row and dw of a weight row, so E = (|W| + dw) da^T + dw |A|^T. Empty
-// (E = 0) if p re-quantizes nothing.
-std::vector<double> requant_sums(const Reference &ref, const Precision &p) {
+// max |w| over each of a weight row's blocks of wb values.
+void block_max(const float *w, int64_t K, int64_t wb, double *row) {
+    for (int64_t k0 = 0; k0 < K; k0 += wb) {
+        float mx = 0;
+        for (int64_t k = k0; k < k0 + wb; k++)
+            mx = std::max(mx, std::abs(w[k]));
+        std::fill(row + k0, row + k0 + wb, (double)mx);
+    }
+}
+
+// The sums over k, for each of ref's outputs, of check's e = cw da + dw |A|
+// and of e^2, as products: da is of an act row, and dw and cw (|W| + dw, plus
+// max_block|W| with p.act_sum) of a weight row. Empty (e = 0) if p
+// re-quantizes nothing.
+Reference::Requant requant_sums(const Reference &ref, const Precision &p) {
     int64_t K = ref.K, N = ref.ns.size(), M = ref.ms.size();
-    std::vector<double> E;
-    bool w_requant = p.w_block || p.w_quant != GGML_TYPE_COUNT;
+    Reference::Requant r;
+    bool a_requant = p.act_quant != GGML_TYPE_COUNT, w_requant = p.w_block || p.w_quant != GGML_TYPE_COUNT;
     auto dw = [&](int64_t n, double *row) {
         if (p.w_block) {
             requant_err(&ref.w[n * K], K, GGML_TYPE_Q8_0, p.w_block, row);
-        } else {
+        } else if (w_requant) {
             requant_err(&ref.w[n * K], K, p.w_quant, ggml_blck_size(p.w_quant), row);
+        } else {
+            std::fill(row, row + K, 0.0);
         }
     };
-    if (p.act_quant != GGML_TYPE_COUNT) {
-        std::vector<double> da(M * K);
+    std::vector<double> wmax(K, 0.0);
+    auto cw = [&](int64_t n, double *row) {
+        dw(n, row);
+        if (p.act_sum) block_max(&ref.w[n * K], K, ref.w_block, wmax.data());
+        for (int64_t k = 0; k < K; k++)
+            row[k] += std::abs(ref.w[n * K + k]) + wmax[k];
+    };
+    std::vector<double> da, abs_a(M * K);
+    for (int64_t i = 0; i < M * K; i++)
+        abs_a[i] = std::abs(ref.a[i]);
+    if (a_requant) {
+        da.resize(M * K);
         for (int64_t m = 0; m < M; m++) {
-            requant_err(&ref.a0[m * K], K, p.act_quant, p.act_block ? p.act_block : ggml_blck_size(p.act_quant), &da[m * K]);
+            requant_err(&ref.a0[m * K], K, p.act_quant, p.act_block ? p.act_block : ggml_blck_size(p.act_quant), &da[m * K], p.act_nearest);
             // da bounds |a0 - A'|; the oracle used A = in.at(a0), so add |A - a0|.
             for (int64_t k = 0; k < K; k++)
                 da[m * K + k] += std::abs((double)ref.a[m * K + k] - ref.a0[m * K + k]);
         }
-        auto w_dw = [&](int64_t n, double *row) {
-            if (w_requant) {
-                dw(n, row);
-            } else {
-                std::fill(row, row + K, 0.0);
-            }
+    }
+    auto square = [](std::vector<double> v) {
+        for (double &x : v)
+            x *= x;
+        return v;
+    };
+    auto squared = [&](auto f) {
+        return [&, f](int64_t n, double *row) {
+            f(n, row);
             for (int64_t k = 0; k < K; k++)
-                row[k] += std::abs(ref.w[n * K + k]);
+                row[k] *= row[k];
         };
-        product(N, M, K, w_dw, da, E);
+    };
+    if (a_requant) {
+        product(N, M, K, cw, da, r.sum);
+        product(N, M, K, squared(cw), square(da), r.sum_sq);
     }
     if (w_requant) {
-        std::vector<double> abs_a(M * K);
-        for (int64_t i = 0; i < M * K; i++)
-            abs_a[i] = std::abs(ref.a[i]);
-        product(N, M, K, dw, abs_a, E, !E.empty());
+        product(N, M, K, dw, abs_a, r.sum, a_requant);
+        product(N, M, K, squared(dw), square(abs_a), r.sum_sq, a_requant);
     }
-    return E;
+    if (a_requant && w_requant) {
+        // e^2's cross term, 2 (cw dw) (da |A|)
+        for (int64_t i = 0; i < M * K; i++)
+            abs_a[i] *= 2 * da[i];
+        std::vector<double> d(K);
+        auto cw_dw = [&](int64_t n, double *row) {
+            cw(n, row);
+            dw(n, d.data());
+            for (int64_t k = 0; k < K; k++)
+                row[k] *= d[k];
+        };
+        product(N, M, K, cw_dw, abs_a, r.sum_sq, true);
+    }
+    return r;
 }
 
 // Whether each of ref's outputs in got is, bit for bit, GGML's CPU vec_dot of
@@ -213,6 +254,7 @@ Reference reference(const Inputs &in, const std::vector<float> &a_f32, bool all)
     r.a = decode(in.at, in.a->data(), r.ms, K);
     for (int64_t m : r.ms)
         r.a0.insert(r.a0.end(), &a_f32[m * K], &a_f32[(m + 1) * K]);
+    r.w_block = ggml_is_quantized(in.wt) ? ggml_blck_size(in.wt) : 1;
     int64_t N = r.ns.size(), M = r.ms.size();
     const float *w = r.w.data();
     std::vector<double> a(r.a.begin(), r.a.end());
@@ -224,67 +266,99 @@ Reference reference(const Inputs &in, const std::vector<float> &a_f32, bool all)
             row[k] = std::abs(w[n * K + k]);
     };
     product(N, M, K, abs_w, a, r.sum_wa);
-    int64_t wb = ggml_is_quantized(in.wt) ? ggml_blck_size(in.wt) : 1;
-    auto wmax = [&](int64_t n, double *row) {
-        for (int64_t k0 = 0; k0 < K; k0 += wb) {
-            float mx = 0;
-            for (int64_t k = k0; k < k0 + wb; k++)
-                mx = std::max(mx, std::abs(w[n * K + k]));
-            std::fill(row + k0, row + k0 + wb, (double)mx);
-        }
+    product(N, M, K, [&](int64_t n, double *row) { block_max(&w[n * K], K, r.w_block, row); }, a, r.sum_wmax_a);
+    for (double &x : a)
+        x *= x;
+    auto w2 = [&](int64_t n, double *row) {
+        for (int64_t k = 0; k < K; k++)
+            row[k] = (double)w[n * K + k] * w[n * K + k];
     };
-    product(N, M, K, wmax, a, r.sum_wmax_a);
+    product(N, M, K, w2, a, r.sum_w2a2);
     return r;
 }
 
-// Tolerance (every term is a bound; none is tuned). With W, A the decoded
-// inputs, W', A' what the provider actually multiplies (after any internal
-// re-quantization, |W - W'| <= dw, |A - A'| <= da elementwise), and
-//   S = sum_k (|W| + dw) (|A| + da) + 2 max_block|W| |A|
-// (the second term covers decoding formats whose to_float subtracts a min or
+// Tolerance (every term is a bound, one of them of a stated probability; none
+// is tuned). With W, A the decoded inputs, W', A' what the provider actually
+// multiplies (after any internal re-quantization, |W - W'| <= dw,
+// |A - A'| <= da elementwise), each term of W' A' is within
+//   e = cw da + dw |A|, cw = |W| + dw,
+// of W A's. With p.act_sum the provider splits W' into an offset per block,
+// times the block's sum of A, and the rest, times A': only the rest meets
+// da, and cw gains the offset's bound, max_block|W|. With
+//   E = sum_k e,
+//   S = sum_k |W| |A| + E + 2 sum_k max_block|W| |A|
+// (the last term covers decoding formats whose to_float subtracts a min or
 // offset, so the provider's partial terms may exceed |W A|):
 //   |got - sum_k W A| <= E + g S, with
-//   E = sum_k (|W| da + |A| dw + dw da) and
 //   g = gamma_{chain+4}(u_acc) + gamma_{levels+1}(2^-24) + 2 u_op + u_op^2,
 // i.e. chain accumulations plus <= 4 ops per term (decode, scales) in the
 // accumulator precision, an f32 tree over K/chain partials, and operand rounding.
+// E's worst case has every term's error on one side. The activations are the
+// harness's own draws: their signs are independent and even, whatever their
+// magnitudes and W. Where A' (and in.at's A) is odd in each activation, as
+// GGML's activation types are (scales of a block's largest magnitude, codes
+// rounded alike either side of 0) and as !p.act_asymmetric declares, an
+// activation's sign flips its term's error and no other's: the errors' sum is
+// sum_k s_k x_k, |x_k| <= e, of independent even signs s_k, and by Hoeffding's
+// inequality exceeds lambda sqrt(sum_k e^2) with probability <= 2 exp(-lambda^2
+// / 2). lambda = sqrt(2 ln(2 outputs / p)) makes that p = 1e-9 over all of a
+// check's outputs, and that bound takes E's place where it is the lesser.
 // The reference is BLAS's f64 sum of the K terms (each exact in f64), added
 // in an order of its choosing, with or without FMA:
 //   |ref - sum_k W A| <= gamma_K(2^-53) sum_k |W| |A|,
-// and the tolerance on |got - ref| is the two bounds' sum. S is
-//   sum_k |W| |A| + E + 2 sum_k max_block|W| |A|,
-// its first and last sums the reference's and E its re-quantization model's
-// (requant_sums), computed once for the providers that share the model.
+// and the tolerance on |got - ref| is the two bounds' sum. The sums over k
+// are matrix products: those of the inputs alone are the reference's, and E's
+// its re-quantization model's (requant_sums), computed once for the providers
+// that share the model.
 // With p.ggml_dot, also bit-exact: GGML's CPU vec_dot (else INFINITY).
-double error_ratio(const Inputs &in, Reference &ref, const Precision &p, const float *got) {
+//
+// tol_scale: a tolerance is worth what it excludes. sqrt(sum_k (W A)^2) is
+// what an output comes to with its terms' signs at random; a tolerance of
+// that much or more (gamma_n(u) is INFINITY from n u = 1) accepts outputs
+// that owe nothing to the reference.
+Check check(const Inputs &in, Reference &ref, const Precision &p, const float *got) {
     int64_t K = ref.K, chain = p.chain > 0 ? std::min(p.chain, K) : K;
     double levels = std::ceil(std::log2((double)K / chain));
     double uo = p.operand_bits ? std::ldexp(1.0, -p.operand_bits) : 0;
     double g = gamma(chain + 4, p.acc_bits) + gamma(levels + 1, 24) + 2 * uo + uo * uo;
     auto cached = ref.requant.find(requant_key(p));
     if (cached == ref.requant.end()) cached = ref.requant.emplace(requant_key(p), requant_sums(ref, p)).first;
-    const std::vector<double> &requant = cached->second;
-    double worst = 0;
+    const Reference::Requant &requant = cached->second;
+    static const ggml_type odd_types[] = {GGML_TYPE_F32, GGML_TYPE_F16, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q8_1, GGML_TYPE_Q8_K};
+    bool odd = !p.act_asymmetric && std::find(std::begin(odd_types), std::end(odd_types), in.at) != std::end(odd_types);
+    double lambda = std::sqrt(2 * std::log(2 * (double)(ref.ms.size() * ref.ns.size()) / 1e-9));
+    Check c{0, 0};
     for (size_t m = 0; m < ref.ms.size(); m++) {
         for (size_t n = 0; n < ref.ns.size(); n++) {
             size_t i = m * ref.ns.size() + n;
-            double sum_wa = ref.sum_wa[i], sum_wmax_a = ref.sum_wmax_a[i], E = requant.empty() ? 0 : requant[i];
+            double sum_wa = ref.sum_wa[i], sum_wmax_a = ref.sum_wmax_a[i], E = requant.sum.empty() ? 0 : requant.sum[i];
             double S = sum_wa + E + 2 * sum_wmax_a;
+            if (odd && !requant.sum.empty()) E = std::min(E, lambda * std::sqrt(requant.sum_sq[i]));
             // The oracle decodes q8_1 as d * qs and never reads s. Kernels
             // may read s for the sum of the decoded block, which dots with
             // the weight's block min. GGML's s = f16(d * sum(qs)) (d
             // unrounded; the harness's activations are GGML's) is within 2
-            // f16 roundings of it, ours (f16(f16(d) * sum(qs))) within 1:
-            // either way <= gamma(2, 11) of a term <= wmax sum |a|.
+            // f16 roundings of it, ours (f16(f16(d) * sum(qs))) within 1,
+            // and p.act_sum's (f16 of the f32 sum of up to 32 values)
+            // within 2 of that sum: either way <= gamma(2, 11) of a term <=
+            // wmax sum |a|.
             if (in.at == GGML_TYPE_Q8_1 || p.act_quant == GGML_TYPE_Q8_1) E += gamma(2, 11) * sum_wmax_a;
             double tol = E + g * S + gamma(K, 53) * sum_wa;
             double err = std::abs((double)got[ref.ms[m] * in.s.N + ref.ns[n]] - ref.out[i]);
             double ratio = tol > 0 ? err / tol : (err == 0 ? 0 : INFINITY);
-            worst = std::max(worst, std::isnan(ratio) ? INFINITY : ratio);
+            c.err_ratio = std::max(c.err_ratio, std::isnan(ratio) ? INFINITY : ratio);
+            double scale = std::sqrt(ref.sum_w2a2[i]), tol_scale = tol > 0 ? tol / scale : 0;
+            c.tol_scale = std::max(c.tol_scale, std::isnan(tol_scale) ? INFINITY : tol_scale);
         }
     }
-    if (p.ggml_dot && !is_ggml_vec_dot(in, ref, got)) worst = INFINITY;
-    return worst;
+    if (p.ggml_dot) {
+        if (is_ggml_vec_dot(in, ref, got)) {
+            c.tol_scale = 0;
+        } else {
+            c.err_ratio = INFINITY;
+        }
+    }
+    return c;
 }
 
 }  // namespace gq

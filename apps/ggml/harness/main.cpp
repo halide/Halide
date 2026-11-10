@@ -70,7 +70,8 @@ const char *usage =
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
     "  --early-stop[=LO,HI]     end a case's rounds (after 5) once every GGML/Halide\n"
     "                           time ratio's 95% CI is outside [LO, HI] (0.92,1.03)\n"
-    "  --check                  correctness only, exit 1 on any failure\n"
+    "  --check                  correctness only, exit 1 on any failure (ok 0; not on\n"
+    "                           unchecked: within a tolerance that excludes nothing)\n"
     "  --outputs all|sampled    outputs the oracle checks: every one, or up to 64 rows x 4\n"
     "                           columns (default: all with --check, else sampled)\n"
     "  --cold                   cycle >= 512 MiB of weight copies (cache-cold)\n"
@@ -351,7 +352,7 @@ int main(int argc, char **argv) {
     Emitter out{o.json};
     std::mt19937 rng(42);
     std::normal_distribution<float> normal;
-    int failures = 0, cases = 0;
+    int failures = 0, unchecked = 0, cases = 0;
     for (int op : {GQ_vec_dot, GQ_mul_mat}) {
         if (!(o.ops & op)) continue;
         for (const Shape &s : shapes(o.shapes, op)) {
@@ -387,7 +388,7 @@ int main(int argc, char **argv) {
                     struct Entry {
                         const Provider *p;
                         std::unique_ptr<Kernel> k;
-                        double err;
+                        Check c;
                     };
                     std::vector<Entry> es;
                     for (const Provider &p : providers()) {
@@ -399,8 +400,8 @@ int main(int argc, char **argv) {
                         k->run(1);
                         std::vector<float> got(s.N * s.M);
                         k->read(got.data());
-                        double err = error_ratio(in, ref, k->prec, got.data());
-                        es.push_back({&p, std::move(k), err});
+                        Check c = check(in, ref, k->prec, got.data());
+                        es.push_back({&p, std::move(k), c});
                     }
                     if (es.empty()) continue;
                     std::vector<Timing> ts;
@@ -416,9 +417,11 @@ int main(int argc, char **argv) {
                     }
                     for (size_t i = 0; i < es.size(); i++) {
                         auto &e = es[i];
-                        bool ok = e.err <= 1;
+                        // Within a tolerance that excludes nothing: not a pass.
+                        bool ok = e.c.err_ratio <= 1, vacuous = ok && e.c.tol_scale >= 1;
                         cases++;
                         failures += !ok;
+                        unchecked += vacuous;
                         std::vector<std::pair<std::string, std::string>> kv = {
                             {"op", op == GQ_vec_dot ? "vec_dot" : "mul_mat"},
                             {"wtype", ggml_type_name(wt)},
@@ -432,8 +435,10 @@ int main(int argc, char **argv) {
                             {"cold", o.cold ? "1" : "0"},
                             {"provider", e.p->name},
                             {"path", e.k->path},
-                            {"err_ratio", fmt(e.err)},
-                            {"ok", ok ? "1" : "0"},
+                            {"err_ratio", fmt(e.c.err_ratio)},
+                            {"tol_scale", fmt(e.c.tol_scale)},
+                            {"ok", vacuous ? "unchecked" : ok ? "1" :
+                                                                "0"},
                         };
                         if (!o.check) {
                             const Timing &t = ts[i];
@@ -466,9 +471,10 @@ int main(int argc, char **argv) {
             cases++;
             failures += !ok;
             if (!ok) fprintf(stderr, "codec %s %s %s K=%lld: %s\n", r.type.c_str(), r.dir.c_str(), r.provider.c_str(), (long long)r.K, r.detail.c_str());
-            // Same columns as above; atype is the direction, gops is Gvalues/s.
+            // Same columns as above; atype is the direction, the check is bitwise
+            // (tol_scale 0), gops is Gvalues/s.
             std::vector<std::pair<std::string, std::string>> kv = {
-                {"op", "codec"}, {"wtype", r.type}, {"atype", r.dir}, {"model", ""}, {"layer", ""}, {"K", std::to_string(r.K)}, {"N", std::to_string(r.rows)}, {"M", "1"}, {"threads", "1"}, {"cold", "0"}, {"provider", r.provider}, {"path", r.path}, {"err_ratio", ok ? "0" : "inf"}, {"ok", ok ? "1" : "0"}};
+                {"op", "codec"}, {"wtype", r.type}, {"atype", r.dir}, {"model", ""}, {"layer", ""}, {"K", std::to_string(r.K)}, {"N", std::to_string(r.rows)}, {"M", "1"}, {"threads", "1"}, {"cold", "0"}, {"provider", r.provider}, {"path", r.path}, {"err_ratio", ok ? "0" : "inf"}, {"tol_scale", "0"}, {"ok", ok ? "1" : "0"}};
             if (r.timed) {
                 double bytes = r.rows * (4.0 * r.K + ggml_row_size(type_named(parse_format(r.type).type), r.K));
                 kv.insert(kv.end(), {{"ns", fmt(r.t.median, "%.1f")}, {"ns_lo", fmt(r.t.lo, "%.1f")}, {"ns_hi", fmt(r.t.hi, "%.1f")}, {"ci_pct", fmt(100 * (r.t.hi - r.t.lo) / r.t.median, "%.2f")}, {"samples", std::to_string(r.t.samples)}, {"reps", std::to_string(r.t.reps)}, {"gbps", fmt(bytes / r.t.median, "%.2f")}, {"gops", fmt(r.rows * r.K / r.t.median, "%.2f")}});
@@ -476,6 +482,6 @@ int main(int argc, char **argv) {
             out.row(kv);
         }
     }
-    fprintf(stderr, "%d results, %d failures\n", cases, failures);
+    fprintf(stderr, "%d results, %d failures, %d unchecked\n", cases, failures, unchecked);
     return failures ? 1 : 0;
 }

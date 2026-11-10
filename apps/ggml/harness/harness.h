@@ -39,6 +39,10 @@ struct Precision {
     int64_t act_block = 0;                  // ... with 8-bit absmax blocks of this size (0: act_quant's)
     int64_t w_block = 0;                    // weights re-quantized to 8-bit absmax blocks of this size
     ggml_type w_quant = GGML_TYPE_COUNT;    // decoded weights re-rounded internally to this type (f16, bf16)
+    bool act_sum = false;                   // a weight block's offset multiplies the acts' sum from before their
+                                            // re-quantization (act_quant's error reaches the scaled codes only)
+    bool act_asymmetric = false;            // act_quant is not odd in each activation (a zero point)
+    bool act_nearest = false;               // act_quant's 8-bit codes are rounded to nearest, of a scale kept in f16 or better
     bool ggml_dot = false;                  // also bit-exact: GGML's CPU vec_dot of each output (act in its vec_dot_type)
 };
 
@@ -87,16 +91,31 @@ struct Reference {
     // The tolerance's sums over k, per output as `out`: of |W| |A|, and of
     // max_block|W| |A| (the max over the weight type's block around k).
     std::vector<double> sum_wa, sum_wmax_a;
-    // ... and of the re-quantization error, by the Precision fields it is a
-    // function of (filled by error_ratio).
-    std::map<std::array<int64_t, 4>, std::vector<double>> requant;
+    // ... of (W A)^2 ...
+    std::vector<double> sum_w2a2;
+    // ... and of a re-quantization's error bound E and of its terms' squares
+    // (oracle.cpp), by the Precision fields they are functions of (filled by
+    // check).
+    struct Requant {
+        std::vector<double> sum, sum_sq;
+    };
+    std::map<std::array<int64_t, 5>, Requant> requant;
+    int64_t w_block;  // the weight type's block size (1 if not quantized)
 };
 Reference reference(const Inputs &in, const std::vector<float> &a_f32, bool all = false);
 // GGML's decoding of K values of type t: its to_float, or for the types it has
 // none for (activation-only q8_1, q8_K) their block layouts.
 void to_float(ggml_type t, const uint8_t *p, float *out, int64_t K);
-// max over the reference's outputs of |got - ref| / tolerance; <= 1 passes.
-double error_ratio(const Inputs &in, Reference &ref, const Precision &p, const float *got);
+// A provider's outputs against the reference: over the reference's outputs,
+// the max of |got - ref| / tolerance (<= 1 passes), and the max of tolerance /
+// sqrt(sum_k (W A)^2), an output's scale: what the sum comes to with the signs
+// of its terms at random. From 1 on, the tolerance cannot tell an output from
+// one unrelated to the reference, and passing it checks nothing (inf: the
+// provider's model bounds nothing).
+struct Check {
+    double err_ratio, tol_scale;
+};
+Check check(const Inputs &in, Reference &ref, const Precision &p, const float *got);
 
 // Shapes (shapes.cpp).
 std::vector<Shape> shapes(const std::string &preset, int op);

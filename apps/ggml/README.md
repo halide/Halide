@@ -74,9 +74,24 @@ accumulator precision and chain length, operand rounding, internal
 re-quantization of activations or weights, and the reference's own f64 rounding
 (see `harness/oracle.cpp`). Its sums are `dgemm` products too, shared by the
 providers that re-quantize alike. It passes when error / tolerance \<= 1
-(`err_ratio`). With pre-quantized activations the bound is tight; providers that
-re-quantize f32 activations get a worst-case requantization term, which is much
-looser.
+(`err_ratio`). With pre-quantized activations the bound is tight. A
+re-quantization's error is bounded by its worst case, every term's on one side,
+or, where that is less and the re-quantization is odd in each activation, over
+the signs of the harness's random activations (Hoeffding's inequality: exceeded
+with probability \<= 1e-9 per check).
+
+A tolerance is worth what it excludes. `tol_scale` is its largest ratio to an
+output's scale, sqrt(sum_k (W A)^2): what the sum comes to with its terms' signs
+at random. From 1 on, the tolerance accepts outputs that owe nothing to the
+reference, and a row within it has `ok` `unchecked`, not 1 (`tol_scale` `inf`:
+the declared model bounds nothing). The summary on stderr counts them apart
+(`N results, F failures, U unchecked`); only failures (`ok` 0) set the exit
+status. The worst-case bound of an f16 accumulator is of that kind at these
+sizes: cuBLAS's f16 gemm (`CUBLAS_COMPUTE_16F`, accumulation undocumented:
+modeled as one f16 chain of K, unbounded from K = 2044), GGML's CUDA `mmvf` on
+f16 weights, and the `acc16` libraries where they cannot be compared bitwise
+with GGML's f16 `vec_dot`. So is the worst case of KleidiAI's per-row
+re-quantization (`qai8dx`: a zero point, not odd) from K of a few hundred.
 
 Notable GGML behavior: KleidiAI's q8_0 path re-quantizes weights and activations
 per row (it does not compute q8_0 x q8_0); the CPU backend rejects f16
@@ -176,8 +191,8 @@ checked variant only; the scheme a kernel may pick with
 `format(spec, aos, scaled)`, see `Type0Quant`'s `code_shift`), and dequantize
 also on crafted blocks spanning every code byte with every finite fp16 scale
 pattern stepped by 31 (zeros, subnormals, both signs). Codec rows reuse the CSV
-columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf, `gops`
-is Gvalues/s.
+columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf,
+`tol_scale` is 0, `gops` is Gvalues/s.
 
 `vec_dot` and `mul_mat` build the one mul_mat generator (`kernels/matmul.cpp`,
 `weight=<type> act=<act> op=<op>`) for each act in `acts`, as

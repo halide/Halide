@@ -324,6 +324,7 @@ void add_device(ggml_backend_dev_t dev) {
                                        k->prec.act_quant = GGML_TYPE_Q8_0;
                                        k->prec.act_block = q8 ? in.s.K : 32;
                                        k->prec.w_block = q8 ? in.s.K : 0;
+                                       k->prec.act_asymmetric = q8;
                                        k->path = std::string("kleidiai:") + (q8 ? "qai8dx_qsi8cx" : "qsi8d32_qsi4c32") + ":" + kind;
                                    } else {
                                        std::string layout = grep_log(log, "repack tensor ");
