@@ -279,11 +279,35 @@ endif ()
 # (cuda_shapes). Each bench library's test checks that its PTX multiplies
 # on the tensor cores.
 set(GGML_HALIDE_CUDA_FORMATS
-    "f16 mul_mat f16"
-    "q4_0:f16 mul_mat f16"
     "q4_0 mul_mat f32,q8_0"
     "q8_0 mul_mat f32,q8_0"
+    "q4_1 mul_mat f32,q8_1"
+    "q5_0 mul_mat f32,q8_0"
+    "q5_1 mul_mat f32,q8_1"
+    "mxfp4 mul_mat f32,q8_0"
+    "iq4_nl mul_mat f32,q8_0"
+    "q2_0 mul_mat f32,q8_0"
     "q4_K mul_mat f32,q8_K"
+    "q6_K mul_mat f32,q8_K"
+    "q5_K mul_mat f32,q8_K"
+    "iq4_xs mul_mat f32,q8_K"
+    "q2_K mul_mat f32,q8_K"
+    "q3_K mul_mat f32,q8_K"
+    "f16 mul_mat f16,f32:f16"
+    "q4_0:f16 mul_mat f32:f16,f16"
+    "q8_0:f16 mul_mat f32:f16,f16"
+    "q4_K:f16 mul_mat f32:f16,f16"
+    "q5_K:f16 mul_mat f32:f16,f16"
+    "q6_K:f16 mul_mat f32:f16,f16"
+    "q2_K:f16 mul_mat f32:f16,f16"
+    "q3_K:f16 mul_mat f32:f16,f16"
+    "iq4_xs:f16 mul_mat f32:f16,f16"
+    "q4_1:f16 mul_mat f32:f16,f16"
+    "q5_0:f16 mul_mat f32:f16,f16"
+    "q5_1:f16 mul_mat f32:f16,f16"
+    "mxfp4:f16 mul_mat f32:f16,f16"
+    "iq4_nl:f16 mul_mat f32:f16,f16"
+    "q2_0:f16 mul_mat f32:f16,f16"
 )
 set(GGML_HALIDE_CUDA_FEATURES cuda cuda_capability_80)
 # Metal rows need Apple's GPU; CUDA rows GGML's CUDA backend (to compare with)
