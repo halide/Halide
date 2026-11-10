@@ -1390,9 +1390,14 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     Var n = dot.args()[0], m = dot.args()[1], u("u");
     RVar ry = r.y, rx = r.x;
     std::vector<Func> wc = rs[0].decoded_components(tag::codes), ac = rs[1].decoded_components(tag::codes);
-    Func blk = s.rfactor(ry, u);
     std::vector<Func> keep = wc;
     keep.insert(keep.end(), ac.begin(), ac.end());
+    // an affine weight's code-free term (q4_1's min times the act's sum: its
+    // s port), as GGML's AMX acc_C: one f32 product per block and output
+    Sums sm;
+    Func acc = dot;
+    if (derived_sums(out, st, s, r, rs, sm, 0, 0, keep, false)) acc = sm.with;
+    Func blk = s.rfactor(ry, u);
     Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, false, keep);
     // the accumulators: ts.mt / 16 tiles of 16 x 16 f32, each block's weights
     // staged once for them all
@@ -1404,7 +1409,15 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     } else {
         s.reorder(n, m, ry).vectorize(n).unroll(m);
     }
-    LoopLevel tile(dot, at);
+    LoopLevel tile(acc, at);
+    if (sm.sums.defined()) {
+        Var smo("smo"), smi("smi");
+        sm.sums.compute_at(tile_at(out, st)).vectorize(n).unroll(m);
+        sm.sums.update().split(m, smo, smi, 16).reorder(n, smi, smo, ry).vectorize(n).unroll(smi);
+        for (Func f : {sm.blk, sm.sum}) {
+            if (f.defined()) f.compute_at(sm.sums, smo).vectorize_all_stages(n).unroll_all_stages(m, u);
+        }
+    }
     blk.compute_at(tile).vectorize_all_stages(n).unroll_all_stages(m);
     // the codes' dot: one tile op per 64 values of the block (K <= 64 bytes)
     RVar rxo("rxo"), rxi("rxi");
@@ -1434,13 +1447,13 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
         // (a clone with tables: their rows staged for this tile's decode alone)
         Func d = staged_tables(rs).empty() ? f.in(codes) : f.clone_in(codes), w = d.in(codes);
         Var k = w.args()[0], b = w.args()[1], row = w.args()[2];
-        d.compute_at(dot, ry).vectorize(d.args()[0]).unroll(d.args()[2]);
-        w.compute_at(dot, ry).split_storage(k, ko, ki, 4).reorder_storage(ki, row, ko, b);
+        d.compute_at(acc, ry).vectorize(d.args()[0]).unroll(d.args()[2]);
+        w.compute_at(acc, ry).split_storage(k, ko, ki, 4).reorder_storage(ki, row, ko, b);
         w.split(k, ko, ki, 4).reorder(ki, row, ko, b).vectorize(ki).vectorize(row).vectorize(ko);
         ds.push_back(d);
     }
     // (q5_0's table rows staged per block: dense loads, not a byte gather)
-    tables(rs, ds, LoopLevel(dot, ry), t);
+    tables(rs, ds, LoopLevel(acc, ry), t);
     for (Func f : ac) {
         Func a = f.in(codes);
         a.compute_at(tile).vectorize(a.args()[0]).unroll(a.args()[2]);
@@ -2400,11 +2413,10 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     Tiles mmla8{4, 8, 1, 32, 32, true}, gemm{4, 4, 1, 32, 32, true}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
-    // AMX: integer weights of one row per record, no sub-blocks or code-free
-    // terms (blocked_amx())
-    Tiles amx{16, 16, 1, 32, 32, true}, amx4{16, 64, 1, 32, 64, true};
+    // AMX: integer weights of one row per record, no sub-blocks (blocked_amx())
+    Tiles amx{16, 16, 1, 32, 32, true}, amx4{16, 64, 1, 32, 64, true}, amx8{16, 8, 1, 32, 32, true};
     bool amx_ok = integer && t.has_feature(Target::AVX512_SapphireRapids) && !whole && fmt.rows == 1 && !fmt.sub && fmt.per == 1 &&
-                  fmt.block % 4 == 0 && (fmt.block <= 64 || fmt.block % 64 == 0) && !affine(rs);
+                  fmt.block % 4 == 0 && (fmt.block <= 64 || fmt.block % 64 == 0);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
     bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
@@ -2448,6 +2460,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     } else if (amx_ok) {
         blocked_amx(out, 0, dr, fits(amx4, M), amx4, r, fmt.block, rs, t);
         blocked_amx(out, 0, dr, fits(amx, M), amx, r, fmt.block, rs, t);
+        blocked_amx(out, 0, dr, fits(amx8, M), amx8, r, fmt.block, rs, t);
     }
     // AVX-512 VNNI: blocks of 256 (GGML's tiled gemm's formats) on tiles
     // vectorized across M (blocked_cols())
