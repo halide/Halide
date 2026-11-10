@@ -76,6 +76,12 @@ Core changes (each with its test; none upstreamed yet):
   0.80x. Not when an operand is itself a sign (q1_0's bits): the bias form's
   correction is shared across a gemm tile (q1_0 gemm 2.1 -> 1.7 ms, 12
   threads). Test: `simd_op_check_x86`.
+- `FindIntrinsics`: an int8 operand of a `widening_mul` loaded from a Func
+  whose value bounds are tighter than its own (int8's) is marked with
+  `unsafe_promise_clamped` carrying them, so a staged Func of non-negative
+  bytes (decoded weights) is `vpdpbusd`'s unsigned operand, not the bias form.
+  q4_K's column gemm: 120 -> 83 cycles a sub-block (llvm-mca). Test:
+  `x86_dot_product_loaded_bounds`.
 
 App changes:
 
@@ -116,3 +122,17 @@ App changes:
   sub-blocks on ymm steps (gemv/vec_dot keep the zmm). On x86, q6_K takes it
   (4096^2, M = 32, 12 threads: 1.91 -> 1.4-1.5 ms); q2_K is faster wide
   (1.16 ms against 1.97).
+- `blocked_cols()`: with AVX-512 VNNI, gemm tiles (M >= 16) of 256-value
+  blocks vectorized across 16 columns (M), as GGML's tiled 8x16 microkernel:
+  each weight byte group broadcast against 16 columns' act bytes (staged
+  transposed, once), 8 rows unrolled, the block's accumulators, staged weights
+  and the act's bsums all stored columns-innermost. The weights are decoded
+  once per block by a per-tile `clone_in` (tables shared across the cols32
+  and cols16 specializations were scheduled twice). The d.sums (mins) stages
+  unroll every RVar so their port reads CSE across rows. One thread, 4096^2,
+  M = 32, ms (GGML in brackets): q4_K 11.1 -> 4.1 (4.3), q2_K 11.1 -> 5.1
+  (4.9), q5_K 13.3 -> 5.3 (4.9), q3_K 15.5 -> 8.6 (4.9), q6_K 14.8 -> 9.9
+  (6.0), iq4_xs 13.7 -> 6.2 (3.4), iq2_xxs 18.0 -> 6.8 (4.6), iq2_xs 19.5 ->
+  7.2 (5.4), iq2_s 21.7 -> 7.7 (5.5), iq3_xxs 22.9 -> 7.2 (5.1), iq3_s 29.5 ->
+  8.0 (5.5), iq1_s 19.1 -> 9.9 (5.0), iq1_m 21.1 -> 10.7 (6.5); f32 acts
+  alike.

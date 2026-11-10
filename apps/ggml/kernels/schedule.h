@@ -508,10 +508,10 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 // tq2_0, q6_K) is treated alike, as GGML subtracts offset * bsums (`fold`).
 // Returns false (dot untouched) if there is nothing to read.
 struct Sums {
-    Func sums, blk, sum, part, pair;
-    bool sub_sums = false;  // d.sum sums the act's sub-block sums (no part)
-    bool offsets = false;   // a constant code offset's (offset_path())
-    int offset_lanes = 8;   // (offsets: d.part's vector)
+    Func sums, blk, sum, part, pair, with;  // (with: the codes' terms, s's Func)
+    bool sub_sums = false;                  // d.sum sums the act's sub-block sums (no part)
+    bool offsets = false;                   // a constant code offset's (offset_path())
+    int offset_lanes = 8;                   // (offsets: d.part's vector)
 };
 inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true) {
     d = Sums();
@@ -577,6 +577,7 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     }
     with.compute_at(tile_at(out, st));
     s = with.update();
+    d.with = with;
     return true;
 }
 
@@ -1365,6 +1366,103 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
         Func a = f.in(codes);
         a.compute_at(tile).vectorize(a.args()[0]).unroll(a.args()[2]);
     }
+}
+
+// AVX-512 VNNI gemm tiles vectorized across M, as GGML's tiled x86 gemm
+// (ggml-cpu/tiled): out's stage st under cond on ts tiles (nt rows, mt
+// columns), per block and 16 columns, each row's dot of 4 weight codes
+// (broadcast) with the act's 4 codes of 16 columns (a vpdpbusd), the act's
+// codes staged up front in that layout (4 codes of a column, then the
+// columns, then the next 4), the weight's decoded per block. Sub-blocks'
+// scales (and a derived_sums() term) per row and sub-block, broadcast.
+inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block,
+                         const std::vector<ApproximationResult> &rs, const Target &t, int sub = 0, int act_sub = 0, const Knobs &k = Knobs()) {
+    const int per = 4, lanes = 16;
+    Stage s = tile_out(out, st, dot, cond, ts, r);
+    Var n = dot.args()[0], m = dot.args()[1], u("u"), v("v");
+    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxi("rxi");
+    std::vector<Func> wc = rs[0].decoded_components(tag::codes), ac = rs[1].decoded_components(tag::codes);
+    std::vector<Func> keep = wc;
+    keep.insert(keep.end(), ac.begin(), ac.end());
+    Sums d;
+    Func acc = dot;
+    if (derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, keep, k.fold == Fold::All)) acc = d.with;
+    if (sub <= per) sub = 0;
+    sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxi, per) : s.split(r.x, rxc, rxi, per);
+    Func blk = s.rfactor(ry, u);
+    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, false, keep);
+    // per block, per 16 columns (mc): the rows unrolled
+    Var mo("mc"), mi("mv");
+    s.split(m, mo, mi, lanes).reorder(mi, n, mo, ry).vectorize(mi).unroll(n);
+    std::vector<Func> accs{dot};
+    if (acc.name() != dot.name()) accs.push_back(acc);
+    for (Func f : accs) {
+        f.reorder_storage(m, n).vectorize(m, lanes).unroll(n);
+    }
+    LoopLevel cols(acc, mo), blocks(acc, ry);
+    std::vector<Func> readers{blk, codes};
+    for (Func f : {blk, codes}) {
+        f.compute_at(cols).reorder_storage(m, n).vectorize_all_stages(m).unroll_all_stages(n, u);
+    }
+    Func inner = codes;
+    if (sub) {
+        Func part = codes.update().rfactor(rxs, v);
+        inner = part.update().hoist_invariants()[0];
+        codes.update().reorder(m, n, rxs).vectorize(m).unroll(n);
+        part.compute_at(codes, rxs).reorder_storage(m, n).vectorize_all_stages(m).unroll_all_stages(n, u, v);
+        inner.compute_at(codes, rxs).reorder_storage(m, n).vectorize_all_stages(m).unroll_all_stages(n, u, v);
+        readers.insert(readers.end(), {part, inner});
+    }
+    inner.update().reorder(rxi, m, n, rxc).atomic().vectorize(rxi).vectorize(m).unroll(n).unroll(rxc);
+    // the weight's codes decoded per block, the act's staged up front
+    for (Func f : wc) {
+        if (!calls(inner, f)) continue;
+        Func w = f.clone_in(inner);  // (a clone: each tile's tables clone in its own)
+        readers.push_back(w);
+        w.compute_at(blocks).vectorize(w.args()[0], t.natural_vector_size<int8_t>()).unroll(w.args()[2]);
+    }
+    for (Func f : ac) {
+        if (!calls(inner, f)) continue;
+        Func a = f.in(inner);
+        Var j = a.args()[0], b = a.args()[1], am = a.args()[2], jo("jo"), ji("ji"), mo2("mo2"), mi2("mi2");
+        a.compute_root().split_storage(j, jo, ji, per).reorder_storage(ji, am, jo, b);
+        a.split(j, jo, ji, per).split(am, mo2, mi2, lanes, TailStrategy::GuardWithIf).reorder(ji, mi2, jo, mo2, b).vectorize(ji).vectorize(mi2).parallel(b);
+    }
+    if (d.sums.defined()) {
+        Var smo("smo"), smi("smi");
+        d.sums.compute_at(tile_at(out, st)).reorder_storage(m, n).vectorize(m, lanes).unroll(n);
+        d.sums.update().split(m, smo, smi, lanes).reorder(smi, n, smo, ry).vectorize(smi).unroll(n);
+        for (Func f : {d.blk, d.sum, d.part, d.pair}) {
+            if (!f.defined()) continue;
+            f.compute_at(d.sums, smo).reorder_storage(m, n).vectorize_all_stages(m);
+            std::vector<VarOrRVar> rest;
+            for (Var a : f.args()) {
+                if (a.name() != m.name()) rest.push_back(a);
+            }
+            f.unroll_all_stages(rest);
+            for (int u = 0; u < f.num_update_definitions(); u++) {
+                for (const RVar &x : f.rvars(u)) {
+                    f.update(u).unroll(x);  // (the rows' identical port reads CSE)
+                }
+            }
+        }
+        // the act's ports read (q8_K's bsums) staged up front, the columns innermost
+        std::vector<Func> sums;
+        for (Func f : {d.blk, d.sum, d.part, d.pair}) {
+            if (f.defined()) sums.push_back(f);
+        }
+        for (const DerivedPort &p : rs[1].derived_ports()) {
+            Func g = Func(p.stored).in_callers(sums);
+            if (!g.defined()) continue;
+            std::vector<Var> as = g.args();
+            Var am = as.back();
+            std::vector<Var> order{am};
+            order.insert(order.end(), as.begin(), as.end() - 1);
+            std::vector<VarOrRVar> loops(order.begin(), order.end());
+            g.compute_root().reorder_storage(order).reorder(loops).vectorize(am, lanes, TailStrategy::GuardWithIf).parallel(as[as.size() - 2]);
+        }
+    }
+    tables(rs, readers, blocks, t);
 }
 
 // The Funcs of e's encoder: those of the result that encodes e.
@@ -2196,6 +2294,15 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     } else if (amx_ok) {
         blocked_amx(out, 0, dr, fits(amx4, M), amx4, r, fmt.block, rs, t);
         blocked_amx(out, 0, dr, fits(amx, M), amx, r, fmt.block, rs, t);
+    }
+    // AVX-512 VNNI: blocks of 256 (GGML's tiled gemm's formats) on tiles
+    // vectorized across M (blocked_cols())
+    Tiles cols32{8, 32, 1, 64, 32, true}, cols16{8, 16, 1, 64, 16, true};
+    bool cols_ok = integer && !amx_ok && !tiled && !whole && fmt.rows == 1 && fmt.per == 1 && fmt.block == 256 &&
+                   t.has_feature(Target::AVX512_SapphireRapids) && staged.size() <= 1;
+    if (cols_ok) {
+        blocked_cols(out, 0, dr, fits(cols32, M), cols32, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k);
+        blocked_cols(out, 0, dr, fits(cols16, M), cols16, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
