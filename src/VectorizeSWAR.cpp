@@ -473,6 +473,36 @@ class LowerSWARVectors : public IRMutator {
         return LetOrLetStmt::make(op->name, new_value, new_body);
     }
 
+    // The unsigned e as the narrower unsigned type ut, if its value fits
+    // there because the values it is computed from do: an unsigned quotient
+    // or remainder fits where its operands do, and so does a right shift, by
+    // an amount that is the same in every lane and less than the narrower
+    // width, of a value that fits. Returns an undefined Expr otherwise.
+    static Expr narrow_unsigned(const Expr &e, const Type &ut) {
+        if (Expr l = lossless_cast(ut, e); l.defined()) {
+            return l;
+        } else if (!e.type().is_uint()) {
+            return Expr();
+        }
+        auto both = [&](const Expr &a, const Expr &b, auto make) {
+            Expr na = narrow_unsigned(a, ut), nb = narrow_unsigned(b, ut);
+            return (na.defined() && nb.defined()) ? make(na, nb) : Expr();
+        };
+        if (const Div *op = e.as<Div>()) {
+            return both(op->a, op->b, Div::make);
+        } else if (const Mod *op = e.as<Mod>()) {
+            return both(op->a, op->b, Mod::make);
+        } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_right})) {
+            const Broadcast *amount = op->args[1].as<Broadcast>();
+            Expr value = narrow_unsigned(op->args[0], ut);
+            if (value.defined() && amount && amount->value.type().is_scalar() &&
+                can_prove(amount->value >= 0 && amount->value < ut.bits())) {
+                return value >> Broadcast::make(cast(ut.element_of(), amount->value), amount->lanes);
+            }
+        }
+        return Expr();
+    }
+
     // Truncate the lanes of e to the narrower integer type t, by
     // truncating the leaves of operations that commute with truncation.
     // Returns an undefined Expr if that's not possible.
@@ -527,13 +557,8 @@ class LowerSWARVectors : public IRMutator {
         // that were widened first. A signed quotient of operands that fit
         // the narrower unsigned type is their unsigned quotient.
         const Type ut = t.with_code(Type::UInt);
-        if (const Div *div = e.as<Div>()) {
-            Expr a = lossless_cast(ut, div->a);
-            Expr b = lossless_cast(ut, div->b);
-            if (a.defined() && b.defined()) {
-                Expr q = Div::make(a, b);
-                return t == ut ? q : Cast::make(t, q);
-            }
+        if (Expr u = narrow_unsigned(e, ut); u.defined()) {
+            return t == ut ? u : Cast::make(t, u);
         }
         for (halide_type_code_t code : {Type::UInt, Type::Int}) {
             if (Expr l = lossless_cast(t.with_code(code), e); l.defined()) {

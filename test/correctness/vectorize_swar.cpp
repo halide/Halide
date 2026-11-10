@@ -741,6 +741,12 @@ int main(int argc, char **argv) {
                      Expr low = cast<uint8_t>(cast<uint32_t>(cast<uint8_t>(c(x))) % 16);
                      return cast<int8_t>(cast<int32_t>(high) - 8) ^ cast<int8_t>(low);
                  });
+            // Likewise where the field's position is a runtime value, the
+            // same in every lane and known to be within the narrow lanes.
+            ok = ok && test_elementwise<int8_t>("widened_fields_uniform_shift", lanes, [](Var x, Func a, Func c) {
+                     Expr position = cast<uint32_t>(uniform_cond % 4 % 2 * 4);
+                     return cast<int8_t>((cast<uint32_t>(cast<uint8_t>(a(x))) >> position) % 16) ^ c(x);
+                 });
             // Signed lanes: arithmetic shifts and floor division.
             ok = ok && test_elementwise<int8_t>("signed", lanes, [](Var x, Func a, Func c) {
                      return (a(x) >> 2) + c(x) / 4 + a(x) % 8 - (c(x) << 1);
