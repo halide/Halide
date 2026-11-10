@@ -1687,8 +1687,11 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // M > 1: rows x cols per simdgroup, a lane per value of every 32 (coalesced;
 // the gemv lanes there 0.5-1.4x), behind dot's specialization. `on_codes`:
 // whether dot reads rs[0]'s codes (not a weight compute format's values,
-// e.g. q4_K:f16's), from which the scales and offsets hoist.
-inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true) {
+// e.g. q4_K:f16's), from which the scales and offsets hoist. `integer`
+// (integer acts): the codes' dot in int32, each lane's run of 8 values one
+// vector reduction (CUDA: two dp4a).
+inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
+                       bool integer = false) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -1719,20 +1722,23 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         kind[order[i]] = Shared;
     }
     metal_tiles(out, dot, nr, sg, [](int cols) { return cols > 4 ? 2 : 4; });
-    Var lx("lx");
-    RVar ryk("ryk"), ryu("ryu"), rxo("rxo"), rxl("rxl");
-    Stage sm = dot.update().specialize(M >= 2);
-    if (bits > 5) sm.split(rx, rxo, rxl, 32);
-    Func lanes = sm.rfactor(bits > 5 ? rxl : rx, lx);
-    sm.atomic().gpu_lanes(bits > 5 ? rxl : rx);
-    lanes.compute_at(out, ns).gpu_lanes(lx).unroll(n).unroll(m);
-    Stage ls = lanes.update().split(ry, ryk, ryu, std::max(1, 4 >> (bits - 5)), TailStrategy::GuardWithIf);
-    if (bits > 5) {
-        ls.reorder(n, m, rxo, ryu, ryk, lx).unroll(rxo);
-    } else {
-        ls.reorder(n, m, ryu, ryk, lx);
+    // (integer: the gemv's lanes at every M, their runs the dp4a's)
+    if (!integer) {
+        Var lx("lx");
+        RVar ryk("ryk"), ryu("ryu"), rxo("rxo"), rxl("rxl");
+        Stage sm = dot.update().specialize(M >= 2);
+        if (bits > 5) sm.split(rx, rxo, rxl, 32);
+        Func lanes = sm.rfactor(bits > 5 ? rxl : rx, lx);
+        sm.atomic().gpu_lanes(bits > 5 ? rxl : rx);
+        lanes.compute_at(out, ns).gpu_lanes(lx).unroll(n).unroll(m);
+        Stage ls = lanes.update().split(ry, ryk, ryu, std::max(1, 4 >> (bits - 5)), TailStrategy::GuardWithIf);
+        if (bits > 5) {
+            ls.reorder(n, m, rxo, ryu, ryk, lx).unroll(rxo);
+        } else {
+            ls.reorder(n, m, ryu, ryk, lx);
+        }
+        ls.gpu_lanes(lx).unroll(n).unroll(m).unroll(ryu);
     }
-    ls.gpu_lanes(lx).unroll(n).unroll(m).unroll(ryu);
     Stage s = dot.update();
     // r.x in segments of one kind, from the lowest
     struct Seg {
@@ -1776,7 +1782,17 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     }
     lane_vars.emplace_back(ry, u);
     Func blk = s.rfactor(lane_vars), rest, mid;
-    Func codes = block_dot(blk, rs, false, rest, mid, on_codes && affine(rs));
+    Func codes = block_dot(blk, rs, integer, rest, mid, on_codes && affine(rs));
+    // the codes' runs (int32 dots) reduced as vectors, else unrolled
+    auto inner_loops = [&](Stage fs, bool dots) {
+        for (const RVar &v : inner_rs) {
+            if (dots && integer && v.name() == inner_rs[0].name() && segs[0].kind == Run) {
+                fs.atomic().vectorize(v);
+            } else {
+                fs.unroll(v);
+            }
+        }
+    };
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
@@ -1832,9 +1848,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         std::vector<VarOrRVar> o{f.args()[0]};
         o.insert(o.end(), inner_rs.begin(), inner_rs.end());
         fs.reorder(o).unroll(f.args()[0]);
-        for (const RVar &v : inner_rs) {
-            fs.unroll(v);
-        }
+        inner_loops(fs, f.name() == codes.name());
     }
     for (auto [f, part, inner] : subs) {
         for (Func g : {part, inner}) {
@@ -1849,8 +1863,22 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         std::vector<VarOrRVar> o{inner.args()[0]};
         o.insert(o.end(), inner_rs.begin(), inner_rs.end());
         inner.update().reorder(o);
-        for (const RVar &v : inner_rs) {
-            inner.update().unroll(v);
+        inner_loops(inner.update(), f.name() == codes.name());
+    }
+    // (integer: every column of the tile, registers)
+    if (integer) {
+        std::vector<Func> fs{acc, blk, mid, codes, rest};
+        for (auto [f, part, inner] : subs) {
+            fs.insert(fs.end(), {part, inner});
+        }
+        for (Func f : fs) {
+            if (!f.defined()) continue;
+            for (int i = 0; i <= f.num_update_definitions(); i++) {
+                Stage fs = i ? f.update(i - 1) : Stage(f);
+                for (const Var &v : f.args()) {
+                    if (v.same_as(n) || v.same_as(m)) fs.unroll(v);
+                }
+            }
         }
     }
 }
@@ -2267,33 +2295,31 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, Func x, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
     luts(rs, !t.has_gpu_feature());
-    if (t.has_feature(Target::Metal)) {
-        if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
-        if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
+    // GPUs: Metal's schedules, on CUDA with wmma's 16 x 16 fragments (a
+    // warp is a simdgroup: 32 lanes); f32 operands' gemm on Metal only
+    if (t.has_feature(Target::Metal) || t.has_feature(Target::CUDA)) {
+        const bool metal = t.has_feature(Target::Metal);
+        const std::string gpu = metal ? "metal: " : "cuda: ";
+        const int frag = metal ? 8 : 16, min_m = metal ? 8 : 16;
+        auto shapes = [&](Func wh) { return metal ? metal_shapes(out, wh, fmt) : cuda_shapes(out); };
+        if (acc.defined()) throw std::invalid_argument(gpu + "dots accumulated in f32");
+        if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
         Func wh, xh;
         if (f16_operands(rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, staged);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged);
             return;
         }
-        if (f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, staged);
+        if (metal && f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged);
             return;
         }
         if (fmt.block == 1) {
             metal_flat(out, dots[0], r, staged);
             return;
         }
-        if (!staged.empty() || fmt.wcompute) throw std::invalid_argument("metal: blocked weights on acts stored as computed, or a weight compute format without f16 acts");
+        if (!staged.empty() || fmt.wcompute) throw std::invalid_argument(gpu + "blocked weights on acts stored as computed, or a weight compute format without f16 acts");
         metal_luts(out, rs);
-        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub);
-        return;
-    }
-    if (t.has_feature(Target::CUDA)) {
-        // compile-only (no NVIDIA hardware here): the gemm on f16 operands,
-        // on wmma's 16 x 16 x 16 tensor core fragments
-        Func wh, xh;
-        if (acc.defined() || fmt.act_rows > 1 || fmt.rows > 1 || !f16_operands(rs, staged, fmt, wh, xh)) throw std::invalid_argument("cuda: f16 operands only");
-        gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 16, cuda_shapes(out), 16, staged);
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, !metal && fmt.act_block == fmt.block);
         return;
     }
     if (fmt.rowwise) {
