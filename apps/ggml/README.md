@@ -103,6 +103,11 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   warmed up; then 15 rounds, each timing one sample of every provider in a fresh
   random order. Reported: median, a distribution-free 95% CI of the median
   (order statistics), `ci_pct` = CI width / median, GB/s, GOP/s.
+- Matched synchronization (Metal): by default one sample of our Metal kernels
+  ends with one device sync, while GGML's sample is graphs of 16 nodes with one
+  wait each. `--metal-sync-every 16` makes ours match: a rep is 16 calls writing
+  16 distinct outputs (as GGML's 16 nodes do), then one `halide_device_sync`;
+  times are per call. Not with `--cold`.
 - macOS has no clock pinning: `ci_pct` is the noise report. Serialize timing
   runs machine-wide (`~/dev/Halide/.bench.lock`).
 - Layout sensitivity: at startup the bench reads one byte of every page of every

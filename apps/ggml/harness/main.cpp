@@ -67,6 +67,9 @@ const char *usage =
     "                           columns (default: all with --check, else sampled)\n"
     "  --cold                   cycle >= 512 MiB of weight copies (cache-cold)\n"
     "  --no-keep-awake          let Halide's idle threads sleep during samples\n"
+    "  --metal-sync-every N     our Metal mul_mat: N calls to N distinct outputs per\n"
+    "                           device sync, as GGML's N-node graph per wait (default 1;\n"
+    "                           see README: matched synchronization)\n"
     "  --no-pretouch            don't fault in every page of the loaded images' __TEXT and\n"
     "                           __DATA_CONST at startup, nor the 16 KB past each input\n"
     "                           buffer (see README: layout sensitivity)\n"
@@ -254,6 +257,12 @@ int main(int argc, char **argv) {
             o.cold = true;
         } else if (a == "--no-keep-awake") {
             halide_keep_awake = false;
+        } else if (a == "--metal-sync-every") {
+            halide_metal_sync_every = std::stoi(next());
+            if (halide_metal_sync_every < 1) {
+                fprintf(stderr, "%s", usage);
+                return 2;
+            }
         } else if (a == "--no-pretouch") {
             o.pretouch = false;
         } else if (a == "--json") {
@@ -264,6 +273,10 @@ int main(int argc, char **argv) {
             fprintf(stderr, "%s", usage);
             return a == "--help" ? 0 : 2;
         }
+    }
+    if (o.cold && halide_metal_sync_every > 1) {
+        fprintf(stderr, "--metal-sync-every > 1 does not support --cold\n");
+        return 2;
     }
     if (!o.threads) o.threads = perf_cores();
 #ifdef __APPLE__

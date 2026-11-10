@@ -197,5 +197,9 @@ extern std::string self_exe;
 // Hold the Halide thread pool's keep-awake count while timing Halide kernels
 // (default true; --no-keep-awake).
 extern bool halide_keep_awake;
+// Our Metal mul_mat kernels: calls per device sync (default 1; --metal-sync-every).
+// With n > 1, one rep is n calls writing n distinct outputs, then one
+// halide_device_sync, as GGML's n-node graph per wait; times are per call.
+extern int halide_metal_sync_every;
 
 }  // namespace gq

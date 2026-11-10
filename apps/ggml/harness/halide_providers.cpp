@@ -22,6 +22,7 @@
 namespace gq {
 
 bool halide_keep_awake = true;
+int halide_metal_sync_every = 1;
 
 namespace {
 
@@ -79,6 +80,7 @@ struct HalideKernel : Kernel {
     std::vector<std::vector<void *>> args;
     std::vector<std::vector<uint8_t>> relaid;  // weights in the format's layout
     std::vector<float> host_out;
+    std::vector<std::vector<float>> extra_out;  // outputs 1..batch-1 (halide_metal_sync_every)
     halide_buffer_t *out() {
         return &bufs[0].back()->b;
     }
@@ -94,11 +96,16 @@ struct HalideKernel : Kernel {
         // work for the duration of the sample.
         const bool keep_awake = halide_keep_awake && !gpu;
         if (keep_awake) ggml_halide_thread_pool_keep_awake(true);
-        for (int r = 0, c = 0; r < reps; r++, c = c + 1 == (int)args.size() ? 0 : c + 1) {
-            if (int e = f(args[c].data())) {
-                fprintf(stderr, "halide error %d\n", e);
-                abort();
+        // A GPU rep is `batch` calls (to distinct outputs) and one device sync.
+        const int group = gpu ? batch : 1;
+        for (int r = 0, c = 0; r < reps; r++) {
+            for (int g = 0; g < group; g++, c = c + 1 == (int)args.size() ? 0 : c + 1) {
+                if (int e = f(args[c].data())) {
+                    fprintf(stderr, "halide error %d\n", e);
+                    abort();
+                }
             }
+            if (group > 1) halide_device_sync(nullptr, out());
         }
         if (keep_awake) ggml_halide_thread_pool_keep_awake(false);
         if (gpu) halide_device_sync(nullptr, out());
@@ -282,6 +289,19 @@ void register_halide_providers() {
                                                    if (gpu && i < nw + na && (i < nw || !c)) bs[i]->b.flags |= halide_buffer_flag_host_dirty;
                                                }
                                                k->bufs.push_back(std::move(bs));
+                                           }
+                                           if (gpu && halide_metal_sync_every > 1) {
+                                               // calls 1..n-1 of a rep write their own outputs, as
+                                               // the n mul_mat nodes of GGML's graph do
+                                               k->batch = halide_metal_sync_every;
+                                               for (int g = 1; g < k->batch; g++) {
+                                                   k->extra_out.emplace_back(s.N * s.M);
+                                                   auto ob = std::make_unique<HBuf>(k->extra_out.back().data(), halide_type_t(halide_type_float, 32), std::vector<int64_t>{s.N, s.M});
+                                                   k->args.push_back(k->args[0]);
+                                                   k->args.back().back() = &ob->b;
+                                                   k->bufs.emplace_back();
+                                                   k->bufs.back().push_back(std::move(ob));
+                                               }
                                            }
                                            return k;
                                        }});
