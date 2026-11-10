@@ -165,3 +165,21 @@ App changes:
   12.7 cycles per block predicted, 15.9 measured). Now split to the loop's
   width and unrolled. One thread, 4096^2, M = 1, GGML / halide: tq1_0 0.66
   -> 1.03, tq2_0 0.71 -> 1.08, q6_K 0.90 -> 1.16; others unchanged.
+- Raw sign bits (iq2_s, iq3_s; iq1's): x86 has no byte shifts, so a bit at
+  a constant per-lane position, (x >> c) % 2, took seven ops (LLVM widens to
+  words, shifts, packs), and its 1 - 2 b went through psignb (a factor in
+  [-1, 1]), which LLVM can't fold. CodeGen_X86 now tests x & (1 << c)
+  (vptestnmb) and multiplies by a factor in [0, 1] as a mask, which LLVM
+  folds into one blend. One thread, 4096^2, GGML / halide, M = 1: iq2_s
+  0.66 -> 0.82, iq3_s 0.87 -> 1.07, iq1_m 0.72 -> 0.78; M = 32, ms (GGML):
+  iq2_s 6.6 -> 6.3 (5.7), iq3_s 5.8 -> 5.6 (5.3), iq1_m 6.3 -> 5.3 (6.4).
+- q5_0/q5_1's codes (a staged table row of the high bits plus the low
+  nibble) reach FindIntrinsics already as an explicit `widening_mul`, which
+  didn't get the loaded bounds of `with_loaded_bounds()`; it does now, so
+  their [0, 31] codes are vpdpbusd's unsigned operand, not the bias form.
+  One thread, 4096^2, M = 1, GGML / halide: q5_0 0.86 -> 0.93, q5_1 0.82 ->
+  0.90.
+- q5_0's AMX gemm (`blocked_amx()`) gathered its table's bytes per code
+  (480 vpinsrb in the block loop); its rows are now staged per block
+  (`tables()`, on a clone of the decode for each tile size). One thread,
+  4096^2, M = 32: 42.1 -> 5.4 ms (GGML 23.3).
