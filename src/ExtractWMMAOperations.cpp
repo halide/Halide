@@ -335,6 +335,8 @@ Expr make_matrix_to_fragment(const MatrixUnit &unit, Role role, const Shape &sha
 struct MatmulInfo {
     Shape shape;
     Operand lhs, rhs;
+    // The expressions the operands' loads were found in, which own them.
+    Expr lhs_value, rhs_value;
     Layout lhs_layout = Layout::Row, rhs_layout = Layout::Row;
     Expr lda, ldb;
     Type accumulator_type;
@@ -408,9 +410,17 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     }
     // Under the casts, broadcasts and lane permutations that vectorization may
     // have left on each operand there must be a load.
+    // A float32 operand built from a bfloat16's bits, rather than cast from
+    // it, is that bfloat16 widened too.
+    auto operand = [](const Expr &e) {
+        Expr b = lossless_cast(BFloat(16, e.type().lanes()), e);
+        return b.defined() ? simplify(b) : e;
+    };
+    info.lhs_value = operand(mul->a);
+    info.rhs_value = operand(mul->b);
     Scope<Expr> empty_scope;
-    info.lhs.load = is_load_of_multiramp(mul->a, empty_scope, &info.lhs.mr);
-    info.rhs.load = is_load_of_multiramp(mul->b, empty_scope, &info.rhs.mr);
+    info.lhs.load = is_load_of_multiramp(info.lhs_value, empty_scope, &info.lhs.mr);
+    info.rhs.load = is_load_of_multiramp(info.rhs_value, empty_scope, &info.rhs.mr);
     if (!info.lhs.load || !info.rhs.load) {
         return fail("the matrix multiply operands are not loads with affine indices");
     }

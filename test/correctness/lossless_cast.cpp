@@ -86,6 +86,9 @@ int main(int argc, char **argv) {
         found_error |= check_lossless_cast(bf16x, e, reinterpret(bf16x, var_u16x));
         e = reinterpret(f32x, cast(u32x, var_u16x) << make_const(u32x, 16));
         found_error |= check_lossless_cast(bf16x, e, reinterpret(bf16x, var_u16x));
+        // (the shift as the simplifier writes it before find_intrinsics)
+        e = reinterpret(f32x, cast(u32x, var_u16x) * make_const(u32x, 65536));
+        found_error |= check_lossless_cast(bf16x, e, reinterpret(bf16x, var_u16x));
         // (not 16 bits, or not shifted to the top)
         e = reinterpret(f32x, widening_shift_left(var_u16x, make_const(u16x, 15)));
         found_error |= check_lossless_cast(bf16x, e, Expr());
