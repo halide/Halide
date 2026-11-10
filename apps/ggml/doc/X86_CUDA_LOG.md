@@ -155,3 +155,7 @@ App changes:
   iq2_xxs 6.7 -> 4.3 (4.6), iq2_xs 7.2 -> 5.2 (5.5), iq2_s 7.7 -> 6.7 (5.5),
   iq3_xxs 7.2 -> 4.8 (4.9), iq3_s 8.1 -> 5.8 (5.3), iq4_xs 6.3 -> 4.1 (3.3);
   iq1_s/iq1_m unchanged (9.5, 10.7 against 4.9, 6.5).
+- iq1_s/iq1_m in `blocked_cols()`: their codes simplify to (8 g - 2 s) + 1,
+  an offset whose rest is signed; biased instead (from the promised [-9, 9]
+  bounds, u = q + 9). One thread, 4096^2, M = 32, ms (GGML): iq1_s 9.5 ->
+  5.0 (5.0), iq1_m 10.7 -> 6.3 (6.4).
