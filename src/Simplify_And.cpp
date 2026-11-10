@@ -24,7 +24,7 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
         info->cast_to(op->type);
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type, this);
 
     // Cases that fold to a constant
     if (EVAL_IN_LAMBDA  //

@@ -16,7 +16,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
         info->trim_bounds_using_alignment();
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type, this);
 
     if (EVAL_IN_LAMBDA  //
         (rewrite(select(IRMatcher::likely(true), x, y), true_value) ||

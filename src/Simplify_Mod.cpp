@@ -36,7 +36,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
     }
 
     int lanes = op->type.lanes();
-    auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type, this);
 
     if (rewrite(IRMatcher::Overflow() % x, a) ||
         rewrite(x % IRMatcher::Overflow(), b)) {
@@ -67,7 +67,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
            rewrite(ramp(x, c0, c2) % broadcast(c1, c2), broadcast(x, c2) % broadcast(c1, c2), (c0 % c1 == 0)) ||
            rewrite(ramp(x, c0, lanes) % broadcast(c1, lanes), ramp(x % c1, c0, lanes),
                    // First and last lanes are the same when...
-                   can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)) ||
+                   can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0)) ||
            rewrite(ramp(x * c0, c2, c3) % broadcast(c1, c3),
                    ramp(x * fold(c0 % c1), fold(c2 % c1), c3) % broadcast(c1, c3),
                    c1 > 0 && (c0 >= c1 || c0 < 0)) ||
