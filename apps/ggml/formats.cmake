@@ -167,6 +167,9 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 # subtracts per value (q3_K: the fold doubles its loops' instructions). Where
 # hoist_invariants() can't prove the split exact (iq1_s's and iq1_m's delta,
 # +-1 added to 8 times a grid value, a table's, of unknown bounds), no fold.
+# The x86 VNNI cols gemm (blocked_cols) always folds, whatever the knob: it
+# stages the unsigned codes (q6_K's 0..63) for plain vpdpbusd, as GGML's tiled
+# gemm, rather than signed codes through vpsignb.
 # row_pairs=false (mul_mat's gemv on single rows, not row pairs): q6_K's
 # gemv 1.02-1.03x on one thread at K = 4096 (row pairs spill), even on ten
 # (retimed); q5_K's with f32 acts 1.17-1.21x at any K on one thread,
