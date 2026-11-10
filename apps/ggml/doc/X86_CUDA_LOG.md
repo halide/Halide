@@ -257,3 +257,27 @@ App changes:
   561 -> 460, mxfp4 569 -> 469, q3_K 602 -> 444; f16 unchanged (flat). At
   M = 64..128 mixed (0.7-1.2x), so not there. GGML / Halide at M = 512
   0.61-0.84 -> 0.74-0.98 (q2_K 1.44); M = 256 0.77-1.0 (q2_K 1.6).
+- Tried, not kept: split K for the gemm at M = 16..31 (latency bound:
+  N / 64 x M / 16 tiles). A clone of dot rfactored over chunks of K, the
+  partials in their own kernel (gpu_staged on the fragments), summed per
+  output. q4_0 at M = 16: 80.9 -> 56.5us at 1024 values a chunk (GGML
+  mmq ~52; 512: 57.6, 2048: 61.6), but slower at M = 32 (79.6 -> 84.9).
+  rfactor's tail guard (`r.y` clamped to the blocks; the split's predicate
+  unprovable for a symbolic K, even under a `K % chunk == 0`
+  specialization) gives the staged tiles extents that depend on the block,
+  so the 256-value formats fail the wmma partial-overlap check and the
+  checked build's bounds go negative. Would need rfactor (or
+  specializations) to learn the split is exact.
+- Launch overhead (spec item 4). On this machine (WSL2) a CUDA launch costs
+  ~11us of host time: an empty kernel launched back to back (runtime API,
+  `<<<1, 32>>>`) takes 11.4us a launch to enqueue, 11.5us with the sync
+  (two a step: 21.9 / 22.2). The harness times Halide's calls back to back
+  (async, one sync per sample), so a call costs max(host, GPU). q4_0, us a
+  call, Halide f16 acts / f32 acts, GGML a node (its graph of 16 nodes,
+  each an act quantize and a mmvq or mmq launch): 32x32x1 9.9 / 11.5, 30.1;
+  256x256x1 10.1 / 10.3, 34.1; 1024x1024x1 13.8 / 12.0, 39.5; 32x32x32
+  10.4 / 10.5, 38.3; 256x256x32 9.9 / 10.7, 39.5. So Halide's per-call
+  overhead is one launch's (the pipeline's own host work, under the
+  launch, is not visible), GGML's ~3 (~30us); at 4096^2 every case's
+  kernel takes longer than a launch (M = 1: 20-45us), so the timings above
+  are kernel bound.
