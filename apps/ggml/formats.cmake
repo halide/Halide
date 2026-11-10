@@ -276,8 +276,8 @@ endif ()
 # GGML_HALIDE_CUDA_FEATURES, registered with the harness and run, checked
 # and timed like the Metal rows. The tensor-core gemm is the Metal gemm's
 # schedule (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
-# (cuda_shapes). Each bench library's test checks that its PTX multiplies
-# on the tensor cores.
+# (cuda_shapes). Each f16-act bench library's test checks that its PTX
+# multiplies on the tensor cores (the other acts take dp4a or f32 rows).
 set(GGML_HALIDE_CUDA_FORMATS
     "q4_0 mul_mat f32,q8_0"
     "q8_0 mul_mat f32,q8_0"
@@ -441,7 +441,7 @@ foreach (row IN LISTS GGML_FORMATS)
             string(APPEND registry
                 "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
-            if ("cuda" IN_LIST features_list)
+            if ("cuda" IN_LIST features_list AND act MATCHES "f16$")
                 add_test(NAME ${name}_ptx COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}_bench>)
                 set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
             endif ()
