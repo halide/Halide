@@ -2504,13 +2504,14 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     // AVX-512 VNNI: blocks of 256 (GGML's tiled gemm's formats) on tiles
     // vectorized across M (blocked_cols())
-    Tiles colsM{64, 256, 1, 64, 256, true}, cols32{8, 32, 1, 64, 32, true}, cols16{8, 16, 1, 64, 16, true};
+    Tiles colsM{64, 256, 1, 64, 256, true}, cols32{8, 32, 1, 64, 32, true}, cols16{8, 16, 1, 64, 16, true}, cols8{8, 8, 1, 64, 8, true};
     bool cols_ok = integer && !amx_ok && !tiled && !whole && fmt.rows == 1 && fmt.per == 1 && fmt.block == 256 &&
                    t.has_feature(Target::AVX512_SapphireRapids) && staged.size() <= 1;
     if (cols_ok) {
         blocked_cols(out, 0, dr, fits(colsM, M), colsM, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k);
         blocked_cols(out, 0, dr, fits(cols32, M), cols32, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k, false);
         blocked_cols(out, 0, dr, fits(cols16, M), cols16, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k, false);
+        blocked_cols(out, 0, dr, fits(cols8, M), cols8, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k, false);
     }
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
     if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
