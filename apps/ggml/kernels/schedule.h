@@ -2757,9 +2757,24 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             metal_flat(out, dots[0], r, staged, sg);
             return;
         }
-        if (!staged.empty() || fmt.wcompute) throw std::invalid_argument(gpu + "blocked weights on acts stored as computed, or a weight compute format without f16 acts");
-        metal_luts(out, rs);
         const bool integer = !metal && fmt.act_block == fmt.block;
+        if (fmt.wcompute || (!staged.empty() && !integer)) throw std::invalid_argument(gpu + "blocked weights on acts stored as computed (CUDA: but integer ones), or a weight compute format without f16 acts");
+        // CUDA: acts quantized here (f32:q8_1, as GGML's mmvq quantizes its
+        // f32 acts) by a kernel of their own, a thread per record,
+        // its block's reductions (the scale's maximum) once per record
+        // (inlined, each is a loop inside the next's and the codes'), the
+        // order-independent ones as vector reductions: trees, not chains of
+        // the block's length
+        for (Func e : staged) {
+            Var b = e.args()[0], rec = e.args().back(), bo("bo");
+            e.compute_root().split(b, bo, b, 32, TailStrategy::GuardWithIf).gpu_blocks(bo, rec).gpu_threads(b);
+            for (Func f : encoder_funcs(e, rs)) {
+                if (f.name() == e.name() || !f.has_update_definition() || f.dimensions() > e.dimensions()) continue;
+                f.compute_at(e, b);
+                if (f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);
+            }
+        }
+        metal_luts(out, rs);
         metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg);
         return;
     }

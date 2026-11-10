@@ -239,6 +239,10 @@ void register_halide_providers() {
         const char *gpu_api = strstr(row.features, "metal") ? "metal" : strstr(row.features, "cuda") ? "cuda" :
                                                                                                        nullptr;
         bool gpu = gpu_api != nullptr;
+        // The schemes' q8_0, q8_1 and q8_K are GGML's from_float (their
+        // codecs are checked bit-exact against it): codes rounded to nearest,
+        // of a scale in f16 or f32. KleidiAI's qai8dx is not declared so.
+        bool nearest = !kai && (aq == GGML_TYPE_Q8_0 || aq == GGML_TYPE_Q8_1 || aq == GGML_TYPE_Q8_K);
         // f16 accumulation (acc16): 32 f16 lanes, then 3 f16 tree levels, as
         // GGML's f16 vec_dot, whose results it then equals where GGML has
         // fp16 arithmetic (else it accumulates in f32) and K % 32 == 0 (GGML
@@ -259,7 +263,10 @@ void register_halide_providers() {
                                            if (in.wt != wt || in.at != at) return nullptr;
                                            auto k = vec_dot_kernel(vd, in);
                                            k->path = "halide";
-                                           if (aq != at) k->prec.act_quant = aq;
+                                           if (aq != at) {
+                                               k->prec.act_quant = aq;
+                                               k->prec.act_nearest = nearest;
+                                           }
                                            narrow(*k, in);
                                            return k;
                                        }});
@@ -274,7 +281,10 @@ void register_halide_providers() {
                                            k->gpu = gpu;
                                            k->threads = in.threads;
                                            k->path = gpu ? std::string("halide:") + gpu_api : "halide";
-                                           if (aq != at) k->prec.act_quant = aq;
+                                           if (aq != at) {
+                                               k->prec.act_quant = aq;
+                                               k->prec.act_nearest = nearest;
+                                           }
                                            if (!fs.compute.empty()) k->prec.w_quant = type_named(fs.compute.c_str());
                                            if (kai) {  // as ggml-cpu-kleidiai's
                                                k->prec.act_block = k->prec.w_block = s.K;

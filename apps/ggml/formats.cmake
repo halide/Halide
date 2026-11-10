@@ -286,33 +286,35 @@ endif ()
 # schedule (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
 # (cuda_shapes), on f16 operands or, for bf16 weights on bf16 acts, wmma's
 # bf16 fragments. f32 weights (no scheme) are W itself, or rounded to f16
-# for the gemm (f32:f16). Each f16- or bf16-act bench library's test checks
-# that its PTX multiplies on the tensor cores (the other acts take dp4a or
-# f32 rows).
+# for the gemm (f32:f16). A blocked weight's f32:q8_1 library quantizes its
+# f32 acts on the GPU, in a kernel of their own, as GGML's CUDA backend does
+# (mmvq and mmq run on q8_1 acts), and runs the dp4a rows on them. Each f16-
+# or bf16-act bench library's test checks that its PTX multiplies on the
+# tensor cores (the other acts take dp4a or f32 rows).
 set(GGML_HALIDE_CUDA_FORMATS
-    "q4_0 mul_mat f32,q8_0"
-    "q8_0 mul_mat f32,q8_0"
-    "q4_1 mul_mat f32,q8_1"
-    "q5_0 mul_mat f32,q8_0"
-    "q5_1 mul_mat f32,q8_1"
-    "mxfp4 mul_mat f32,q8_0"
-    "iq4_nl mul_mat f32,q8_0"
-    "q2_0 mul_mat f32,q8_0"
-    "q4_K mul_mat f32,q8_K"
-    "q6_K mul_mat f32,q8_K"
-    "q5_K mul_mat f32,q8_K"
-    "iq4_xs mul_mat f32,q8_K"
-    "q2_K mul_mat f32,q8_K"
-    "q3_K mul_mat f32,q8_K"
+    "q4_0 mul_mat f32,q8_0,f32:q8_1"
+    "q8_0 mul_mat f32,q8_0,f32:q8_1"
+    "q4_1 mul_mat f32,q8_1,f32:q8_1"
+    "q5_0 mul_mat f32,q8_0,f32:q8_1"
+    "q5_1 mul_mat f32,q8_1,f32:q8_1"
+    "mxfp4 mul_mat f32,q8_0,f32:q8_1"
+    "iq4_nl mul_mat f32,q8_0,f32:q8_1"
+    "q2_0 mul_mat f32,q8_0,f32:q8_1"
+    "q4_K mul_mat f32,q8_K,f32:q8_1"
+    "q6_K mul_mat f32,q8_K,f32:q8_1"
+    "q5_K mul_mat f32,q8_K,f32:q8_1"
+    "iq4_xs mul_mat f32,q8_K,f32:q8_1"
+    "q2_K mul_mat f32,q8_K,f32:q8_1"
+    "q3_K mul_mat f32,q8_K,f32:q8_1"
     "nvfp4 mul_mat f32"
-    "q1_0 mul_mat f32,q8_0"
-    "iq2_xxs mul_mat f32,q8_K"
-    "iq2_xs mul_mat f32,q8_K"
-    "iq2_s mul_mat f32,q8_K"
-    "iq3_xxs mul_mat f32,q8_K"
-    "iq3_s mul_mat f32,q8_K"
-    "iq1_s mul_mat f32,q8_K"
-    "iq1_m mul_mat f32,q8_K"
+    "q1_0 mul_mat f32,q8_0,f32:q8_1"
+    "iq2_xxs mul_mat f32,q8_K,f32:q8_1"
+    "iq2_xs mul_mat f32,q8_K,f32:q8_1"
+    "iq2_s mul_mat f32,q8_K,f32:q8_1"
+    "iq3_xxs mul_mat f32,q8_K,f32:q8_1"
+    "iq3_s mul_mat f32,q8_K,f32:q8_1"
+    "iq1_s mul_mat f32,q8_K,f32:q8_1"
+    "iq1_m mul_mat f32,q8_K,f32:q8_1"
     "f16 mul_mat f16,f32,f32:f16"
     "bf16 mul_mat bf16,f32,f32:bf16"
     "f32 mul_mat f32"
