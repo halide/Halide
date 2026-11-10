@@ -1723,7 +1723,9 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     for (int i = 0; i < vals - run; i++) {
         kind[order[i]] = Shared;
     }
-    metal_tiles(out, dot, nr, sg, [](int cols) { return cols > 4 ? 2 : 4; });
+    // (integer: 4 rows at every M; at M = 8 2 rows 0.72-0.89x, 8 rows
+    // 0.74-1.07x; RTX A4500)
+    metal_tiles(out, dot, nr, sg, [=](int cols) { return cols > 4 && !integer ? 2 : 4; });
     // (integer: the gemv's lanes at every M, their runs the dp4a's)
     if (!integer) {
         Var lx("lx");
