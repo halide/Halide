@@ -73,7 +73,9 @@ Core changes (each with its test; none upstreamed yet):
   codes, as GGML builds them; one-thread gemv (q8_K acts) iq2_xxs 0.67 ->
   0.78x, iq2_xs 0.69 -> 0.81x, iq2_s 0.47 -> 0.67x, iq3_xxs 0.54 -> 0.59x,
   iq3_s 0.72 -> 0.92x, iq1_s 0.77 -> 0.82x, iq1_m 0.66 -> 0.69x, q3_K 0.79 ->
-  0.80x. Test: `simd_op_check_x86`.
+  0.80x. Not when an operand is itself a sign (q1_0's bits): the bias form's
+  correction is shared across a gemm tile (q1_0 gemm 2.1 -> 1.7 ms, 12
+  threads). Test: `simd_op_check_x86`.
 
 App changes:
 
@@ -110,3 +112,7 @@ App changes:
   a panel of weights once to biased bytes and runs a 16x16 VNNI microkernel
   over columns: about 9 cycles a block-dot against our 36 for iq3_xxs (4096^2,
   M = 32, one thread: GGML 4.9 ms, without tiled 41.7 ms, ours 20.3 ms).
+- `Knobs::gemm_wide_subs` (default true): false keeps gemm tiles' 16-value
+  sub-blocks on ymm steps (gemv/vec_dot keep the zmm). On x86, q6_K takes it
+  (4096^2, M = 32, 12 threads: 1.91 -> 1.4-1.5 ms); q2_K is faster wide
+  (1.16 ms against 1.97).
