@@ -289,3 +289,8 @@ App changes:
   0.47-0.75 -> 0.57-0.89 (q2_K 1.04), at M = 128 0.55-0.82 -> 0.60-0.90
   (q2_K 1.57). (16 x 64 of 1 x 2 warps: as good at M = 64, 2x slower at
   96; 32 x 32 of 2 x 2: 1.05-1.2x slower.)
+- CUDA gemm k step (values staged a step, 64) not changed. 128: q5_0 at
+  M = 32 100 -> 82us, iq4_xs and q4_0 slightly faster, but q6_K and q4_K
+  slower at M = 16..128 (q6_K at M = 128 190 -> 317us), and f16 fails to
+  compile (the staging loop's extent is no longer constant). 32: slower
+  everywhere but q4_K at M = 16 (86 -> 72us).
