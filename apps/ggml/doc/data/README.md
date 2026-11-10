@@ -8,6 +8,9 @@ command line, and its check summary). Columns: see `../../README.md`; time is
 - `cpu-sweep/`: the current CPU dataset. 4096^2 weights, M = 1..512, 12
   threads and 1, every format and provider but CUDA (`run.sh`; Windows power
   plan High Performance). Summarized in `../X86_CUDA_LOG.md` ("CPU sweep").
+- `amx-repack/`: q4_K, q5_K, iq4_xs with the `.16x4` AMX layouts vs aos and
+  GGML (`rp.sh`: 4096^2, 12 threads, best of 2; `fmt M provider us`).
+  Summarized in `../X86_CUDA_LOG.md` ("AMX repack (16x4)").
 - `phase1-final/`: the Phase 1 report's run (`run.sh`; `gemm_t1.csv` one
   thread at M = 32, `gv_all.csv` llama3-8b gemv shapes), Balanced power plan.
 - `phase2-cuda/`: the Phase 2 report's CUDA timings (text, per format, M and

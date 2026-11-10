@@ -270,6 +270,8 @@ inline Approximation kx8_layout(std::vector<StructField> fields, const std::vect
 // block_q4_K {f16 d, dmin; u8 scales[12]; u8 qs[128]}.
 // "8x8": GGML's repacked block_q4_Kx8 {f16 d[8], dmin[8]; u8 scales[96];
 // u8 qs[1024]} (kx8_layout).
+// "<rows>x<chunk>" otherwise: Interleave's (16x4: AMX's B tile, 16 rows'
+// 4 bytes per K step).
 inline Approximation q4_K(const std::string &lay, bool indexed = false) {
     std::vector<std::string> logical = {"qs", "scales", "d", "dmin"};
     std::vector<StructField> fields = {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qs", UInt(8), QK_K / 2}};
@@ -278,7 +280,6 @@ inline Approximation q4_K(const std::string &lay, bool indexed = false) {
                        Parallel{{"codes", PlanarFieldPack{4, 32}}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
     };
     if (lay == "8x8") return Compose{head(Identity{}), kx8_layout(fields, logical)};
-    if (lay != "aos" && lay != "soa") throw std::invalid_argument("q4_K: no " + lay + " layout (GGML's repacked one is 8x8)");
     return Compose{head(KScales{}), layout(lay, fields, logical)};
 }
 
@@ -287,6 +288,7 @@ inline Approximation q4_K(const std::string &lay, bool indexed = false) {
 // bits in qh (code i in bit i / 32 of byte i % 32).
 // "8x8": GGML's repacked block_q5_Kx8 {f16 d[8], dmin[8]; u8 scales[96];
 // u8 qh[256]; u8 qs[1024]} (kx8_layout).
+// "<rows>x<chunk>" otherwise: Interleave's.
 inline Approximation q5_K(const std::string &lay, bool indexed = false) {
     std::vector<std::string> logical = {"qs", "qh", "scales", "d", "dmin"};
     std::vector<StructField> fields = {{"d", Float(16)}, {"dmin", Float(16)}, {"scales", UInt(8), 12}, {"qh", UInt(8), QK_K / 8}, {"qs", UInt(8), QK_K / 2}};
@@ -295,7 +297,6 @@ inline Approximation q5_K(const std::string &lay, bool indexed = false) {
                        Parallel{{"codes", split_bits(4, 0, 2, PlanarFieldPack{4, 32}, PlanarFieldPack{1, 32})}, {"scales", scales}, {"scale", fp16()}, {"min", fp16()}}};
     };
     if (lay == "8x8") return Compose{head(Identity{}), kx8_layout(fields, logical)};
-    if (lay != "aos" && lay != "soa") throw std::invalid_argument("q5_K: no " + lay + " layout (GGML's repacked one is 8x8)");
     return Compose{head(KScales{}), layout(lay, fields, logical)};
 }
 

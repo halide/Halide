@@ -522,3 +522,67 @@ Where we trail:
 
 Large leads (q2_0, q5_0/q5_1, tq1_0/tq2_0, iq4_nl, mxfp4, nvfp4: 2-14x) are
 formats GGML runs only through its generic blocked vec_dot.
+
+## AMX repack (16x4)
+
+New layouts `q4_K.16x4`, `q5_K.16x4`, `iq4_xs.16x4` (`formats.cmake`; layout
+rows of existing formats, not definition changes): `Interleave{16, 4}` puts 16
+rows' 4-byte code pieces adjacent, which is AMX's B tile (as GGML's AMX buffer
+prepacks). The harness's `ggml_repack` transcribes it; `kquants.h`'s
+aos/soa-only guard on q4_K/q5_K is lifted.
+
+Schedule (`blocked_amx(..., packed = true)`, chosen by generic criteria:
+integer, SPR, 16x4 record, one row per piece, block % 64 == 0):
+
+- Codes decode in place per block at `(acc, ry)`: one dense 64-byte load and a
+  nibble mask per tile row, storage `(ki, row, ko, b)`; no per-sub-block
+  staging/transpose of `w`. Shared by every sub-block's `tdpbssd` and every
+  16-row M sub-tile (q4_K M = 256: 4605 -> 3475 us).
+- New tile `amx2` (32 M columns, two 16-row subtiles per decode) for M >= 32.
+- Routing: amx4 (M >= 64), amx2 (>= 32), amx (>= 16), amx8 only at M = 8
+  (two overlapping ShiftInwards 8-row tiles double the cost at M = 9..15);
+  everything else runs the record gemv (`blocked_rows`), which beats GGML's
+  AMX at M <= 4.
+- iq4_xs: with `packed` the signed codebook is no longer biased to unsigned
+  (`derived_sums` fold) since `tdpbssd` is signed x signed: 1.1-1.3x. The aos
+  amx8 path keeps the bias (1.06x faster there).
+- Tried: a guarded 16-row tile for 9 <= M < 16 (`guard_m`); fails with AMX
+  tile size/stride mismatch and bounds conflicts across the specialized
+  rfactor Funcs. Reverted.
+
+Twelve threads, 4096^2, best of 2 (us; `data/amx-repack/`, `rp.sh`), GGML best
+of its providers vs ours (aos, 16x4); G/H for 16x4:
+
+| fmt | M | GGML | aos | 16x4 | G/H |
+|---|---|---|---|---|---|
+| q4_K | 1 | 42 | 93 | 31 | 1.36 |
+| q4_K | 4 | 134 | 185 | 89 | 1.50 |
+| q4_K | 8 | 165 | 225 | 182 | 0.91 |
+| q4_K | 12 | 194 | 435 | 241 | 0.81 |
+| q4_K | 16 | 224 | 249 | 289 | 0.77 |
+| q4_K | 32 | 433 | 448 | 479 | 0.90 |
+| q4_K | 64 | 844 | 896 | 912 | 0.93 |
+| q4_K | 256 | 3133 | 3880 | 3287 | 0.95 |
+| q5_K | 1 | 61 | 101 | 39 | 1.57 |
+| q5_K | 4 | 161 | 201 | 123 | 1.32 |
+| q5_K | 8 | 187 | 234 | 197 | 0.95 |
+| q5_K | 12 | 224 | 448 | 331 | 0.68 |
+| q5_K | 16 | 255 | 235 | 281 | 0.91 |
+| q5_K | 32 | 473 | 482 | 469 | 1.01 |
+| q5_K | 64 | 911 | 907 | 877 | 1.04 |
+| q5_K | 256 | 3189 | 3894 | 3436 | 0.93 |
+| iq4_xs | 1 | 53 | 73 | 42 | 1.27 |
+| iq4_xs | 4 | 139 | 187 | 124 | 1.12 |
+| iq4_xs | 8 | 165 | 212 | 146 | 1.13 |
+| iq4_xs | 12 | 196 | 421 | 397 | 0.49 |
+| iq4_xs | 16 | 230 | 231 | 205 | 1.13 |
+| iq4_xs | 32 | 394 | 458 | 362 | 1.09 |
+| iq4_xs | 64 | 768 | 860 | 770 | 1.00 |
+| iq4_xs | 256 | 2796 | 3819 | 2874 | 0.97 |
+
+16x4 leads at M <= 4 (1.1-1.6x) and for iq4_xs at M <= 64; q5_K is at
+parity at M = 32/64 (1.01-1.04). Versus aos it is 1.0-1.3x faster except
+q4_K/q5_K at M = 16. Remaining gaps: M = 9..15 (rows path, 0.5-0.8),
+q4_K/q5_K at M = 16 (0.77/0.91: one 16x16 accumulator's serial
+zero/load/dpbssd/store chain per sub-block; GGML pairs two B tiles per A),
+q4_K at M >= 8 (0.90-0.95) and q5_K at M = 8/256 (0.93-0.95).
