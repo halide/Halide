@@ -278,7 +278,13 @@ endif ()
 # schedule (schedule.h: gpu_staged, fragments) on wmma's 16 x 16 fragments
 # (cuda_shapes). Each bench library's test checks that its PTX multiplies
 # on the tensor cores.
-set(GGML_HALIDE_CUDA_FORMATS "f16 mul_mat f16" "q4_0:f16 mul_mat f16")
+set(GGML_HALIDE_CUDA_FORMATS
+    "f16 mul_mat f16"
+    "q4_0:f16 mul_mat f16"
+    "q4_0 mul_mat f32,q8_0"
+    "q8_0 mul_mat f32,q8_0"
+    "q4_K mul_mat f32,q8_K"
+)
 set(GGML_HALIDE_CUDA_FEATURES cuda cuda_capability_80)
 # Metal rows need Apple's GPU; CUDA rows GGML's CUDA backend (to compare with)
 option(GGML_HALIDE_CUDA "Build, register and run the CUDA libraries" ${GGML_CUDA})
