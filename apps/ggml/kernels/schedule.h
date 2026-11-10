@@ -441,6 +441,34 @@ inline std::vector<Func> offset_path(const std::vector<ApproximationResult> &rs)
     return {};
 }
 
+// The codes the dot reads (offset_path()'s) split as offset + unsigned, to
+// stage the unsigned ones: {offset + u, u} (u decoded from the path's inputs,
+// the offset cancelled), dot's calls of the codes (once it calls them
+// directly) redirected to the former; or none.
+inline std::pair<Func, Func> offset_codes(Func dot, const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> path = offset_path(rs);
+    if (path.empty()) return {};
+    Func q;
+    for (Func f : rs[0].decoded_components(tag::codes)) {
+        if (has(path, f.name())) q = f;
+    }
+    auto calls = Internal::find_direct_calls(dot.function());
+    if (!calls.count(q.name())) return {};
+    std::vector<Var> as = q.args();
+    std::vector<Expr> es(as.begin(), as.end());
+    Func full(Internal::unique_name(q.name() + "_full"));
+    full(as) = q(es);
+    full.eager_inline(path);
+    Expr e = simplify(full.value());
+    const auto *a = e.as<Internal::Add>();
+    if (!a || !Internal::is_const(a->b)) return {};
+    Func u(Internal::unique_name(q.name() + "_unsigned")), o(Internal::unique_name(q.name() + "_offset"));
+    u(as) = a->a;
+    o(as) = u(es) + a->b;
+    dot.function().substitute_calls(calls.at(q.name()), o.function());
+    return {o, u};
+}
+
 // Does f's increment (a product) have a factor free of its RVars?
 inline bool invariant_factor(Func f) {
     Expr v = Internal::substitute_in_all_lets(f.update_value());
@@ -512,18 +540,31 @@ struct Sums {
     bool sub_sums = false;                  // d.sum sums the act's sub-block sums (no part)
     bool offsets = false;                   // a constant code offset's (offset_path())
     int offset_lanes = 8;                   // (offsets: d.part's vector)
+    Func unsigned_codes;                    // (offsets, split: offset_codes()'s)
 };
-inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true) {
+// `owner` (s's Func): a constant code offset folded with the codes split
+// (offset_codes()), the unsigned ones left a Func (d.unsigned_codes).
+inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}, bool fold = true,
+                         Func owner = Func()) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty()) return false;
     std::vector<Func> dec = without(decoders(rs, all_but({tag::codes}), 0, 1), kept);
     std::vector<Func> path = fold ? offset_path(rs) : std::vector<Func>{};
+    std::vector<Func> group = decoders(rs, only({tag::codes}), 0, 1);
     bool offsets = !path.empty();
     if (!offsets && !affine(rs)) return false;
     d.offsets = offsets;
     s.eager_inline(dec);
+    if (offsets && owner.defined()) {
+        auto [o, u] = offset_codes(owner, rs);
+        if (o.defined()) {
+            path = {o};
+            group = {u};
+            d.unsigned_codes = u;
+        }
+    }
     if (offsets) s.eager_inline(path);
-    FuncVec parts = s.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
+    FuncVec parts = s.hoist_invariants({group});
     if (!parts[1].defined() && offsets) {  // no exact split (iq1's delta): no fold
         d = Sums();
         return false;
@@ -1386,7 +1427,13 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     keep.insert(keep.end(), ac.begin(), ac.end());
     Sums d;
     Func acc = dot;
-    if (derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, keep, k.fold == Fold::All)) acc = d.with;
+    // a constant code offset always folded (whatever fold_offsets), as
+    // GGML's: the unsigned codes staged (q6_K 9.2 -> 7.1 ms, q3_K)
+    if (derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, keep, true, dot)) acc = d.with;
+    if (d.unsigned_codes.defined()) {
+        wc = {d.unsigned_codes};
+        keep.push_back(d.unsigned_codes);
+    }
     if (sub <= per) sub = 0;
     sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxi, per) : s.split(r.x, rxc, rxi, per);
     Func blk = s.rfactor(ry, u);
@@ -1415,11 +1462,18 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     inner.update().reorder(rxi, m, n, rxc).atomic().vectorize(rxi).vectorize(m).unroll(n).unroll(rxc);
     // the weight's codes decoded per block, the act's staged up front
+    std::vector<Func> wd = rs[0].decode_funcs();
+    bool lut = std::any_of(wd.begin(), wd.end(), [&](const Func &f) { return tabulate(rs[0], f, true); });
     for (Func f : wc) {
         if (!calls(inner, f)) continue;
         Func w = f.clone_in(inner);  // (a clone: each tile's tables clone in its own)
         readers.push_back(w);
-        w.compute_at(blocks).vectorize(w.args()[0], t.natural_vector_size<int8_t>()).unroll(w.args()[2]);
+        // (unrolled, the sub-blocks' bit field positions constant, not a
+        // shift per lane widened to 32 bits: q6_K 7.1 -> 4.5 ms, q2_K 5.0 ->
+        // 4.3, q5_K 4.8 -> 4.1; not a table's index: iq3_s 3% slower)
+        Var wk = w.args()[0], wko("wko"), wki("wki");
+        w.compute_at(blocks).split(wk, wko, wki, t.natural_vector_size<int8_t>()).vectorize(wki).unroll(w.args()[2]);
+        if (!lut) w.unroll(wko);
     }
     for (Func f : ac) {
         if (!calls(inner, f)) continue;
