@@ -45,6 +45,9 @@ public:
     // grid index bytes read as is (iq3_xxs's qs) staged a word at a time in
     // GPRs (see ggml::staged_indices; else a load each)
     GeneratorParam<bool> plain_index_words{"plain_index_words", true};
+    // CUDA's gemm on blocked weights: one warp per block below M = 128 (see
+    // ggml::cuda_shapes)
+    GeneratorParam<bool> cuda_one_warp{"cuda_one_warp", false};
 
     void configure() {
         // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
@@ -233,7 +236,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {

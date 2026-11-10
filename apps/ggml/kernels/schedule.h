@@ -219,7 +219,7 @@ struct Knobs {
     int interleave = 2;
     bool sublanes = false, gpr_scales = false;
     Fold fold = Fold::All;
-    bool row_pairs = true, index_words = false, plain_index_words = true;
+    bool row_pairs = true, index_words = false, plain_index_words = true, cuda_one_warp = false;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -1908,7 +1908,8 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
 // The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
 // rows of `cols` columns, the widest cols <= 8 that M allows (gemv: nr rows
 // of one column); N < nr * sg, a row per threadgroup. Edge tiles shift in.
-inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows) {
+// `sg8`: the simdgroups of the 8-column tiles' threadgroups, if not sg.
+inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows, int sg8 = 0) {
     Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi");
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     auto tile = [&](Stage o, int rows, int groups, int cols) {
@@ -1922,7 +1923,7 @@ inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<
     };
     Stage big = Stage(out).specialize(N >= nr * sg);
     for (int cols = 8; cols > 1; cols--) {
-        tile(big.specialize(M >= cols), rows(cols), sg, cols);
+        tile(big.specialize(M >= cols), rows(cols), cols == 8 && sg8 ? sg8 : sg, cols);
     }
     tile(big, nr, sg, 1);
     tile(Stage(out), 1, 1, 1);
@@ -1990,7 +1991,7 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // codes (its min's term; CUDA: dp4a by ones, reusing the codes' loads: q4_1,
 // q5_1, q4_K, q5_K at M = 8 1.6-2.4x).
 inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
-                       bool integer = false) {
+                       bool integer = false, int sg = 2) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -2000,7 +2001,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         bits++;
     if (block != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
     const int run = 3, vals = std::min(5, bits - 1);
-    const int nr = std::max(1, 4 >> (vals - 4)), sg = 2;
+    const int nr = std::max(1, (8 >> (vals - 4)) / sg);
     // the bits each kind: run, shared, the lane's
     enum Kind { Run,
                 Shared,
@@ -2022,7 +2023,9 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     }
     // (integer: 4 rows at every M; at M = 8 2 rows 0.72-0.89x, 8 rows
     // 0.74-1.07x; RTX A4500)
-    metal_tiles(out, dot, nr, sg, [=](int cols) { return cols > 4 && !integer ? 2 : 4; });
+    // (8 columns: 2 warps a block also where the gemv takes one; CUDA, q4_K
+    // on f32 acts at 4096^2 x 64..512 1.05-1.08x)
+    metal_tiles(out, dot, nr, sg, [=](int cols) { return cols > 4 && !integer ? 2 : 4; }, std::max(sg, 2));
     // (integer: the gemv's lanes at every M, their runs the dp4a's)
     if (!integer) {
         Var lx("lx");
@@ -2190,8 +2193,8 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
 // values of every 32 * c (coalesced; merged into half4/float4 loads), each
 // output a scalar accumulator (float4 ones spill for M > 1). Staged acts get
 // a kernel of their own (inlined, every tile would encode its columns).
-inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged) {
-    const int nr = 2, sg = 2, c = 16;
+inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged, int sg = 2) {
+    const int nr = 4 / sg, c = 16;
     Var n = out.args()[0], m = out.args()[1], ns("ns"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), rl("rl"), ryi("ryi");
     metal_tiles(out, dot, nr, sg, [](int) { return 4; });
@@ -2237,12 +2240,32 @@ inline bool f32_operands(Func dot, Func x, const std::vector<ApproximationResult
 
 // A GPU gemm's tile shape under `cond` (Expr(): the rest): a block of wn x wm
 // warps (Metal: simdgroups), each tn x tm fragments; `guard`: one tile, its
-// stores guarded (gpu_staged()).
+// stores guarded (gpu_staged()); `kstep`: the values of K staged per step.
 struct GemmShape {
     Expr cond;
     int tn, tm, wn;
     bool guard = false;
-    int wm = 1;
+    int wm = 1, kstep = 64;
+};
+
+// How gpu_staged() stages a step's operands in shared memory: each lane
+// stores `vec` values of K at once; `pad`: a row's storage is its step's
+// values and `pad` more (CUDA: a row a multiple of 128 bytes after the last
+// puts a fragment's rows in the same banks, and its loads conflict: 8 values
+// more on f16 x f16 at 4096 x 4096 x 64, 128 x 64 tiles: 0.22 -> 0.18 ms; RTX
+// 3090); wcopy, xcopy: the weights, the acts are their input as stored,
+// copied by the copy engine (MemoryType::GPUSharedAsync: 0.18 -> 0.13 ms);
+// xroot: the acts are encoded once per call, in a kernel of their own, and
+// its output copied (each tile otherwise encodes its rows of them: f16 on
+// f32:f16 acts at 4096 x 4096 x 16 0.066 -> 0.046 ms, x 512 0.47 -> 0.31);
+// xasync: the acts' copies are the copy engine's too (beside weights decoded
+// in the kernel, plain loads: q4_0:f16 on f16 acts at 4096 x 4096 x 32 0.073
+// -> 0.058 ms, on f32:f16 acts 0.074 -> 0.064); sub16: super-blocks' weights
+// on the one-fragment tiles 16 values a lane, a sub-block's scale decoded
+// once per 16 (q4_K:f16 at M = 16 0.066 -> 0.060 ms).
+struct Staging {
+    int vec = 4, pad = 0;
+    bool wcopy = false, xcopy = false, xroot = false, xasync = true, sub16 = false;
 };
 
 // Metal's shapes, of 8 x 8 fragments, by M: 64 x 64 on blocked f16 operands
@@ -2267,28 +2290,55 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
     return shapes;
 }
 
-// CUDA's shapes, of wmma's 16 x 16 fragments, by M: on blocked weights 64 x
-// 128 of 2 x 2 warps (M >= 256), decoding each weight once per 128 act rows
-// (4096^2 x 256..512 vs 128 x 64: q6_K/q3_K/q5_0 1.2-1.4x, iq4_xs 1.18x,
-// q4_K/q2_K 1.03-1.09x; at M = 64..128 0.7-1.2x; f16 0.96x); 32 x 64 of 2 x
-// 2 warps at M = 64..128 (f16: < 80), 4x the blocks of 128 x 64 (4096^2,
-// us, M = 64: q6_K 204 -> 111, q4_0 175 -> 125, f16 117 -> 94; M = 128: q6_K
-// 232 -> 187, q4_K 164 -> 160; f16 at M = 80 126 -> 134; M = 192 1.0-1.6x
-// slower); 128 x 64 (M >= 64, N >= 128), 16 x 32 of 1 x 2 warps, 32 x 16
-// (gpu_gemm's min_m: 16; f16 weights: 2, M < 16 one 32 x 16 tile of 2
-// warps, guarded: 4096^2 x 8 152 -> 76us, x 4 105 -> 75, cuBLAS 77-79; one
-// warp 1.05x slower; at M = 1 as the rows). (M =
-// 32, f16 acts, 4096^2: 16 x 32 vs 32 x 32 of 2 x 2 warps q4_K 94 -> 77us)
-// (f16, 4096^2 x 512, us: 128 x 64 of 4 warps 322; 256 x 64 of 8 warps 487,
-// 128 x 64 of 8 warps 468, 256 x 32 of 8 warps 527; RTX A4500)
-inline std::vector<GemmShape> cuda_shapes(Func out, const Formats &fmt) {
+// CUDA's shapes, of wmma's 16 x 16 fragments, by M. Weights staged by the
+// copy engine (`copied`; f16 x f16 at 4096 x 4096), each warp one fragment of
+// N: 4 warps of 16 x 64 from M = 128 (M = 128 0.097 ms, 512 0.31; 8 warps
+// of 16 x 32 0.097, 0.34; 4 of 32 x 64 0.13, 0.34), of 16 x 32 from 64 on
+// 128-value steps (0.060; 64-value 0.073), below 2 warps of 16 x 16 (M = 16
+// 0.045 on 256-value steps, 0.052 on 128; M = 32 0.048 on 128). A block's
+// time is its steps' (a step's loads take ~1-2 us to arrive, whatever their
+// size), so few rows of M take long steps; its shared memory (48 KB) bounds
+// them. Below 16 rows one 16-row tile, guarded (M = 2..15 0.046-0.047 ms; the
+// rows 0.048 at M = 2, 0.065 at 4, 0.111 at 8); from 17 to 31 one of 32 rows
+// (0.057; two of 16, the second shifted, 0.065). Flat weights converted in
+// the kernel (f32:f16): one warp per block of as many rows of M as it has
+// accumulators for, 2 warps from M = 256 (f32:f16 on f32:f16 acts, M = 32:
+// 0.087 ms; 128: 0.164; 512: 0.42), to M = 16 on 256-value steps (0.088; on
+// 128-value steps 0.103), below 16 rows on a guarded tile (M = 15: 0.094; the
+// rows 0.25). Blocked weights (`block` > 1), decoded in the kernel: 64 x 128
+// of 2 x 2 warps from M = 256, each weight decoded once per 128 act rows; 128
+// x 64 of 4 x 1 above 128; 32 x 64 of 2 x 2 from 64; 16 x 32 of 1 x 2 from
+// 32; below one warp's 16 x 16 on 128-value steps. (ms at M = 16, 32, 64,
+// 128, 512 on f32:f16 acts: q4_0:f16 0.056, 0.064, 0.098, 0.117, 0.40; one
+// warp per block of 16 x 16 to 16 x 64, two of 16 x 128 from 256, 0.061,
+// 0.069, 0.098, 0.130, 0.42; q4_K:f16 0.054, 0.058, 0.083, 0.112, 0.40
+// against 0.067, 0.073, 0.093, 0.152, 0.45; q6_K:f16 0.078, 0.064, 0.083,
+// 0.131, 0.44 against 0.082, 0.091, 0.114, 0.158, 0.62.) `one_warp`: one warp
+// of 16 x 16 to M = 63 and of 16 x 32 to 127 (q8_0:f16 M = 32 0.084 -> 0.067,
+// 64 0.117 -> 0.091; q5_0:f16 alike). (RTX 3090)
+inline std::vector<GemmShape> cuda_shapes(Func out, bool copied, int block, bool one_warp = false) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
-    std::vector<GemmShape> shapes;
-    if (fmt.block == 1) shapes.push_back({M < 16, 1, 1, 2, true});
-    if (fmt.block > 1) shapes.push_back({M >= 256 && N >= 64, 2, 4, 2, false, 2});
-    shapes.push_back({M >= 64 && (fmt.block > 1 ? M <= 128 : M < 80), 1, 2, 2, false, 2});
-    shapes.insert(shapes.end(), {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 1, 1, false, 2}, {Expr(), 1, 1, 2}});
-    return shapes;
+    auto shape = [](Expr cond, int tn, int tm, int wn, bool guard = false, int kstep = 64, int wm = 1) {
+        GemmShape sh{cond, tn, tm, wn, guard, wm};
+        sh.kstep = kstep;
+        return sh;
+    };
+    if (copied) {
+        return {shape(M >= 128 && N >= 64, 1, 4, 4), shape(M >= 64 && N >= 64, 1, 2, 4, false, 128), shape(M >= 32, 1, 1, 2, false, 128),
+                shape(M > 16, 1, 2, 2, true, 128), shape(M >= 16, 1, 1, 2, false, 256), shape(Expr(), 1, 1, 2, true, 256)};
+    }
+    if (block > 1) {
+        std::vector<GemmShape> shapes{shape(M >= 256 && N >= 64, 2, 4, 2, false, 64, 2), shape(M > 128 && N >= 128, 2, 4, 4)};
+        if (one_warp) {
+            shapes.insert(shapes.end(), {shape(M >= 128, 1, 2, 2, false, 64, 2), shape(M >= 64, 1, 2, 1)});
+        } else {
+            shapes.insert(shapes.end(), {shape(M >= 64, 1, 2, 2, false, 64, 2), shape(M >= 32, 1, 1, 1, false, 64, 2)});
+        }
+        shapes.push_back(shape(Expr(), 1, 1, 1, false, 128));
+        return shapes;
+    }
+    return {shape(M >= 256, 1, 8, 2), shape(M >= 128, 1, 4, 1), shape(M >= 64, 1, 2, 1), shape(M > 16, 1, 1, 1, false, 128),
+            shape(M >= 16, 1, 1, 1, false, 256), shape(Expr(), 1, 1, 2, true, 256)};
 }
 
 // What gpu_staged() leaves to fragments(): the operands' copies in shared
@@ -2303,15 +2353,14 @@ struct Staged {
 // for `o` (out's specialization): the macro-kernel. A block (Metal: a
 // threadgroup) takes a bn x bm tile, its warps wn x wm sub-tiles of frag * tn
 // x frag * tm, each frag x frag an accumulator (fragments()). Per step of K
-// (kstep values) the operands are staged in shared memory. Tiles: the first of
-// `shapes` whose cond holds. Under a guarded shape, out reads the tile from a
-// shared copy (edge; a guarded store from Tile memory doesn't lower), its
-// stores guarded; the rows past M it computes read the last act row (the
-// algorithm clamps them). `pad`: the copies' rows that many values longer,
-// a block's rows adjacent (CUDA: rows of an odd number of 16 bytes, wmma's
-// loads free of bank conflicts).
+// (the shape's kstep values, or the largest of its halves down to 32, or a
+// block, that K is a multiple of) the operands are staged in shared memory
+// (`sg`). Tiles: the first of `shapes` whose cond holds. Under a guarded
+// shape, out reads the tile from a shared copy (edge; a guarded store from
+// Tile memory doesn't lower), its stores guarded; the rows past M it computes
+// read the last act row (the algorithm clamps them).
 inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                         const std::vector<GemmShape> &shapes, int frag, int kstep, int pad = 0) {
+                         const std::vector<GemmShape> &shapes, int frag, const Staging &sg = Staging()) {
     if (fmt.block % frag && fmt.block != 1) throw std::invalid_argument("gpu_staged: flat, or blocks of a multiple of frag values");
     // (names apart from the other specializations' loops, which compute
     // other Funcs at theirs)
@@ -2331,9 +2380,19 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
     for (Func f : clone_paths(ws, [&](const Func &f) { return staged.count(f.name()) > 0; })) {
         metal_lut(f, out, n);
     }
+    // Copied acts (sg.xcopy) under a guarded shape: the rows past M are no
+    // copy of the input's, so its tile copies a copy of them made by a
+    // kernel of its own (xg, realized under that shape only); the other
+    // shapes inline it.
+    const auto guarded = std::count_if(shapes.begin(), shapes.end(), [](const GemmShape &sh) { return sh.guard; });
+    Func xg;
+    if (sg.xcopy && guarded) xg = xh.in(xs);
     Stage sd = Stage(dot), su = dot.update();
-    std::function<void()> edged;
+    std::vector<std::function<void()>> edged;
+    // the steps of K by their conditions, first first
+    std::vector<std::pair<Expr, int>> rows;
     for (const GemmShape &sh : shapes) {
+        const int kstep = sh.kstep;
         const int bn = frag * sh.tn * sh.wn, bm = frag * sh.tm * sh.wm;
         auto tile = [&](Stage st) {
             if (sh.guard) st.tile({n, m}, {nw, mw}, {ni, mi}, {frag * sh.tn, frag * sh.tm}, {TailStrategy::Auto, TailStrategy::RoundUp});
@@ -2346,10 +2405,11 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             Var sw("mm_sw");
             so.split(n, n, ni, bn, TailStrategy::ShiftInwards).split(m, m, mi, bm / sh.wn, TailStrategy::GuardWithIf).split(m, m, sw, sh.wn, TailStrategy::RoundUp).reorder(ni, mi, sw, n, m);
             so.gpu_blocks(n, m).gpu_lanes(ni).gpu_threads(sw);
-            edged = [=]() mutable {
+            // (edge's tile under the shape's cond, where several guard)
+            edged.push_back([=]() mutable {
                 edge.compute_at(out, n).store_in(MemoryType::GPUShared);
-                tile(edge);
-            };
+                tile(guarded > 1 && sh.cond.defined() ? Stage(edge).specialize(sh.cond) : Stage(edge));
+            });
         } else {
             so.eager_inline(edge);
             so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, frag * sh.tn, frag * sh.tm).tile(ni, mi, nt, mt, frag, frag);
@@ -2359,7 +2419,10 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
         Stage u = su.specialize(sh.cond);
         // ks: the steps of K; kb: their blocks (or, for blocks longer than a
         // step or flat, ko: the step's fragment-long pieces)
-        auto steps = [&](Stage st, int step) {
+        auto steps = [&](Stage st, int step, Expr whole = Expr()) {
+            Expr c = sh.cond.defined() ? sh.cond : Internal::const_true();
+            rows.emplace_back(whole.defined() ? c && whole : c, step);
+            if (whole.defined()) st = st.specialize(whole);
             tile(st);
             if (fmt.block == 1) {
                 st.split(ry, ks, rxk, step).split(rxk, ko, kt, frag).reorder(kt, nt, mt, ni, mi, ko, rx, nw, mw, ks);
@@ -2370,14 +2433,11 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             }
             st.unroll(ko).atomic().vectorize(kt);
         };
-        if (fmt.block == 1) {
-            steps(u.specialize(nb % kstep == 0), kstep);
-            steps(u, kstep / 2);  // (gpu_gemm: K % 32 == 0)
-        } else {
-            if (fmt.block < kstep) steps(u.specialize(nb % (kstep / fmt.block) == 0), kstep);
-            steps(u, std::min(fmt.block, kstep));
+        for (int st = kstep; st > std::max(fmt.block, 32); st /= 2) {
+            steps(u, st, nb % (st / fmt.block) == 0);
         }
-        // each lane 4 values of K of a row of the step's weights or acts
+        steps(u, fmt.block == 1 ? 32 : std::min(fmt.block, kstep));  // (gpu_gemm: flat K % 32 == 0)
+        // each lane sg.vec values of K of a row of the step's weights or acts
         // (blocked (j, b, i) or flat (k, i)), unrolled (f32 acts on 64 x 56
         // 0.92 -> 1.0x of GGML's); two-level weights on the M >= 256 tiles
         // 16, as GGML's dequantize_q4_K etc., decoding a sub-block's scale
@@ -2387,15 +2447,13 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             std::vector<Var> a = f.args();
             Var l("l"), ln("ln"), lt("lt"), sw("sw"), jv("jv");
             Stage s = f.specialize(sh.cond);
+            if (xg.defined() && !sh.guard && f.name() == xs.name()) s.eager_inline(xg);
             if (f.name() == ws.name() && fmt.sub && sh.tn > 1) {
                 Var ju("ju"), jh("jh");
                 s.split(a[0], l, jv, 32).split(jv, jh, jv, 16).split(jv, ju, jv, 4).fuse(jh, l, l).unroll(ju);
             } else {
-                // (padded: 16 bytes a lane; super-blocks' weights on the
-                // one-fragment tiles 16 values, q4_K/q6_K M = 16 1.16-1.46x,
-                // q4_0/f16 0.9x; RTX A4500)
-                int wv = f.name() == ws.name() && fmt.block >= 256 && sh.tn == 1 ? 16 : 16 / f.type().bytes();
-                s.split(a[0], l, jv, pad ? wv : 4);
+                // (super-blocks' weights on the one-fragment tiles: 16 values)
+                s.split(a[0], l, jv, sg.sub16 && f.name() == ws.name() && fmt.block >= 256 && sh.tn == 1 ? 16 : sg.vec);
             }
             for (size_t i = 1; i < a.size(); i++) {
                 Var fl("l" + std::to_string(i));
@@ -2409,14 +2467,25 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             s.unroll(lt);
         }
     }
-    if (edged) edged();
+    for (auto &e : edged) {
+        e();
+    }
+    if (xg.defined()) {
+        Var k = xh.args()[0], ko("ko"), kv("kv");
+        xg.compute_at(out, Var::outermost()).split(k, ko, k, 256, TailStrategy::GuardWithIf).split(k, k, kv, sg.vec).vectorize(kv).gpu_blocks(ko, xh.args()[1]).gpu_threads(k);
+    }
     dot.compute_at(out, n);
     for (Func f : {ws, xs}) {
-        f.compute_at(dot, ks).store_in(MemoryType::GPUShared);
-        if (!pad) continue;
-        std::vector<Var> a = f.args();
-        f.bound_storage(a[0], (a.size() == 2 ? kstep : std::min(fmt.block, kstep)) + pad);
-        if (a.size() == 3) f.reorder_storage(a[0], a[2], a[1]);
+        const bool copy = f.name() == ws.name() ? sg.wcopy : (sg.xcopy || sg.xroot) && sg.xasync;
+        f.compute_at(dot, ks).store_in(copy ? MemoryType::GPUSharedAsync : MemoryType::GPUShared);
+        if (!sg.pad) continue;
+        // a row's storage along K: the values of its step (blocked: of one
+        // of its blocks) and sg.pad more
+        Expr row = 0;
+        for (auto it = rows.rbegin(); it != rows.rend(); ++it) {
+            row = select(it->first, (f.args().size() == 2 ? it->second : std::min(it->second, fmt.block)) + sg.pad, row);
+        }
+        f.align_storage(f.args()[0], row);
     }
     return {ws, xs, wf, xf, ks, ko};
 }
@@ -2447,30 +2516,47 @@ inline void fragments(const Staged &st, Func dot, int frag) {
 
 // GPU on f16 or f32 operands: gpu_staged() on `shapes` of frag x frag
 // fragments() where M >= min_m and N >= 32 (flat:
-// K % 32 == 0 and, on Metal, M * N >= 2^16; below it flat's rows win,
-// 1.2-2.6x at M = 8..32, N = 512..2048), else metal_rows (flat: metal_flat) on a clone of
+// K % 32 == 0 and `large`, else M * N >= 2^16: below it flat's rows win on
+// Metal, 1.2-2.6x at M = 8..32, N = 512..2048), else metal_rows (flat: metal_flat) on a clone of
 // dot, one kernel but flat's staged acts. min_m on Metal: 8 (GGML's; on f32
 // at M = 8..15 the gemm takes 0.59-1.0x of the rows' time, iq4_nl's at M =
-// 8 1.04x; M3 Max).
+// 8 1.04x; M3 Max). n_align: the gemm only where N is a multiple of it. A
+// tile's accumulators are stored straight to out, whose rows are N apart, the
+// tiles at multiples of frag or shifted in from N: CUDA's wmma.store wants
+// each fragment's rows 32 bytes aligned (an RTX 3090 faults on rows not 8
+// bytes aligned: CUDA_ERROR_MISALIGNED_ADDRESS), i.e. N % 8 == 0. `sg`: the
+// rows' warps per block (metal_rows(), metal_flat()); `staging`: gpu_staged()'s.
 inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
-                     const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}, int pad = 0) {
+                     const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}, int n_align = 1, int sg = 2, const Staging &staging = Staging(),
+                     Expr large = Expr()) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
     // once, reading edge (dot's copy, inlined unless guarded); then via reads
     // pass, reading the clone, and the other branches inline both
     Func via = dot.in(out), edge = dot.in(via);
     Expr cond = M >= min_m && N >= 32;
-    if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && (frag == 16 || cast<int64_t>(M) * N >= (1 << 16));
+    if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && (large.defined() ? large : cast<int64_t>(M) * N >= (1 << 16));
+    if (n_align > 1) cond = cond && N % n_align == 0;
     Stage mm = Stage(out).specialize(cond).eager_inline(via);
     Func pass = edge.clone_in(via);
     Func rows = dot.clone_in(pass);
     out.eager_inline(via, pass);
-    fragments(gpu_staged(mm, out, dot, edge, wh, xh, r, fmt, rs, shapes, frag, 64, pad), dot, frag);
+    fragments(gpu_staged(mm, out, dot, edge, wh, xh, r, fmt, rs, shapes, frag, staging), dot, frag);
     // the rows' luts, staged before metal_rows inlines the decoders (else
     // its gemv inlines them: select trees)
     metal_luts(out, rs);
+    // the gemm's acts encoded in a kernel of their own (staging.xroot; as
+    // metal_flat()'s, scheduled after the rows' clones of them), realized in
+    // out's gemm branches (at the root, the rows' calls would set up its
+    // buffer too)
+    auto root_acts = [&]() {
+        if (!staging.xroot) return;
+        Var k = xh.args()[0], em = xh.args()[1], ko("ko"), kv("kv");
+        xh.compute_at(out, Var::outermost()).split(k, ko, k, 256, TailStrategy::GuardWithIf).split(k, k, kv, 4).vectorize(kv).gpu_blocks(ko, em).gpu_threads(k);
+    };
     if (fmt.block > 1) {
-        metal_rows(out, rows, r, fmt.block, rs, fmt.sub, !fmt.wcompute);
+        metal_rows(out, rows, r, fmt.block, rs, fmt.sub, !fmt.wcompute, false, sg);
+        root_acts();
         return;
     }
     // the rows' own staged acts (their kernel skipped under the gemm, whose
@@ -2479,7 +2565,8 @@ inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const 
     for (const Func &e : staged) {
         names.insert(e.name());
     }
-    metal_flat(out, rows, r, clone_paths(rows, [&](const Func &f) { return names.count(f.name()) > 0; }));
+    metal_flat(out, rows, r, clone_paths(rows, [&](const Func &f) { return names.count(f.name()) > 0; }), sg);
+    root_acts();
 }
 
 // Rowwise formats (schemes/kleidiai.h: qsi8cx weights, qai8dx acts): one
@@ -2629,31 +2716,51 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, Func x, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
     luts(rs, !t.has_gpu_feature(), t);
-    // GPUs: Metal's schedules, on CUDA with wmma's 16 x 16 fragments (a
-    // warp is a simdgroup: 32 lanes); f32 operands' gemm on Metal only
+    // GPUs: Metal's schedules, on CUDA with wmma's fragments (a warp is a
+    // simdgroup: 32 lanes). Metal's matrix unit: 8 x 8 fragments of f16 or
+    // f32, from M = 8. CUDA's (wmma): 16 x 16 fragments of f16 or bf16 (none
+    // of f32), blocked weights from M = 16 (q4_K:f16 at 4096 x 4096 x 16 113
+    // us on the rows, 64 on the gemm; iq2_xs:f16 131, 62; RTX 3090), flat
+    // ones from 2 (f32: 8) on guarded tiles (cuda_shapes()), where N % 8 == 0
+    // (gpu_gemm's n_align). The rows: 2 warps (simdgroups) per block on
+    // Metal, 1 on CUDA (integer rows: 2).
     if (t.has_feature(Target::Metal) || t.has_feature(Target::CUDA)) {
         const bool metal = t.has_feature(Target::Metal);
         const std::string gpu = metal ? "metal: " : "cuda: ";
-        const int frag = metal ? 8 : 16, min_m = metal ? 8 : (fmt.block == 1 ? 2 : 16);
-        auto shapes = [&](Func wh) { return metal ? metal_shapes(out, wh, fmt) : cuda_shapes(out, fmt); };
+        const int sg = metal ? 2 : 1;
         if (acc.defined()) throw std::invalid_argument(gpu + "dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
         Func wh, xh;
-        if (f16_operands(rs, staged, fmt, wh, xh, !metal)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged, metal ? 0 : 8);
+        if (!metal && f16_operands(rs, staged, fmt, wh, xh, true)) {
+            // CUDA stages 16 bytes per lane, the rows 8 values apart from
+            // the banks' period; f16 and bf16 operands as stored are copied,
+            // acts encoded here (f32:f16) from a kernel of their own
+            // (blocked weights: the acts' copies plain loads, super-blocks'
+            // weights 16 values a lane on the one-fragment tiles)
+            const Staging cs{8, 8, !fmt.wcompute, staged.empty(), !staged.empty(), fmt.block == 1, fmt.block > 1};
+            // The flat gemm from M * N = 2^13 (f16 x f16 at 4096 x 1024 x 8
+            // 0.028 ms, the rows 0.031; x 32 0.035, 0.111; 2048 x 2048 x 4
+            // 0.018, 0.020; at 4096 x 1024 x 4 the rows 0.022), f32 weights'
+            // guarded tiles (M < 16) from 2^15 and M = 8 (f32:f16 at 4096 x
+            // 4096 x 8 0.101, the rows 0.129, x 4 0.101, 0.089; 4096 x 1024 x
+            // 8 0.058, 0.046; 2048 x 512 x 16 0.017, 0.024). (RTX 3090)
+            Expr M = out.output_buffer().dim(1).extent(), MN = cast<int64_t>(M) * out.output_buffer().dim(0).extent();
+            Expr large = cs.wcopy ? MN >= (1 << 13) : (M >= 16 && MN >= (1 << 13)) || (M >= 8 && MN >= (1 << 15));
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp), 16, staged, 8, sg, cs, large);
             return;
         }
-        if (metal && f32_operands(dots[0], x, rs, staged, fmt, wh, xh)) {
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, min_m, shapes(wh), frag, staged);
+        if (metal && (f16_operands(rs, staged, fmt, wh, xh) || f32_operands(dots[0], x, rs, staged, fmt, wh, xh))) {
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, 8, metal_shapes(out, wh, fmt), 8, staged);
             return;
         }
         if (fmt.block == 1) {
-            metal_flat(out, dots[0], r, staged);
+            metal_flat(out, dots[0], r, staged, sg);
             return;
         }
         if (!staged.empty() || fmt.wcompute) throw std::invalid_argument(gpu + "blocked weights on acts stored as computed, or a weight compute format without f16 acts");
         metal_luts(out, rs);
-        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, !metal && fmt.act_block == fmt.block);
+        const bool integer = !metal && fmt.act_block == fmt.block;
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg);
         return;
     }
     if (fmt.rowwise) {

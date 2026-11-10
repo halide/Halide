@@ -256,6 +256,10 @@ set(GGML_SCHEDULE_PARAMS
     "[x86] iq3_xxs mul_mat * plain_index_words=false"
     "[x86] iq3_xxs mul_mat q8_K sublanes=false"
     "[x86] iq3_xxs mul_mat f32:q8_K sublanes=false"
+    # RTX 3090: the CUDA gemm's one-warp tiles below M = 128 (4096^2, f32:f16
+    # acts, M = 32 / 64: q8_0:f16 0.084 -> 0.067 / 0.117 -> 0.091 ms; q5_0:f16
+    # 0.081 -> 0.079 / 0.117 -> 0.102). No effect on the Metal libraries.
+    "q8_0:f16 mul_mat * cuda_one_warp=true" "q5_0:f16 mul_mat * cuda_one_warp=true"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the
