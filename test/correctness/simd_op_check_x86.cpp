@@ -118,6 +118,13 @@ public:
             Expr signed_byte = i8(in_u8(4 * x + r + 32) / 2) * sign((4 * x + r) % 16);
             check("vpabsb*ymm", 8, sum(i32(in_i8(4 * x + r)) * signed_byte));
         }
+        if (target.has_feature(Target::AVX512_Skylake)) {
+            // A byte's bit at a constant position per lane (sign bits, 8 a
+            // byte), times a byte: a test of the bit, then a blend.
+            Expr bit = i8((in_u8(x / 8) >> u8(x % 8)) % 2);
+            check("vptest*b*ymm", 32, in_i8(x) * (1 - bit * 2));
+            check("vptest*b*ymm", 32, in_i8(x) * bit);
+        }
     }
 
     void check_streaming_accesses() {
