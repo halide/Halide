@@ -925,6 +925,10 @@ void test() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    // The kernel's host target may use AMX, whose tiles Linux enables per
+    // process on request: the runtime's CPU feature detection asks.
+    uint64_t none[(halide_target_feature_end + 63) / 64] = {};
+    halide_can_use_target_features((halide_target_feature_end + 63) / 64, none);
     test_counting();
     test_unbalanced_release();
     test_many_small_loops();
