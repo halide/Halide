@@ -12,6 +12,9 @@
 //   CPU;
 // - make_block_q4_1x4: the harness's own x4 of q4_1, which GGML does not
 //   repack (Interleave's layout);
+// - interleave_fields: the harness's own 16x4 of q4_K, q5_K and iq4_xs
+//   (Interleave's layout: AMX's B tile, 16 rows' 4 bytes per K step; GGML's
+//   AMX buffer packs them its own way);
 // - ggml_repack_live: the bytes GGML itself repacks to, read back from its
 //   CPU_REPACK buffer (host memory; the buffer has no get_tensor), which
 //   cross-checks the transcription on the layout GGML picks here;
@@ -26,6 +29,7 @@
 
 #include "ggml-backend.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -449,6 +453,31 @@ void repack_rows(const B *src, uint8_t *out, int64_t nrow, int64_t nblocks, F ma
     }
 }
 
+// Records of `rows` rows as one, each field (its element bytes and count, in
+// memory order) in pieces of `chunk` bytes (or the whole field, if smaller)
+// from the rows in turn: Interleave::encode (schemes/layouts.h).
+void interleave_fields(const uint8_t *src, uint8_t *dst, int64_t nrow, int64_t nblocks, int rows, int chunk, const std::vector<std::pair<int, int>> &fields) {
+    size_t bs = 0;
+    for (auto [el, n] : fields) {
+        bs += el * n;
+    }
+    for (int64_t g = 0; g < nrow; g += rows) {
+        for (int64_t x = 0; x < nblocks; x++) {
+            size_t off = 0;
+            for (auto [el, n] : fields) {
+                int c = std::clamp(chunk / el, 1, n);
+                for (int p = 0; p < n / c; p++) {
+                    for (int r = 0; r < rows; r++) {
+                        memcpy(dst, src + ((g + r) * nblocks + x) * bs + off + p * c * el, c * el);
+                        dst += c * el;
+                    }
+                }
+                off += el * n;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K) {
@@ -487,6 +516,15 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
     }
     if (t == GGML_TYPE_Q6_K && f.codes.empty() && f.rows == 8 && c == 8 && N % 8 == 0 && K % QK_K == 0) {
         repack_rows<8>((const block_q6_K *)src, dst, N, K / QK_K, [c](block_q6_K *in) { return make_block_q6_Kx8(in, c); });
+        return true;
+    }
+    if (f.codes.empty() && f.rows == 16 && c == 4 && N % 16 == 0 && K % QK_K == 0) {
+        std::vector<std::pair<int, int>> fields;
+        if (t == GGML_TYPE_Q4_K) fields = {{2, 1}, {2, 1}, {1, 12}, {1, QK_K / 2}};
+        if (t == GGML_TYPE_Q5_K) fields = {{2, 1}, {2, 1}, {1, 12}, {1, QK_K / 8}, {1, QK_K / 2}};
+        if (t == GGML_TYPE_IQ4_XS) fields = {{2, 1}, {1, 2}, {1, QK_K / 64}, {1, QK_K / 2}};
+        if (fields.empty()) return false;
+        interleave_fields(src, dst, N, K / QK_K, 16, 4, fields);
         return true;
     }
     if (t != GGML_TYPE_Q4_0 || f.codes != "i4" || N % f.rows || K % QK4_0) return false;

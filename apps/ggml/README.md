@@ -261,7 +261,14 @@ GGML's `q6_K_8x8` (its 16 int8 scales per row regrouped across the rows, a
 sharing `ql`/`qh` bytes). With act records the gemm loops over such groups of
 sub-blocks (q4_K's pairs, q6_K's 128 values; fully unrolled, the codes' loads
 are scheduled early and spill), each unrolled with those reading the same bytes
-adjacent (`sharing_order`: q6_K's 0, 4, 2, 6, ...). An in-kernel activation
+adjacent (`sharing_order`: q6_K's 0, 4, 2, 6, ...). `q4_K.16x4`, `q5_K.16x4`
+and `iq4_xs.16x4` (new layouts, not GGML's byte formats; `Interleave{16, 4}`,
+the harness's `ggml_repack` transcribing it) put 16 rows' 4-byte pieces
+adjacent, AMX's B tile layout as GGML's AMX buffer prepacks them: on AMX
+(`blocked_amx`, `packed`) each block's codes decode in place to dense tiles
+(one 64-byte load and a nibble mask per tile row) shared by every sub-block's
+tile op and every 16-row M tile, for M = 8 and M >= 16; the rest of M runs the
+record gemv (`blocked_rows`). An in-kernel activation
 encoder runs first, parallel over activation rows when M > 1, and vectorized per
 encoded block (`encoder`: the block's reductions, e.g. its scale, across the
 block; per-value Funcs, e.g. the codes, across their values). Kernel ABI

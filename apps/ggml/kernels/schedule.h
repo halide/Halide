@@ -1403,9 +1403,11 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // Sub-blocks of `sub` values (GGML's AMX K-quant kernels): one tile op per
 // sub-block, its int32 result times the sub-block's scales (decoded per block,
 // a row's at a time), summed per block; the code-free term (mins) per block
-// across the columns, as blocked_cols().
+// across the columns, as blocked_cols(). `packed`: the weight's records
+// already in the B tile's layout (16 rows in 4-byte pieces): its codes
+// decoded per block, dense, in place, shared by every sub-block and M tile.
 inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block,
-                        const std::vector<ApproximationResult> &rs, const Target &t, int sub = 0, int act_sub = 0) {
+                        const std::vector<ApproximationResult> &rs, const Target &t, int sub = 0, int act_sub = 0, bool packed = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], u("u"), v("v");
     RVar ry = r.y, rx = r.x, rxs("rxs"), rxc("rxc");
@@ -1420,8 +1422,11 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     // s port), as GGML's AMX acc_C: one f32 product per block and output
     Sums sm;
     Func acc = dot;
-    // (sub-blocks: a constant code offset folded, as blocked_cols())
-    if (derived_sums(out, st, s, r, rs, sm, act_sub, sub > act_sub ? sub : 0, keep, sub != 0, sub ? dot : Func())) acc = sm.with;
+    // (sub-blocks: a constant code offset folded, as blocked_cols(); packed,
+    // signed codes without one left signed: tdpbssd, no bias to undo, iq4_xs
+    // 1.1-1.3x; transposed per sub-block, the bias is 1.06x faster at M = 8)
+    bool fold = sub && (!packed || !offset_path(rs).empty());
+    if (derived_sums(out, st, s, r, rs, sm, act_sub, sub > act_sub ? sub : 0, keep, sub != 0, fold ? dot : Func())) acc = sm.with;
     if (sm.unsigned_codes.defined()) {
         wc = {sm.unsigned_codes};
         keep.push_back(sm.unsigned_codes);
@@ -1517,8 +1522,9 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     // (the weight's codes, or their offline staged input: what codes calls
     // but the act's)
     Var ko("ko"), ki("ki");
-    // (sub-blocks: decoded per sub-block, a 512-byte transpose)
-    LoopLevel wat = sub ? tile : LoopLevel(acc, ry);
+    // (sub-blocks: decoded per sub-block, a 512-byte transpose; packed
+    // weights, already in AMX's layout: per block, dense, no transpose)
+    LoopLevel wat = sub && !packed ? tile : LoopLevel(acc, ry);
     std::vector<Func> wops, ds;
     for (const auto &kv : Internal::find_direct_calls(codes.function())) {
         bool act = kv.first == codes.name();
@@ -1529,7 +1535,15 @@ inline void blocked_amx(Func out, int st, Func dot, Expr cond, Tiles ts, const R
     for (Func f : wops) {
         // decoded in rows (dense, vectorized), then transposed in words
         // (a clone with tables: their rows staged for this tile's decode alone)
-        Func d = staged_tables(rs).empty() ? f.in(codes) : f.clone_in(codes), w = d.in(codes);
+        Func d = staged_tables(rs).empty() ? f.in(codes) : f.clone_in(codes);
+        if (packed) {
+            Var k = d.args()[0], b = d.args()[1], row = d.args()[2];
+            d.compute_at(wat).split_storage(k, ko, ki, 4).reorder_storage(ki, row, ko, b);
+            d.split(k, ko, ki, 4).reorder(ki, row, ko, b).vectorize(ki).vectorize(row).unroll(ko);
+            ds.push_back(d);
+            continue;
+        }
+        Func w = d.in(codes);
         Var k = w.args()[0], b = w.args()[1], row = w.args()[2];
         d.compute_at(wat).vectorize(d.args()[0]).unroll(d.args()[2]);
         w.compute_at(wat).split_storage(k, ko, ki, 4).reorder_storage(ki, row, ko, b);
@@ -2537,9 +2551,14 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     Tiles mmla8{4, 8, 1, 32, 32, true}, gemm{4, 4, 1, 32, 32, true}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // AMX: integer weights of one row per record (blocked_amx(); with sub-blocks, 8 <= M < 16 alone)
-    Tiles amx{16, 16, 1, 32, 32, true}, amx4{16, 64, 1, 32, 64, true}, amx8{16, 8, 1, 32, 32, true};
+    Tiles amx{16, 16, 1, 32, 32, true}, amx4{16, 64, 1, 32, 64, true}, amx8{16, 8, 1, 32, 32, true},
+        amx2{16, 32, 1, 32, 32, true};
     bool amx_ok = integer && t.has_feature(Target::AVX512_SapphireRapids) && !whole && fmt.rows == 1 && fmt.per == 1 &&
                   fmt.block % 4 == 0 && (fmt.block <= 64 || fmt.block % 64 == 0);
+    // (records of 16 rows in 4-byte pieces: AMX's B tile layout, as GGML's
+    // AMX buffer: M >= 16, and M = 8; the rest on the rows path, its gemv
+    // 1.3-1.6x GGML's AMX at M = 1, a 16-row tile op slower below M = 8)
+    bool amx_recs = integer && t.has_feature(Target::AVX512_SapphireRapids) && !whole && fmt.rows == 16 && fmt.chunk == 4 && fmt.per == 1 && fmt.block % 64 == 0;
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
     bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
@@ -2580,6 +2599,12 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(rm, M), rm, r, fmt.block, rr, t, true, fmt.sub, fmt.act_sub, true, whole, 1, k);
     } else if (mmla_ok) {
         blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, fmt.block, rs, t, true, fmt.sub, fmt.act_sub, false, false, 1, k);
+    } else if (amx_recs) {
+        // (8 < M < 16: the rows path; two 8-row tiles would overlap)
+        blocked_amx(out, 0, dr, fits(amx4, M), amx4, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, true);
+        blocked_amx(out, 0, dr, fits(amx2, M), amx2, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, true);
+        blocked_amx(out, 0, dr, fits(amx, M), amx, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, true);
+        blocked_amx(out, 0, dr, fits(amx8, M) && M % 8 == 0, amx8, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, true);
     } else if (amx_ok && !fmt.sub) {
         blocked_amx(out, 0, dr, fits(amx4, M), amx4, r, fmt.block, rs, t);
         blocked_amx(out, 0, dr, fits(amx, M), amx, r, fmt.block, rs, t);
