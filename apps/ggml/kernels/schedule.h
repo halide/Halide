@@ -1972,8 +1972,12 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 // CUDA's shapes, of wmma's 16 x 16 fragments, by M: on blocked weights 64 x
 // 128 of 2 x 2 warps (M >= 256), decoding each weight once per 128 act rows
 // (4096^2 x 256..512 vs 128 x 64: q6_K/q3_K/q5_0 1.2-1.4x, iq4_xs 1.18x,
-// q4_K/q2_K 1.03-1.09x; at M = 64..128 0.7-1.2x; f16 0.96x); 128 x 64 (M >=
-// 64, N >= 128), 16 x 32 of 1 x 2 warps, 32 x 16 (gpu_gemm's min_m: 16). (M =
+// q4_K/q2_K 1.03-1.09x; at M = 64..128 0.7-1.2x; f16 0.96x); 32 x 64 of 2 x
+// 2 warps at M = 64..128 (f16: < 80), 4x the blocks of 128 x 64 (4096^2,
+// us, M = 64: q6_K 204 -> 111, q4_0 175 -> 125, f16 117 -> 94; M = 128: q6_K
+// 232 -> 187, q4_K 164 -> 160; f16 at M = 80 126 -> 134; M = 192 1.0-1.6x
+// slower); 128 x 64 (M >= 64, N >= 128), 16 x 32 of 1 x 2 warps, 32 x 16
+// (gpu_gemm's min_m: 16). (M =
 // 32, f16 acts, 4096^2: 16 x 32 vs 32 x 32 of 2 x 2 warps q4_K 94 -> 77us)
 // (f16, 4096^2 x 512, us: 128 x 64 of 4 warps 322; 256 x 64 of 8 warps 487,
 // 128 x 64 of 8 warps 468, 256 x 32 of 8 warps 527; RTX A4500)
@@ -1981,6 +1985,7 @@ inline std::vector<GemmShape> cuda_shapes(Func out, const Formats &fmt) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     std::vector<GemmShape> shapes;
     if (fmt.block > 1) shapes.push_back({M >= 256 && N >= 64, 2, 4, 2, false, 2});
+    shapes.push_back({M >= 64 && (fmt.block > 1 ? M <= 128 : M < 80), 1, 2, 2, false, 2});
     shapes.insert(shapes.end(), {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 1, 1, false, 2}, {Expr(), 1, 1, 2}});
     return shapes;
 }
