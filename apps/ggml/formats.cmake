@@ -82,6 +82,7 @@ set(GGML_FORMATS
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
     "q4_0.soa codec,mul_mat q8_0,f32:q8_0"
+    "q4_1.4x8 codec,mul_mat q8_1,f32:q8_1"
     "q8_0.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"
     "iq4_nl.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"
     "mxfp4.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"

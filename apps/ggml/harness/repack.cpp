@@ -10,6 +10,8 @@
 //   src/ggml-cpu/repack.cpp (MIT License, Copyright (c) 2023-2024 The ggml
 //   authors), for every layout, including those GGML does not pick on this
 //   CPU;
+// - make_block_q4_1x4: the harness's own x4 of q4_1, which GGML does not
+//   repack (Interleave's layout);
 // - ggml_repack_live: the bytes GGML itself repacks to, read back from its
 //   CPU_REPACK buffer (host memory; the buffer has no get_tensor), which
 //   cross-checks the transcription on the layout GGML picks here;
@@ -163,6 +165,31 @@ block_sq4x4<S> make_block_sq4x4(block_sq4<S> *in, unsigned int blck_size_interle
         int src_offset = (i / 4) * blck_size_interleave;
         int dst_offset = i * blck_size_interleave;
         memcpy(&out.qs[dst_offset], &in[src_id].qs[src_offset], sizeof(uint32_t));
+    }
+    return out;
+}
+
+// block_q4_1 {f16 d; f16 m; u8 qs[16]}, which GGML does not repack: the
+// harness's own x4 (Interleave's layout, as make_block_sq4x4's with m after
+// d; its unsigned codes as they are).
+struct block_q4_1 {
+    uint16_t d, m;
+    uint8_t qs[QK4_0 / 2];
+};
+struct block_q4_1x4 {
+    uint16_t d[4], m[4];
+    uint8_t qs[QK4_0 * 2];
+};
+
+block_q4_1x4 make_block_q4_1x4(block_q4_1 *in, int blck_size_interleave) {
+    block_q4_1x4 out;
+    for (int i = 0; i < 4; i++) {
+        out.d[i] = in[i].d;
+        out.m[i] = in[i].m;
+    }
+    const int end = QK4_0 * 2 / blck_size_interleave;
+    for (int i = 0; i < end; ++i) {
+        memcpy(&out.qs[i * blck_size_interleave], &in[i % 4].qs[(i / 4) * blck_size_interleave], blck_size_interleave);
     }
     return out;
 }
@@ -444,6 +471,10 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
     }
     if (t == GGML_TYPE_MXFP4 && f.codes.empty() && f.rows == 4 && c == 4 && N % 4 == 0 && K % QK4_0 == 0) {
         repack_rows<4>((const block_sq4<uint8_t> *)src, dst, N, K / QK4_0, [c](block_sq4<uint8_t> *in) { return make_block_sq4x4(in, c); });
+        return true;
+    }
+    if (t == GGML_TYPE_Q4_1 && f.codes.empty() && f.rows == 4 && (c == 4 || c == 8) && N % 4 == 0 && K % QK4_0 == 0) {
+        repack_rows<4>((const block_q4_1 *)src, dst, N, K / QK4_0, [c](block_q4_1 *in) { return make_block_q4_1x4(in, c); });
         return true;
     }
     if (t == GGML_TYPE_Q1_0 && f.codes.empty() && f.rows == 4 && c == 1 && N % 4 == 0 && K % QK1_0 == 0) {
