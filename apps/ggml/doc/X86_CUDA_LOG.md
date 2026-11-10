@@ -136,3 +136,15 @@ App changes:
   7.2 (5.4), iq2_s 21.7 -> 7.7 (5.5), iq3_xxs 22.9 -> 7.2 (5.1), iq3_s 29.5 ->
   8.0 (5.5), iq1_s 19.1 -> 9.9 (5.0), iq1_m 21.1 -> 10.7 (6.5); f32 acts
   alike.
+- Offset formats in `blocked_cols()`: `offset_codes()` splits a weight's
+  decoded codes `base + c` (q6_K's -32, q3_K's, q2_K's) into a staged unsigned
+  Func `u` and `u + c`, so the staged weights feed plain `vpdpbusd` and the
+  offset folds through the act's bsums, as GGML's tiled gemm does (before:
+  signed staged codes, each dot `vpbroadcastd` + 2 `vpsignb` +
+  `vinserti64x4`, SPR having no zmm `vpsignb`). The cols gemm always folds,
+  whatever `fold_offsets` says. The staging splits K by the vector width and
+  unrolls the outer part (constant sub-block shifts, not per-lane u32
+  shifts), except for table-decoded formats (iq3_s 3% slower unrolled). One
+  thread, 4096^2, M = 32, ms (GGML): q6_K 9.2 -> 4.7 (5.9), q3_K 8.6 -> 5.7
+  (5.1), q2_K 5.0 -> 4.4 (5.1), q5_K 4.8 -> 4.1 (4.0), q4_K 3.7 (3.6); iq
+  formats unchanged.
