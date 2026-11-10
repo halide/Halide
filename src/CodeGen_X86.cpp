@@ -56,6 +56,7 @@ protected:
     void visit(const Add *) override;
     void visit(const Sub *) override;
     void visit(const Mul *) override;
+    void visit(const Mod *) override;
     void visit(const Cast *) override;
     void visit(const Call *) override;
     void visit(const GT *) override;
@@ -475,12 +476,65 @@ void CodeGen_X86::visit(const NE *op) {
     codegen(!(op->a == op->b));
 }
 
+namespace {
+
+// Free of variables and loads: a constant once LLVM folds it.
+bool is_constant_expr(const Expr &e) {
+    bool constant = true;
+    visit_with(e.get(), [&](auto *self, const Variable *) { constant = false; },  //
+               [&](auto *self, const Load *) { constant = false; });
+    return constant;
+}
+
+// An 8-bit vector's bits at constant, per-lane positions c, (x >> c) % 2 or
+// (x >> c) & 1, as a test of x & (1 << c): x86 has no byte shifts (LLVM
+// widens to words, shifts and packs; seven ops), but tests bytes in two.
+Expr byte_bit_test(const Expr &e) {
+    const Type &t = e.type();
+    if (!t.is_vector() || t.bits() != 8) {
+        return Expr();
+    }
+    Expr shifted;
+    if (const Mod *m = e.as<Mod>(); m && is_const(m->b, 2)) {
+        shifted = m->a;
+    } else if (const Call *c = Call::as_intrinsic(e, {Call::bitwise_and}); c && is_const_one(c->args[1])) {
+        shifted = c->args[0];
+    }
+    const Call *shift = Call::as_intrinsic(shifted, {Call::shift_right});
+    if (!shift || shift->args[1].as<Broadcast>() || !is_constant_expr(shift->args[1]) ||
+        !ConstantInterval(0, 7).contains(constant_integer_bounds(shift->args[1]))) {
+        return Expr();
+    }
+    const Expr &x = shift->args[0], &c = shift->args[1];
+    Expr one = make_one(t);
+    return select((x & (make_one(x.type()) << c)) != make_zero(x.type()), one, make_zero(t));
+}
+
+}  // namespace
+
+void CodeGen_X86::visit(const Mod *op) {
+    if (Expr e = byte_bit_test(op); e.defined()) {
+        value = codegen(e);
+        return;
+    }
+    CodeGen_CPU::visit(op);
+}
+
 void CodeGen_X86::visit(const Mul *op) {
-    // x86 has no byte multiply. By a factor in [-1, 1], it is psignb.
+    // x86 has no byte multiply. By a factor in [-1, 1], it is psignb; in
+    // [0, 1], a mask (LLVM folds it into the factor's select).
     if (op->type.is_int() && op->type.bits() == 8 && op->type.is_vector()) {
         auto is_sign = [](const Expr &e) {
             return ConstantInterval(-1, 1).contains(constant_integer_bounds(e));
         };
+        auto is_bit = [](const Expr &e) {
+            return ConstantInterval(0, 1).contains(constant_integer_bounds(e));
+        };
+        if (is_bit(op->b) || is_bit(op->a)) {
+            const Expr &bit = is_bit(op->b) ? op->b : op->a, &other = is_bit(op->b) ? op->a : op->b;
+            value = codegen(other & (make_zero(op->type) - bit));
+            return;
+        }
         Value *v = nullptr;
         if (is_sign(op->b)) {
             v = call_overloaded_intrin(op->type, "sign", {op->a, op->b});
@@ -651,6 +705,11 @@ void CodeGen_X86::visit(const Call *op) {
             table = shuffle_vectors(table, indices);
             value = codegen_dynamic_shuffle(op, slice_lanes, intrin, {table});
         }
+        return;
+    }
+
+    if (Expr e = byte_bit_test(op); e.defined()) {
+        value = codegen(e);
         return;
     }
 
