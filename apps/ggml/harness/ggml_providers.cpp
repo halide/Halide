@@ -164,7 +164,12 @@ ggml_type dot_type(ggml_type t) {
 Precision cpu_precision(const Inputs &in) {
     Precision p;
     ggml_type vdt = dot_type(in.wt);
-    if (in.at != vdt && vdt != GGML_TYPE_F32) p.act_quant = vdt;
+    // GGML's from_float: q8_0's, q8_1's and q8_K's codes are rounded to
+    // nearest, their scales f16 or f32 (ggml-quants.c, ggml-cpu/arch)
+    if (in.at != vdt && vdt != GGML_TYPE_F32) {
+        p.act_quant = vdt;
+        p.act_nearest = true;
+    }
     if (in.wt == GGML_TYPE_F16 && ggml_cpu_has_fp16_va()) {
         p.acc_bits = 11;
         p.chain = in.s.K / 32 + 3;
@@ -225,29 +230,50 @@ std::vector<std::string> cuda_kernels(Kernel &k) {
 
 // GGML's CUDA mul_mat path (ggml_cuda_mul_mat), from the kernels it launched
 // (`ks`, gpu_probe()), and what it does to the operands:
-//   mmvq (mul_mat_vec_q), mmq (mul_mat_q): f32 acts quantized to q8_1 (dp4a/int8 mma)
+//   mmvq (mul_mat_vec_q), mmq (mul_mat_q): f32 acts quantized to q8_1
+//     (dp4a/int8 mma), in blocks of 32 (mmq on q2_K: one scale per 64), codes
+//     rounded to nearest of an f32 or f16 scale, their s the sum of the f32
+//     values (quantize.cu), which the kernels of offset formats multiply the
+//     offset by (vecdotq.cuh)
 //   mmvf (mul_mat_vec_f): f16 weights times acts rounded to f16, in half2
 //     per-thread partial sums (>= 32 threads, 2 lanes each), then f32
-//   mmf (mul_mat_f): tensor-core mma on f16/bf16 (f32: tf32) operands, f32 accumulators
+//   mmf (mul_mat_f): tensor-core mma on f16/bf16 operands, f32 accumulators;
+//     f32 operands go to the tf32 mma as they are, which reads their top 11
+//     significant bits (its results are the f32 product of the truncated ones)
 //   cublas: weights and acts converted to f16 (bf16 for bf16), cuBLAS gemm;
-//     on f16, CUBLAS_COMPUTE_16F with an f16 result (Ampere and later)
+//     on f16, CUBLAS_COMPUTE_16F with an f16 result (Ampere and later). On
+//     f32, sgemm under GGML's CUBLAS_TF32_TENSOR_OP_MATH (common.cuh), which
+//     may round the operands to tf32's 11 bits (to nearest: where it does,
+//     its results are the f32 product of the operands so rounded)
 std::string cuda_path(const std::string &ks, const Inputs &in, Precision &p) {
     auto has = [&](const char *s) { return ks.find(s) != std::string::npos; };
     const bool bf = in.wt == GGML_TYPE_BF16;
+    // The operands that are not of the kernel's type t are rounded to it.
+    auto rounded_to = [&](ggml_type t) {
+        if (in.at != t) p.act_quant = t;
+        if (in.wt != t) p.w_quant = t;
+    };
     if (has("mul_mat_vec_q") || has("mul_mat_q")) {
         p.act_quant = GGML_TYPE_Q8_1;
+        p.act_sum = true;
+        p.act_nearest = true;
+        if (has("mul_mat_q") && in.wt == GGML_TYPE_Q2_K) p.act_block = 64;
         return has("mul_mat_vec_q") ? "cuda:mmvq" : "cuda:mmq";
     }
     if (has("mul_mat_vec_f")) {
         if (in.wt == GGML_TYPE_F16) {
-            p.operand_bits = 11;
+            rounded_to(GGML_TYPE_F16);
             p.acc_bits = 11;
             p.chain = in.s.K / 64;
         }
         return "cuda:mmvf";
     }
     if (has("mul_mat_f")) {
-        p.operand_bits = bf ? 8 : 11;
+        if (in.wt == GGML_TYPE_F32) {
+            p.operand_bits = 10;
+        } else {
+            rounded_to(in.wt);
+        }
         return "cuda:mmf";
     }
     if (ks.empty()) {
@@ -256,9 +282,13 @@ std::string cuda_path(const std::string &ks, const Inputs &in, Precision &p) {
         p.acc_bits = bf ? 24 : 11;
         return "cuda:?";
     }
-    if (in.wt != GGML_TYPE_F32) {
-        p.operand_bits = bf ? 8 : 11;
-        if (!bf) p.acc_bits = 11;
+    if (in.wt == GGML_TYPE_F32) {
+        p.operand_bits = 11;
+    } else if (bf) {
+        rounded_to(GGML_TYPE_BF16);
+    } else {
+        rounded_to(GGML_TYPE_F16);
+        p.acc_bits = 11;
     }
     return "cuda:cublas";
 }
@@ -325,6 +355,7 @@ void add_device(ggml_backend_dev_t dev) {
                                        k->prec.act_block = q8 ? in.s.K : 32;
                                        k->prec.w_block = q8 ? in.s.K : 0;
                                        k->prec.act_asymmetric = q8;
+                                       k->prec.act_nearest = false;
                                        k->path = std::string("kleidiai:") + (q8 ? "qai8dx_qsi8cx" : "qsi8d32_qsi4c32") + ":" + kind;
                                    } else {
                                        std::string layout = grep_log(log, "repack tensor ");
