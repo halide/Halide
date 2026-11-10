@@ -29,7 +29,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
         info->trim_bounds_using_alignment();
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type, this);
 
     if (rewrite(IRMatcher::Overflow() - x, a) ||
         rewrite(x - IRMatcher::Overflow(), b) ||
@@ -287,8 +287,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite((min(((z + y) + w), x) - z), min(x - z, y + w)) ||
 
            rewrite(min(x, y) - min(y, x), 0) ||
-           rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
-           rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
+           rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w)) ||
+           rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w)) ||
            rewrite(min(x * c0, c1) - min(x, c2) * c0, min(c1 - min(x, c2) * c0, 0), c0 > 0 && c1 <= c2 * c0) ||
 
            rewrite((x - max(z, (x + y))), (0 - max(z - x, y)), !is_const(x)) ||
@@ -318,8 +318,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite((max(((z + y) + w), x) - z), max(x - z, y + w)) ||
 
            rewrite(max(x, y) - max(y, x), 0) ||
-           rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w, this)) ||
-           rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w, this)) ||
+           rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w)) ||
+           rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w)) ||
 
            // When you have min(x, y) - min(z, w) and no further
            // information, there are four possible ways for the
@@ -348,80 +348,80 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            // direction or the other.
 
            // Then the actual rules. We consider only cases where x and z differ by a constant.
-           rewrite(min(x, y) - min(x, w), min(y - min(x, w), 0), can_prove(y <= w, this)) ||
-           rewrite(min(x, y) - min(x, w), max(min(x, y) - w, 0), can_prove(y >= w, this)) ||
-           rewrite(min(x + c0, y) - min(x, w), min(y - min(x, w), c0), can_prove(y <= w + c0, this)) ||
-           rewrite(min(x + c0, y) - min(x, w), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0, this)) ||
-           rewrite(min(x, y) - min(x + c1, w), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(min(x, y) - min(x + c1, w), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(min(x + c0, y) - min(x + c1, w), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
-           rewrite(min(x + c0, y) - min(x + c1, w), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
+           rewrite(min(x, y) - min(x, w), min(y - min(x, w), 0), can_prove(y <= w)) ||
+           rewrite(min(x, y) - min(x, w), max(min(x, y) - w, 0), can_prove(y >= w)) ||
+           rewrite(min(x + c0, y) - min(x, w), min(y - min(x, w), c0), can_prove(y <= w + c0)) ||
+           rewrite(min(x + c0, y) - min(x, w), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0)) ||
+           rewrite(min(x, y) - min(x + c1, w), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(min(x, y) - min(x + c1, w), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(min(x + c0, y) - min(x + c1, w), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
+           rewrite(min(x + c0, y) - min(x + c1, w), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
 
-           rewrite(min(y, x) - min(w, x), min(y - min(x, w), 0), can_prove(y <= w, this)) ||
-           rewrite(min(y, x) - min(w, x), max(min(x, y) - w, 0), can_prove(y >= w, this)) ||
-           rewrite(min(y, x + c0) - min(w, x), min(y - min(x, w), c0), can_prove(y <= w + c0, this)) ||
-           rewrite(min(y, x + c0) - min(w, x), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0, this)) ||
-           rewrite(min(y, x) - min(w, x + c1), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(min(y, x) - min(w, x + c1), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(min(y, x + c0) - min(w, x + c1), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
-           rewrite(min(y, x + c0) - min(w, x + c1), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
+           rewrite(min(y, x) - min(w, x), min(y - min(x, w), 0), can_prove(y <= w)) ||
+           rewrite(min(y, x) - min(w, x), max(min(x, y) - w, 0), can_prove(y >= w)) ||
+           rewrite(min(y, x + c0) - min(w, x), min(y - min(x, w), c0), can_prove(y <= w + c0)) ||
+           rewrite(min(y, x + c0) - min(w, x), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0)) ||
+           rewrite(min(y, x) - min(w, x + c1), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(min(y, x) - min(w, x + c1), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(min(y, x + c0) - min(w, x + c1), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
+           rewrite(min(y, x + c0) - min(w, x + c1), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
 
-           rewrite(min(x, y) - min(w, x), min(y - min(x, w), 0), can_prove(y <= w, this)) ||
-           rewrite(min(x, y) - min(w, x), max(min(x, y) - w, 0), can_prove(y >= w, this)) ||
-           rewrite(min(x + c0, y) - min(w, x), min(y - min(x, w), c0), can_prove(y <= w + c0, this)) ||
-           rewrite(min(x + c0, y) - min(w, x), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0, this)) ||
-           rewrite(min(x, y) - min(w, x + c1), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(min(x, y) - min(w, x + c1), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(min(x + c0, y) - min(w, x + c1), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
-           rewrite(min(x + c0, y) - min(w, x + c1), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
+           rewrite(min(x, y) - min(w, x), min(y - min(x, w), 0), can_prove(y <= w)) ||
+           rewrite(min(x, y) - min(w, x), max(min(x, y) - w, 0), can_prove(y >= w)) ||
+           rewrite(min(x + c0, y) - min(w, x), min(y - min(x, w), c0), can_prove(y <= w + c0)) ||
+           rewrite(min(x + c0, y) - min(w, x), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0)) ||
+           rewrite(min(x, y) - min(w, x + c1), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(min(x, y) - min(w, x + c1), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(min(x + c0, y) - min(w, x + c1), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
+           rewrite(min(x + c0, y) - min(w, x + c1), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
 
-           rewrite(min(y, x) - min(x, w), min(y - min(x, w), 0), can_prove(y <= w, this)) ||
-           rewrite(min(y, x) - min(x, w), max(min(x, y) - w, 0), can_prove(y >= w, this)) ||
-           rewrite(min(y, x + c0) - min(x, w), min(y - min(x, w), c0), can_prove(y <= w + c0, this)) ||
-           rewrite(min(y, x + c0) - min(x, w), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0, this)) ||
-           rewrite(min(y, x) - min(x + c1, w), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(min(y, x) - min(x + c1, w), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(min(y, x + c0) - min(x + c1, w), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
-           rewrite(min(y, x + c0) - min(x + c1, w), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
+           rewrite(min(y, x) - min(x, w), min(y - min(x, w), 0), can_prove(y <= w)) ||
+           rewrite(min(y, x) - min(x, w), max(min(x, y) - w, 0), can_prove(y >= w)) ||
+           rewrite(min(y, x + c0) - min(x, w), min(y - min(x, w), c0), can_prove(y <= w + c0)) ||
+           rewrite(min(y, x + c0) - min(x, w), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0)) ||
+           rewrite(min(y, x) - min(x + c1, w), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(min(y, x) - min(x + c1, w), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(min(y, x + c0) - min(x + c1, w), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
+           rewrite(min(y, x + c0) - min(x + c1, w), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
 
            // The equivalent rules for max are what you'd
            // expect. Just swap < and > and min and max (apply the
            // isomorphism x -> -x).
-           rewrite(max(x, y) - max(x, w), max(y - max(x, w), 0), can_prove(y >= w, this)) ||
-           rewrite(max(x, y) - max(x, w), min(max(x, y) - w, 0), can_prove(y <= w, this)) ||
-           rewrite(max(x + c0, y) - max(x, w), max(y - max(x, w), c0), can_prove(y >= w + c0, this)) ||
-           rewrite(max(x + c0, y) - max(x, w), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0, this)) ||
-           rewrite(max(x, y) - max(x + c1, w), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(max(x, y) - max(x + c1, w), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(max(x + c0, y) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
-           rewrite(max(x + c0, y) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
+           rewrite(max(x, y) - max(x, w), max(y - max(x, w), 0), can_prove(y >= w)) ||
+           rewrite(max(x, y) - max(x, w), min(max(x, y) - w, 0), can_prove(y <= w)) ||
+           rewrite(max(x + c0, y) - max(x, w), max(y - max(x, w), c0), can_prove(y >= w + c0)) ||
+           rewrite(max(x + c0, y) - max(x, w), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0)) ||
+           rewrite(max(x, y) - max(x + c1, w), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(max(x, y) - max(x + c1, w), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(max(x + c0, y) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
+           rewrite(max(x + c0, y) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
 
-           rewrite(max(y, x) - max(w, x), max(y - max(x, w), 0), can_prove(y >= w, this)) ||
-           rewrite(max(y, x) - max(w, x), min(max(x, y) - w, 0), can_prove(y <= w, this)) ||
-           rewrite(max(y, x + c0) - max(w, x), max(y - max(x, w), c0), can_prove(y >= w + c0, this)) ||
-           rewrite(max(y, x + c0) - max(w, x), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0, this)) ||
-           rewrite(max(y, x) - max(w, x + c1), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(max(y, x) - max(w, x + c1), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(max(y, x + c0) - max(w, x + c1), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
-           rewrite(max(y, x + c0) - max(w, x + c1), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
+           rewrite(max(y, x) - max(w, x), max(y - max(x, w), 0), can_prove(y >= w)) ||
+           rewrite(max(y, x) - max(w, x), min(max(x, y) - w, 0), can_prove(y <= w)) ||
+           rewrite(max(y, x + c0) - max(w, x), max(y - max(x, w), c0), can_prove(y >= w + c0)) ||
+           rewrite(max(y, x + c0) - max(w, x), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0)) ||
+           rewrite(max(y, x) - max(w, x + c1), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(max(y, x) - max(w, x + c1), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(max(y, x + c0) - max(w, x + c1), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
+           rewrite(max(y, x + c0) - max(w, x + c1), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
 
-           rewrite(max(x, y) - max(w, x), max(y - max(x, w), 0), can_prove(y >= w, this)) ||
-           rewrite(max(x, y) - max(w, x), min(max(x, y) - w, 0), can_prove(y <= w, this)) ||
-           rewrite(max(x + c0, y) - max(w, x), max(y - max(x, w), c0), can_prove(y >= w + c0, this)) ||
-           rewrite(max(x + c0, y) - max(w, x), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0, this)) ||
-           rewrite(max(x, y) - max(w, x + c1), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(max(x, y) - max(w, x + c1), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(max(x + c0, y) - max(w, x + c1), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
-           rewrite(max(x + c0, y) - max(w, x + c1), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)) ||
+           rewrite(max(x, y) - max(w, x), max(y - max(x, w), 0), can_prove(y >= w)) ||
+           rewrite(max(x, y) - max(w, x), min(max(x, y) - w, 0), can_prove(y <= w)) ||
+           rewrite(max(x + c0, y) - max(w, x), max(y - max(x, w), c0), can_prove(y >= w + c0)) ||
+           rewrite(max(x + c0, y) - max(w, x), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0)) ||
+           rewrite(max(x, y) - max(w, x + c1), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(max(x, y) - max(w, x + c1), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(max(x + c0, y) - max(w, x + c1), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
+           rewrite(max(x + c0, y) - max(w, x + c1), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0)) ||
 
-           rewrite(max(y, x) - max(x, w), max(y - max(x, w), 0), can_prove(y >= w, this)) ||
-           rewrite(max(y, x) - max(x, w), min(max(x, y) - w, 0), can_prove(y <= w, this)) ||
-           rewrite(max(y, x + c0) - max(x, w), max(y - max(x, w), c0), can_prove(y >= w + c0, this)) ||
-           rewrite(max(y, x + c0) - max(x, w), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0, this)) ||
-           rewrite(max(y, x) - max(x + c1, w), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w, this)) ||
-           rewrite(max(y, x) - max(x + c1, w), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w, this)) ||
-           rewrite(max(y, x + c0) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
-           rewrite(max(y, x + c0) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)))) ||
+           rewrite(max(y, x) - max(x, w), max(y - max(x, w), 0), can_prove(y >= w)) ||
+           rewrite(max(y, x) - max(x, w), min(max(x, y) - w, 0), can_prove(y <= w)) ||
+           rewrite(max(y, x + c0) - max(x, w), max(y - max(x, w), c0), can_prove(y >= w + c0)) ||
+           rewrite(max(y, x + c0) - max(x, w), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0)) ||
+           rewrite(max(y, x) - max(x + c1, w), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w)) ||
+           rewrite(max(y, x) - max(x + c1, w), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w)) ||
+           rewrite(max(y, x + c0) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0)) ||
+           rewrite(max(y, x + c0) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0)))) ||
 
          (no_overflow_int(op->type) && EVAL_IN_LAMBDA  //
           (rewrite(c0 - (c1 - x) / c2, (fold(c0 * c2 - c1 + c2 - 1) + x) / c2, c2 > 0) ||

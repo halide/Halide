@@ -14,7 +14,7 @@ Expr Simplify::visit(const Not *op, ExprInfo *info) {
         info->cast_to(op->type);
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a), op->type, this);
 
     if (rewrite(!c0, fold(!c0)) ||
         rewrite(!(x < y), y <= x) ||

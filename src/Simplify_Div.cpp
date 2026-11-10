@@ -55,7 +55,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
 
     int lanes = op->type.lanes();
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type, this);
 
     if (rewrite(IRMatcher::Overflow() / x, a) ||
         rewrite(x / IRMatcher::Overflow(), b) ||
@@ -97,10 +97,10 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
          // Unlike can_prove this only looks facts up, never building an Expr
          // and so never recursing back into the simplifier.
          (no_overflow(op->type) && has_facts() &&
-          (rewrite(max(x * c0, y) / c0, x, c0 > 0 && linear_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
-           rewrite(max(y, x * c0) / c0, x, c0 > 0 && linear_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
-           rewrite(min(x * c0, y) / c0, x, c0 > 0 && linear_max_diff(x, c0, y, 1, this) <= 0) ||
-           rewrite(min(y, x * c0) / c0, x, c0 > 0 && linear_max_diff(x, c0, y, 1, this) <= 0) ||
+          (rewrite(max(x * c0, y) / c0, x, c0 > 0 && linear_min_diff(x, c0, y, 1) >= fold(1 - c0)) ||
+           rewrite(max(y, x * c0) / c0, x, c0 > 0 && linear_min_diff(x, c0, y, 1) >= fold(1 - c0)) ||
+           rewrite(min(x * c0, y) / c0, x, c0 > 0 && linear_max_diff(x, c0, y, 1) <= 0) ||
+           rewrite(min(y, x * c0) / c0, x, c0 > 0 && linear_max_diff(x, c0, y, 1) <= 0) ||
            false)) ||
 
          (no_overflow(op->type) &&
@@ -120,8 +120,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
            (!op->type.is_float() &&
-            (rewrite((x * c0 + y) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)) ||
-             rewrite((y + x * c0) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)))) ||
+            (rewrite((x * c0 + y) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0)) ||
+             rewrite((y + x * c0) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0)))) ||
 
            rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||

@@ -17,6 +17,8 @@
 namespace Halide {
 namespace Internal {
 
+class Simplify;
+
 /** Does the first expression have the same structure as the second?
  * Variables in the first expression with the name * are interpreted
  * as wildcards, and their matching equivalent in the second
@@ -111,6 +113,10 @@ struct MatcherState {
     halide_scalar_value_t bound_const[max_wild];
 
     BoundConstType bound_const_type[max_wild];
+
+    // The simplifier running the match, if any. Predicates that consult
+    // learned facts (can_prove, min_diff, in_range, ...) require it.
+    Simplify *simplifier = nullptr;
 
     HALIDE_ALWAYS_INLINE
     void set_binding(int i, const BaseExprNode &n) noexcept {
@@ -2561,11 +2567,13 @@ std::ostream &operator<<(std::ostream &s, const IsConst<A> &op) {
     return s;
 }
 
-template<typename A, typename Prover>
+// The predicates below call into the simplifier, which is incomplete in this
+// header. Their make_folded_const methods are templated on the state type so
+// that those calls are resolved at instantiation.
+template<typename A>
 struct CanProve {
     struct pattern_tag {};
     A a;
-    Prover *prover;  // An existing simplifying mutator
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2577,23 +2585,24 @@ struct CanProve {
     constexpr static bool foldable = true;
 
     // Includes a raw call to an inlined make method, so don't inline.
-    [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
+    template<typename State>
+    [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, State &state) const {
         Expr condition = a.make(state, {});
-        condition = prover->simplify_can_prove_condition(condition);
+        condition = state.simplifier->simplify_can_prove_condition(condition);
         val.u.u64 = is_const_one(condition);
         ty = Bool(condition.type().lanes());
         return false;
     }
 };
 
-template<typename A, typename Prover>
-HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<decltype(pattern_arg(a)), Prover> {
+template<typename A>
+HALIDE_ALWAYS_INLINE auto can_prove(A &&a) noexcept -> CanProve<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), p};
+    return {pattern_arg(a)};
 }
 
-template<typename A, typename Prover>
-std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const CanProve<A> &op) {
     s << "can_prove(" << op.a << ")";
     return s;
 }
@@ -2620,20 +2629,19 @@ struct has_bound_const_int<A, std::void_t<decltype(std::declval<const A &>().bou
 
 // Bounds on the linear combination (ca * a - cb * b) of two matched
 // expressions, derived from the facts the prover has learned. Used as
-// (min_diff(x, y, this) >= 0) and friends. ca and cb are constants already in
+// (min_diff(x, y) >= 0) and friends. ca and cb are constants already in
 // hand (matched WildConsts, typically) that sit outside a and b's own IR, so
 // peeling can't find them. Allocation-free: ca/cb read as raw ints, a/b as raw
 // bound nodes. When nothing is known the fold reports overflow, which the
 // rewriter already treats as a failed predicate, so the rule simply doesn't
 // fire.
-template<typename A, typename CA, typename B, typename CB, typename Prover, bool is_min>
+template<typename A, typename CA, typename B, typename CB, bool is_min>
 struct LinearDiffBound {
     struct pattern_tag {};
     A a;
     CA ca;
     B b;
     CB cb;
-    Prover *prover;
 
     static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
                   "The a/b operands of min_diff/max_diff must be wildcards, so "
@@ -2651,15 +2659,16 @@ struct LinearDiffBound {
 
     constexpr static bool foldable = true;
 
-    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+    template<typename State>
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, State &state) const noexcept {
         int64_t result = 0;
         bool known;
         if (is_min) {
-            known = prover->known_min_diff(a.bound_node(state), ca.bound_const_int(state),
-                                           b.bound_node(state), cb.bound_const_int(state), &result);
+            known = state.simplifier->known_min_diff(a.bound_node(state), ca.bound_const_int(state),
+                                                     b.bound_node(state), cb.bound_const_int(state), &result);
         } else {
-            known = prover->known_max_diff(a.bound_node(state), ca.bound_const_int(state),
-                                           b.bound_node(state), cb.bound_const_int(state), &result);
+            known = state.simplifier->known_max_diff(a.bound_node(state), ca.bound_const_int(state),
+                                                     b.bound_node(state), cb.bound_const_int(state), &result);
         }
         val.u.i64 = result;
         ty = Int(64);
@@ -2668,41 +2677,41 @@ struct LinearDiffBound {
     }
 };
 
-template<typename A, typename CA, typename B, typename CB, typename Prover>
-HALIDE_ALWAYS_INLINE auto linear_min_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
-    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, true> {
+template<typename A, typename CA, typename B, typename CB>
+HALIDE_ALWAYS_INLINE auto linear_min_diff(A &&a, CA &&ca, B &&b, CB &&cb) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), true> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb), p};
+    return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb)};
 }
 
-template<typename A, typename CA, typename B, typename CB, typename Prover>
-HALIDE_ALWAYS_INLINE auto linear_max_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
-    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, false> {
+template<typename A, typename CA, typename B, typename CB>
+HALIDE_ALWAYS_INLINE auto linear_max_diff(A &&a, CA &&ca, B &&b, CB &&cb) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), false> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb), p};
+    return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb)};
 }
 
 // Bounds on the plain difference (a - b).
-template<typename A, typename B, typename Prover>
-HALIDE_ALWAYS_INLINE auto min_diff(A &&a, B &&b, Prover *p) noexcept
-    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, Prover, true> {
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto min_diff(A &&a, B &&b) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, true> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}, p};
+    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}};
 }
 
-template<typename A, typename B, typename Prover>
-HALIDE_ALWAYS_INLINE auto max_diff(A &&a, B &&b, Prover *p) noexcept
-    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, Prover, false> {
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto max_diff(A &&a, B &&b) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, false> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}, p};
+    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}};
 }
 
-template<typename A, typename CA, typename B, typename CB, typename Prover, bool is_min>
-std::ostream &operator<<(std::ostream &s, const LinearDiffBound<A, CA, B, CB, Prover, is_min> &op) {
+template<typename A, typename CA, typename B, typename CB, bool is_min>
+std::ostream &operator<<(std::ostream &s, const LinearDiffBound<A, CA, B, CB, is_min> &op) {
     s << (is_min ? "linear_min_diff(" : "linear_max_diff(") << op.a << ", " << op.ca << ", " << op.b << ", " << op.cb << ")";
     return s;
 }
@@ -2744,20 +2753,19 @@ std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
 
 // Whether a matched expression is known to lie in the half-open range
 // [lo, hi), using only bounds the prover already has; nothing is simplified.
-// Used as in_range(y, 0, c0, this). The range is half-open so that a rule can
+// Used as in_range(y, 0, c0). The range is half-open so that a rule can
 // pass a matched constant as the end directly: lo and hi must be WildConsts or
 // integer literals (has_bound_const_int), so a folded bound such as
 // fold(c0 - 1) isn't accepted. Allocation-free: a is read as a raw bound node,
 // lo and hi as raw ints. Only an integer constant or a
 // variable with known constant bounds (or a broadcast of either) qualifies.
 // Anything else fails the predicate, so the rule simply doesn't fire.
-template<typename A, typename Lo, typename Hi, typename Prover>
+template<typename A, typename Lo, typename Hi>
 struct InRange {
     struct pattern_tag {};
     A a;
     Lo lo;
     Hi hi;
-    Prover *prover;
 
     static_assert(has_bound_node<A>::value,
                   "The first operand of in_range must be a wildcard, so that "
@@ -2775,23 +2783,24 @@ struct InRange {
 
     constexpr static bool foldable = true;
 
-    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+    template<typename State>
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, State &state) const noexcept {
         const BaseExprNode *node = a.bound_node(state);
-        val.u.u64 = prover->known_in_range(node, lo.bound_const_int(state), hi.bound_const_int(state));
+        val.u.u64 = state.simplifier->known_in_range(node, lo.bound_const_int(state), hi.bound_const_int(state));
         ty = Bool(node->type.lanes());
         return false;
     }
 };
 
-template<typename A, typename Lo, typename Hi, typename Prover>
-HALIDE_ALWAYS_INLINE auto in_range(A &&a, Lo &&lo, Hi &&hi, Prover *p) noexcept
-    -> InRange<decltype(pattern_arg(a)), decltype(pattern_arg(lo)), decltype(pattern_arg(hi)), Prover> {
+template<typename A, typename Lo, typename Hi>
+HALIDE_ALWAYS_INLINE auto in_range(A &&a, Lo &&lo, Hi &&hi) noexcept
+    -> InRange<decltype(pattern_arg(a)), decltype(pattern_arg(lo)), decltype(pattern_arg(hi))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lo), pattern_arg(hi), p};
+    return {pattern_arg(a), pattern_arg(lo), pattern_arg(hi)};
 }
 
-template<typename A, typename Lo, typename Hi, typename Prover>
-std::ostream &operator<<(std::ostream &s, const InRange<A, Lo, Hi, Prover> &op) {
+template<typename A, typename Lo, typename Hi>
+std::ostream &operator<<(std::ostream &s, const InRange<A, Lo, Hi> &op) {
     s << "in_range(" << op.a << ", " << op.lo << ", " << op.hi << ")";
     return s;
 }
@@ -3043,7 +3052,7 @@ template<typename Before,
          typename = std::enable_if_t<std::decay_t<Before>::foldable &&
                                      std::decay_t<After>::foldable>>
 HALIDE_NEVER_INLINE void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
-                                        Type wildcard_type, Type output_type) noexcept {
+                                        Type wildcard_type, Type output_type, Simplify *simplifier) noexcept {
 
     // We only validate the rules in the scalar case
     wildcard_type = wildcard_type.with_lanes(1);
@@ -3064,6 +3073,7 @@ HALIDE_NEVER_INLINE void fuzz_test_rule(Before &&before, After &&after, Predicat
     // silly errors, but not necessarily corner cases.
     static std::mt19937_64 rng(0);
     MatcherState state;
+    state.simplifier = simplifier;
 
     Expr exprs[max_wild];
     bool overflow = false;  // for the constant_fold_bin_op normalizations below
@@ -3167,7 +3177,7 @@ template<typename Before,
          typename = std::enable_if_t<!(std::decay_t<Before>::foldable &&
                                        std::decay_t<After>::foldable)>>
 HALIDE_ALWAYS_INLINE void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
-                                         Type, Type, int dummy = 0) noexcept {
+                                         Type, Type, Simplify *, int dummy = 0) noexcept {
     // We can't verify rewrite rules that can't be constant-folded.
 }
 
@@ -3207,8 +3217,9 @@ struct Rewriter {
     bool validate;
 
     HALIDE_ALWAYS_INLINE
-    Rewriter(Instance instance, Type output, Type wildcard)
+    Rewriter(Instance instance, Type output, Type wildcard, Simplify *simplifier)
         : instance(std::move(instance)), output_type(output), wildcard_type(wildcard) {
+        state.simplifier = simplifier;
     }
 
     template<typename After>
@@ -3228,7 +3239,7 @@ struct Rewriter {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
         static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
-        fuzz_test_rule(before, after, true, wildcard_type, output_type);
+        fuzz_test_rule(before, after, true, wildcard_type, output_type, state.simplifier);
 #endif
         if (before.template match<0>(unwrap(instance), state)) {
             build_replacement(after);
@@ -3267,7 +3278,7 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after) noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
-        fuzz_test_rule(before, IntLiteral(after), true, wildcard_type, output_type);
+        fuzz_test_rule(before, IntLiteral(after), true, wildcard_type, output_type, state.simplifier);
 #endif
         if (before.template match<0>(unwrap(instance), state)) {
             result = make_const(output_type, after);
@@ -3297,7 +3308,7 @@ struct Rewriter {
         static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
 
 #if HALIDE_FUZZ_TEST_RULES
-        fuzz_test_rule(before, after, pred, wildcard_type, output_type);
+        fuzz_test_rule(before, after, pred, wildcard_type, output_type, state.simplifier);
 #endif
         if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
@@ -3345,7 +3356,7 @@ struct Rewriter {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
-        fuzz_test_rule(before, IntLiteral(after), pred, wildcard_type, output_type);
+        fuzz_test_rule(before, IntLiteral(after), pred, wildcard_type, output_type, state.simplifier);
 #endif
         if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
@@ -3369,7 +3380,9 @@ struct Rewriter {
  * type of the wildcards is likely to be. If omitted it uses the same
  * type as the expression itself.  They are not required to be this
  * type, but the rule will only be tested for wildcards of that type
- * when testing is enabled.
+ * when testing is enabled. The final optional argument is the
+ * simplifier, which is required by predicates that consult the facts
+ * it has learned (can_prove, min_diff, in_range, ...).
  *
  * The rewriter can be used to check to see if the instance is one of
  * some number of patterns and if so rewrite it into another form,
@@ -3382,24 +3395,24 @@ struct Rewriter {
 // @{
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
-HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, Type output_type, Type wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
-    return {pattern_arg(instance), output_type, wildcard_type};
+HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, Type output_type, Type wildcard_type, Simplify *simplifier = nullptr) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+    return {pattern_arg(instance), output_type, wildcard_type, simplifier};
 }
 
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
-HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, Type output_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
-    return {pattern_arg(instance), output_type, output_type};
+HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, Type output_type, Simplify *simplifier = nullptr) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+    return {pattern_arg(instance), output_type, output_type, simplifier};
 }
 
 HALIDE_ALWAYS_INLINE
-auto rewriter(const Expr &e, Type wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), e.type(), wildcard_type};
+auto rewriter(const Expr &e, Type wildcard_type, Simplify *simplifier = nullptr) noexcept -> Rewriter<decltype(pattern_arg(e))> {
+    return {pattern_arg(e), e.type(), wildcard_type, simplifier};
 }
 
 HALIDE_ALWAYS_INLINE
-auto rewriter(const Expr &e) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), e.type(), e.type()};
+auto rewriter(const Expr &e, Simplify *simplifier = nullptr) noexcept -> Rewriter<decltype(pattern_arg(e))> {
+    return {pattern_arg(e), e.type(), e.type(), simplifier};
 }
 // @}
 
