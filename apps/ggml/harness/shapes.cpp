@@ -46,6 +46,7 @@ const Shape denoiser[] = {
 //   llama3-8b-gemv / -full: just that model
 //   denoiser: a diffusion transformer's layers at its own M (not in gemv/full)
 //   KxNxM: one explicit shape
+//   a,b,...: several of the above (mul_mat)
 // vec_dot: n in {256, 4096, 14336} (smoke: 256, 4096) or an explicit K.
 std::vector<Shape> shapes(const std::string &preset, int op) {
     std::vector<Shape> v;
@@ -54,6 +55,15 @@ std::vector<Shape> shapes(const std::string &preset, int op) {
         if (preset.find_first_not_of("0123456789") == std::string::npos) return {{"", "", std::stoll(preset), 1, 1}};
         for (int64_t n : {256, 4096, 14336})
             v.push_back({"", "", n, 1, 1});
+        return v;
+    }
+    if (preset.find(',') != std::string::npos) {
+        for (size_t i = 0, j; i <= preset.size(); i = j + 1) {
+            j = std::min(preset.find(',', i), preset.size());
+            for (const Shape &s : shapes(preset.substr(i, j - i), op)) {
+                v.push_back(s);
+            }
+        }
         return v;
     }
     if (preset == "smoke") return {{"", "", 256, 64, 1}, {"", "", 512, 96, 5}, {"", "", 1024, 256, 40}};
