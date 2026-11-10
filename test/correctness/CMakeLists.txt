@@ -275,6 +275,7 @@ tests(
     gpu_f16_intrinsics.cpp
     gpu_free_sync.cpp
     gpu_give_input_buffers_device_allocations.cpp
+    gpu_global_vector_load_codegen.cpp
     gpu_jit_explicit_copy_to_device.cpp
     gpu_lanes_conditional_allocation.cpp
     gpu_lanes_reduction.cpp
@@ -310,6 +311,7 @@ tests(
     gpu_thread_barrier.cpp
     gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
+    gpu_vector_load_of_crop.cpp
     gpu_vectorize.cpp
     gpu_vectorize_3_lanes.cpp
     gpu_vectorized_shared_memory.cpp

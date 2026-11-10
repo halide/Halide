@@ -23,6 +23,7 @@
 #include "Target.h"
 
 #include <fstream>
+#include <limits>
 #include <set>
 
 namespace Halide {
@@ -897,7 +898,9 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
+        AllocaInst *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
+        // Aligned for the 128-bit loads of visit(const Load *).
+        ptr->setAlignment(std::max(ptr->getAlign(), llvm::Align(16)));
         builder->SetInsertPoint(here);
         sym_push(allocation_name, ptr);
     }
@@ -915,17 +918,49 @@ void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Load *op) {
-    // Do aligned 4-wide 32-bit loads as a single i128 load.
+    // Do dense vector loads aligned to their width as 128-bit or 64-bit
+    // integer loads. The backend otherwise loads a vector it can't prove
+    // aligned one element at a time.
     const Ramp *r = op->index.as<Ramp>();
-    // TODO: lanes >= 4, not lanes == 4
-    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
-        ModulusRemainder align = op->alignment;
-        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
-            Expr index = simplify(r->base / 4);
-            Expr equiv = Load::make(UInt(128), op->name, index,
-                                    op->image, op->param, const_true(), align / 4, op->is_streaming);
-            equiv = reinterpret(op->type, equiv);
-            codegen(equiv);
+    const int bits = op->type.bits();
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && bits >= 8) {
+        const ModulusRemainder align = op->alignment;
+        const int total = bits * r->lanes;
+        // The alignment in bytes of the start of the buffer. Allocations
+        // inside the kernel start at multiples of 16 bytes: shared memory is
+        // packed in groups that do (fuse_gpu_thread_loops), and visit(Allocate)
+        // aligns the others. So do the device allocations the runtime makes.
+        // A pipeline's input or output may be a crop of another buffer at any
+        // offset, so it is only aligned as much as its host_alignment says;
+        // and when JIT-compiling, an embedded buffer as much as its host
+        // pointer is, as CodeGen_LLVM assumes.
+        int base_alignment = 16;
+        if (op->param.defined()) {
+            base_alignment = op->param.host_alignment();
+        } else if (op->image.defined() && get_target().has_feature(Target::JIT)) {
+            base_alignment = (int)gcd(base_alignment, (int)(((uintptr_t)op->image.data()) & std::numeric_limits<int>::max()));
+        }
+        for (int piece : {128, 64}) {
+            // The elements of one load, and the loads it takes.
+            const int n = piece / bits, pieces = total / piece;
+            if (bits >= piece || total % piece != 0 || base_alignment % (piece / 8) != 0 ||
+                align.modulus % n != 0 || align.remainder % n != 0) {
+                continue;
+            }
+            if (pieces == 1) {
+                Expr index = simplify(r->base / n);
+                Expr equiv = Load::make(UInt(piece), op->name, index,
+                                        op->image, op->param, const_true(), align / n, op->is_streaming);
+                codegen(reinterpret(op->type, equiv));
+                return;
+            }
+            vector<Expr> loads;
+            for (int i = 0; i < pieces; i++) {
+                Expr index = Ramp::make(simplify(r->base + i * n), 1, n);
+                loads.push_back(Load::make(op->type.with_lanes(n), op->name, index,
+                                           op->image, op->param, const_true(n), align + i * n, op->is_streaming));
+            }
+            codegen(Shuffle::make_concat(loads));
             return;
         }
     }
