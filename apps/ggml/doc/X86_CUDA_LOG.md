@@ -299,3 +299,41 @@ App changes:
   (cuBLAS 79, GGML's mmf on f32 acts 70), x 4 105 -> 75, 4096 x 2048 x 8
   80 -> 51 (cuBLAS 46). One warp's 16 x 16 1.05x slower; at M = 1 the same
   as the rows (77 vs 78us), which stay.
+
+## Phase 2 report (2a CUDA gemm, 2b CUDA GEMV)
+
+RTX A4500 (sm_86, 46 SMs), driver 596.71, CUDA 13.2, WSL2; at b67e43bfb
+(f16 at M = 8 after it, the rest at 738327646: same kernels). K = N =
+4096; t_GGML / t_ours, best Halide path (q8 `dot` or f16 acts) against
+GGML's best (mmvq/mmq/mmf on f32 acts, cuBLAS); `--early-stop`, cases
+under 0.97 re-run twice, minimum kept (first runs: M = 1 iq4_nl/iq4_xs/
+mxfp4/q2_0 0.5-0.92, from GPU clock drops while CPU providers interleaved).
+
+| M | match (>= 0.95) | median | min | max |
+|---|---|---|---|---|
+| 1 | 12/15 | 1.08 | 0.83 (q3_K) | 1.96 |
+| 8 | 14/15 | 1.08 | 0.92 (f16) | 1.93 |
+| 16 | 1/15 | 0.61 | 0.47 | 1.08 |
+| 32 | 2/15 | 0.70 | 0.56 | 1.07 |
+| 64 | 1/15 | 0.63 | 0.52 | 0.97 |
+| 128 | 1/15 | 0.70 | 0.54 | 1.31 |
+| 256 | 1/15 | 0.81 | 0.71 | 1.41 |
+| 512 | 1/15 | 0.78 | 0.71 | 1.35 |
+
+- Everything runs; `--check` passes on all 348 smoke cases (dot, f32,
+  f16 acts) and on the odd shapes above.
+- Sloc: schedule.h +471 / -83 since fecbc0001; core +236 / -1 (3
+  commits: Deinterleave across VectorReduce, test deinterleave_vector_reduce;
+  PTX f16 products, test cuda_f16_product; PTX dp4a sums, test
+  cuda_8_bit_sum). No ExtractWMMAOperations change (no int8 MMA).
+- Gaps, M >= 16:
+  1. f16 decode-to-shared vs GGML's int8 mma on q8_1 (mmq): q4_0's kernel
+     decodes in registers (`mul.rn.f16x2` by the scale) and `st.shared` 63x
+     per 120 `wmma.mma ... f32.f32` (m16n16k16); mmq's int8 mma does twice
+     the MACs per instruction and stages half the bytes.
+  2. No pipelining: no `cp.async`, one stage (`bar.sync` 20, loads then
+     mma), 56-128 registers a thread; at M <= 128 the grid (32-128 blocks)
+     doesn't fill 46 SMs' latency. Split-K at M = 16 (80.9 -> 56.5us, GGML
+     52) blocked by rfactor's tail guard (above).
+  3. Table formats (iq4_nl, iq4_xs, mxfp4) 0.5-0.75: their luts in shared
+     memory per block, a lookup per value against q4_0's arithmetic decode.
