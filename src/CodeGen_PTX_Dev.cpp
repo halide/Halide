@@ -83,6 +83,7 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const Call *) override;
+    void visit(const Cast *) override;
     void visit(const For *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;
@@ -93,6 +94,10 @@ protected:
     void visit(const ProducerConsumer *) override;
     void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
+
+    /** Emit a cast to float16 of an f32 product of float16s as float16's own
+     * multiply, if the target has one. Returns false if e isn't that. */
+    bool codegen_f16_product(Type t, const Expr &e);
 
     std::string mcpu_target() const override;
     std::string mcpu_tune() const override;
@@ -393,7 +398,72 @@ void CodeGen_PTX_Dev::init_module() {
     }
 }
 
+namespace {
+
+// An f32 operand that is exactly a float16: a cast of one, or of an integer
+// of at most 8 bits.
+Expr f16_operand(const Expr &e) {
+    Expr v;
+    if (const Cast *c = e.as<Cast>()) {
+        v = c->value;
+    } else if (const Call *c = Call::as_intrinsic(e, {Call::strict_cast})) {
+        v = c->args[0];
+    } else {
+        return Expr();
+    }
+    if (v.type().element_of() == Float(16)) {
+        return v;
+    } else if (v.type().is_int_or_uint() && v.type().bits() <= 8) {
+        return cast(Float(16, v.type().lanes()), v);
+    }
+    return Expr();
+}
+
+}  // namespace
+
+bool CodeGen_PTX_Dev::codegen_f16_product(Type t, const Expr &e) {
+    // The f32 product of two float16s is exact (22 significant bits, and it
+    // can't overflow or underflow), so its rounding to float16 is float16's
+    // correctly rounded multiply (sm_53 and up). Otherwise each float16
+    // operation is done in f32 (upgrade_type_for_arithmetic).
+    if (t.element_of() != Float(16) || e.type().element_of() != Float(32) ||
+        target.get_cuda_capability_lower_bound() < 53) {
+        return false;
+    }
+    Expr a, b;
+    if (const Call *w = Call::as_intrinsic(e, {Call::widening_mul})) {
+        if (w->args[0].type().element_of() == Float(16) &&
+            w->args[1].type().element_of() == Float(16)) {
+            a = w->args[0];
+            b = w->args[1];
+        }
+    } else if (const Mul *m = e.as<Mul>()) {
+        a = f16_operand(m->a);
+        b = f16_operand(m->b);
+    } else if (const Call *m = Call::as_intrinsic(e, {Call::strict_mul})) {
+        a = f16_operand(m->args[0]);
+        b = f16_operand(m->args[1]);
+    }
+    if (!a.defined() || !b.defined()) {
+        return false;
+    }
+    llvm::Value *va = codegen(a);
+    llvm::Value *vb = codegen(b);
+    value = builder->CreateFMul(va, vb);
+    return true;
+}
+
+void CodeGen_PTX_Dev::visit(const Cast *op) {
+    if (!codegen_f16_product(op->type, op->value)) {
+        CodeGen_LLVM::visit(op);
+    }
+}
+
 void CodeGen_PTX_Dev::visit(const Call *op) {
+    if (op->is_intrinsic(Call::strict_cast) && codegen_f16_product(op->type, op->args[0])) {
+        return;
+    }
+
     if (op->is_intrinsic(Call::cuda_await_copies)) {
         internal_assert(op->args.size() == 1);
         auto group = as_const_int(op->args[0]);
