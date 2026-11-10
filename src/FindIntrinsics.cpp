@@ -1032,6 +1032,11 @@ protected:
             if (narrow_a.defined() && narrow_b.defined()) {
                 return mutate(Cast::make(op->type, widening_mul(with_loaded_bounds(narrow_a), with_loaded_bounds(narrow_b))));
             }
+            Expr a = with_loaded_bounds(op->args[0]);
+            Expr b = with_loaded_bounds(op->args[1]);
+            if (!a.same_as(op->args[0]) || !b.same_as(op->args[1])) {
+                return mutate(widening_mul(a, b));
+            }
         } else if (op->is_intrinsic(Call::widening_add) && (op->type.bits() >= 16)) {
             internal_assert(op->args.size() == 2);
             for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
