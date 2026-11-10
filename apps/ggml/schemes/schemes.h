@@ -47,7 +47,7 @@ inline Format sub_blocks(Format f, int sub) {
     return f;
 }
 
-// `aos`: the same format with one row per record. `indexed`: its blocks'
+// `aos`: the same format with one row per record (soa is one already). `indexed`: its blocks'
 // values indexed (index in block, block, ...), not flat (see BlockReshape).
 // `blocks`: a row's, for the rowwise formats (undefined: only their ports'
 // shapes are of use).
@@ -72,7 +72,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     for (size_t i = 1; i < t.size(); i++) {
         (isdigit(t[i][0]) || t[i] == "aos" || t[i] == "soa" ? lay : codes) = t[i];
     }
-    if (aos) lay = "aos";
+    if (aos && lay != "soa") lay = "aos";
     int rows = 1, chunk = 0;
     sscanf(lay.c_str(), "%dx%d", &rows, &chunk);
     if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4, scaled * 4) : offset(8, scaled * 4), lay, scaled * 4, indexed), QK, rows, chunk};

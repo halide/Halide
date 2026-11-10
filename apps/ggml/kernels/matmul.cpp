@@ -48,6 +48,10 @@ public:
     // CUDA's gemm on blocked weights: one warp per block below M = 128 (see
     // ggml::cuda_shapes)
     GeneratorParam<bool> cuda_one_warp{"cuda_one_warp", false};
+    // CUDA's integer gemm's weight codes decoded 8 a word, in GPRs (see
+    // ggml::gpu_int_gemm; else 16 a vector, which PTX computes a code at a
+    // time)
+    GeneratorParam<bool> code_words{"code_words", false};
 
     void configure() {
         // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
@@ -236,7 +240,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {

@@ -206,6 +206,9 @@ set(GGML_SCHEDULE_PARAMS
     "q4_K mul_mat * gpr_scales=true"
     "q5_K vec_dot * gpr_scales=true"
     "q5_K mul_mat * gpr_scales=true"
+    "q4_0 mul_mat f32:q8_0.soa code_words=true"
+    "q5_0 mul_mat f32:q8_0.soa code_words=true"
+    "q8_0 mul_mat f32:q8_0.soa code_words=true"
     "iq3_s mul_mat q8_K gemm_index_words=true"
     "iq3_s mul_mat f32 gemm_index_words=true"
     "iq3_s mul_mat f32:q8_K gemm_index_words=true"
@@ -288,9 +291,17 @@ endif ()
 # bf16 fragments. f32 weights (no scheme) are W itself, or rounded to f16
 # for the gemm (f32:f16). A blocked weight's f32:q8_1 library quantizes its
 # f32 acts on the GPU, in a kernel of their own, as GGML's CUDA backend does
-# (mmvq and mmq run on q8_1 acts), and runs the dp4a rows on them. Each f16-
-# or bf16-act bench library's test checks that its PTX multiplies on the
-# tensor cores (the other acts take dp4a or f32 rows).
+# (mmvq and mmq run on q8_1 acts), and runs the dp4a rows on them. Weights
+# of one scale per block and no offset (q4_0, q5_0, q8_0, iq4_nl, mxfp4) also
+# have an integer gemm library, <type> on f32:q8_0.soa acts (schedule.h's
+# gpu_int_gemm; as GGML's mmq, which its CUDA backend runs for M > 8): the
+# acts quantized on the GPU to q8_0's codes and scales, one planar array each
+# (.soa: no records to pack), the weights' int8 codes multiplied by them on
+# wmma's int8 fragments for M >= 16 and N % 8 == 0 (else the dp4a rows).
+# code_words=true (GGML_SCHEDULE_PARAMS): its weight codes decoded 8 a word
+# in a GPR (the formats decoded by arithmetic). Each f16-, bf16- or .soa-act
+# bench library's test checks that its PTX multiplies on the tensor cores
+# (the other acts take dp4a or f32 rows).
 set(GGML_HALIDE_CUDA_FORMATS
     "q4_0 mul_mat f32,q8_0,f32:q8_1"
     "q8_0 mul_mat f32,q8_0,f32:q8_1"
@@ -315,6 +326,11 @@ set(GGML_HALIDE_CUDA_FORMATS
     "iq3_s mul_mat f32,q8_K,f32:q8_1"
     "iq1_s mul_mat f32,q8_K,f32:q8_1"
     "iq1_m mul_mat f32,q8_K,f32:q8_1"
+    "q4_0 mul_mat f32:q8_0.soa"
+    "q8_0 mul_mat f32:q8_0.soa"
+    "q5_0 mul_mat f32:q8_0.soa"
+    "iq4_nl mul_mat f32:q8_0.soa"
+    "mxfp4 mul_mat f32:q8_0.soa"
     "f16 mul_mat f16,f32,f32:f16"
     "bf16 mul_mat bf16,f32,f32:bf16"
     "f32 mul_mat f32"
@@ -475,7 +491,7 @@ foreach (row IN LISTS GGML_FORMATS)
             string(APPEND registry
                 "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
-            if ("cuda" IN_LIST features_list AND act MATCHES "f16$")
+            if ("cuda" IN_LIST features_list AND act MATCHES "(f16|\\.soa)$")
                 add_test(
                     NAME ${name}_ptx
                     COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}_bench>
