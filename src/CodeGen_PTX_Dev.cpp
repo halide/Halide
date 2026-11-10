@@ -165,6 +165,9 @@ protected:
     void codegen_wmma(const Call *op);
     llvm::Value *codegen_wmma_raw(const Call *op);
     void codegen_wmma_store(const Store *op);
+    /** Check that the target has tensor core loads and stores of fragments
+     * of type t. */
+    void check_wmma_fragment_capability(Type t);
     void split_fragment(const Expr &e, std::vector<llvm::Value *> &args);
     void vector_to_fragment_regs(llvm::Value *v, Type t, std::vector<llvm::Value *> &regs);
     // @}
@@ -603,6 +606,14 @@ std::string wmma_type_suffix(Type t) {
     return "";
 }
 
+// The compute capability whose target feature the tensor core instructions on
+// fragments of a type need: half precision and the float32 it accumulates in
+// came first, then the integers, then bfloat16.
+int wmma_capability(Type t) {
+    return t == BFloat(16) ? 80 : t.is_int_or_uint() ? 75 :
+                                                       70;
+}
+
 }  // namespace
 
 void CodeGen_PTX_Dev::vector_to_fragment_regs(Value *v, Type t, vector<Value *> &regs) {
@@ -724,6 +735,13 @@ void CodeGen_PTX_Dev::codegen_fragment_store(const Store *op) {
     }
 }
 
+void CodeGen_PTX_Dev::check_wmma_fragment_capability(Type t) {
+    const int required = wmma_capability(t);
+    user_assert(target.get_cuda_capability_lower_bound() >= required)
+        << "Tensor core fragments of " << t << " require the cuda_capability_"
+        << required << " target feature.\n";
+}
+
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
     // The nvvm wmma intrinsics take and return fragments as a flat list of
     // 32-bit registers, packaged up as a literal struct. We represent them in
@@ -748,9 +766,7 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
         // operands, which for us are always the same type. Everything else
         // names it after the multiplicands, which are in args 5 and 6.
         const Type operand_type = op->args[5].type().element_of();
-        const int required = (operand_type == BFloat(16)    ? 80 :
-                              operand_type.is_int_or_uint() ? 75 :
-                                                              70);
+        const int required = wmma_capability(operand_type);
         user_assert(target.get_cuda_capability_lower_bound() >= required)
             << "Tensor core matrix multiplies of " << operand_type
             << " require the cuda_capability_" << required << " target feature.\n";
@@ -773,16 +789,20 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
         const bool is_b = op->is_intrinsic(Call::wmma_matrix_to_fragment_b);
         // The simplifier is free to have rewritten the load of the matrix into
         // a dense load followed by a transpose, which is what happens to a
-        // column-major matrix. is_load_of_multiramp undoes that.
+        // column-major matrix, or into a broadcast of a smaller load, which is
+        // what happens to one with a stride of zero. wmma_matrix_load undoes
+        // that.
         const Expr &arg = op->args[wmma_matrix_arg(op)];
         MultiRamp mr;
-        const Load *matrix = is_load_of_multiramp(arg, Scope<Expr>::empty_scope(), &mr);
+        const Load *matrix = wmma_matrix_load(arg, &mr);
         user_assert(matrix && matrix->type.element_of() == arg.type().element_of())
             << "The matrix a tensor core instruction takes a fragment out of is not a "
             << "load with an affine index by the time it reaches the backend.\n";
         WMMAMatrixLayout mem = matrix_in_memory(matrix->name, mr,
                                                 is_b ? K : M, is_a ? K : N, arg);
-        const std::string type_suffix = wmma_type_suffix(op->type.element_of());
+        const Type fragment_type = op->type.element_of();
+        const std::string type_suffix = wmma_type_suffix(fragment_type);
+        check_wmma_fragment_capability(fragment_type);
         name << "load." << (is_a ? "a" : is_b ? "b" :
                                                 "c")
              << "." << (mem.row_major ? "row" : "col") << ".stride." << type_suffix;
@@ -826,6 +846,8 @@ void CodeGen_PTX_Dev::codegen_wmma_store(const Store *op) {
     MultiRamp mr;
     internal_assert(is_multiramp(index, Scope<Expr>::empty_scope(), &mr));
     WMMAMatrixLayout mem = matrix_in_memory(op->name, mr, M, N);
+
+    check_wmma_fragment_capability(fragment.type().element_of());
 
     std::ostringstream name;
     name << "llvm.nvvm.wmma.m" << M << "n" << N << "k" << K << ".store.d."

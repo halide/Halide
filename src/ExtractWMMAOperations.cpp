@@ -6,6 +6,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "MultiRamp.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -34,6 +35,9 @@
  *
  * - An accumulator may be zero-initialized, filled from a matrix in memory,
  *   accumulated into by a matrix multiply, and copied back out to memory.
+ *   Where the hardware lets a lane get at the elements it holds (CUDA), an
+ *   accumulator may also be assigned an elementwise function of accumulators
+ *   and of matrices in memory, e.g. to scale an integer tile into a float one.
  * - An operand may be filled from a matrix in memory and read by a matrix
  *   multiply.
  *
@@ -121,6 +125,14 @@ struct MatrixUnit {
     // Whether an operand's registers are laid out according to the layout of
     // the matrix it was loaded from, which the multiply must then be told.
     bool operand_registers_have_layout;
+    // Whether a lane can compute on the accumulator elements it holds. Which
+    // elements those are is not specified, so the only thing a lane can do
+    // with them is combine them with the elements other accumulators hold in
+    // the same place. That relies on every accumulator of a shape with 32-bit
+    // elements being laid out the same way, whatever its element type and
+    // whether a multiply or a load from memory wrote it, which the hardware's
+    // documentation does not promise.
+    bool elementwise_accumulators;
 };
 
 // The shape of the matrix each fragment is taken out of.
@@ -205,6 +217,13 @@ const MatrixUnit cuda_matrix_unit{
     cuda_fragment_type_supported,
     cuda_elements_per_lane,
     true,
+    // An int32 and a float32 accumulator of the same shape keep each element
+    // in the same register of the same lane, for all three shapes. NVIDIA
+    // leaves the layout unspecified; this is what an RTX 3090 (sm_86) does,
+    // and correctness_wmma_elementwise checks it on whatever device it runs
+    // on, by scaling the int32 accumulators of multiplies by float32
+    // matrices that differ in every row and column.
+    true,
 };
 
 const MatrixUnit metal_matrix_unit{
@@ -216,6 +235,8 @@ const MatrixUnit metal_matrix_unit{
     metal_fragment_type_supported,
     metal_elements_per_lane,
     // simdgroup_load transposes a column-major matrix on the way in.
+    false,
+    // A simdgroup_matrix is opaque.
     false,
 };
 
@@ -354,8 +375,10 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     auto fail = [&](const std::string &reason) -> MatmulInfo {
         user_error << "Matrix multiply not recognized. Store to a Tile "
                    << "allocation must be a zero-initialization, a fill from a matrix "
-                   << "in memory, or a sum of a vector reduce op and a load from the "
-                   << "same allocation. In the following store, " << reason << ".\n"
+                   << "in memory, a sum of a vector reduce op and a load from the "
+                   << "same allocation, or (on CUDA) an elementwise function of "
+                   << "accumulators and matrices in memory. In the following store, "
+                   << reason << ".\n"
                    << Stmt(op);
         return MatmulInfo{};
     };
@@ -503,15 +526,15 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     return info;
 }
 
-// Whether a store to a fragment fills it, as opposed to a matrix multiply
-// accumulating into it.
-bool is_fill(const Store *op) {
-    if (is_const_zero(op->value)) {
-        return true;
-    }
-    MultiRamp mr;
-    const Load *load = is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
-    return load && load->name != op->name;
+// Whether a store to a fragment computes each of its elements from the
+// corresponding elements of other tiles, as opposed to accumulating a matrix
+// multiply, which reduces over a third dimension.
+bool is_elementwise(const Store *op) {
+    bool reduces = false;
+    visit_with(op->value, [&](auto *self, const VectorReduce *r) {
+        reduces = true;
+    });
+    return !reduces;
 }
 
 Stmt convert_to_tile_store(const MatrixUnit &unit, const Store *op, const Expr &store_index,
@@ -704,6 +727,19 @@ class ExtractWMMAOperations : public IRMutator {
                                        operand.mr.base, stride, lane);
     }
 
+    // Whether a store to a fragment fills it with zeros or from a matrix in
+    // memory, as opposed to computing it from fragments: a matrix multiply
+    // accumulating into it, or an elementwise function of accumulators, of
+    // which a conversion or a copy of one is the simplest.
+    bool is_fill(const Store *op) {
+        if (is_const_zero(op->value)) {
+            return true;
+        }
+        MultiRamp mr;
+        const Load *load = is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
+        return load && !find_fragment(load->name);
+    }
+
     Stmt convert_to_fill(const Store *op, Fragment *f) {
         int rows, cols;
         fragment_matrix_shape(f->role, f->shape, &rows, &cols);
@@ -736,15 +772,11 @@ class ExtractWMMAOperations : public IRMutator {
             MultiRamp mr;
             const Load *matrix =
                 is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
-            internal_assert(matrix);  // is_fill checked this
+            internal_assert(matrix && !find_fragment(matrix->name));  // is_fill checked this
             int rows, cols;
             fragment_matrix_shape(f->role, f->shape, &rows, &cols);
             WMMAMatrixLayout mem;
-            if (find_fragment(matrix->name)) {
-                value = fail("A fragment can only be filled from a matrix in memory, "
-                             "not from another fragment, because the layout in "
-                             "registers is not known");
-            } else if (matrix->type.element_of() != f->element_type) {
+            if (matrix->type.element_of() != f->element_type) {
                 value = fail("A fragment can only be filled from a matrix of the same "
                              "type, because the hardware does not convert on the way in");
             } else if (!is_const_one(matrix->predicate)) {
@@ -796,6 +828,203 @@ class ExtractWMMAOperations : public IRMutator {
             store = LetStmt::make(let_name, v, store);
         }
         return store;
+    }
+
+    // Rewrites the value of an elementwise store to an accumulator, which is a
+    // vector over a whole tile, into the same function of just the elements one
+    // lane holds. The lanes of every vector in it are the elements of a tile in
+    // row-major order. A load of an accumulator becomes that accumulator's
+    // registers, and a load of a matrix in memory becomes a load of it into
+    // registers laid out the same way. That covers a vector or a column
+    // repeated across the tile too, which is a matrix with a stride of zero.
+    class Elementwise : public IRMutator {
+        using IRMutator::visit;
+
+        ExtractWMMAOperations *pass;
+        const Store *store;
+        const Fragment *dst;
+        Expr lane;
+        int lanes;
+        Scope<> vector_lets;
+
+        Expr fail(const std::string &reason) {
+            user_error << "Elementwise update of a tensor core accumulator not "
+                       << "supported. Its value must be a function of the "
+                       << "corresponding elements of 32-bit accumulators and of "
+                       << "matrices in memory, but in the following store, "
+                       << reason << ".\n"
+                       << Stmt(store);
+            return Expr{};
+        }
+
+        Type narrow(Type t) const {
+            return t.with_lanes(lanes);
+        }
+
+        // A load, possibly broadcast along one dimension of the tile.
+        Expr matrix(const Expr &e) {
+            MultiRamp mr;
+            const Load *load = wmma_matrix_load(e, &mr);
+            if (!load || load->type.element_of() != e.type().element_of()) {
+                return fail("an operand is not a load with an affine index");
+            }
+            if (!is_const_one(load->predicate)) {
+                return fail("a load is predicated");
+            }
+            // The 32-bit types a fragment can hold, which leaves out uint32.
+            if (load->type.bits() != 32 ||
+                !dst->unit->fragment_type_supported(load->type.element_of())) {
+                return fail("an operand is not float32 or int32");
+            }
+            const Shape &shape = dst->shape;
+            if (Fragment *src = pass->find_fragment(load->name)) {
+                if (!e.as<Load>()) {
+                    return fail("an accumulator is not read a whole tile at a time");
+                }
+                pass->set_role(src, Role::Accumulator);
+                if (!src->found_shape ||
+                    src->shape.M != shape.M || src->shape.N != shape.N) {
+                    return fail("the accumulators do not have the same shape");
+                }
+                const string name = pass->subtile_name(src, load->index);
+                return Load::make(narrow(load->type), name, Ramp::make(0, 1, lanes));
+            }
+            WMMAMatrixLayout mem;
+            if (!wmma_matrix_layout(mr, shape.M, shape.N, &mem)) {
+                return fail("a matrix loaded from is not dense along the rows or "
+                            "the columns of the tile");
+            }
+            return make_matrix_to_fragment(*dst->unit, Role::Accumulator, shape,
+                                           mem.row_major ? Layout::Row : Layout::Col,
+                                           load, mem.base, mem.stride, lane);
+        }
+
+        Expr visit(const Load *op) override {
+            return matrix(op);
+        }
+
+        Expr visit(const Shuffle *op) override {
+            return matrix(op);
+        }
+
+        Expr visit(const Broadcast *op) override {
+            if (op->value.type().is_scalar()) {
+                return Broadcast::make(mutate(op->value), lanes);
+            }
+            return matrix(op);
+        }
+
+        Expr visit(const Ramp *op) override {
+            return fail("the value depends on the position in the tile");
+        }
+
+        Expr visit(const VectorReduce *op) override {
+            return fail("the value contains a vector reduction");
+        }
+
+        Expr visit(const Cast *op) override {
+            return Cast::make(narrow(op->type), mutate(op->value));
+        }
+
+        Expr visit(const Reinterpret *op) override {
+            return Reinterpret::make(narrow(op->type), mutate(op->value));
+        }
+
+        Expr visit(const Call *op) override {
+            if (!op->is_pure()) {
+                return fail("the value contains an impure call");
+            }
+            vector<Expr> args;
+            for (const Expr &a : op->args) {
+                args.push_back(mutate(a));
+            }
+            return Call::make(narrow(op->type), op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+        }
+
+        Expr visit(const Variable *op) override {
+            if (!vector_lets.contains(op->name)) {
+                return fail("the value contains a vector defined outside of it");
+            }
+            return Variable::make(narrow(op->type), op->name);
+        }
+
+        Expr visit(const Let *op) override {
+            Expr value = mutate(op->value);
+            ScopedBinding<> bind(op->value.type().is_vector(), vector_lets, op->name);
+            return Let::make(op->name, std::move(value), mutate(op->body));
+        }
+
+    public:
+        // Scalars are the same in every lane, unless they come out of a
+        // fragment: one element of it is held by one lane.
+        Expr mutate(const Expr &e) override {
+            if (!e.type().is_scalar()) {
+                return IRMutator::mutate(e);
+            }
+            const Fragment *read = nullptr;
+            visit_with(e, [&](auto *self, const Load *load) {
+                if (const Fragment *f = pass->find_fragment(load->name)) {
+                    read = f;
+                }
+                self->visit_base(load);
+            });
+            if (read) {
+                return fail("a single element of the accumulator " + read->name + " is read");
+            }
+            return e;
+        }
+
+        Elementwise(ExtractWMMAOperations *pass, const Store *store,
+                    const Fragment *dst, Expr lane, int lanes)
+            : pass(pass), store(store), dst(dst), lane(std::move(lane)), lanes(lanes) {
+        }
+    };
+
+    Stmt convert_to_elementwise(const Store *op, Fragment *f) {
+        const MatrixUnit &unit = *f->unit;
+        user_assert(unit.elementwise_accumulators)
+            << "Store to a " << unit.name << " fragment not recognized as a fill or "
+            << "a matrix multiply, and " << unit.device_api << " does not support "
+            << "elementwise operations on them.\n"
+            << Stmt(op);
+        if (pass == 0) {
+            set_role(f, Role::Accumulator);
+            // Only a matrix multiply tells us the shape of a tile, so it comes
+            // from the accumulators the value reads.
+            visit_with(op->value, [&](auto *self, const Load *load) {
+                Fragment *src = find_fragment(load->name);
+                if (src && src != f && src->found_shape) {
+                    set_shape(f, src->shape);
+                }
+                self->visit_base(load);
+            });
+            user_assert(f->found_shape)
+                << "Elementwise update of the tensor core accumulator " << f->name
+                << " reads no accumulator of a matrix multiply, so the shape of its "
+                << "tiles is not known.\n"
+                << Stmt(op);
+        }
+        const Shape &shape = f->shape;
+        MultiRamp dest_mr;
+        WMMAMatrixLayout dest;
+        user_assert(f->element_type.bits() == 32 &&
+                    is_const_one(op->predicate) &&
+                    is_multiramp(op->index, Scope<Expr>::empty_scope(), &dest_mr) &&
+                    wmma_matrix_layout(dest_mr, shape.M, shape.N, &dest))
+            << "An elementwise update of a tensor core accumulator must store a "
+            << "whole " << shape.M << "x" << shape.N << " tile of 32-bit elements, "
+            << "unpredicated.\n"
+            << Stmt(op);
+        const string name = subtile_name(f, op->index);
+        const int lanes = f->value_type().lanes();
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        Expr value = Elementwise(this, op, f, lane, lanes).mutate(op->value);
+        if (pass == 0) {
+            return op;
+        }
+        return in_lane_loop(unit, lane,
+                            Store::make(name, std::move(value), Ramp::make(0, 1, lanes)));
     }
 
     Stmt visit(const For *op) override {
@@ -931,6 +1160,10 @@ class ExtractWMMAOperations : public IRMutator {
             return pass == 0 ? Stmt(op) : convert_to_fill(op, f);
         }
 
+        if (is_elementwise(op)) {
+            return convert_to_elementwise(op, f);
+        }
+
         MatmulInfo info = analyze_matmul(*f->unit, op);
         if (pass == 0) {
             set_role(f, Role::Accumulator);
@@ -1007,6 +1240,24 @@ bool wmma_matrix_layout(const MultiRamp &mr, int rows, int cols,
     }
     result->base = mr.base;
     return true;
+}
+
+const Load *wmma_matrix_load(const Expr &e, MultiRamp *mr) {
+    const Shuffle *shuffle = e.as<Shuffle>();
+    if (auto factor = shuffle ? shuffle->is_repeat_each_lane() : std::nullopt) {
+        // Each lane repeated is a broadcast along the inner dimension.
+        MultiRamp inner;
+        const Load *load = wmma_matrix_load(shuffle->vectors[0], &inner);
+        if (load) {
+            vector<Expr> strides = inner.strides;
+            vector<int> lanes = inner.lanes;
+            strides.insert(strides.begin(), make_zero(inner.base.type()));
+            lanes.insert(lanes.begin(), *factor);
+            *mr = MultiRamp(inner.base, std::move(strides), std::move(lanes));
+        }
+        return load;
+    }
+    return is_load_of_multiramp(e, Scope<Expr>::empty_scope(), mr);
 }
 
 bool is_wmma_matrix_store(const Store *op) {

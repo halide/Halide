@@ -669,6 +669,7 @@ tests(
     warp_shuffle_hoisting.cpp
     widening_reduction.cpp
     wmma_bfloat_bits.cpp
+    wmma_elementwise.cpp
     wmma_fragment_layout.cpp
     wmma_matmul.cpp
     wmma_row_max.cpp

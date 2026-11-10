@@ -15,6 +15,7 @@ namespace Halide {
 namespace Internal {
 
 struct Call;
+struct Load;
 struct Store;
 
 /** Rewrite matrix multiplies that accumulate into Tile memory as
@@ -41,6 +42,10 @@ bool is_wmma_intrinsic(const Call *op);
  * memory, and the distance between its rows or columns, are recoverable from
  * the index of that Load: whichever dimension has stride one is the dense one.
  *
+ * A matrix that is one row or one column repeated has a stride of zero, and the
+ * simplifier turns the Load of one into a broadcast of a smaller Load;
+ * wmma_matrix_load sees through that.
+ *
  * Being a Load rather than a bare handle to the allocation means that the
  * passes which track uses of an allocation (dead allocation removal, shared
  * memory liveness and packing, closure construction) see the access, and see
@@ -48,6 +53,13 @@ bool is_wmma_intrinsic(const Call *op);
  * - so passes that rewrite the *structure* of a load must leave it alone, or
  * the tile shape will no longer be recoverable. */
 int wmma_matrix_arg(const Call *op);
+
+/** The Load underneath a matrix moved by a wmma intrinsic, with *mr describing
+ * the addresses of the whole matrix in row-major order, or null if `e` is not
+ * a load with an affine index. Like is_load_of_multiramp, but it also
+ * recognizes a load with each lane repeated, which is what the simplifier makes
+ * of a matrix whose rows are all the same vector. */
+const Load *wmma_matrix_load(const Expr &e, MultiRamp *mr);
 
 /** Whether a Store is the copy of a tensor core accumulator out to memory
  * produced by the pass above. Such a store writes the whole matrix, with each
