@@ -1932,13 +1932,14 @@ inline bool f32_operands(Func dot, Func x, const std::vector<ApproximationResult
     return dot.type() == Float(32) && wh.type() == Float(32) && xh.type() == Float(32);
 }
 
-// A GPU gemm's tile shape under `cond` (Expr(): the rest): a block of wn x 1
+// A GPU gemm's tile shape under `cond` (Expr(): the rest): a block of wn x wm
 // warps (Metal: simdgroups), each tn x tm fragments; `guard`: one tile, its
 // stores guarded (gpu_staged()).
 struct GemmShape {
     Expr cond;
     int tn, tm, wn;
     bool guard = false;
+    int wm = 1;
 };
 
 // Metal's shapes, of 8 x 8 fragments, by M: 64 x 64 on blocked f16 operands
@@ -1964,12 +1965,13 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 }
 
 // CUDA's shapes, of wmma's 16 x 16 fragments, by M: 128 x 64 (M >= 64, N >=
-// 128), 32 x 32, 32 x 16 (gpu_gemm's min_m: 16). (f16, 4096^2 x 512, us: 128
+// 128), 16 x 32 of 1 x 2 warps, 32 x 16 (gpu_gemm's min_m: 16). (M = 32,
+// f16 acts, 4096^2: 16 x 32 vs 32 x 32 of 2 x 2 warps q4_K 94 -> 77us) (f16, 4096^2 x 512, us: 128
 // x 64 of 4 warps 322; 256 x 64 of 8 warps 487, 128 x 64 of 8 warps 468,
 // 256 x 32 of 8 warps 527; RTX A4500)
 inline std::vector<GemmShape> cuda_shapes(Func out) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
-    return {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 2, 2}, {Expr(), 1, 1, 2}};
+    return {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 1, 1, false, 2}, {Expr(), 1, 1, 2}};
 }
 
 // What gpu_staged() leaves to fragments(): the operands' copies in shared
@@ -1982,7 +1984,7 @@ struct Staged {
 
 // A GPU gemm on f16 or f32 operands (wh, xh), as GGML's Metal kernel_mul_mm,
 // for `o` (out's specialization): the macro-kernel. A block (Metal: a
-// threadgroup) takes a bn x bm tile, its warps wn x 1 sub-tiles of frag * tn
+// threadgroup) takes a bn x bm tile, its warps wn x wm sub-tiles of frag * tn
 // x frag * tm, each frag x frag an accumulator (fragments()). Per step of K
 // (kstep values) the operands are staged in shared memory. Tiles: the first of
 // `shapes` whose cond holds. Under a guarded shape, out reads the tile from a
@@ -2015,7 +2017,7 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
     Stage sd = Stage(dot), su = dot.update();
     std::function<void()> edged;
     for (const GemmShape &sh : shapes) {
-        const int bn = frag * sh.tn * sh.wn, bm = frag * sh.tm;
+        const int bn = frag * sh.tn * sh.wn, bm = frag * sh.tm * sh.wm;
         auto tile = [&](Stage st) {
             if (sh.guard) st.tile({n, m}, {nw, mw}, {ni, mi}, {frag * sh.tn, frag * sh.tm}, {TailStrategy::Auto, TailStrategy::RoundUp});
             else
@@ -2072,15 +2074,22 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
                 Var ju("ju"), jh("jh");
                 s.split(a[0], l, jv, 32).split(jv, jh, jv, 16).split(jv, ju, jv, 4).fuse(jh, l, l).unroll(ju);
             } else {
-                s.split(a[0], l, jv, pad ? 16 / f.type().bytes() : 4);
+                // (padded: 16 bytes a lane; super-blocks' weights on the
+                // one-fragment tiles 16 values, q4_K/q6_K M = 16 1.16-1.46x,
+                // q4_0/f16 0.9x; RTX A4500)
+                int wv = f.name() == ws.name() && fmt.block >= 256 && sh.tn == 1 ? 16 : 16 / f.type().bytes();
+                s.split(a[0], l, jv, pad ? wv : 4);
             }
             for (size_t i = 1; i < a.size(); i++) {
                 Var fl("l" + std::to_string(i));
                 s.fuse(l, a[i], fl);
                 l = fl;
             }
-            s.split(l, l, ln, 32).split(l, lt, sw, sh.wn).reorder(jv, lt, ln, sw);
-            s.gpu_lanes(ln).gpu_threads(sw).vectorize(jv).unroll(lt);
+            // the warps (sw, sm) on dot's thread dimensions (nw, mw)
+            Var sm("sm");
+            s.split(l, l, ln, 32).split(l, lt, sw, sh.wn * sh.wm).split(sw, sm, sw, sh.wn).reorder(jv, lt, ln, sw, sm);
+            s.gpu_lanes(ln).gpu_threads(sw, sm).vectorize(jv);
+            s.unroll(lt);
         }
     }
     if (edged) edged();
