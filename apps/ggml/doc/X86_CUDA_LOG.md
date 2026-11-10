@@ -251,3 +251,9 @@ App changes:
   (52.2), iq4_nl 62.9 -> 47.3 (51.6), q4_K 42.0 -> 38.9 (59.2). GGML /
   Halide at M = 8 now 1.02 (q8_0) to 1.96 (q2_K); at M = 1 1.05 (q6_K) to
   1.89 (q2_K) but q3_K 0.90 (43.1 vs 38.9).
+- apps/ggml: CUDA gemm on blocked weights at M >= 256 in 64 x 128 tiles of
+  2 x 2 warps (was 128 x 64 of 4 x 1): each weight decoded once per 128
+  act rows, not 64. 4096^2, f16 acts, us: M = 512 q6_K 669 -> 515, q5_0
+  561 -> 460, mxfp4 569 -> 469, q3_K 602 -> 444; f16 unchanged (flat). At
+  M = 64..128 mixed (0.7-1.2x), so not there. GGML / Halide at M = 512
+  0.61-0.84 -> 0.74-0.98 (q2_K 1.44); M = 256 0.77-1.0 (q2_K 1.6).

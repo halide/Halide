@@ -1969,14 +1969,20 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
     return shapes;
 }
 
-// CUDA's shapes, of wmma's 16 x 16 fragments, by M: 128 x 64 (M >= 64, N >=
-// 128), 16 x 32 of 1 x 2 warps, 32 x 16 (gpu_gemm's min_m: 16). (M = 32,
-// f16 acts, 4096^2: 16 x 32 vs 32 x 32 of 2 x 2 warps q4_K 94 -> 77us) (f16, 4096^2 x 512, us: 128
-// x 64 of 4 warps 322; 256 x 64 of 8 warps 487, 128 x 64 of 8 warps 468,
-// 256 x 32 of 8 warps 527; RTX A4500)
-inline std::vector<GemmShape> cuda_shapes(Func out) {
+// CUDA's shapes, of wmma's 16 x 16 fragments, by M: on blocked weights 64 x
+// 128 of 2 x 2 warps (M >= 256), decoding each weight once per 128 act rows
+// (4096^2 x 256..512 vs 128 x 64: q6_K/q3_K/q5_0 1.2-1.4x, iq4_xs 1.18x,
+// q4_K/q2_K 1.03-1.09x; at M = 64..128 0.7-1.2x; f16 0.96x); 128 x 64 (M >=
+// 64, N >= 128), 16 x 32 of 1 x 2 warps, 32 x 16 (gpu_gemm's min_m: 16). (M =
+// 32, f16 acts, 4096^2: 16 x 32 vs 32 x 32 of 2 x 2 warps q4_K 94 -> 77us)
+// (f16, 4096^2 x 512, us: 128 x 64 of 4 warps 322; 256 x 64 of 8 warps 487,
+// 128 x 64 of 8 warps 468, 256 x 32 of 8 warps 527; RTX A4500)
+inline std::vector<GemmShape> cuda_shapes(Func out, const Formats &fmt) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
-    return {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 1, 1, false, 2}, {Expr(), 1, 1, 2}};
+    std::vector<GemmShape> shapes;
+    if (fmt.block > 1) shapes.push_back({M >= 256 && N >= 64, 2, 4, 2, false, 2});
+    shapes.insert(shapes.end(), {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 1, 1, false, 2}, {Expr(), 1, 1, 2}});
+    return shapes;
 }
 
 // What gpu_staged() leaves to fragments(): the operands' copies in shared
@@ -2323,7 +2329,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         const bool metal = t.has_feature(Target::Metal);
         const std::string gpu = metal ? "metal: " : "cuda: ";
         const int frag = metal ? 8 : 16, min_m = metal ? 8 : 16;
-        auto shapes = [&](Func wh) { return metal ? metal_shapes(out, wh, fmt) : cuda_shapes(out); };
+        auto shapes = [&](Func wh) { return metal ? metal_shapes(out, wh, fmt) : cuda_shapes(out, fmt); };
         if (acc.defined()) throw std::invalid_argument(gpu + "dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
         Func wh, xh;
