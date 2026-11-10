@@ -28,6 +28,24 @@ namespace Internal {
  * operation that cannot be done lane-wise within one. */
 Stmt lower_swar_vectors(const Stmt &s, const std::string &loop_name, const Target &target);
 
+/** Arithmetic on the lanes of vectors of integer type t packed as above into
+ * words: unsigned integers of t.bits() * t.lanes() bits, which may be up to
+ * 64. The operands and the results are words. */
+// @{
+/** The word with the low t.bits() bits of v in every lane. */
+Expr swar_splat(const Type &t, uint64_t v);
+
+/** The lane-wise sum and difference of a and b, wrapping in each lane. Each
+ * operand appears twice in the result. */
+Expr swar_add(const Type &t, const Expr &a, const Expr &b);
+Expr swar_sub(const Type &t, const Expr &a, const Expr &b);
+
+/** Every lane of w shifted by the constant c, in the other direction if c is
+ * negative. A shift by at least the lane width fills the lane with zeros, or
+ * with sign bits for a right shift of signed lanes. */
+Expr swar_shift(const Type &t, const Expr &w, int64_t c, bool left);
+// @}
+
 }  // namespace Internal
 }  // namespace Halide
 

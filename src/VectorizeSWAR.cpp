@@ -47,6 +47,73 @@ uint64_t low_bits(int bits) {
     return bits >= 64 ? ~(uint64_t)0 : (shl(1, bits) - 1);
 }
 
+Type word_type(const Type &t) {
+    return UInt(t.bits() * t.lanes());
+}
+
+// The word with the given value in every lane.
+uint64_t splat_bits(const Type &t, uint64_t v) {
+    uint64_t w = 0;
+    for (int i = 0; i < t.lanes(); i++) {
+        w |= shl(v & low_bits(t.bits()), t.bits() * i);
+    }
+    return w;
+}
+
+}  // namespace
+
+Expr swar_splat(const Type &t, uint64_t v) {
+    return make_const(word_type(t), splat_bits(t, v));
+}
+
+Expr swar_add(const Type &t, const Expr &a, const Expr &b) {
+    // Add the lanes without their top bits, so no carry crosses into
+    // the next lane, then fix up the top bits with an xor.
+    const uint64_t top = shl(1, t.bits() - 1);
+    Expr h = swar_splat(t, top), not_h = swar_splat(t, ~top);
+    return ((a & not_h) + (b & not_h)) ^ ((a ^ b) & h);
+}
+
+Expr swar_sub(const Type &t, const Expr &a, const Expr &b) {
+    // Subtract with the top bit of each lane of a set, so no borrow
+    // crosses into the next lane, then fix up the top bits.
+    const uint64_t top = shl(1, t.bits() - 1);
+    Expr h = swar_splat(t, top), not_h = swar_splat(t, ~top);
+    return ((a | h) - (b & not_h)) ^ ((a ^ ~b) & h);
+}
+
+Expr swar_shift(const Type &t, const Expr &w, int64_t c, bool left) {
+    if (c < 0) {
+        return swar_shift(t, w, -c, !left);
+    } else if (c == 0) {
+        return w;
+    }
+    const int bits = t.bits();
+    const Type wt = word_type(t);
+    if (left) {
+        if (c >= bits) {
+            return make_zero(wt);
+        }
+        return (w << make_const(wt, c)) & swar_splat(t, shl(low_bits(bits), (int)c) & low_bits(bits));
+    } else {
+        if (c >= bits) {
+            if (!t.is_int()) {
+                return make_zero(wt);
+            }
+            c = bits - 1;
+        }
+        Expr result = (w >> make_const(wt, c)) & swar_splat(t, shr(low_bits(bits), (int)c));
+        if (t.is_int()) {
+            // Sign-extend from bit (bits - 1 - c) of each lane.
+            Expr m = swar_splat(t, shl(1, bits - 1 - (int)c));
+            result = swar_sub(t, result ^ m, m);
+        }
+        return result;
+    }
+}
+
+namespace {
+
 // The name of the Func that a loop belongs to. Loop names have the
 // form func.s<stage>.var...
 string func_name_of_loop(const string &loop_name) {
@@ -87,23 +154,6 @@ class LowerSWARVectors : public IRMutator {
         return Expr();
     }
 
-    static Type word_type(const Type &t) {
-        return UInt(t.bits() * t.lanes());
-    }
-
-    // The word with the given value in every lane.
-    static uint64_t splat_bits(const Type &t, uint64_t v) {
-        uint64_t w = 0;
-        for (int i = 0; i < t.lanes(); i++) {
-            w |= shl(v & low_bits(t.bits()), t.bits() * i);
-        }
-        return w;
-    }
-
-    static Expr splat(const Type &t, uint64_t v) {
-        return make_const(word_type(t), splat_bits(t, v));
-    }
-
     static Expr packed(const Type &t, const vector<int64_t> &lanes) {
         uint64_t w = 0;
         for (int i = 0; i < t.lanes(); i++) {
@@ -116,15 +166,15 @@ class LowerSWARVectors : public IRMutator {
     // unsigned type) in every lane.
     static Expr splat_runtime(const Type &t, Expr x) {
         if (const auto c = as_const_uint(x)) {
-            return splat(t, *c);
+            return swar_splat(t, *c);
         } else if (const auto c = as_const_int(x)) {
-            return splat(t, (uint64_t)*c);
+            return swar_splat(t, (uint64_t)*c);
         }
         Type lane_t = UInt(t.bits());
         if (x.type() != lane_t) {
             x = reinterpret(lane_t, x);
         }
-        return cast(word_type(t), x) * splat(t, 1);
+        return cast(word_type(t), x) * swar_splat(t, 1);
     }
 
     // The value of each lane of v, if they are all constants.
@@ -185,56 +235,8 @@ class LowerSWARVectors : public IRMutator {
         return result;
     }
 
-    Expr swar_add(const Type &t, const Expr &a, const Expr &b) {
-        // Add the lanes without their top bits, so no carry crosses into
-        // the next lane, then fix up the top bits with an xor.
-        const uint64_t top = shl(1, t.bits() - 1);
-        Expr h = splat(t, top), not_h = splat(t, ~top);
-        return ((a & not_h) + (b & not_h)) ^ ((a ^ b) & h);
-    }
-
-    Expr swar_sub(const Type &t, const Expr &a, const Expr &b) {
-        // Subtract with the top bit of each lane of a set, so no borrow
-        // crosses into the next lane, then fix up the top bits.
-        const uint64_t top = shl(1, t.bits() - 1);
-        Expr h = splat(t, top), not_h = splat(t, ~top);
-        return ((a | h) - (b & not_h)) ^ ((a ^ ~b) & h);
-    }
-
     Expr word_const(const Type &t, uint64_t v) {
         return make_const(word_type(t), v);
-    }
-
-    // Shift every lane of w by the constant c. Shifts by at least the
-    // lane width fill the lane with zeros (or sign bits for a right shift
-    // of signed lanes).
-    Expr shift_const(const Type &t, const Expr &w, int64_t c, bool left) {
-        if (c < 0) {
-            return shift_const(t, w, -c, !left);
-        } else if (c == 0) {
-            return w;
-        }
-        const int bits = t.bits();
-        if (left) {
-            if (c >= bits) {
-                return word_const(t, 0);
-            }
-            return (w << word_const(t, c)) & splat(t, shl(low_bits(bits), (int)c) & low_bits(bits));
-        } else {
-            if (c >= bits) {
-                if (!t.is_int()) {
-                    return word_const(t, 0);
-                }
-                c = bits - 1;
-            }
-            Expr result = (w >> word_const(t, c)) & splat(t, shr(low_bits(bits), (int)c));
-            if (t.is_int()) {
-                // Sign-extend from bit (bits - 1 - c) of each lane.
-                Expr m = splat(t, shl(1, bits - 1 - (int)c));
-                result = swar_sub(t, result ^ m, m);
-            }
-            return result;
-        }
     }
 
     // Shift each lane of w by a constant that may differ per lane.
@@ -244,11 +246,11 @@ class LowerSWARVectors : public IRMutator {
             lanes_by_amount[amounts[i]] |= shl(low_bits(t.bits()), t.bits() * i);
         }
         if (lanes_by_amount.size() == 1) {
-            return shift_const(t, w, amounts[0], left);
+            return swar_shift(t, w, amounts[0], left);
         }
         Expr result;
         for (const auto &[amount, lanes] : lanes_by_amount) {
-            Expr part = shift_const(t, w, amount, left) & word_const(t, lanes);
+            Expr part = swar_shift(t, w, amount, left) & word_const(t, lanes);
             result = result.defined() ? (result | part) : part;
         }
         return result;
@@ -309,7 +311,7 @@ class LowerSWARVectors : public IRMutator {
             }
             return packed(t, mask);
         } else if (const Broadcast *op = cond.as<Broadcast>(); op && op->value.type().is_scalar()) {
-            return Select::make(mutate(op->value), splat(t, ~(uint64_t)0), splat(t, 0));
+            return Select::make(mutate(op->value), swar_splat(t, ~(uint64_t)0), swar_splat(t, 0));
         } else if (const Select *op = cond.as<Select>()) {
             if (const Broadcast *b = op->condition.as<Broadcast>(); b && b->value.type().is_scalar()) {
                 return Select::make(mutate(b->value), mask_word(t, op->true_value), mask_word(t, op->false_value));

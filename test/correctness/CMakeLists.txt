@@ -150,6 +150,7 @@ tests(
     cse.cpp
     cse_name_collision.cpp
     cse_nan.cpp
+    cuda_8_bit_add.cpp
     cuda_8_bit_dot_product.cpp
     cuda_8_bit_sum.cpp
     cuda_f16_product.cpp

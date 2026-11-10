@@ -21,6 +21,7 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
+#include "VectorizeSWAR.h"
 
 #include <fstream>
 #include <limits>
@@ -84,6 +85,8 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const Call *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
     void visit(const Cast *) override;
     void visit(const For *) override;
     void visit(const Allocate *) override;
@@ -95,6 +98,17 @@ protected:
     void visit(const ProducerConsumer *) override;
     void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
+
+    /** Emit e, whose elements are of interest modulo t's (a vector of 8- or
+     * 16-bit integers that fills a 32- or 64-bit register), as arithmetic on
+     * that register, if it adds, subtracts or shifts. Returns false if it
+     * doesn't, isn't such arithmetic throughout, or isn't an operand of a dot
+     * product instruction. */
+    bool codegen_in_register(Type t, const Expr &e);
+
+    /** Whether the expression being emitted is an operand of a dot product
+     * instruction (dp4a, dp2a), which takes its vector as a register. */
+    bool in_dot_product_operands = false;
 
     /** Emit a cast to float16 of an f32 product of float16s as float16's own
      * multiply, if the target has one. Returns false if e isn't that. */
@@ -458,7 +472,161 @@ bool CodeGen_PTX_Dev::codegen_f16_product(Type t, const Expr &e) {
 }
 
 void CodeGen_PTX_Dev::visit(const Cast *op) {
-    if (!codegen_f16_product(op->type, op->value)) {
+    if (!codegen_f16_product(op->type, op->value) &&
+        !(op->value.type().bits() > op->type.bits() && codegen_in_register(op->type, op))) {
+        CodeGen_LLVM::visit(op);
+    }
+}
+
+namespace {
+
+// The elements of e modulo those of t (a vector of small integers that fills
+// a register), as a value of that register's type (w): the element-wise
+// integer arithmetic that carries nothing between fields, or is patched not
+// to. Undefined if e is anything else. `arith`: set if e adds, subtracts or
+// shifts.
+Expr in_register(Type t, Type w, const Expr &e, bool &arith) {
+    const int bits = t.bits();
+    const Type et = e.type();
+    if (!et.is_int_or_uint() || et.lanes() != t.lanes() || et.bits() < bits) {
+        return Expr();
+    }
+    auto arg = [&](const Expr &a) { return in_register(t, w, a, arith); };
+    // The fields are the lanes of a SWAR word, whose sums and differences
+    // carry nothing between them.
+    auto add = [&](const Expr &a, const Expr &b, bool sub) {
+        Expr x = arg(a), y = arg(b);
+        if (!x.defined() || !y.defined()) {
+            return Expr();
+        }
+        arith = true;
+        // (each operand is used twice)
+        const std::string xn = unique_name('t'), yn = unique_name('t');
+        const Expr xv = Variable::make(w, xn), yv = Variable::make(w, yn);
+        return Let::make(xn, x, Let::make(yn, y, sub ? swar_sub(t, xv, yv) : swar_add(t, xv, yv)));
+    };
+    // a, if it is a value of t's width zero-extended: its upper bits are
+    // zeros, so its shifts right are those of the register, masked.
+    auto zero_extended = [&](Expr a) {
+        while (a.type().bits() > bits) {
+            const Cast *c = a.as<Cast>();
+            if (!c || !a.type().is_uint() || c->value.type().bits() > a.type().bits()) {
+                return Expr();
+            }
+            a = c->value;
+        }
+        return a.type().is_uint() && a.type().bits() == bits ? a : Expr();
+    };
+    auto shift = [&](const Expr &a, const Expr &by, bool right) {
+        std::optional<uint64_t> c = as_const_uint(by);
+        if (auto ci = as_const_int(by); ci && *ci >= 0) {
+            c = (uint64_t)*ci;
+        }
+        if (!c || *c >= (uint64_t)bits) {
+            return Expr();
+        }
+        Expr x = right ? zero_extended(a) : a;
+        x = x.defined() ? arg(x) : x;
+        if (!x.defined()) {
+            return Expr();
+        }
+        arith = true;
+        // (zeros shift in from either side)
+        return swar_shift(t.with_code(Type::UInt), x, (int64_t)*c, !right);
+    };
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        if (auto c = as_const_int(b->value)) {
+            return swar_splat(t, (uint64_t)*c);
+        } else if (auto c = as_const_uint(b->value)) {
+            return swar_splat(t, *c);
+        }
+    } else if (const Cast *c = e.as<Cast>()) {
+        // (a cast of a value at least as wide keeps its low bits)
+        Expr x = c->value.type().bits() >= bits ? arg(c->value) : Expr();
+        if (x.defined()) {
+            return x;
+        }
+    } else if (const Reinterpret *r = e.as<Reinterpret>()) {
+        Expr x = r->value.type().lanes() == et.lanes() ? arg(r->value) : Expr();
+        if (x.defined()) {
+            return x;
+        }
+    } else if (const Add *a = e.as<Add>()) {
+        return add(a->a, a->b, false);
+    } else if (const Sub *a = e.as<Sub>()) {
+        return add(a->a, a->b, true);
+    } else if (const Mul *m = e.as<Mul>()) {
+        // (a shift left by a constant, as the simplifier writes it)
+        const Broadcast *b = m->b.as<Broadcast>();
+        auto k = b ? is_const_power_of_two_integer(b->value) : std::nullopt;
+        Expr x = k ? shift(m->a, make_const(UInt(32), *k), false) : Expr();
+        if (x.defined()) {
+            return x;
+        }
+    } else if (const Div *d = e.as<Div>()) {
+        const Broadcast *b = d->b.as<Broadcast>();
+        auto k = b ? is_const_power_of_two_integer(b->value) : std::nullopt;
+        return k ? shift(d->a, make_const(UInt(32), *k), true) : Expr();
+    } else if (const Mod *m = e.as<Mod>()) {
+        const Broadcast *b = m->b.as<Broadcast>();
+        auto k = b ? is_const_power_of_two_integer(b->value) : std::nullopt;
+        Expr x = k && *k <= bits ? arg(m->a) : Expr();
+        return x.defined() ? x & swar_splat(t, ((uint64_t)1 << *k) - 1) : Expr();
+    } else if (const Call *c = e.as<Call>()) {
+        const Broadcast *b = c->args.size() == 2 ? c->args[1].as<Broadcast>() : nullptr;
+        if (c->is_intrinsic({Call::widening_add, Call::widen_right_add})) {
+            return add(c->args[0], c->args[1], false);
+        } else if (c->is_intrinsic({Call::widening_sub, Call::widen_right_sub})) {
+            return add(c->args[0], c->args[1], true);
+        } else if (c->is_intrinsic({Call::shift_right, Call::widening_shift_right}) && b) {
+            return shift(c->args[0], b->value, true);
+        } else if (c->is_intrinsic({Call::shift_left, Call::widening_shift_left}) && b) {
+            return shift(c->args[0], b->value, false);
+        } else if (c->is_intrinsic({Call::bitwise_and, Call::bitwise_or, Call::bitwise_xor})) {
+            Expr x = arg(c->args[0]), y = arg(c->args[1]);
+            if (!x.defined() || !y.defined()) {
+                return Expr();
+            }
+            return c->is_intrinsic(Call::bitwise_and) ? x & y : c->is_intrinsic(Call::bitwise_or) ? x | y :
+                                                                                                    x ^ y;
+        } else if (c->is_intrinsic(Call::bitwise_not)) {
+            Expr x = arg(c->args[0]);
+            return x.defined() ? ~x : Expr();
+        }
+    }
+    // Anything else of t's width is its own bits.
+    return et.bits() == bits ? reinterpret(w, e) : Expr();
+}
+
+}  // namespace
+
+bool CodeGen_PTX_Dev::codegen_in_register(Type t, const Expr &e) {
+    // PTX has no vector registers: the backend extracts each element of a
+    // vector of small integers, operates on it and packs the results again.
+    // The dot product instructions take the packed register; anything that
+    // wants the elements (a conversion to float, say) would unpack it again.
+    const int bits = t.bits(), total = bits * t.lanes();
+    if (!in_dot_product_operands || !t.is_vector() || !t.is_int_or_uint() ||
+        (bits != 8 && bits != 16) || (total != 32 && total != 64)) {
+        return false;
+    }
+    bool arith = false;
+    Expr r = in_register(t, UInt(total), e, arith);
+    if (!r.defined() || !arith) {
+        return false;
+    }
+    codegen(reinterpret(t, r));
+    return true;
+}
+
+void CodeGen_PTX_Dev::visit(const Add *op) {
+    if (!codegen_in_register(op->type, op)) {
+        CodeGen_LLVM::visit(op);
+    }
+}
+
+void CodeGen_PTX_Dev::visit(const Sub *op) {
+    if (!codegen_in_register(op->type, op)) {
         CodeGen_LLVM::visit(op);
     }
 }
@@ -1434,6 +1602,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         }
         // Concatenate the per-lane results to get the full vector result
         Expr equiv = Shuffle::make_concat(result);
+        ScopedValue<bool> operands(in_dot_product_operands, true);
         equiv.accept(this);
         return;
     }
