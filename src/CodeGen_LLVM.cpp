@@ -5397,7 +5397,26 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
     if (!is_reduction && intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
-        // intrinsic on each, then splice together the results.
+        // intrinsic on each, then splice together the results. Args wider than
+        // a native vector are cut into native vectors first, so that each
+        // piece is a subvector of a single register.
+        vector<vector<Value *>> chunks(arg_values.size());
+        for (size_t i = 0; i < arg_values.size(); i++) {
+            llvm::Type *t = arg_values[i]->getType();
+            int bits = t->getScalarSizeInBits();
+            if (!isa<FixedVectorType>(t) || !bits) {
+                continue;
+            }
+            int lanes = get_vector_num_elements(t);
+            int n = native_vector_bits() / bits;
+            int slice_lanes = intrin_lanes * (lanes / arg_lanes);
+            if (lanes > n && slice_lanes && n % slice_lanes == 0) {
+                for (int s = 0; s < lanes; s += n) {
+                    chunks[i].push_back(slice_vector(arg_values[i], s, n));
+                }
+            }
+        }
+
         vector<Value *> results;
         for (int start = 0; start < arg_lanes; start += intrin_lanes) {
             vector<Value *> args;
@@ -5413,7 +5432,14 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                     // result. Assume that they horizontally reduce
                     // neighboring elements...
                     int reduce = arg_i_lanes / arg_lanes;
-                    args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
+                    int s = start * reduce;
+                    Value *v = arg_values[i];
+                    if (!chunks[i].empty()) {
+                        int n = get_vector_num_elements(chunks[i][0]->getType());
+                        v = chunks[i][s / n];
+                        s %= n;
+                    }
+                    args.push_back(slice_vector(v, s, intrin_lanes * reduce));
                 } else if (arg_i_lanes == 1) {
                     if (intrin->getFunctionType()->getParamType(i)->isVectorTy()) {
                         // It's a scalar argument to a vector parameter. Broadcast it.
