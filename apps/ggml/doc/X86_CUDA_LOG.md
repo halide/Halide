@@ -236,3 +236,12 @@ App changes:
   0.63, q5_1 0.63, mxfp4 0.67, iq4_nl 0.78, iq4_xs 0.84, q2_0 0.91,
   q2_K 1.10, q3_K 0.85, q4_K 0.84 (was 0.43), q5_K 0.73, q6_K 0.85; f16
   vs cuBLAS 1.07. M = 16: 0.48 (q5_0) to 0.93 (q2_0); M = 512 unchanged.
+- CUDA rows on integer acts: an affine weight's min term summed the act's
+  codes per lane byte by byte (unrolled; 128 byte loads beside the dp4a's
+  word loads at M = 8). The run is now a vector reduction, which PTX lowers
+  to dp4a by ones (core), sharing the codes' loads. (Reading q8_1's s and
+  q8_K's bsums instead, derived_sums(), took M = 8 to 72/67us for
+  q4_1/q5_1, but M = 1 regressed 1.45x: a second pass over the weights'
+  mins.) 4096^2, q8 acts, us, M = 8 (GGML mmvq): q4_1 87 -> 52.9 (47.5),
+  q5_1 93 -> 48.3 (50.3), q4_K 99 -> 42.0 (58.0), q5_K 122 -> 56.1 (60.4);
+  M = 1 unchanged or faster (q5_K 35.7 -> 33.7).
