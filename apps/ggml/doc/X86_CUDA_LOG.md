@@ -294,3 +294,8 @@ App changes:
   slower at M = 16..128 (q6_K at M = 128 190 -> 317us), and f16 fails to
   compile (the staging loop's extent is no longer constant). 32: slower
   everywhere but q4_K at M = 16 (86 -> 72us).
+- CUDA f16 weights at M = 2..15 on the wmma gemm (one 32 x 16 tile of 2
+  warps, guarded; was the rows), at any M * N: 4096^2 x 8 152 -> 76us
+  (cuBLAS 79, GGML's mmf on f32 acts 70), x 4 105 -> 75, 4096 x 2048 x 8
+  80 -> 51 (cuBLAS 46). One warp's 16 x 16 1.05x slower; at M = 1 the same
+  as the rows (77 vs 78us), which stay.

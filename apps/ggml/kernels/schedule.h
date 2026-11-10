@@ -1977,13 +1977,16 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 // us, M = 64: q6_K 204 -> 111, q4_0 175 -> 125, f16 117 -> 94; M = 128: q6_K
 // 232 -> 187, q4_K 164 -> 160; f16 at M = 80 126 -> 134; M = 192 1.0-1.6x
 // slower); 128 x 64 (M >= 64, N >= 128), 16 x 32 of 1 x 2 warps, 32 x 16
-// (gpu_gemm's min_m: 16). (M =
+// (gpu_gemm's min_m: 16; f16 weights: 2, M < 16 one 32 x 16 tile of 2
+// warps, guarded: 4096^2 x 8 152 -> 76us, x 4 105 -> 75, cuBLAS 77-79; one
+// warp 1.05x slower; at M = 1 as the rows). (M =
 // 32, f16 acts, 4096^2: 16 x 32 vs 32 x 32 of 2 x 2 warps q4_K 94 -> 77us)
 // (f16, 4096^2 x 512, us: 128 x 64 of 4 warps 322; 256 x 64 of 8 warps 487,
 // 128 x 64 of 8 warps 468, 256 x 32 of 8 warps 527; RTX A4500)
 inline std::vector<GemmShape> cuda_shapes(Func out, const Formats &fmt) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     std::vector<GemmShape> shapes;
+    if (fmt.block == 1) shapes.push_back({M < 16, 1, 1, 2, true});
     if (fmt.block > 1) shapes.push_back({M >= 256 && N >= 64, 2, 4, 2, false, 2});
     shapes.push_back({M >= 64 && (fmt.block > 1 ? M <= 128 : M < 80), 1, 2, 2, false, 2});
     shapes.insert(shapes.end(), {{M >= 64 && N >= 128, 2, 4, 4}, {M >= 32, 1, 1, 1, false, 2}, {Expr(), 1, 1, 2}});
@@ -2146,8 +2149,8 @@ inline void fragments(const Staged &st, Func dot, int frag) {
 
 // GPU on f16 or f32 operands: gpu_staged() on `shapes` of frag x frag
 // fragments() where M >= min_m and N >= 32 (flat:
-// K % 32 == 0 and M * N >= 2^16; below it flat's rows win, 1.2-2.6x at M =
-// 8..32, N = 512..2048), else metal_rows (flat: metal_flat) on a clone of
+// K % 32 == 0 and, on Metal, M * N >= 2^16; below it flat's rows win,
+// 1.2-2.6x at M = 8..32, N = 512..2048), else metal_rows (flat: metal_flat) on a clone of
 // dot, one kernel but flat's staged acts. min_m on Metal: 8 (GGML's; on f32
 // at M = 8..15 the gemm takes 0.59-1.0x of the rows' time, iq4_nl's at M =
 // 8 1.04x; M3 Max).
@@ -2159,7 +2162,7 @@ inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const 
     // pass, reading the clone, and the other branches inline both
     Func via = dot.in(out), edge = dot.in(via);
     Expr cond = M >= min_m && N >= 32;
-    if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && cast<int64_t>(M) * N >= (1 << 16);
+    if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && (frag == 16 || cast<int64_t>(M) * N >= (1 << 16));
     Stage mm = Stage(out).specialize(cond).eager_inline(via);
     Func pass = edge.clone_in(via);
     Func rows = dot.clone_in(pass);
@@ -2333,7 +2336,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (t.has_feature(Target::Metal) || t.has_feature(Target::CUDA)) {
         const bool metal = t.has_feature(Target::Metal);
         const std::string gpu = metal ? "metal: " : "cuda: ";
-        const int frag = metal ? 8 : 16, min_m = metal ? 8 : 16;
+        const int frag = metal ? 8 : 16, min_m = metal ? 8 : (fmt.block == 1 ? 2 : 16);
         auto shapes = [&](Func wh) { return metal ? metal_shapes(out, wh, fmt) : cuda_shapes(out, fmt); };
         if (acc.defined()) throw std::invalid_argument(gpu + "dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
