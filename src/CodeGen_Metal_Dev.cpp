@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <filesystem>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -8,7 +9,9 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
+#include "ExtractWMMAOperations.h"
 #include "IROperator.h"
+#include "MultiRamp.h"
 #include "Util.h"
 
 namespace Halide {
@@ -128,6 +131,31 @@ protected:
         std::string shared_name;
 
         const std::string simd_lane_id_name = "_simd_lane_id";
+
+        /** The Tile allocations in scope, each of which is a
+         * simdgroup_matrix: an 8x8 matrix striped across the 32 lanes of a
+         * SIMD-group, two elements per lane, in a layout that only the
+         * simdgroup_matrix operations understand. */
+        std::set<std::string> simdgroup_matrices;
+
+        /** The simdgroup_matrix operations that extract_wmma_operations
+         * produces, all of which are 8x8x8. */
+        // @{
+        std::string print_simdgroup_matrix_type(Type element_type);
+        /** The address of the first element of a matrix in memory, and how
+         * to pass its layout to simdgroup_load or simdgroup_store. */
+        std::string print_matrix_pointer(const std::string &name, Type element_type,
+                                         const MultiRamp &mr, int rows, int cols,
+                                         std::string *stride, bool *transpose);
+        /** The name of a simdgroup_matrix holding the value of a fragment
+         * expression, emitting the operation that computes it if it isn't
+         * already in an allocation. */
+        std::string print_simdgroup_matrix(const Expr &e);
+        /** Emit the operation that computes a fragment straight into the
+         * simdgroup_matrix called dest. */
+        void print_simdgroup_matrix_op(const std::string &dest, const Expr &value);
+        void print_simdgroup_store(const Store *op);
+        // @}
 
         void visit(const Min *) override;
         void visit(const Max *) override;
@@ -399,9 +427,128 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
                 << "(" << value << ", (ushort)" << x << ")";
         }
         print_assignment(op->type, rhs.str());
+    } else if (is_wmma_intrinsic(op)) {
+        id = print_simdgroup_matrix(op);
     } else {
+        internal_assert(!op->is_intrinsic(Call::wmma_fragment_to_matrix_d) &&
+                        !op->is_intrinsic(Call::wmma_lane_owns))
+            << "A simdgroup matrix store was broken apart during lowering. "
+            << op->name << " only has meaning as part of one.\n";
         CodeGen_GPU_C::visit(op);
     }
+}
+
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_simdgroup_matrix_type(Type element_type) {
+    return "simdgroup_matrix<" + print_type(element_type) + ", 8, 8>";
+}
+
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_matrix_pointer(const string &name, Type element_type,
+                                                                const MultiRamp &mr, int rows, int cols,
+                                                                string *stride, bool *transpose) {
+    WMMAMatrixLayout mem;
+    user_assert(wmma_matrix_layout(mr, rows, cols, &mem))
+        << "The memory a simdgroup_matrix operation moves a " << rows << "x" << cols
+        << " matrix of " << name << " to or from is not a dense tile by the time it "
+        << "reaches the backend. One cause is a threadgroup memory allocation made "
+        << "inside the loop over GPU threads, which gets striped across them; compute "
+        << "it at a loop outside the threads instead. The addresses accessed are:\n"
+        << mr.to_expr() << "\n";
+    // simdgroup_load and simdgroup_store read a row-major matrix, with
+    // elements_per_row giving the distance between rows. A column-major one is
+    // the transpose of a row-major one, with the distance between its columns
+    // as elements_per_row.
+    *stride = print_expr(cast(UInt(32), mem.stride));
+    *transpose = !mem.row_major;
+    string base = print_expr(mem.base);
+    string space = get_memory_space(name);
+    return "((" + space + " " + print_type(element_type) + " *)" + print_name(name) + " + " + base + ")";
+}
+
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_simdgroup_matrix(const Expr &e) {
+    if (const Load *load = e.as<Load>()) {
+        if (simdgroup_matrices.count(load->name)) {
+            return print_name(load->name);
+        }
+    }
+    const Call *call = e.as<Call>();
+    internal_assert(call && is_wmma_intrinsic(call))
+        << "Expected a simdgroup matrix value: " << e << "\n";
+    string dest = unique_name('_');
+    stream << get_indent() << print_simdgroup_matrix_type(e.type().element_of())
+           << " " << dest << ";\n";
+    print_simdgroup_matrix_op(dest, e);
+    return dest;
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::print_simdgroup_matrix_op(const string &dest, const Expr &value) {
+    const Call *op = value.as<Call>();
+    internal_assert(value.type().lanes() == 2)
+        << "A simdgroup_matrix fragment should be two elements per lane: " << value << "\n";
+    if (op && op->is_intrinsic(Call::wmma_mma)) {
+        // wmma_mma(M, N, K, a_layout, b_layout, a, b, c, lane). Once in a
+        // simdgroup_matrix an operand has no layout, because simdgroup_load
+        // already transposed it if it needed to.
+        internal_assert(op->args.size() == 9);
+        string a = print_simdgroup_matrix(op->args[5]);
+        string b = print_simdgroup_matrix(op->args[6]);
+        string c = print_simdgroup_matrix(op->args[7]);
+        stream << get_indent() << "simdgroup_multiply_accumulate(" << dest << ", "
+               << a << ", " << b << ", " << c << ");\n";
+    } else if (op && wmma_matrix_arg(op) >= 0) {
+        // The matrix is a Load of the whole of it, which is never actually
+        // performed: simdgroup_load reads it, given its address and layout.
+        const bool is_a = op->is_intrinsic(Call::wmma_matrix_to_fragment_a);
+        const bool is_b = op->is_intrinsic(Call::wmma_matrix_to_fragment_b);
+        auto get_int_arg = [&](int i) {
+            auto v = as_const_int(op->args[i]);
+            internal_assert(v) << "Expected a constant integer argument to " << op->name << "\n";
+            return (int)*v;
+        };
+        const int M = get_int_arg(0), N = get_int_arg(1), K = get_int_arg(2);
+        const Expr &arg = op->args[wmma_matrix_arg(op)];
+        MultiRamp mr;
+        const Load *matrix = is_load_of_multiramp(arg, Scope<Expr>::empty_scope(), &mr);
+        user_assert(matrix && matrix->type.element_of() == arg.type().element_of())
+            << "The matrix a simdgroup_matrix is loaded from is not a load with an "
+            << "affine index by the time it reaches the backend.\n";
+        string stride;
+        bool transpose;
+        string ptr = print_matrix_pointer(matrix->name, matrix->type.element_of(), mr,
+                                          is_b ? K : M, is_a ? K : N, &stride, &transpose);
+        stream << get_indent() << "simdgroup_load(" << dest << ", " << ptr << ", "
+               << stride << ", ulong2(0, 0), " << (transpose ? "true" : "false") << ");\n";
+    } else if (is_const_zero(value)) {
+        stream << get_indent() << dest << " = make_filled_simdgroup_matrix<"
+               << print_type(value.type().element_of()) << ", 8, 8>(0);\n";
+    } else {
+        internal_error << "Unexpected value for a simdgroup matrix: " << value << "\n";
+    }
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::print_simdgroup_store(const Store *op) {
+    // The extraction pass wrote this as a store of the whole matrix, with each
+    // lane writing the entries it holds; one simdgroup_store does that for the
+    // whole SIMD-group. A store to a column-major matrix arrives as a dense
+    // store of the transpose of it, which peeling the permutations undoes.
+    Expr index;
+    const Call *inflate = peel_store_permutations(op, &index).as<Call>();
+    internal_assert(inflate && inflate->args.size() == 5);
+    auto get_int_arg = [&](int i) {
+        auto v = as_const_int(inflate->args[i]);
+        internal_assert(v);
+        return (int)*v;
+    };
+    const int M = get_int_arg(0), N = get_int_arg(1);
+    MultiRamp mr;
+    internal_assert(is_multiramp(index, Scope<Expr>::empty_scope(), &mr));
+    string frag = print_simdgroup_matrix(inflate->args[3]);
+    string stride;
+    bool transpose;
+    string ptr = print_matrix_pointer(op->name, op->value.type().element_of(), mr, M, N,
+                                      &stride, &transpose);
+    stream << get_indent() << "simdgroup_store(" << frag << ", " << ptr << ", "
+           << stride << ", ulong2(0, 0), " << (transpose ? "true" : "false") << ");\n";
+    cache.clear();
 }
 
 namespace {
@@ -430,6 +577,10 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
+    if (simdgroup_matrices.count(op->name)) {
+        id = print_name(op->name);
+        return;
+    }
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
     user_assert(op->type.lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->type << ".\n";
 
@@ -499,6 +650,15 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
+    if (is_wmma_matrix_store(op)) {
+        print_simdgroup_store(op);
+        return;
+    }
+    if (simdgroup_matrices.count(op->name)) {
+        print_simdgroup_matrix_op(print_name(op->name), op->value);
+        cache.clear();
+        return;
+    }
     user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
     user_assert(op->value.type().lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->value.type() << ".\n";
 
@@ -570,6 +730,23 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
     if (is_gpu_shared(op->memory_type)) {
         // Already handled
         op->body.accept(this);
+    } else if (op->memory_type == MemoryType::Tile) {
+        // A fragment of a simdgroup matrix, made by extract_wmma_operations.
+        // It's two elements per lane of an 8x8 matrix.
+        user_assert(op->constant_allocation_size() == 2)
+            << "Tile memory in a Metal kernel must be a simdgroup matrix fragment, "
+            << "but " << op->name << " is not one.\n";
+        open_scope();
+        stream << get_indent() << print_simdgroup_matrix_type(op->type) << " "
+               << print_name(op->name) << ";\n";
+        stream << get_indent() << "#define " << get_memory_space(op->name) << " thread\n";
+        Allocation alloc;
+        alloc.type = op->type;
+        allocations.push(op->name, alloc);
+        simdgroup_matrices.insert(op->name);
+        op->body.accept(this);
+        internal_assert(!allocations.contains(op->name));
+        close_scope("alloc " + print_name(op->name));
     } else {
         open_scope();
 
@@ -616,6 +793,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Free *op) {
         // Should have been freed internally
         internal_assert(allocations.contains(op->name));
         allocations.pop(op->name);
+        simdgroup_matrices.erase(op->name);
         stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
@@ -726,9 +904,30 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     //   buffer size given by CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE.
     // The last condition is handled via the preprocessor in the kernel
     // declaration.
+    // simdgroup_load and simdgroup_store only take pointers to device and
+    // threadgroup memory, so the buffers they touch can't go in constant.
+    std::set<string> simdgroup_matrix_buffers;
+    auto find_loaded_matrices = [&](auto *self, const Call *op) {
+        int arg = wmma_matrix_arg(op);
+        if (arg >= 0) {
+            visit_with(op->args[arg], [&](auto *self, const Load *load) {
+                simdgroup_matrix_buffers.insert(load->name);
+                self->visit_base(load);
+            });
+        }
+        self->visit_base(op);
+    };
+    auto find_stored_matrices = [&](auto *self, const Store *op) {
+        if (is_wmma_matrix_store(op)) {
+            simdgroup_matrix_buffers.insert(op->name);
+        }
+        self->visit_base(op);
+    };
+    visit_with(s, find_loaded_matrices, find_stored_matrices);
     vector<BufferSize> constants;
     for (const auto &arg : args) {
         if (arg.is_buffer &&
+            !simdgroup_matrix_buffers.count(arg.name) &&
             CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) &&
             arg.size > 0) {
             constants.emplace_back(arg.name, arg.size);
@@ -886,6 +1085,10 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
                << "#pragma METAL fp math_mode(" << (any_strict_float ? "safe)\n" : "fast)\n")
                << "#include <metal_stdlib>\n"
+               // simdgroup_matrix, which Tile memory lowers to, is MSL 2.3 and up.
+               << "#if __METAL_VERSION__ >= 230\n"
+               << "#include <metal_simdgroup_matrix>\n"
+               << "#endif\n"
                << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"
                << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"
