@@ -256,6 +256,36 @@ class LowerSWARVectors : public IRMutator {
         return result;
     }
 
+    // If v is a ramp of unsigned integers (perhaps converted from a ramp of
+    // signed ones) with a constant non-negative stride, whose lanes are all
+    // provably less than bits (so that none of them wraps around), its base
+    // (of v's element type) and the lanes' constant offsets from it.
+    std::optional<vector<int64_t>> unsigned_ramp_lanes(const Expr &v, int bits, Expr *base) {
+        if (!v.type().is_uint()) {
+            return std::nullopt;
+        }
+        const Ramp *r = v.as<Ramp>();
+        if (const Cast *c = v.as<Cast>(); c && !r) {
+            r = c->value.as<Ramp>();
+        }
+        auto stride = r ? as_const_int(r->stride) : std::nullopt;
+        if (!stride || *stride < 0 || !r->base.type().is_scalar()) {
+            return std::nullopt;
+        }
+        vector<int64_t> offsets(v.type().lanes());
+        for (int i = 0; i < v.type().lanes(); i++) {
+            offsets[i] = *stride * i;
+        }
+        // The bounds of the base before its conversion to v's lane type, in
+        // which a negative base, or one that wraps around, is not in range.
+        if (offsets.back() >= bits ||
+            !ConstantInterval(0, bits - 1 - offsets.back()).contains(constant_integer_bounds(r->base))) {
+            return std::nullopt;
+        }
+        *base = cast(v.type().element_of(), r->base);
+        return offsets;
+    }
+
     // Shift every lane of w by the scalar y, which must be less than the
     // lane width. A negative signed y shifts in the other direction.
     Expr shift_uniform(const Type &t, const Expr &w, const Expr &y, bool left) {
@@ -680,6 +710,12 @@ class LowerSWARVectors : public IRMutator {
                     return shift_lanes(t, to_word(op->args[0]), *c, left);
                 } else if (const Broadcast *b = amount.as<Broadcast>(); b && b->value.type().is_scalar()) {
                     return shift_uniform(t, to_word(op->args[0]), mutate(b->value), left);
+                }
+                Expr base;
+                if (auto offsets = unsigned_ramp_lanes(amount, t.bits(), &base)) {
+                    // A ramp of unsigned amounts from a runtime base: every
+                    // lane shifted by the base, then by its constant offset.
+                    return shift_lanes(t, shift_uniform(t, to_word(op->args[0]), mutate(base), left), *offsets, left);
                 }
                 return fail(e, "a shift by an amount that varies across the lanes and is not constant");
             }

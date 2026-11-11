@@ -308,6 +308,7 @@ Param<int> uniform_cond("uniform_cond");
 Param<uint8_t> uniform_shift("uniform_shift");
 Param<int8_t> uniform_signed_shift("uniform_signed_shift");
 Param<uint8_t> uniform_value("uniform_value");
+Param<int> ramp_base("ramp_base");
 
 template<typename T>
 Buffer<T> random_buffer(const std::vector<int> &sizes) {
@@ -618,12 +619,14 @@ int simd_lanes = 1;
 
 // Check a SWAR-vectorized Func against the same Func computed without
 // vectorization. The definition is given the Var to vectorize and the
-// inputs.
+// inputs. `aligned`: the output starts at 0, so each word's lanes start at a
+// known multiple of `lanes`.
 template<typename T>
 bool test_elementwise(const char *name, int lanes,
                       std::function<Expr(Var, Func, Func)> def,
                       int size = 64,
-                      TailStrategy tail = TailStrategy::Auto) {
+                      TailStrategy tail = TailStrategy::Auto,
+                      bool aligned = false) {
     // Leave room for tail strategies that read past the end of the output.
     Buffer<T> a_buf = random_buffer<T>({size + 16}), c_buf = random_buffer<T>({size + 16});
     Var x("x");
@@ -634,6 +637,9 @@ bool test_elementwise(const char *name, int lanes,
     Func f(std::string(name) + "_swar"), ref(std::string(name) + "_ref");
     f(x) = def(x, a, c);
     ref(x) = def(x, a, c);
+    if (aligned) {
+        f.output_buffer().dim(0).set_min(0);
+    }
     if (simd_lanes > 1) {
         Var xo("xo"), xw("xw"), y("y"), xi("xi");
         f.split(x, xw, xi, lanes, tail)
@@ -673,6 +679,7 @@ int main(int argc, char **argv) {
     uniform_cond.set(1);
     uniform_shift.set(3);
     uniform_signed_shift.set(2);
+    ramp_base.set(3);
 
     bool ok = true;
 
@@ -771,6 +778,15 @@ int main(int argc, char **argv) {
             ok = ok && test_elementwise<int8_t>("uniform_signed_shift", lanes, [](Var x, Func a, Func c) {
                      return (a(x) >> uniform_signed_shift) + (c(x) << (-uniform_signed_shift));
                  });
+            // Shifts by consecutive amounts from a runtime base that is
+            // clamped to keep every lane's amount below the lanes' width (a
+            // base that may not is an error: see vectorize_swar_errors).
+            ok = ok && test_elementwise<uint8_t>("ramp_shr_clamped_base", lanes, [lanes](Var x, Func a, Func c) { return a(x) >> cast<uint8_t>(x % lanes + clamp(ramp_base, 0, 8 - lanes)); }, 64, TailStrategy::RoundUp, true);
+            // Shifts by consecutive amounts from a base that is the same in
+            // every lane of a word (and of the SIMD vector around it) but
+            // not constant.
+            ok = ok && test_elementwise<uint8_t>("ramp_shr", lanes, [lanes](Var x, Func a, Func c) { return a(x) >> cast<uint8_t>(x % lanes + (x / (lanes * simd_lanes)) % (9 - lanes)); }, 64, TailStrategy::RoundUp, true);
+            ok = ok && test_elementwise<uint8_t>("ramp_shl", lanes, [lanes](Var x, Func a, Func c) { return c(x) << cast<uint8_t>(x % lanes + (x / (lanes * simd_lanes)) % (9 - lanes)); }, 64, TailStrategy::RoundUp, true);
             // Tails.
             ok = ok && test_elementwise<uint8_t>("tail_shift_inwards", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37);
             ok = ok && test_elementwise<uint8_t>("tail_guard_with_if", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::GuardWithIf);

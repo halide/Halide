@@ -80,6 +80,32 @@ int main(int argc, char **argv) {
         f.compile_jit();
     });
 
+    // Shifts by consecutive amounts from a runtime base that may make a
+    // lane's amount wrap around in the lane type (a base of -3 shifts the
+    // first three lanes by 253 to 255).
+    auto ramp_shift = [](const std::function<Expr(Func, Var, Expr)> &shift) {
+        ImageParam a(UInt(8), 1, "a");
+        Param<int> base("base");
+        Var x("x");
+        Func fa("fa"), f("f");
+        fa(x) = a(x);
+        f(x) = shift(fa, x, base);
+        f.output_buffer().dim(0).set_min(0);
+        f.vectorize(x, 4, VectorizeIn::SWAR, TailStrategy::RoundUp);
+        f.compile_jit();
+    };
+    ok &= expect_user_error("ramp_shift_right_runtime_base", "a shift by an amount that varies across the lanes", [=] {
+        ramp_shift([](Func a, Var x, Expr base) { return a(x) >> cast<uint8_t>(x % 4 + base); });
+    });
+    ok &= expect_user_error("ramp_shift_left_runtime_base", "a shift by an amount that varies across the lanes", [=] {
+        ramp_shift([](Func a, Var x, Expr base) { return a(x) << cast<uint8_t>(x % 4 + base); });
+    });
+    // A base that is at least zero, but may take the last lane past the
+    // lanes' width.
+    ok &= expect_user_error("ramp_shift_large_base", "a shift by an amount that varies across the lanes", [=] {
+        ramp_shift([](Func a, Var x, Expr base) { return a(x) >> cast<uint8_t>(x % 4 + clamp(base, 0, 5)); });
+    });
+
     ok &= expect_user_error("nested_simd_in_swar", "can't be nested inside a SWAR-vectorized one", [] {
         Func f("f");
         Var x("x"), y("y");
