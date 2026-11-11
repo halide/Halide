@@ -7,13 +7,15 @@ path (no BLAS, no GPU); the stratum is that path's kind: format-specific
 loops vec_dot over the output). Ours: one stored layout per weight type,
 held out: chosen (geomean G/H) on the case's other shapes; --per-case takes
 the fastest layout per case (diagnostic). vec_dot: K in {4096, 14336}.
-usage: analyze.py a.csv [b.csv ...] [--per-case] [--cases] [--by-m]
+--l3: the mul_mat shapes past a 30 MB L3 at 4 bits (K x N > 4096 x 4096:
+4096x14336, 14336x4096, decode's case) apart, as op "mul_mat>L3".
+usage: analyze.py a.csv [b.csv ...] [--per-case] [--cases] [--by-m] [--l3]
 (several CSVs: the minimum time per row: the re-run rule)
 """
 import csv, re, sys, math, statistics, collections
 
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
-per_case, show, by_m = '--per-case' in sys.argv, '--cases' in sys.argv, '--by-m' in sys.argv
+per_case, show, by_m, l3 = '--per-case' in sys.argv, '--cases' in sys.argv, '--by-m' in sys.argv, '--l3' in sys.argv
 ACT = re.compile(r'(.*?)_(q8_0|q8_1|q8_K|f16|f32|bf16|qai8dx)(_|$)')
 best = {}
 for f in args:
@@ -65,7 +67,8 @@ res = collections.defaultdict(list)
 for k, c in sorted(cases.items()):
     L = chosen(k)
     g = c['ggml'][0] / c['ours'][L]
-    res[(k[0] + (f'@M{k[5]}' if by_m else ''), k[6], stratum(k, c))].append((g, k, L, c['ggml'][1] + ':' + c['ggml'][2]))
+    op = k[0] + ('>L3' if l3 and k[0] == 'mul_mat' and int(k[3]) * int(k[4]) > 4096 * 4096 else '')
+    res[(op + (f'@M{k[5]}' if by_m else ''), k[6], stratum(k, c))].append((g, k, L, c['ggml'][1] + ':' + c['ggml'][2]))
 
 print('op,threads,stratum,cases,matched,pct,median')
 for (op, T, s), v in sorted(res.items()):

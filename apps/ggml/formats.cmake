@@ -231,7 +231,7 @@ set(GGML_SCHEDULE_PARAMS
     "iq1_s mul_mat f32:q8_K slp=false"
     "iq4_xs mul_mat q8_K interleave=1"
     "iq4_xs mul_mat f32:q8_K interleave=1"
-    # SPR: LLVM's SLP vectorizer packs the u16 grid indices and then
+    # x86: LLVM's SLP vectorizer packs the u16 grid indices and then
     # extracts each with vpextrw; scalar loads instead (one-thread gemv
     # iq2_xs 0.41 -> 0.69x of GGML, iq2_s 0.36 -> 0.47x, iq3_s 0.48 -> 0.71x)
     "[x86] iq2_xs vec_dot q8_K slp=false"
@@ -242,13 +242,13 @@ set(GGML_SCHEDULE_PARAMS
     "[x86] iq2_s mul_mat * interleave=1 slp=false"
     "[x86] iq3_s vec_dot q8_K slp=false"
     "[x86] iq3_s mul_mat * slp=false"
-    # SPR: one block per gemv iteration (M = 1, one thread: iq1_s 1.32 ->
+    # x86: one block per gemv iteration (M = 1, one thread: iq1_s 1.32 ->
     # 1.17 ms, tq2_0 0.33 -> 0.30, iq3_s 2.23 -> 2.11, iq1_m 1.55 -> 1.48)
     "[x86] iq1_s mul_mat q8_K interleave=1"
     "[x86] iq1_m mul_mat q8_K interleave=1"
     "[x86] iq3_s mul_mat q8_K interleave=1"
     "[x86] tq2_0 mul_mat q8_K interleave=1"
-    # SPR: iq3_xxs's grid index bytes staged in GPR words cost a mov, shift
+    # x86: iq3_xxs's grid index bytes staged in GPR words cost a mov, shift
     # and mask each (and the words spill); a byte load each instead, as
     # GGML's (vec_dot 103 -> 79 cycles a block by llvm-mca, GGML's 69; gemv
     # without sublanes 101 -> 76: sublanes build the grid rows on the stack)
