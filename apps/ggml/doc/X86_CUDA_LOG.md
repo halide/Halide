@@ -731,3 +731,27 @@ iq2_xxs 0.91, q3_K 0.89. What remains (q3_K profile): the sub-block loop is
 
 `--check` mul_mat, 15 formats, 5 shapes (M = 8, 33, 37, 300, 512): 0
 failures. M3 replay (982 Arm/Metal objects): all byte-identical.
+
+### bf16 gemv by vdpbf16ps; T12 M=1 fixed cost
+
+Priority 2 (T12, M = 1, fixed cost per call): on the smallest shapes ours is
+cheaper than GGML's (256x16, T12: 0.2-0.3 us vs 1.7). The T12 4096x1024 gaps
+(bf16 0.58, f16 0.73) are not fixed cost: with `--cold`, ours wins (bf16 138
+vs 148 us, f16 136 vs 148). Warm, each thread's slice (0.7 MB) is resident in
+its own L2, which exposed the kernel's in-L2 throughput: bf16 T1 4096x64
+(512 KB) was 12.0 us vs GGML's 8.2. The mul_mat path widened bf16 to f32
+(`vpmovzxwd`, `vpslld`, FMA); only vec_dot summed products in pairs for
+`vdpbf16ps`. `flat()`'s pairs now apply to both mul_mat tiles too (the rule
+`bf16_pairs()`: bf16 weights and acts on an AVX512-BF16 target):
+
+- bf16 T1 4096x64: 12.0 -> 8.95 us (bf16 act), 7.95 (f32 act encoded to bf16)
+  vs GGML 8.0.
+- bf16 T12 4096x1024: 33 -> 27 us; GGML 19. What remains is T12 alone (ours
+  22.3 us at T8, 25.6 at T12; GGML 19.5, 18.6). 8-row tasks instead of 16
+  (better balance across 12 threads) were slower at T8 and no faster at T12,
+  and the fast-path chunks are in use (584 of 588 calls); pinning one
+  thread per core changed nothing. Unexplained.
+
+`--check` mul_mat bf16/f16/f32 (K 4096, 4097, 4100, 512; M 1-300) and
+vec_dot bf16/f16: 0 failures. M3 replay (982 objects): all byte-identical
+(the rule needs AVX512-BF16).
