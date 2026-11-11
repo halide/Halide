@@ -105,15 +105,6 @@ class PlanRotation : public IRVisitor {
         return as_const_int(simplify(substitute(l.iteration, it + 1, e) - e));
     }
 
-    bool steps_by_constants(const Expr &e) {
-        for (const Loop &l : loops) {
-            if (!l.becomes_constant && !step(e, l)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     void access(const IRNode *node, const vector<Expr> &args) {
         accesses++;
         if (failed) {
@@ -215,19 +206,12 @@ class PlanRotation : public IRVisitor {
         bool becomes_constant = (op->for_type == ForType::Unrolled ||
                                  op->for_type == ForType::Vectorized);
         enclosed[op] = !loops.empty();
-        Expr min = expand(op->min), max = expand(op->max);
+        Expr min = expand(op->min);
         int before = accesses;
-        if (can_prove(max <= min)) {
-            // A loop that runs at most once has no back edge, and its var is
-            // both its min and its max whenever it runs.
-            Expr var = steps_by_constants(min) ? min : max;
-            with_value(op->name, var, [&]() { op->body.accept(this); });
-        } else {
-            Expr var = min + Variable::make(Int(32), iteration);
-            loops.push_back({op, iteration, becomes_constant});
-            with_value(op->name, var, [&]() { op->body.accept(this); });
-            loops.pop_back();
-        }
+        Expr var = min + Variable::make(Int(32), iteration);
+        loops.push_back({op, iteration, becomes_constant});
+        with_value(op->name, var, [&]() { op->body.accept(this); });
+        loops.pop_back();
         accesses_inside[op] = accesses - before;
     }
 
