@@ -312,6 +312,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     builder->SetInsertPoint(body_block);
 
     debug(1) << "Generating llvm bitcode for kernel...\n";
+    // A kernel starts with no asynchronous copies in flight.
+    committed_groups.clear();
+    uncommitted_group = -1;
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
     stmt.accept(this);
@@ -1376,6 +1379,11 @@ void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
 
     ScopedValue<bool> old_in(in_producer, true);
     codegen(op->body);
+    // A producer's copies are committed as soon as it has issued them, though
+    // they may be awaited later (at the barrier that publishes them): left
+    // open while the block goes on to stage something else, they are slower
+    // to land.
+    commit_copies();
 }
 
 void CodeGen_PTX_Dev::commit_copies() {

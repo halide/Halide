@@ -266,6 +266,7 @@ tests(
     gpu_assertion_in_kernel.cpp
     gpu_async_copy.cpp
     gpu_async_copy_errors.cpp
+    gpu_async_copy_wait.cpp
     gpu_bounds_inference_failure.cpp
     gpu_condition_lifting.cpp
     gpu_cpu_simultaneous_read.cpp

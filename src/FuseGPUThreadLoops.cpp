@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <utility>
 
 #include "Bounds.h"
@@ -48,10 +49,16 @@ class MarkAsyncCopies : public IRMutator {
     // becomes ordinary shared memory, but the stores to it stay ordinary too.
     DeviceAPI device_api = DeviceAPI::None;
 
+    // Whether this is inside a loop over threads or lanes.
+    bool in_threads = false;
+
     Stmt visit(const For *op) override {
         ScopedValue<DeviceAPI> d(device_api, op->device_api == DeviceAPI::None ?
                                                  device_api :
                                                  op->device_api);
+        ScopedValue<bool> t(in_threads, in_threads ||
+                                            op->for_type == ForType::GPUThread ||
+                                            op->for_type == ForType::GPULane);
         return IRMutator::visit(op);
     }
 
@@ -90,11 +97,19 @@ class MarkAsyncCopies : public IRMutator {
     }
 
     // Waiting for a copy is something each thread does for the copies it
-    // issued itself, so the wait belongs inside the loops over threads. Put it
-    // at the end of the innermost one, which is still before the barrier that
-    // publishes the data to the rest of the block and before any of it is
-    // read. Leaving it after them would make it a statement outside the loops
-    // over threads, which is a thing only the first thread does.
+    // issued itself. A producer whose stores are spread over the loops over
+    // threads publishes them to the rest of the block with a barrier, which
+    // nothing reads them before, and the barrier waits for every copy the
+    // thread has in flight (CodeGen_PTX_Dev). Where the block goes on to stage
+    // a Func through registers before that barrier, waiting there lets those
+    // loads and stores overlap the copies (CodeGen_PTX_Dev commits each
+    // producer's copies at its end, and they are in flight from then on).
+    // Otherwise the producer waits at its end: copies followed by other
+    // copies are no faster for waiting together. That wait belongs inside the
+    // loops over threads, at the end of the innermost one, since a statement
+    // after them is one only the first thread runs. A producer that one
+    // thread runs alone, outside or inside the loops over threads (which that
+    // thread may read with no barrier in between), waits at its end too.
     class AwaitInEachThread : public IRMutator {
         using IRMutator::visit;
 
@@ -120,10 +135,74 @@ class MarkAsyncCopies : public IRMutator {
         }
     };
 
+    static bool has_thread_loop(const Stmt &s) {
+        bool found = false;
+        visit_with(s, [&](auto *self, const For *op) {
+            found = found || op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane;
+            self->visit_base(op);
+        });
+        return found;
+    }
+
+    // Whether the producer being visited leaves its copies to the barrier.
+    bool defer_wait = false;
+
+    // Whether what follows a producer, s, produces a Func staged through
+    // registers (not by the copy engine) before anything else: the producers
+    // that open s, through the consumers and allocations they are nested in.
+    bool stages_through_registers(Stmt s) const {
+        std::set<string> copied;
+        auto staged_through_registers = [&](const ProducerConsumer *p) {
+            return !groups.count(p->name) && !copied.count(p->name);
+        };
+        while (s.defined()) {
+            if (const ProducerConsumer *pc = s.as<ProducerConsumer>()) {
+                if (pc->is_producer) {
+                    return staged_through_registers(pc);
+                }
+                s = pc->body;
+            } else if (const Block *b = s.as<Block>()) {
+                const ProducerConsumer *pc = b->first.as<ProducerConsumer>();
+                if (!pc || !pc->is_producer) {
+                    return false;
+                } else if (staged_through_registers(pc)) {
+                    return true;
+                }
+                s = b->rest;
+            } else if (const Allocate *a = s.as<Allocate>()) {
+                if (a->memory_type == MemoryType::GPUSharedAsync) {
+                    copied.insert(a->name);
+                }
+                s = a->body;
+            } else if (const LetStmt *l = s.as<LetStmt>()) {
+                s = l->body;
+            } else {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    Stmt visit(const Block *op) override {
+        const ProducerConsumer *p = op->first.as<ProducerConsumer>();
+        if (!(p && p->is_producer && groups.count(p->name) && device_api == DeviceAPI::CUDA &&
+              !in_threads && has_thread_loop(p->body) && stages_through_registers(op->rest))) {
+            return IRMutator::visit(op);
+        }
+        Stmt first;
+        {
+            ScopedValue<bool> d(defer_wait, true);
+            first = mutate(op->first);
+        }
+        return Block::make(first, mutate(op->rest));
+    }
+
     Stmt visit(const ProducerConsumer *op) override {
+        const bool deferred = defer_wait;
+        ScopedValue<bool> d(defer_wait, false);
         Stmt body = mutate(op->body);
         auto it = groups.find(op->name);
-        if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
+        if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA && !deferred) {
             Expr wait = Call::make(Int(32), Call::cuda_await_copies,
                                    {it->second}, Call::Intrinsic);
             Stmt with_wait = AwaitInEachThread(wait).mutate(body);
@@ -1646,6 +1725,12 @@ protected:
             Stmt mutated = mutate(s);
             Footprint here = footprint_of(mutated);
             int mask = here.conflict(pending);
+            // MarkAsyncCopies leaves some producers' asynchronous copies
+            // (stores to GPUSharedAsync memory, which count as shared stores
+            // here) to be awaited at the barrier that publishes them, which
+            // relies on this putting one before anything that reads them, and
+            // on CodeGen_PTX_Dev waiting for every copy in flight at each
+            // barrier.
             if (mask) {
                 result.push_back(make_barrier(mask));
                 injected_barrier = true;
