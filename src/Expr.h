@@ -444,7 +444,13 @@ enum class MemoryType {
      * accesses are the whole-tile ones a matrix unit provides - filling a
      * tile, loading one from memory, storing one back, and multiplying a pair
      * of them into a third. Which of those a given tile takes part in, and so
-     * which role it plays in the multiply, follows from how it is used. */
+     * which role it plays in the multiply, follows from how it is used.
+     *
+     * On CUDA the shape of the tiles of a multiply selects the instruction:
+     * 16x16x16, 32x8x16 and 8x32x16 (rows x columns x values reduced over)
+     * are wmma's; 16x8x32 and 16x8x16 tiles of 8-bit integers are mma.sync's,
+     * whose registers are in a specified layout, so each lane loads and
+     * stores the elements it holds with ordinary loads and stores. */
     Tile,
 
     /** GPU shared memory, written by an asynchronous copy instruction that

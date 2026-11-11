@@ -419,6 +419,7 @@ tests(
     mismatch_runtime_vscale.cpp
     missing_args.cpp
     mixed_sign_dot_product.cpp
+    mma_sync_matmul.cpp
     mod.cpp
     modulus_remainder.cpp
     multi_output_pipeline_with_bad_sizes.cpp

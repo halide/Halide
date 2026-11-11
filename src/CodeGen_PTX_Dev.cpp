@@ -945,11 +945,53 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_raw(const Call *op) {
         } else {
             signature = wmma_type_suffix(operand_type);
         }
-        name << "mma." << layouts[get_int_arg(3)] << "." << layouts[get_int_arg(4)]
-             << "." << signature;
         split_fragment(op->args[5], args);
         split_fragment(op->args[6], args);
         split_fragment(op->args[7], args);
+        if (M == 16 && N == 8) {
+            // mma.sync, which llvm has no intrinsic for. Its fragments are
+            // 32-bit registers: one of the first operand per 8 rows and 16
+            // values of K, one of the second per 16 values of K, and four of
+            // the accumulator, which it also returns.
+            user_assert(target.get_cuda_capability_lower_bound() >= 80)
+                << "Tensor core matrix multiplies of 16x8x" << K << " tiles require the "
+                << "cuda_capability_80 target feature.\n";
+            const int a_regs = K / 8, b_regs = K / 16;
+            internal_assert(get_int_arg(3) == 0 && get_int_arg(4) == 1 &&
+                            operand_type.bits() == 8 && (int)args.size() == a_regs + b_regs + 4);
+            const std::string acc = wmma_type_suffix(op->type.element_of());
+            // The results are operands 0 to 3 of the assembly, then the
+            // registers of each fragment in turn.
+            int reg = 4;
+            auto regs = [&](int n) {
+                std::string list = "{";
+                for (int i = 0; i < n; i++) {
+                    list += (i ? ",$" : "$") + std::to_string(reg++);
+                }
+                return list + "}";
+            };
+            std::string text = "mma.sync.aligned.m16n8k" + std::to_string(K) + ".row.col." + acc +
+                               "." + signature + "." +
+                               wmma_type_suffix(op->args[6].type().element_of()) + "." + acc +
+                               " {$0,$1,$2,$3}, ";
+            text += regs(a_regs) + ", ";
+            text += regs(b_regs) + ", ";
+            text += regs(4) + ";";
+            std::string constraints = "=r,=r,=r,=r";
+            for (size_t i = 0; i < args.size(); i++) {
+                constraints += ",r";
+            }
+            vector<llvm::Type *> arg_types(args.size(), i32_t);
+            llvm::Type *result_type = llvm::StructType::get(i32_t, i32_t, i32_t, i32_t);
+            llvm::FunctionType *fn_type = llvm::FunctionType::get(result_type, arg_types, false);
+            llvm::InlineAsm *mma = llvm::InlineAsm::get(fn_type, text, constraints, false);
+            llvm::CallInst *call = builder->CreateCall(fn_type, mma, args);
+            call->setDoesNotAccessMemory();
+            call->setDoesNotThrow();
+            return call;
+        }
+        name << "mma." << layouts[get_int_arg(3)] << "." << layouts[get_int_arg(4)]
+             << "." << signature;
     } else {
         // The a operand is M x K, the b operand is K x N, and the accumulator
         // is M x N.

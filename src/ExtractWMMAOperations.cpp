@@ -28,6 +28,14 @@
  * shapes and types they support and in how many elements of a fragment each
  * lane holds, which is what the MatrixUnit table below describes.
  *
+ * NVIDIA's tensor cores also have a multiply whose operands are plain
+ * registers in a layout the architecture does specify (mma.sync), at tile
+ * shapes of its own. A multiply on tiles of one of those shapes is lowered to
+ * it, and there is then no instruction to move a tile: each lane loads the
+ * elements of a matrix that it holds from where the layout says they are, and
+ * stores them likewise. A lane only loads the elements it needs, so a matrix
+ * that is one row or one column repeated costs a load per distinct element.
+ *
  * A tile allocation holds one of the three matrices of a multiply, and
  * which one follows from how it is used. An allocation accumulated into by a
  * matrix multiply is the accumulator; one read as an operand of a multiply is
@@ -122,6 +130,13 @@ struct MatrixUnit {
     bool (*fragment_type_supported)(Type t);
     // How many elements of a fragment each lane holds.
     int (*elements_per_lane)(Role role, const Shape &shape, Type t);
+    // Whether a tile shape has a multiply of operands of a type.
+    bool (*shape_supported)(const Shape &shape, Type operand);
+    // The row and column of the matrix a fragment is taken out of that a
+    // lane keeps in element `e` of its registers, where the layout of the
+    // fragments of a shape is specified. Returns false where it isn't.
+    bool (*element_position)(Role role, const Shape &shape, int e, const Expr &lane,
+                             Expr *row, Expr *col);
     // Whether an operand's registers are laid out according to the layout of
     // the matrix it was loaded from, which the multiply must then be told.
     bool operand_registers_have_layout;
@@ -141,9 +156,6 @@ void fragment_matrix_shape(Role role, const Shape &shape, int *rows, int *cols) 
     *cols = role == Role::A ? shape.K : shape.N;
 }
 
-// An NVIDIA tensor core accumulator tile holds 256 elements whatever its
-// shape, so each lane holds 8 of them whatever their type.
-constexpr int cuda_accumulator_elements = 8;
 // Half precision operand fragments are eight 32-bit registers per lane
 // whatever the shape, which is sixteen elements. For the shapes that hold
 // fewer than that the hardware replicates elements across lanes.
@@ -173,15 +185,64 @@ bool cuda_fragment_type_supported(Type t) {
 // this follows from the shape; half precision is the fixed size above however
 // small the shape is.
 int cuda_elements_per_lane(Role role, const Shape &shape, Type t) {
-    if (role == Role::Accumulator) {
-        return cuda_accumulator_elements;
-    }
-    if (t == Float(16)) {
+    if (t == Float(16) && role != Role::Accumulator) {
         return cuda_half_operand_elements;
     }
     int rows, cols;
     fragment_matrix_shape(role, shape, &rows, &cols);
     return rows * cols / warp_lanes;
+}
+
+// The shapes of the mma.sync instruction, whose operands are registers in a
+// specified layout. The others are wmma's.
+bool cuda_is_mma_sync_shape(const Shape &shape) {
+    return shape.M == 16 && shape.N == 8 && (shape.K == 16 || shape.K == 32);
+}
+
+// Only mma.sync's multiplies of eight-bit integers are lowered to. Every type
+// the tensor cores multiply has wmma instructions at each of wmma's shapes.
+bool cuda_shape_supported(const Shape &shape, Type operand) {
+    return !cuda_is_mma_sync_shape(shape) || operand == Int(8) || operand == UInt(8);
+}
+
+// The fragments of mma.sync's m16n8k32 and m16n8k16 on 8-bit integers (PTX
+// ISA, "Matrix fragments for mma.m16n8k32" and "for mma.m16n8k16"). The lanes
+// are eight groups of four. The first operand is a register of four 8-bit
+// elements per 8 rows and 16 values of K: a group holds rows `group` and
+// `group + 8`, a lane 4 values of K of each 16. The second is a register per
+// 16 values of K: a group holds column `group`, a lane 4 values of K of each
+// 16. The accumulator is four 32-bit registers: rows `group` and `group + 8`,
+// two columns each.
+bool cuda_element_position(Role role, const Shape &shape, int e, const Expr &lane,
+                           Expr *row, Expr *col) {
+    if (!cuda_is_mma_sync_shape(shape)) {
+        return false;
+    }
+    Expr group = lane / 4, thread = lane % 4;
+    switch (role) {
+    case Role::A:
+        *row = group + 8 * ((e / 4) % 2);
+        *col = thread * 4 + (e % 4 + 16 * (e / 8));
+        break;
+    case Role::B:
+        *row = thread * 4 + (e % 4 + 16 * (e / 4));
+        *col = group;
+        break;
+    default:
+        *row = group + 8 * (e / 2);
+        *col = thread * 2 + e % 2;
+        break;
+    }
+    return true;
+}
+
+bool every_shape_supported(const Shape &shape, Type operand) {
+    return true;
+}
+
+bool no_element_position(Role role, const Shape &shape, int e, const Expr &lane,
+                         Expr *row, Expr *col) {
+    return false;
 }
 
 // Metal's simdgroup_matrix multiplies half or float matrices, into a half or
@@ -211,18 +272,21 @@ int metal_elements_per_lane(Role role, const Shape &shape, Type t) {
 const MatrixUnit cuda_matrix_unit{
     DeviceAPI::CUDA,
     "tensor core",
-    {{16, 16, 16}, {32, 8, 16}, {8, 32, 16}},
-    "16x16x16, 32x8x16, or 8x32x16",
+    {{16, 16, 16}, {32, 8, 16}, {8, 32, 16}, {16, 8, 32}, {16, 8, 16}},
+    "16x16x16, 32x8x16, or 8x32x16, or 16x8x32 or 16x8x16 on 8-bit integers",
     cuda_types_supported,
     cuda_fragment_type_supported,
     cuda_elements_per_lane,
+    cuda_shape_supported,
+    cuda_element_position,
     true,
     // An int32 and a float32 accumulator of the same shape keep each element
     // in the same register of the same lane, for all three shapes. NVIDIA
-    // leaves the layout unspecified; this is what an RTX 3090 (sm_86) does,
-    // and correctness_wmma_elementwise checks it on whatever device it runs
-    // on, by scaling the int32 accumulators of multiplies by float32
-    // matrices that differ in every row and column.
+    // leaves the layout of wmma's unspecified; this is what an RTX 3090
+    // (sm_86) does, and correctness_wmma_elementwise checks it on whatever
+    // device it runs on, by scaling the int32 accumulators of multiplies by
+    // float32 matrices that differ in every row and column. mma.sync's are
+    // specified.
     true,
 };
 
@@ -234,6 +298,8 @@ const MatrixUnit metal_matrix_unit{
     metal_types_supported,
     metal_fragment_type_supported,
     metal_elements_per_lane,
+    every_shape_supported,
+    no_element_position,
     // simdgroup_load transposes a column-major matrix on the way in.
     false,
     // A simdgroup_matrix is opaque.
@@ -337,15 +403,60 @@ Expr make_matrix_address(const string &name, Type element_type, const Expr &base
                       const_true(lanes), ModulusRemainder(), false);
 }
 
+// Where in memory the elements of a matrix that a lane holds are, in the order
+// of its registers, for a fragment whose layout is specified. Returns false
+// for one whose layout isn't.
+bool fragment_element_indices(const MatrixUnit &unit, Role role, const Shape &shape, Type t,
+                              Layout layout, const Expr &base, const Expr &stride,
+                              const Expr &lane, vector<Expr> *indices) {
+    Expr one = make_one(base.type());
+    Expr col_stride = layout == Layout::Row ? one : stride;
+    Expr row_stride = layout == Layout::Row ? stride : one;
+    const int elements = unit.elements_per_lane(role, shape, t);
+    for (int e = 0; e < elements; e++) {
+        Expr row, col;
+        if (!unit.element_position(role, shape, e, lane, &row, &col)) {
+            return false;
+        }
+        indices->push_back(simplify(base + cast(base.type(), row) * row_stride +
+                                    cast(base.type(), col) * col_stride));
+    }
+    return true;
+}
+
 Expr make_matrix_to_fragment(const MatrixUnit &unit, Role role, const Shape &shape, Layout layout,
                              const Load *load, const Expr &base, const Expr &stride,
                              const Expr &lane) {
+    const Type t = load->type.element_of();
+    if (vector<Expr> indices;
+        fragment_element_indices(unit, role, shape, t, layout, base, stride, lane, &indices)) {
+        // Each lane loads the elements it holds. Those of a register that are
+        // next to each other in memory are one dense load.
+        const int per_reg = 32 / t.bits();
+        vector<Expr> pieces;
+        for (size_t e = 0; e < indices.size(); e += per_reg) {
+            bool dense = per_reg > 1;
+            for (int i = 1; dense && i < per_reg; i++) {
+                dense = can_prove(indices[e + i] == indices[e] + i);
+            }
+            if (dense) {
+                pieces.push_back(Load::make(t.with_lanes(per_reg), load->name,
+                                            Ramp::make(indices[e], 1, per_reg), load->image,
+                                            load->param, const_true(per_reg), ModulusRemainder(), false));
+                continue;
+            }
+            for (int i = 0; i < per_reg; i++) {
+                pieces.push_back(Load::make(t, load->name, indices[e + i], load->image,
+                                            load->param, const_true(), ModulusRemainder(), false));
+            }
+        }
+        return Shuffle::make_concat(pieces);
+    }
     int rows, cols;
     fragment_matrix_shape(role, shape, &rows, &cols);
-    Expr address = make_matrix_address(load->name, load->type.element_of(), base,
+    Expr address = make_matrix_address(load->name, t, base,
                                        rows, cols, layout, stride, load->image, load->param);
-    Type type = load->type.element_of().with_lanes(
-        unit.elements_per_lane(role, shape, load->type.element_of()));
+    Type type = t.with_lanes(unit.elements_per_lane(role, shape, t));
     return Call::make(type, intrinsic_for_role(role),
                       {shape.M, shape.N, shape.K, std::move(address), lane},
                       Call::Intrinsic);
@@ -494,7 +605,8 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     // supported shape and seeing which one the access patterns fit.
     const Shape *shape = nullptr;
     for (const Shape &candidate : unit.shapes) {
-        if (candidate.M * candidate.N != MN || candidate.K != K) {
+        if (candidate.M * candidate.N != MN || candidate.K != K ||
+            !unit.shape_supported(candidate, operand_type)) {
             continue;
         }
         vector<int> canonical_shape{candidate.K, candidate.N, candidate.M};
@@ -569,6 +681,16 @@ Stmt convert_to_tile_store(const MatrixUnit &unit, const Store *op, const Expr &
                            Ramp::make(0, 1, frag_lanes));
     const int lanes = shape.M * shape.N;
     Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+    if (vector<Expr> indices;
+        fragment_element_indices(unit, Role::Accumulator, shape, element_type, layout,
+                                 mem.base, mem.stride, lane, &indices)) {
+        // Each lane stores the elements it holds where the layout says they
+        // belong.
+        return in_lane_loop(unit, lane,
+                            Store::make(op->name, std::move(frag), Shuffle::make_concat(indices),
+                                        op->param, const_true(frag_lanes), ModulusRemainder(),
+                                        op->is_streaming));
+    }
     Expr matrix = Call::make(element_type.with_lanes(lanes), Call::wmma_fragment_to_matrix_d,
                              {shape.M, shape.N, shape.K, std::move(frag), lane},
                              Call::Intrinsic);
@@ -786,7 +908,11 @@ class ExtractWMMAOperations : public IRMutator {
                              "shape");
             } else {
                 const Layout layout = mem.row_major ? Layout::Row : Layout::Col;
-                if (f->role != Role::Accumulator && f->unit->operand_registers_have_layout) {
+                Expr row, col;
+                const bool specified =
+                    f->unit->element_position(f->role, f->shape, 0, lane, &row, &col);
+                if (f->role != Role::Accumulator && !specified &&
+                    f->unit->operand_registers_have_layout) {
                     auto [it, inserted] = f->fill_layouts.emplace(name, layout);
                     user_assert(it->second == layout)
                         << "The tensor core fragment " << f->name << " is filled from "
@@ -808,6 +934,12 @@ class ExtractWMMAOperations : public IRMutator {
         Layout a_layout = info.lhs_layout, b_layout = info.rhs_layout;
         Expr a = operand_value(unit, info.lhs, Role::A, info.shape, &a_layout, info.lda, lane);
         Expr b = operand_value(unit, info.rhs, Role::B, info.shape, &b_layout, info.ldb, lane);
+        if (Expr row, col; unit.element_position(Role::A, info.shape, 0, lane, &row, &col)) {
+            // Operands in a specified layout are gathered into the one
+            // arrangement the instruction takes, however they were stored.
+            a_layout = Layout::Row;
+            b_layout = Layout::Col;
+        }
 
         const int acc_lanes =
             unit.elements_per_lane(Role::Accumulator, info.shape, info.accumulator_type);
