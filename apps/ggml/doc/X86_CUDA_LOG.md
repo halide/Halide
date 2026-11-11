@@ -704,3 +704,30 @@ G/H (GGML / ours), 4096², fastest of each side; before -> after (16x4):
 q4_0 M=1 T1 4096x1024: 0.64 -> 0.88; T12: 1.21. `--check` mul_mat and codec,
 q4_0/q4_1/q8_0: 0 failures. M3 replay (982 Arm/Metal objects, HEAD vs this
 schedule.h): all byte-identical.
+
+### blocked_cols: staged scales, strip order, vectorized sums combine
+
+GGML's tiled VNNI gemm (8 rows x 16 columns per step, per sub-block a
+`vpdpbusd` run then a `vpmulld` by the scale) beat our `blocked_cols` at
+M >= 32 for the 256-value K-quant and iq formats (T1 4096x1024 M=512: 0.62 -
+0.78). Three generic changes to `blocked_cols` (x86 only: `cols_ok`):
+
+- sub-block scales decoded per block, vectorized across sub-blocks (a clone
+  computed at the block loop), not per row and column group inside the
+  sub-block loop (scalar code with spills before; now a broadcast load).
+  q4_K M=512 T1 16.3 -> 15.0 ms, q3_K 20.0 -> 18.2.
+- a macro tile's 8-row strips inside its 16-column groups (each block's
+  decoded weights reused across the columns from L1). q4_K 15.0 -> 14.6.
+- the derived sums' difference (dot += with - sums) vectorized across the
+  columns under the tile's condition. It was a scalar loop striding 1 KB per
+  element, 9% of q4_K's profile. q4_K 14.6 -> 13.4 ms.
+
+G/H after, T1 4096x1024 M=512: q4_K 0.86, q5_K 0.87, q2_K 0.95, q3_K 0.76,
+q6_K 0.78, iq2_xxs 0.77. T1 4096² M=32: q4_K 0.82 -> 0.86, q3_K 0.85 -> 0.89,
+q5_K 0.87 -> 0.91, iq2_s 0.87 -> 1.08. T12 4096² M=512: q4_K 1.05, q6_K 0.98,
+iq2_xxs 0.91, q3_K 0.89. What remains (q3_K profile): the sub-block loop is
+63% and matches GGML's instruction mix; the mins/offset sums pass is ~19%
+(vpmaddwd with spilled scale broadcasts).
+
+`--check` mul_mat, 15 formats, 5 shapes (M = 8, 33, 37, 300, 512): 0
+failures. M3 replay (982 Arm/Metal objects): all byte-identical.
