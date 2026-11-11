@@ -340,6 +340,15 @@ int main(int argc, char **argv) {
         internal_assert(!mentions(hoisted[0].function().update(0).values()[0], "rf_scale"))
             << "hoist_invariants should have hoisted scale out of the reduction\n";
 
+        // hoist_invariants() leaves intm with an unconditional, RDom-free
+        // pointwise update on its pure vars; eager_inline() can fold it back
+        // into the caller stage.
+        acc.update().eager_inline(intm);
+        internal_assert(!mentions(acc.function().update(0).values()[0], intm.name()))
+            << "eager_inline should have folded the hoisted intermediate into acc\n";
+        internal_assert(mentions(acc.function().update(0).values()[0], hoisted[0].name()))
+            << "acc should now call the inner sum directly\n";
+
         Buffer<int> out = acc.realize({width});
         for (int i = 0; i < width; i++) {
             int ref = 0;

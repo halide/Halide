@@ -227,10 +227,11 @@ public:
      * rewriting only this stage's definition in place. This is useful to surface
      * structure that other schedule-time directives (e.g. rfactor()) need to see.
      *
-     * Each inlined Func must be inlinable: a pure Func (no update or extern
-     * definition) with no specializations, and with a schedule compatible with
-     * inlining (as for compute_inline()). That is, it must not be scheduled
-     * compute_root(), compute_at(), store_root(), store_at(),
+     * Each inlined Func must be inlinable: a pure Func (no extern definition
+     * and no updates other than unconditional, RDom-free pointwise updates on
+     * its pure vars, such as the write-back stage left by hoist_invariants())
+     * with no specializations, and with a schedule compatible with inlining (as
+     * for compute_inline()). That is, it must not be scheduled compute_root(), compute_at(), store_root(), store_at(),
      * hoist_storage_root(), hoist_storage(), compute_with(), or memoize(), and
      * none of its loops may be parallel (including GPU blocks or threads),
      * vectorized, or unrolled. Passing any other Func is an error. The schedule
