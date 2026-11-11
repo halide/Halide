@@ -177,6 +177,7 @@ tests(
     define_after_realize.cpp
     define_after_use.cpp
     deinterleave4.cpp
+    deinterleave_dynamic_shuffle.cpp
     deinterleave_lets.cpp
     deinterleave_vector.cpp
     deinterleave_vector_based_ramp.cpp

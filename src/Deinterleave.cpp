@@ -353,12 +353,22 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             return op;
+        } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
+            // The lookup table is not lane-parallel with the result; only
+            // the indices are.
+            std::vector<Expr> args = op->args;
+            args[1] = mutate(args[1]);
+            return Call::make(t, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
         } else {
+            for (const Expr &a : op->args) {
+                if (a.type().is_vector() && a.type().lanes() != op->type.lanes()) {
+                    return give_up_and_shuffle(op);
+                }
+            }
 
-            // Vector calls are always parallel across the lanes, so we
+            // Vector calls are otherwise parallel across the lanes, so we
             // can just deinterleave the args.
-
-            // Beware of intrinsics for which this is not true!
             auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
