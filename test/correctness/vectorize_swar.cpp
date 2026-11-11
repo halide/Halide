@@ -731,6 +731,9 @@ int main(int argc, char **argv) {
             ok = ok && test_elementwise<uint8_t>("mul_div_mod", lanes, [](Var x, Func a, Func c) {
                      return a(x) * 4 + c(x) / 8 + a(x) % 16;
                  });
+            ok = ok && test_elementwise<uint8_t>("widened_div_mod", lanes, [](Var x, Func a, Func c) {
+                     return cast<uint8_t>((cast<uint32_t>(a(x)) / 4) % 4 + (cast<uint32_t>(c(x)) % 16) * 4);
+                 });
             // Signed lanes: arithmetic shifts and floor division.
             ok = ok && test_elementwise<int8_t>("signed", lanes, [](Var x, Func a, Func c) {
                      return (a(x) >> 2) + c(x) / 4 + a(x) % 8 - (c(x) << 1);
