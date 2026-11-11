@@ -3119,22 +3119,57 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     storage(g, out, per_step, fmt.per > 1);
     metal_luts(out, rs);
     metal_rows(out, rows, r, fmt.block, rs, fmt.sub, true, true, sg);
-    // the acts, encoded by kernels of their own: the codes 4 values a
-    // thread, the scales (dense along M)
-    Var bo("bo"), jv("jv");
-    std::vector<Var> a = ac[0].args();
-    ac[0].compute_at(out, Var::outermost()).split(a[0], a[0], jv, 4).split(a[1], bo, a[1], 8, TailStrategy::GuardWithIf).fuse(a[0], a[1], a[0]).vectorize(jv).gpu_blocks(bo, a[2]).gpu_threads(a[0]);
-    // its scales and sums as encoded, dense along M: a kernel each (the
-    // gemms' act factors decode them as they stage them, as the rows do),
-    // a thread per block, its reductions (the scale's maximum, the codes'
-    // sum) of vectors
-    for (Func e : rs[1].encoded) {
+    // the acts, encoded by one kernel of 16 blocks a GPU block: the codes 4
+    // values a thread, the scales (dense along M: the gemms' act factors
+    // decode them as they stage them, as the rows do) a thread per block,
+    // each block's maximum staged once (q4_0 at 4096 x 4096 x 512: a kernel
+    // each 14.7 + 14.3 us, one 16.4; of 8 blocks 18.0, 32 17.1; RTX 3090). A
+    // derived port (q8_1's sum, which not every path reads: a fused group
+    // is computed whole or not at all) a kernel of its own, on its own
+    // copies of what it reads, a thread per block. The reductions (the
+    // scale's maximum, the codes' sum) of vectors.
+    std::set<std::string> enc;
+    for (Func f : encoder_funcs(rs[1].encoded[0], rs)) {
+        enc.insert(f.name());
+    }
+    std::vector<Func> copies;
+    std::function<void(Func)> own = [&](Func f) {
+        for (const auto &[name, c] : Internal::find_direct_calls(f.function())) {
+            if (name == f.name() || !enc.count(name)) continue;
+            Func cc = Func(c).clone_in(f);
+            copies.push_back(cc);
+            own(cc);
+        }
+    };
+    Var bo("bo"), jv("jv"), row("enc_row"), blk("enc_blk");
+    std::vector<Func> fused, derived;
+    for (size_t j = 0; j < rs[1].encoded.size(); j++) {
+        Func e = rs[1].encoded[j];
         if (e.name() == ac[0].name()) continue;
+        const std::vector<DerivedPort> &dp = rs[1].derived_ports();
+        const bool d = std::any_of(dp.begin(), dp.end(), [&](const DerivedPort &p) { return p.name == rs[1].encoded_ports[j].name; });
+        (d ? derived : fused).push_back(e);
+        if (d) own(e);
+    }
+    std::vector<Var> a = ac[0].args();
+    ac[0].compute_at(out, Var::outermost()).rename(a[1], blk).rename(a[2], row).split(a[0], a[0], jv, 4).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).fuse(a[0], blk, a[0]).vectorize(jv).gpu_blocks(bo, row).gpu_threads(a[0]);
+    for (Func e : fused) {
+        a = e.args();
+        e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).rename(a[0], blk).rename(a[1], row).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).gpu_blocks(bo, row).gpu_threads(blk).compute_with(ac[0], bo);
+    }
+    for (Func e : derived) {
         a = e.args();
         e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).split(a[0], bo, a[0], 32, TailStrategy::GuardWithIf).gpu_blocks(bo, a[1]).gpu_threads(a[0]);
     }
     for (Func f : encoder_funcs(rs[1].encoded[0], rs)) {
-        if (f.has_update_definition() && f.dimensions() < ac[0].dimensions() && f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);
+        if (!f.has_update_definition() || f.dimensions() >= ac[0].dimensions()) continue;
+        a = f.args();
+        f.compute_at(ac[0], bo).gpu_threads(a[0]);
+        f.update().gpu_threads(a[0]);
+        copies.push_back(f);
+    }
+    for (Func f : copies) {
+        if (f.has_update_definition() && f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);
     }
 }
 
