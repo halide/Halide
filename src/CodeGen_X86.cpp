@@ -8,6 +8,7 @@
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "LLVM_Headers.h"
 #include "OptimizeShuffles.h"
 #include "Simplify.h"
@@ -15,6 +16,8 @@
 #include "Util.h"
 
 #include <algorithm>
+#include <map>
+#include <optional>
 
 namespace Halide {
 namespace Internal {
@@ -69,6 +72,8 @@ protected:
     void visit(const Allocate *) override;
     void visit(const Load *) override;
     void visit(const Store *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
     // @}
 
@@ -77,6 +82,12 @@ protected:
 
 private:
     Scope<MemoryType> mem_type;
+
+    /** Let-bound vectors of constants (lane patterns lifted by CSE), for
+     * the pattern matching that needs their lanes. */
+    std::map<std::string, Expr> constant_lets;
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op);
 };
 
 CodeGen_X86::CodeGen_X86(Target t)
@@ -911,6 +922,45 @@ void CodeGen_X86::visit(const Call *op) {
     CodeGen_CPU::visit(op);
 }
 
+template<typename LetOrLetStmt>
+void CodeGen_X86::visit_let(const LetOrLetStmt *op) {
+    bool constant = op->value.type().is_vector();
+    if (constant) {
+        visit_with(
+            op->value,
+            [&](auto *self, const Variable *) { constant = false; },
+            [&](auto *self, const Load *) { constant = false; },
+            [&](auto *self, const Call *c) {
+                constant = constant && c->is_pure();
+                self->visit_base(c);
+            });
+    }
+    if (!constant) {
+        CodeGen_CPU::visit(op);
+        return;
+    }
+    auto it = constant_lets.find(op->name);
+    std::optional<Expr> shadowed;
+    if (it != constant_lets.end()) {
+        shadowed = it->second;
+    }
+    constant_lets[op->name] = op->value;
+    CodeGen_CPU::visit(op);
+    if (shadowed) {
+        constant_lets[op->name] = *shadowed;
+    } else {
+        constant_lets.erase(op->name);
+    }
+}
+
+void CodeGen_X86::visit(const Let *op) {
+    visit_let(op);
+}
+
+void CodeGen_X86::visit(const LetStmt *op) {
+    visit_let(op);
+}
+
 void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (op->op != VectorReduce::Add && op->op != VectorReduce::SaturatingAdd) {
         CodeGen_CPU::codegen_vector_reduce(op, init);
@@ -1049,7 +1099,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         // (multiplies that can't wrap, or at the reduction's width, where
         // wrapping commutes)
         std::function<void(const Expr &)> factors = [&](const Expr &e) {
-            const Call *c = Call::as_intrinsic(e, {Call::widening_mul});
+            const Call *c = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul});
             const Mul *m = e.as<Mul>();
             const Cast *cast = e.as<Cast>();
             if (c) {
@@ -1067,8 +1117,20 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             }
         };
         factors(op->value);
-        auto pairwise_uniform = [](const Expr &e) {
-            return equal(simplify(extract_even_lanes(e)), simplify(extract_odd_lanes(e)));
+        auto pairwise_uniform = [&](Expr e) {
+            if (equal(simplify(extract_even_lanes(e)), simplify(extract_odd_lanes(e)))) {
+                return true;
+            }
+            // (lane by lane, with the constant lets' lanes: strided slices of
+            // shuffles the simplifier doesn't canonicalize, e.g. of a concat
+            // of broadcasts)
+            e = substitute(constant_lets, e);
+            for (int i = 0; i < e.type().lanes(); i += 2) {
+                if (!equal(simplify(extract_lane(e, i)), simplify(extract_lane(e, i + 1)))) {
+                    return false;
+                }
+            }
+            return true;
         };
         // (exact by the value's bounds, too)
         auto narrow = [](Type t, const Expr &e) {
@@ -1079,19 +1141,88 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             }
             return n;
         };
-        for (size_t i = 0; leaves.size() == 3 && i < 3; i++) {
+        // (a table lookup's values are its table's: codes decoded by a LUT)
+        auto bounds = [](const Expr &e) {
+            const Call *c = Call::as_intrinsic(e, {Call::dynamic_shuffle});
+            return constant_integer_bounds(c ? c->args[0] : e);
+        };
+        auto is_sign = [&](const Expr &e) {
+            return ConstantInterval(-1, 1).contains(bounds(e));
+        };
+        auto not_int8_min = [&](const Expr &e) {
+            ConstantInterval c = bounds(e);
+            return c.min_defined && c.min > -128;
+        };
+        auto magnitude = [&](const Expr &e) {
+            ConstantInterval c = bounds(e);
+            return c.is_bounded() ? std::max(-c.min, c.max) : INT64_MAX;
+        };
+        const size_t n = leaves.size();
+        for (size_t i = 0; (n == 3 || n == 4) && i < n; i++) {
             Expr s = narrow(Int(16, lanes), leaves[i]);
             if (!s.defined() || !pairwise_uniform(leaves[i])) {
                 continue;
             }
-            Expr x = leaves[(i + 1) % 3], y = leaves[(i + 2) % 3];
+            std::vector<Expr> others;
+            for (size_t j = 0; j < n; j++) {
+                if (j != i) others.push_back(leaves[j]);
+            }
+            // A fourth factor in [-1, 1] (a sign): onto a signed factor that
+            // can't be -128 (psignb, exact), preferring one beside an
+            // unsigned factor
+            if (others.size() == 3) {
+                auto sign = std::find_if(others.begin(), others.end(), is_sign);
+                if (sign == others.end()) {
+                    continue;
+                }
+                Expr sg = narrow(Int(8, lanes), *sign);
+                others.erase(sign);
+                int onto = -1;
+                for (int j = 0; j < 2; j++) {
+                    Expr y = narrow(Int(8, lanes), others[j]);
+                    if (y.defined() && not_int8_min(y) && sg.defined() && (onto < 0 || narrow(UInt(8, lanes), others[1 - j]).defined())) {
+                        onto = j;
+                    }
+                }
+                if (onto < 0) {
+                    continue;
+                }
+                others[onto] = narrow(Int(8, lanes), others[onto]) * sg;
+            }
+            Expr x = others[0], y = others[1];
             Expr u = narrow(UInt(8, lanes), x), v = narrow(Int(8, lanes), y);
             if (!u.defined() || !v.defined()) {
                 u = narrow(UInt(8, lanes), y);
                 v = narrow(Int(8, lanes), x);
             }
-            if (!u.defined() || !v.defined() ||
-                !ConstantInterval(INT16_MIN, INT16_MAX).contains(constant_integer_bounds(u) * constant_integer_bounds(v) * 2)) {
+            // Both signed: x * y = |x| * (x < 0 ? -y : y), exact with y not
+            // -128 (psignb); the sign onto the narrower one (the other's
+            // abs then shared by the dots against it)
+            std::string a_name, b_name;
+            if (!u.defined() || !v.defined()) {
+                Expr a = narrow(Int(8, lanes), x), b = narrow(Int(8, lanes), y);
+                if (!a.defined() || !b.defined()) {
+                    continue;
+                }
+                if (!not_int8_min(b) || (not_int8_min(a) && magnitude(a) < magnitude(b))) {
+                    std::swap(a, b);
+                }
+                if (!not_int8_min(b) ||
+                    !ConstantInterval(INT16_MIN, INT16_MAX).contains(bounds(abs(a)) * bounds(b) * 2)) {
+                    continue;
+                }
+                a_name = unique_name('a');
+                b_name = unique_name('b');
+                sym_push(a_name, codegen(a));
+                Expr av = Variable::make(a.type(), a_name);
+                Value *signed_b = call_overloaded_intrin(b.type(), "sign", {b, av});
+                if (!signed_b) {
+                    signed_b = codegen(select(av < make_zero(a.type()), -b, b));
+                }
+                sym_push(b_name, signed_b);
+                u = abs(av);
+                v = Variable::make(b.type(), b_name);
+            } else if (!ConstantInterval(INT16_MIN, INT16_MAX).contains(constant_integer_bounds(u) * constant_integer_bounds(v) * 2)) {
                 continue;
             }
             Expr pairs = VectorReduce::make(VectorReduce::SaturatingAdd, widening_mul(u, v), lanes / 2);
@@ -1100,6 +1231,10 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 scaled = VectorReduce::make(VectorReduce::Add, scaled, op->type.lanes());
             }
             codegen_vector_reduce(scaled.as<VectorReduce>(), init);
+            if (!a_name.empty()) {
+                sym_pop(b_name);
+                sym_pop(a_name);
+            }
             return;
         }
     }
