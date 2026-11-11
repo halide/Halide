@@ -1394,3 +1394,125 @@ are faster. The float gemms are as in Phase 3 (ms within 2.1%).
     formats' rows.
   - q2_K, nvfp4, iq2_xxs, iq2_xs, iq3_xxs, iq3_s, iq1_s from M = 16: the f16
     gemm, as Phase 3.
+
+## Phase 5: mma.sync, by hand and in the compiler (RTX 3090)
+
+Same machine and conventions as Phase 4. The question: is `mma.sync` (Phase 4's
+diagnosis) the lever on the integer gemm, and does the compiler reach it.
+
+- By hand first. A q4_0 x q8_0 kernel after GGML's mmq (nvcc; `mma.sync`
+  m16n8k32 on int8, weights decoded to shared memory per 256 values of K, acts
+  quantized by a kernel of its own and staged per 128, scales read per element
+  from the operands' shared rows, K split over blocks with a kernel summing the
+  parts), varied one thing at a time. 4096^2; ms of a call (its three kernels),
+  then the GPU time of the gemm and of the sum of the K split (us, CUPTI);
+  shapes are weight rows x act rows of a block / parts of K:
+
+  | variant                                      | M = 16                      | M = 64                      | M = 128                       | M = 512                       |
+  | -------------------------------------------- | --------------------------- | --------------------------- | ----------------------------- | ----------------------------- |
+  | GGML (quantize, mmq, stream-k fixup)         | 0.0298, 22.1 + 4.4          | 0.0472, 33.1 + 9.3          | 0.0747, 47.0 + 16.1           | 0.1921, 150.9 + 19.4          |
+  | Halide on wmma (Phase 4)                     | 0.0339, 25.4 + 2.1          | 0.0606, 44.8 + 5.4          | 0.0937, 79.5                  | 0.2865, 238.8                 |
+  | by hand, GGML's formulation                  | 64x16/4, 0.0278, 20.6 + 2.4 | 64x64/2, 0.0422, 33.4 + 3.0 | 64x128/2, 0.0662, 53.2 + 4.8  | 64x64/1, 0.2023, 185.9        |
+  | (1) two m16n8k16 per 32 values of K          | 64x16/4, 0.0279, 20.8 + 2.4 | 64x64/2, 0.0429, 34.1 + 3.0 | 64x128/2, 0.0672, 54.3 + 4.8  | 64x64/1, 0.2078, 191.6        |
+  | (2) the weights' operand by word loads       | 64x16/4, 0.0286, 21.5 + 2.4 | 64x64/2, 0.0446, 35.9 + 3.0 | 64x128/2, 0.0666, 53.7 + 4.9  | 64x128/1, 0.2118, 194.6       |
+  | (2) the acts' operand by `ldmatrix`          | 64x16/4, 0.0276, 20.5 + 2.4 | 64x64/2, 0.0439, 35.2 + 3.0 | 64x128/2, 0.0652, 52.2 + 4.8  | 64x128/1, 0.1996, 182.5       |
+  | the weights' operand and scales per multiply | 64x16/8, 0.0307, 22.8 + 3.1 | 64x64/2, 0.0638, 55.0 + 3.0 | 128x128/2, 0.1050, 92.7 + 4.3 | 64x64/2, 0.3562, 306.9 + 31.4 |
+  | (3) scales a load per element and operand    | 64x16/8, 0.0326, 24.7 + 3.2 | 64x64/2, 0.0636, 54.7 + 3.1 | 128x128/2, 0.1031, 90.8 + 4.3 | 64x64/1, 0.3514, 335.3        |
+  | (5) acts staged by `cp.async`                | 64x16/4, 0.0277, 20.6 + 2.4 | 64x64/2, 0.0407, 32.0 + 3.0 | 64x128/2, 0.0635, 50.5 + 4.8  | 64x128/1, 0.1961, 178.8       |
+
+  (4), the tile: blocks of 128 / 64 / 32 weight rows (8 / 4 / 2 warps) take
+  0.0268 / 0.0256 / 0.0254 ms at M = 16, 0.0431 / 0.0390 / 0.0427 at 64, 0.0618
+  / 0.0618 / 0.0688 at 128, 0.2163 / 0.2004 / 0.2317 at 512; a warp on 32 weight
+  rows and every tile of the acts (128 x 64 blocks of 4 warps) 0.0397, 0.0611,
+  0.1941 at M = 64, 128, 512. (5), the order: a step's weights loaded after its
+  acts' copies are awaited (the order of the generated kernels) against before:
+  0.0264 / 0.0252 at M = 16, 0.0413 / 0.0377 at 64, 0.2035 / 0.1891 at 512. So
+  the hand-written kernel is at 0.86-0.92x of mmq's GPU time at M = 16..128 and
+  1.05-1.09x at 512 (128 tiles on 82 SMs: stream-k balances them; GGML / ours on
+  a call 1.07, 1.12, 1.13, 0.95, the best of the variants 1.17, 1.26, 1.26,
+  1.02). The multiply instruction is not the lever: m16n8k32 against two of 16
+  values of K is nothing (the peak of both, operands in registers, is 298 TOPS
+  on this card, as wmma's m16n16k16's), `ldmatrix` against word loads 1-6%. The
+  loads per multiply are: scales loaded per element (what wmma's `load.c` of a
+  scale tile does, its layout being unspecified) cost 1.2-1.7x, an operand
+  reloaded per multiply 1.1-1.8x.
+
+- Core: tiles of 16 x 8 x 32 and 16 x 8 x 16 (rows x columns x values of K) of
+  8-bit integers in `MemoryType::Tile` are `mma.sync`'s
+  (`ExtractWMMAOperations`, `CodeGen_PTX_Dev`; capability 80). Its registers'
+  layout is specified, so nothing moves a tile: each lane loads the elements of
+  an operand that it holds (words, where K is dense in memory), stores its
+  elements of an accumulator, and an elementwise function of accumulators reads
+  a matrix in memory at the elements the lane holds, a load per distinct one
+  (two per tile of a per-row vector). The shape of a multiply's tiles selects
+  the instruction; wmma's shapes lower as before (`mma_sync_matmul`: both
+  shapes, int8 and uint8, operands of both signs, staged in fragments or not,
+  K-dense or transposed, the scaled gemm and one offset by a matrix, on the
+  device against data that differs in every row, column and value of K).
+
+- The integer gemm on it (`gpu_int_gemm` with 16 x 8 fragments of 32 values of
+  K, the weights the 16-row operand; 16 values where sub-blocks are 16: q6_K
+  checks) is not faster than on wmma, and is not moved. q4_0, ms at M = 16, 32,
+  64, 128, 512 on Phase 4's blocks: 0.0333, 0.0411, 0.0618, 0.1022, 0.299 (wmma:
+  0.0339, 0.0413, 0.0606, 0.0937, 0.2865); the best of the blocks tried: 0.0567
+  at 64 (128 x 64, K in 4), 0.0908 at 128 (64 x 128), 0.294 at 512; q4_K 0.0320,
+  0.0539, 0.0687, 0.1253, 0.364 (0.0334, 0.0471, 0.0728, 0.1235, 0.376), q4_1
+  0.0404, 0.0508, 0.0715, 0.1165, 0.348 (0.0406, 0.0506, 0.0696, 0.1138, 0.343),
+  q5_K and q6_K within the same +-13% (one run each). Its multiply phase is the
+  hand-written kernel's (per tile and 32 values of K: two word loads, one
+  `mma.sync`, a load of two scales, 4 x (cvt, mul, fma); the weights' operand
+  and scales once per block of K), but the multiplies are not where its time is.
+  With instructions of the M >= 256 kernel's PTX replaced by moves (4096^2 x
+  512, 256 blocks of 64 x 128; and x 128, 64 blocks, one per SM): all of it 258
+  us (81), without the multiplies 179 (64), without multiplies and scaling, i.e.
+  staging alone, 154 (63.5); the hand-written kernel on the same blocks and
+  staging order 212 (84), its staging alone 134 (48). Two blocks sharing an SM
+  take 1.6x one's time each (by hand: 1.2x), the time does not depend on the
+  steps of K (64-value steps 0.304 ms, 128 0.297) and larger blocks are slower
+  (128 x 128 of 8 warps on 64-value steps 0.339 ms). So from M = 16 the
+  generated gemm is bound by moving its operands into shared memory (60% of the
+  kernel at M = 512), then by the multiplies themselves (58 us of them at the
+  card's peak), and the scales' loads Phase 4 blamed come third.
+
+- `halide-by-m-<type>_f32_cuda` takes, per type, the library measured fastest at
+  the nearest of M = 16, 32, 64, 128, 512 where it is more than 3% ahead of the
+  default (the integer gemm, else the f16 gemm above 16; `by_m` in
+  `harness/halide_providers.cpp`). GGML / Halide at 4096^2, Phase 4's provider
+  -> this one: the rows at M = 16 on q4_1 0.78 -> 0.87, q5_1 0.87 -> 0.89,
+  iq4_nl 0.63 -> 0.72, iq4_xs 0.57 -> 0.62, iq1_m 1.61 -> 2.18, at 32 on iq1_s
+  0.35 -> 0.46; the f16 gemm at 128 on q4_1 0.69 -> 0.73, q4_K 0.63 -> 0.72,
+  q5_K 0.61 -> 0.66, q6_K 0.65 -> 0.68, at 64 on iq4_xs 0.51 -> 0.64, at 512 on
+  iq2_s 0.52 -> 0.59 and iq1_m 0.51 -> 0.59, at 16 on q2_K 0.52 -> 0.60. Not
+  q6_K's f16 gemm at M = 32 and 64, 8% and 4% faster at 4096^2: on the `full`
+  preset's 4096 x 1024 x 32 and 2048 x 512 x 32 its integer gemm (K split) is
+  1.5-1.7x faster. A choice by M alone is 4096^2's; the other cells were not
+  measured on other shapes. Elsewhere the provider is within 3% of the best
+  library in every cell from M = 16 but iq2_s at 16 (3.3%) and iq4_xs at 128
+  (3.6%).
+
+- Gate: `--check` of every CUDA library on the Phase 3 grid: 102060 results, 0
+  failures, 0 unchecked; of the integer gemm and by-M libraries also on K in
+  {256, 768, 1280, 2304, 3072} (9450 results, 0 failures). `ctest -L ggml`
+  78/78, `-L ggml_cuda` 67/67; the core tests matching
+  `gpu_|wmma_|mma_|warp_|cuda_|register_shuffle|atomics|lossless_cast|rfactor|vectorize_swar|specialize|deinterleave`
+  under `HL_JIT_TARGET=host-cuda`: 112/112. The 82 Metal libraries' `.stmt` are
+  byte-identical to b09e9eaf3's, the 36 sampled x86 CPU libraries' but for the
+  numbering of temporaries in 2.
+
+- Results: the libraries are Phase 4's, re-measured (4096^2, M = 1..512, 23
+  types, medians of 3 runs): no cell of its best-per-cell table, nor a by-M
+  provider's, is more than 3% slower (the worst 2.6%: iq1_s's rows at M = 32,
+  0.0701 -> 0.0719 ms); 19 of 207 cells reach 0.95 (17: q6_K and iq1_s at M = 8
+  moved from 0.93-0.94 to 0.96-0.97). The float gemms likewise (63 cells, the
+  worst 2.3%). The `full` preset's 12 layers, M = 32 / 512, by-M (one run: the
+  machine was in use during the other two): q4_0 0.67-1.21 / 0.59-0.94, q8_0
+  0.57-1.10 / 0.54-0.88, q4_K 0.46-1.02 / 0.49-0.76, q6_K 0.43-1.04 / 0.53-0.82,
+  iq2_xs 0.27-0.66 / 0.47-0.84: Phase 4's.
+
+- Where the rest is, from M = 16: the generated gemm's staging, as above. By
+  hand, GGML's formulation with its staging reaches GGML (the table), so the
+  schedule's steps are what to change next: what a block stages per step and in
+  what order (a step's weights are loaded after its acts' copies are awaited, 7%
+  by hand), its blocks sharing an SM, and stream-k's balance at M = 512; then
+  the scales' loads, which `mma.sync`'s tiles already remove. Below M = 16 as
+  Phase 4.

@@ -575,8 +575,11 @@ and cuBLAS. The Halide counterparts of a blocked type are:
 
 `halide-by-m-<type>_f32_cuda` picks among them by M as GGML picks its kernel:
 the `f32:q8_1` rows below 16 rows, then the integer gemm where the type has one,
-else (above 16) the f16 gemm. (Around M = 128 the f16 gemm is still the faster
-one on q4_1, q4_K, q5_K and q6_K: 0.67-0.74 against 0.61-0.69.)
+else (above 16) the f16 gemm; per type, another of the three where it was
+measured more than 3% faster at the nearest of M = 16, 32, 64, 128, 512 (`by_m`
+in `harness/halide_providers.cpp`: the rows at 16 on q4_1, q5_1, iq4_nl, iq4_xs
+and iq1_m, the f16 gemm around 128 on q4_1, q4_K, q5_K and q6_K, at 512 on iq2_s
+and iq1_m).
 
 The f16 gemm's staging is Metal's, on 16 bytes per lane and rows padded by 8
 values (a fragment's rows, 128 bytes apart, share their banks): the weights'
@@ -609,13 +612,15 @@ acts, the best library, q4_0 0.93, 0.92, 0.90, 1.14, 0.88, 0.88, 0.78, 0.80,
 0.67; q8_0 0.93, 0.94, 0.86, 0.97, 0.89, 0.80, 0.74, 0.62, 0.65; q4_K 0.77,
 0.73, 0.86, 0.97, 0.92, 0.77, 0.70, 0.73, 0.55; q6_K 0.78, 0.69, 0.74, 0.93,
 0.78, 0.71, 0.73, 0.70, 0.59; iq2_xs 0.46, 0.47, 0.57, 0.70, 0.51, 0.54, 0.56,
-0.55, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 and 4) has every type, the `full`
+0.55, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 5) has every type, the `full`
 preset's layers and where the rest of the time is: from M = 16 the integer gemm
-kernel itself (1.4-1.6x the GPU time of GGML's, which multiplies 32 values of K
-per `mma.sync` and reads its scales per element; wmma has neither) and the acts'
-two or three kernels against GGML's one; below, the second launch, the rows'
-cost per act column and the grid formats' decodes; cuBLAS's f16 accumulators on
-f16 from M = 64.
+kernel itself (1.4-1.6x the GPU time of GGML's): moving its operands into shared
+memory is 60% of it at M = 512, the multiplies come next, and on `mma.sync`
+(tiles of 16 x 8 x 32, whose scales a lane reads per element, as GGML's) it is
+no faster than on wmma, where it stays (Phase 5); and the acts' two or three
+kernels against GGML's one; below, the second launch, the rows' cost per act
+column and the grid formats' decodes; on f16 from M = 64, cuBLAS's f16
+accumulators.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
