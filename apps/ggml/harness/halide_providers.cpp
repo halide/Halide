@@ -386,10 +386,27 @@ void register_halide_providers() {
     // halide-by-m-<type>_f32_cuda: a blocked weight's CUDA libraries on f32
     // acts by M, as GGML's CUDA backend picks mmvq or mmq (and as an
     // integration would dispatch): below 16 rows the dp4a rows on acts
-    // quantized to q8_1 (<type> on f32:q8_1); from 16 the integer gemm
-    // (<type> on f32:q8_0.soa or f32:q8_1.soa) where the type has one, else, above 16, the
-    // f16 gemm (<type>:f16 on f32:f16; at M = 16 the rows are 1.1-1.5x
-    // faster than it on 4096 x 4096; RTX 3090).
+    // quantized to q8_1 (<type> on f32:q8_1, `r`); from 16 the integer gemm
+    // (<type> on f32:q8_0.soa or f32:q8_1.soa, `i`) where the type has one,
+    // else, above 16, the f16 gemm (<type>:f16 on f32:f16, `h`). by_m: the
+    // types where another of the three is more than 3% faster at M = 16,
+    // 32, 64, 128 or 512 on 4096 x 4096 (RTX 3090), a letter each; an M
+    // from 16 takes the nearest of those five's. (Not q6_K's f16 gemm at M
+    // = 32 and 64, 4-8% faster there: on 4096 x 1024 x 32 and 2048 x 512 x
+    // 32 its integer gemm is 1.5-1.7x faster.)
+    static const std::map<std::string, std::string> by_m = {
+        {"iq1_m", "riiih"},
+        {"iq1_s", "rrhhh"},
+        {"iq2_s", "iiiih"},
+        {"iq4_nl", "riiii"},
+        {"iq4_xs", "rihii"},
+        {"q2_K", "hhhhh"},
+        {"q4_1", "riihi"},
+        {"q4_K", "iiihi"},
+        {"q5_1", "riiii"},
+        {"q5_K", "iiihi"},
+        {"q6_K", "iiihi"},
+    };
     auto make = [](const std::string &name) {
         for (const Provider &p : providers()) {
             if (p.timed && p.ops & GQ_mul_mat && p.name == "halide-" + name) return p.make;
@@ -406,13 +423,27 @@ void register_halide_providers() {
         std::string rows_name = c.name, int_name = id + "_f32_to_q8_0_soa_mul_mat_cuda", f16_name = id + "_to_f16_f32_to_f16_mul_mat_cuda";
         if (!make(int_name)) int_name = id + "_f32_to_q8_1_soa_mul_mat_cuda";
         const bool has_int = (bool)make(int_name);
-        const std::string gemm_name = has_int ? int_name : f16_name;
-        if (!make(gemm_name)) continue;
+        if (!make(has_int ? int_name : f16_name)) continue;
+        auto it = by_m.find(type);
+        const std::string picks = it != by_m.end() ? it->second : has_int ? "iiiii" :
+                                                                            "rhhhh";
+        std::map<char, std::string> names = {{'r', rows_name}, {'i', int_name}, {'h', f16_name}};
+        std::map<char, std::function<std::unique_ptr<Kernel>(const Inputs &)>> makes;
+        bool all = true;
+        for (char c : picks) {
+            makes[c] = make(names[c]);
+            all = all && makes[c];
+        }
+        if (!all) continue;
         providers().push_back({"halide-by-m-" + id + "_f32_cuda", GQ_mul_mat, true,
-                               [mv = make(rows_name), mm = make(gemm_name), rows_name, gemm_name, has_int](const Inputs &in) {
-                                   bool big = in.s.M >= (has_int ? 16 : 17);
-                                   auto k = (big ? mm : mv)(in);
-                                   if (k) k->path = "halide:cuda:" + (big ? gemm_name : rows_name);
+                               [mv = make(rows_name), makes, names, rows_name, picks](const Inputs &in) {
+                                   const int M = in.s.M;
+                                   const char c = M < 16 ? 'r' : picks[M < 24 ? 0 : M < 48 ? 1 :
+                                                                                M < 96     ? 2 :
+                                                                                M < 256    ? 3 :
+                                                                                             4];
+                                   auto k = (M < 16 ? mv : makes.at(c))(in);
+                                   if (k) k->path = "halide:cuda:" + (M < 16 ? rows_name : names.at(c));
                                    return k;
                                }});
     }
