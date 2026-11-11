@@ -209,6 +209,12 @@ set(GGML_SCHEDULE_PARAMS
     "q4_0 mul_mat f32:q8_0.soa code_words=true"
     "q5_0 mul_mat f32:q8_0.soa code_words=true"
     "q8_0 mul_mat f32:q8_0.soa code_words=true"
+    "q4_1 mul_mat f32:q8_1.soa code_words=true"
+    "q5_1 mul_mat f32:q8_1.soa code_words=true"
+    "q4_K mul_mat f32:q8_1.soa code_words=true"
+    "q5_K mul_mat f32:q8_1.soa code_words=true"
+    "q6_K mul_mat f32:q8_0.soa code_words=true"
+    "q3_K mul_mat f32:q8_0.soa code_words=true"
     "iq3_s mul_mat q8_K gemm_index_words=true"
     "iq3_s mul_mat f32 gemm_index_words=true"
     "iq3_s mul_mat f32:q8_K gemm_index_words=true"
@@ -291,15 +297,21 @@ endif ()
 # bf16 fragments. f32 weights (no scheme) are W itself, or rounded to f16
 # for the gemm (f32:f16). A blocked weight's f32:q8_1 library quantizes its
 # f32 acts on the GPU, in a kernel of their own, as GGML's CUDA backend does
-# (mmvq and mmq run on q8_1 acts), and runs the dp4a rows on them. Weights
-# of one scale per block and no offset (q4_0, q5_0, q8_0, iq4_nl, mxfp4) also
-# have an integer gemm library, <type> on f32:q8_0.soa acts (schedule.h's
+# (mmvq and mmq run on q8_1 acts), and runs the dp4a rows on them. Most
+# also have an integer gemm library, <type> on f32:q8_0.soa acts (schedule.h's
 # gpu_int_gemm; as GGML's mmq, which its CUDA backend runs for M > 8): the
 # acts quantized on the GPU to q8_0's codes and scales, one planar array each
 # (.soa: no records to pack), the weights' int8 codes multiplied by them on
-# wmma's int8 fragments for M >= 16 and N % 8 == 0 (else the dp4a rows).
-# code_words=true (GGML_SCHEDULE_PARAMS): its weight codes decoded 8 a word
-# in a GPR (the formats decoded by arithmetic). Each f16-, bf16- or .soa-act
+# wmma's int8 fragments for M >= 16 and N % 8 == 0 (else the dp4a rows), each
+# 32-value block's (or 16-value sub-block's) int32 tile scaled by the weight's
+# scale of it (a K-quant's: its sub-block's times its super-block's). Weights
+# with an offset or min per block (q4_1, q5_1, q4_K, q5_K) take f32:q8_1.soa
+# acts: q8_1's block sums are a third array, which the offsets multiply. Not
+# q2_K (mins per 16 values: q8_1's sums are per 32), nvfp4 (float sub-block
+# scales) or the grid formats whose f16 gemm is faster (iq2_xxs, iq2_xs,
+# iq3_xxs, iq3_s, iq1_s). code_words=true (GGML_SCHEDULE_PARAMS): its weight
+# codes decoded 8 a word in a GPR (the formats decoded by shifts and masks
+# of bytes). Each f16-, bf16- or .soa-act
 # bench library's test checks that its PTX multiplies on the tensor cores
 # (the other acts take dp4a or f32 rows).
 set(GGML_HALIDE_CUDA_FORMATS
@@ -331,6 +343,17 @@ set(GGML_HALIDE_CUDA_FORMATS
     "q5_0 mul_mat f32:q8_0.soa"
     "iq4_nl mul_mat f32:q8_0.soa"
     "mxfp4 mul_mat f32:q8_0.soa"
+    "iq4_xs mul_mat f32:q8_0.soa"
+    "q6_K mul_mat f32:q8_0.soa"
+    "q3_K mul_mat f32:q8_0.soa"
+    "q1_0 mul_mat f32:q8_0.soa"
+    "q2_0 mul_mat f32:q8_0.soa"
+    "iq2_s mul_mat f32:q8_0.soa"
+    "iq1_m mul_mat f32:q8_0.soa"
+    "q4_1 mul_mat f32:q8_1.soa"
+    "q5_1 mul_mat f32:q8_1.soa"
+    "q4_K mul_mat f32:q8_1.soa"
+    "q5_K mul_mat f32:q8_1.soa"
     "f16 mul_mat f16,f32,f32:f16"
     "bf16 mul_mat bf16,f32,f32:bf16"
     "f32 mul_mat f32"

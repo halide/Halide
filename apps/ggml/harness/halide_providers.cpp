@@ -387,7 +387,7 @@ void register_halide_providers() {
     // acts by M, as GGML's CUDA backend picks mmvq or mmq (and as an
     // integration would dispatch): below 16 rows the dp4a rows on acts
     // quantized to q8_1 (<type> on f32:q8_1); from 16 the integer gemm
-    // (<type> on f32:q8_0.soa) where the type has one, else, above 16, the
+    // (<type> on f32:q8_0.soa or f32:q8_1.soa) where the type has one, else, above 16, the
     // f16 gemm (<type>:f16 on f32:f16; at M = 16 the rows are 1.1-1.5x
     // faster than it on 4096 x 4096; RTX 3090).
     auto make = [](const std::string &name) {
@@ -403,7 +403,8 @@ void register_halide_providers() {
         for (char &ch : id) {
             if (!isalnum((unsigned char)ch)) ch = '_';
         }
-        const std::string rows_name = c.name, int_name = id + "_f32_to_q8_0_soa_mul_mat_cuda", f16_name = id + "_to_f16_f32_to_f16_mul_mat_cuda";
+        std::string rows_name = c.name, int_name = id + "_f32_to_q8_0_soa_mul_mat_cuda", f16_name = id + "_to_f16_f32_to_f16_mul_mat_cuda";
+        if (!make(int_name)) int_name = id + "_f32_to_q8_1_soa_mul_mat_cuda";
         const bool has_int = (bool)make(int_name);
         const std::string gemm_name = has_int ? int_name : f16_name;
         if (!make(gemm_name)) continue;
