@@ -1220,3 +1220,177 @@ f16 x f16 1.05 1.06 1.07 0.97 1.02 1.04 0.87 0.78 0.60; f16 on `f32:f16` acts
     (rank 1, from the acts' partial sums) in `gpu_int_gemm`.
   - f16 from M = 64 (0.60-0.89): cuBLAS's f16 accumulators (f32 ones bound M =
     512 at 0.84x on this card).
+
+## Phase 4: the integer gemm for the other blocked types (RTX 3090)
+
+Same machine, measure and conventions as Phase 3 (GGML / Halide, f32 acts,
+`--rounds 9`, medians of 3 runs).
+
+- Where the time is (GPU time per kernel from CUPTI's activity records, us,
+  4096^2; q4_0 on `f32:q8_0.soa` as Phase 3 left it):
+
+  | M   | GGML: quantize, mmq, stream-k fixup | Halide: act codes, act scales, gemm, sum of the K split |
+  | --- | ----------------------------------- | ------------------------------------------------------- |
+  | 64  | 4.0, 33.0, 9.3 (46.2)               | 3.9, 3.6, 45.4, 5.5 (58.4)                              |
+  | 512 | 16.0, 153.6, 19.5 (189.1)           | 17.4, 18.0, 242.4, none (277.7)                         |
+
+  Launch overhead is not it (wall time less GPU time: 1-3 us on both sides). The
+  gemm kernel takes 1.4-1.6x mmq's time, and the acts' two kernels twice GGML's
+  one. A hand-written wmma kernel of the same design (16 x 16 x 16 int8
+  fragments, accumulators scaled in registers, `cp.async` acts, stream-k) does
+  no better than the generated one: its best shapes take 0.062 ms at M = 64 and
+  0.358 at 512, the library 0.061 and 0.286. Per 32 values of K and 16 x 128
+  outputs (M = 512), each lane of the Halide kernel issues 16 `wmma.load.a` and
+  16 `wmma.mma` of 16 values of K, and 9 `wmma.load.c` of f32 scale tiles (8
+  loads each: a tile of scales is loaded as a matrix, since which elements a
+  lane holds is unspecified), then 64 x (cvt, mul, fma). mmq uses
+  `mma.sync.m16n8k32` (half the multiplies per value of K), `ldmatrix` and, the
+  fragment layout of `mma.sync` being documented, two scale loads per 16 x 8
+  tile. That is the remaining gap of the gemm kernel; neither is reachable from
+  wmma, by scheduling or otherwise.
+
+- `gpu_int_gemm` on any blocked weight whose decode is codes times factors, plus
+  terms free of the codes: the factors of a block's increment that vary along N
+  become a Func staged per step (`factor_funcs`: q4_K's d * sc of the sub-block,
+  read from the record), those along M the act's scale. Affine weights (q4_1,
+  q5_1, q4_K, q5_K) split on their codes (`hoist_invariants`); the code-free
+  terms read `q8_1.soa`'s block sums (the derived port, a third planar array),
+  an outer product per block. Sub-blocks of 16 values (q6_K, q3_K, iq2_s, iq1_m)
+  scale each fragment's int32 tile, the act's scale their sum. A weight block of
+  several act blocks (the K-quants' 256 values) is staged once, its steps of 128
+  values the acts' (staged per step with the acts, K-quants at M >= 128 need
+  more shared memory than a block has). `code_words` takes a K-quant's 64 values
+  of 32 bytes per lane (q4_K at M = 64 0.092 -> 0.072 ms).
+
+- Core: `VectorizeIn::SWAR` narrows a right shift of widened lanes by an amount
+  that is the same in every lane and provably within the narrow lanes
+  (`vectorize_swar`). q5_K's fifth bits, q6_K's and q3_K's high bits sit at a
+  bit position that depends on the sub-block, i.e. on the lane's thread:
+  `code_words` could not be scheduled for them. (q5_K at M = 64 0.097 -> 0.076
+  ms, q6_K 0.102 -> 0.083, q3_K 0.094 -> 0.080.)
+
+- The acts' kernels: their scales and sums are a kernel each as encoded (the
+  gemm's factors decode them as they stage them; as first written the `q8_1.soa`
+  acts took five kernels, 13.6 us at M = 64), the reductions in them (the
+  scale's maximum of 32 values, the sum of 32 codes) of vectors. GPU time before
+  the gemm, M = 64 / 512: q4_0 7.5 -> 5.6 / 35.3 -> 29.0 us; q4_1 7.8 / 33.7
+  (GGML 4.0 / 16.0).
+
+- q2_0's integer gemm (Phase 3: `w` read two blocks past its end at K = 1024) is
+  registered: its 64-value blocks are two act blocks, which the staging now
+  takes whole.
+
+- Not done by scheduling: q2_K (a min per 16 values: `q8_1`'s sums are per 32;
+  GGML's mmq quantizes its acts with a scale per 64 and sums per 16), nvfp4
+  (float scales per sub-block: no integer factor hoists). iq2_xxs, iq2_xs,
+  iq3_xxs, iq3_s and iq1_s run and check on the integer gemm but are slower than
+  on the f16 gemm at most M (iq2_xxs 0.52, 0.49, 0.44, 0.49, 0.45 at M = 16..512
+  against 0.38, 0.51, 0.47, 0.50, 0.48; their grid lookups are decoded a code at
+  a time on both): not registered.
+
+- Core review fixes (the six Phase 3 commits, amended): int8 products computed
+  in uint16 are no tensor core multiply (they were lowered as one: -1 * 1 =
+  65535); a conversion or copy of an accumulator is elementwise; a scalar read
+  of a fragment, a uint32 matrix and a float accumulator of an int32 matrix
+  below capability 75 are user errors; the int32 / float32 accumulator layouts
+  are checked on 32 x 8 and 8 x 32 fragments too; `rfactor()`'s unguarded
+  specialization of the intermediate is made when the pipeline is lowered (or
+  asked for), so what is scheduled on the intermediate afterwards holds in it;
+  the PTX backend's in-register arithmetic uses `VectorizeSWAR`'s and also takes
+  shifts left and sums with a constant widened on one side.
+
+- Gate: `--check` of every CUDA library on the Phase 3 grid: 102060 results, 0
+  failures, 0 unchecked; of the integer gemm and by-M libraries alone also on K
+  in {256, 768, 1280, 2304, 3072} (9450 results, 0 failures). `ctest -L ggml`
+  78/78 (`ggml_check`: 3182 results, 0 failures, 53 unchecked, as Phase 3's),
+  `-L ggml_cuda` 67/67; the core tests under `HL_JIT_TARGET=host-cuda` 111/111.
+  The 82 Metal libraries' `.stmt` are byte-identical to b09e9eaf3's, the 36
+  sampled x86 CPU libraries' but for the numbering of temporaries in 2.
+
+- Results, 4096^2, GGML / Halide on f32 acts, the best Halide library per cell
+  (r, i, h, x as in Phase 3; i below M = 16: the integer gemm library's rows, on
+  `.soa` acts; three runs' spread under 5% in all 1161 cells, median 0.3%):
+
+| type    | M = 1 | 2     | 4     | 8         | 16        | 32        | 64        | 128       | 512       |
+| ------- | ----- | ----- | ----- | --------- | --------- | --------- | --------- | --------- | --------- |
+| q4_0    | 0.93r | 0.92r | 0.90r | **1.14**i | 0.88i     | 0.88i     | 0.78i     | 0.80i     | 0.67i     |
+| q4_1    | 0.94r | 0.93r | 0.82r | **0.97**r | 0.85r     | 0.69i     | 0.72i     | 0.74h     | 0.62i     |
+| q5_0    | 0.90i | 0.89r | 0.81r | **1.07**i | 0.88i     | 0.82i     | 0.80i     | 0.73i     | 0.66i     |
+| q5_1    | 0.92r | 0.88r | 0.82r | **0.97**r | 0.90r     | 0.67i     | 0.72i     | 0.72i     | 0.62i     |
+| q8_0    | 0.93x | 0.94r | 0.86i | **0.97**i | 0.89i     | 0.80i     | 0.74i     | 0.62h     | 0.65i     |
+| mxfp4   | 0.72i | 0.71i | 0.77i | 0.94i     | 0.63r     | 0.60i     | 0.51i     | 0.57i     | 0.58i     |
+| iq4_nl  | 0.83r | 0.80i | 0.78i | **0.96**i | 0.72r     | 0.65i     | 0.60i     | 0.70i     | 0.62i     |
+| q2_0    | 0.66i | 0.66r | 0.88i | **1.06**i | 0.76i     | 0.79i     | 0.80i     | 0.67h     | 0.65i     |
+| q4_K    | 0.77i | 0.73r | 0.86i | **0.97**r | 0.92i     | 0.77i     | 0.70i     | 0.73h     | 0.55i     |
+| q5_K    | 0.70x | 0.60i | 0.70i | 0.78r     | **0.95**i | 0.75i     | 0.69i     | 0.67h     | 0.57i     |
+| q6_K    | 0.78h | 0.69x | 0.74i | 0.93i     | 0.78i     | 0.71h     | 0.73h     | 0.70h     | 0.59i     |
+| q2_K    | 0.85x | 0.65r | 0.88r | **0.99**r | 0.57h     | 0.80h     | 0.75h     | **1.13**h | **0.97**h |
+| q3_K    | 0.82x | 0.61i | 0.86r | **1.05**i | 0.81i     | 0.68i     | 0.66i     | 0.74i     | 0.63i     |
+| iq4_xs  | 0.78r | 0.76i | 0.79i | 0.95i     | 0.62r     | 0.60i     | 0.65h     | 0.64h     | 0.58i     |
+| nvfp4   | 0.55x | 0.42x | 0.47x | 0.51x     | 0.59h     | 0.75h     | 0.59h     | 0.85h     | 0.67h     |
+| q1_0    | 0.73i | 0.69r | 0.88r | **1.01**i | 0.89i     | 0.87i     | 0.85i     | 0.87i     | 0.69i     |
+| iq2_xxs | 0.40h | 0.37r | 0.51r | 0.58r     | 0.38h     | 0.50h     | 0.46h     | 0.49h     | 0.47h     |
+| iq2_xs  | 0.46r | 0.47r | 0.57r | 0.70r     | 0.51r     | 0.54h     | 0.56h     | 0.55h     | 0.61h     |
+| iq2_s   | 0.48i | 0.51i | 0.61i | 0.73i     | 0.56r     | 0.49i     | 0.50i     | 0.51i     | 0.59h     |
+| iq3_xxs | 0.53x | 0.40r | 0.48r | 0.57r     | 0.41r     | 0.54h     | 0.49h     | 0.50h     | 0.46h     |
+| iq3_s   | 0.52x | 0.40r | 0.48r | 0.59r     | 0.44r     | 0.52h     | 0.52h     | 0.45h     | 0.47h     |
+| iq1_s   | 0.86r | 0.81r | 0.84r | 0.94r     | 0.63r     | 0.45r     | 0.44h     | 0.40h     | 0.52h     |
+| iq1_m   | 0.72r | 0.74i | 0.84i | 0.93i     | **2.19**r | **1.34**i | **0.97**i | 0.76i     | 0.59h     |
+
+17 of 207 cells reach 0.95 (Phase 3: 12). From M = 16, against Phase 3's best:
+q4_K 0.63, 0.62, 0.60, 0.70, 0.50 -> 0.92, 0.77, 0.70, 0.73, 0.55; q5_K 0.52,
+0.54, 0.60, 0.65, 0.52 -> 0.95, 0.75, 0.69, 0.67, 0.57; q3_K 0.45, 0.59, 0.64,
+0.69, 0.59 -> 0.81, 0.68, 0.66, 0.74, 0.63; q6_K 0.56 -> 0.78 at 16, 0.53 ->
+0.59 at 512; q4_1 0.56, 0.52 -> 0.69, 0.72 at 32, 64, 0.52 -> 0.62 at 512; q5_1
+0.53, 0.45, 0.68, 0.53 -> 0.67, 0.72, 0.72, 0.62 from 32; q1_0 0.60, 0.61, 0.50,
+0.59, 0.51 -> 0.89, 0.87, 0.85, 0.87, 0.69; q2_0 0.65, 0.63, 0.54 -> 0.76, 0.79,
+0.80 to 64, 0.46 -> 0.65 at 512. `halide-by-m-<type>_f32_cuda` (the `f32:q8_1`
+rows below 16, then the integer gemm) is within 0.03 of the table except where
+the rows (q4_1, iq4_nl, iq4_xs, iq1_m at M = 16) or the f16 gemm (q4_1, q4_K,
+q5_K, q6_K around M = 128; iq4_xs at 64: 0.51 against 0.65; iq2_s, iq1_m at 512)
+are faster. The float gemms are as in Phase 3 (ms within 2.1%).
+
+- Below M = 16 the rows changed with the review fixes' in-register arithmetic
+  (their PTX differs between the two compilers: iq1_s on `f32:q8_1` 12548 ->
+  9512 lines, q3_K 15587 -> 14201, iq2_xs 14715 -> 14187, q5_0 9994 -> 9928):
+  iq1_s 0.62, 0.58, 0.70, 0.78 -> 0.86, 0.81, 0.84, 0.94 at M = 1..8, iq1_m
+  0.54, 0.54, 0.66, 0.74 -> 0.72, 0.74, 0.84, 0.93; q5_0 at M = 4 lost 5.8%
+  (0.0229 -> 0.0242 ms), iq2_xs at M = 1..4 3-4%. Of the gemm cells that were
+  their type's best, q8_0's integer gemm at M = 64 lost 4.5% (0.0720 -> 0.0753
+  ms) and iq4_nl's at M = 32 3.6% (0.0581 -> 0.0602): the compilers emit the
+  same PTX for them, so by this phase's schedule (the acts' scales are decoded
+  as they are staged; q4_0's and q5_0's cells gained 2-4% in this phase).
+  q2_K:f16 at M = 16 reads 0.0492 ms against Phase 3's 0.0443: same schedule,
+  same PTX from both compilers, and Phase 3's three runs were 0.0443, 0.0491,
+  0.0443 (now 0.0492-0.0502): a cell with two timings, not a change.
+
+- The `full` preset's 12 layers, M = 32 / 512, GGML / Halide (by-M): q4_0
+  0.67-1.21 / 0.60-0.94, q8_0 0.57-1.10 / 0.54-0.87, q4_K 0.46-1.02 / 0.49-0.76
+  (Phase 3: 0.35-0.85 / 0.44-0.73), q6_K 0.43-1.05 / 0.53-0.83, iq2_xs 0.25-0.66
+  / 0.47-0.83 (its libraries are Phase 3's).
+
+- Where the rest is:
+
+  - M >= 16, the gemm kernel (0.55-0.92): 1.4-1.6x mmq's GPU time, for the
+    reasons above (wmma's 16 values of K per multiply and its unspecified
+    fragment layout, against `mma.sync.m16n8k32`, `ldmatrix` and scales read per
+    element). An integer gemm on `mma.sync` needs a matrix unit of that
+    instruction in `ExtractWMMAOperations` and the PTX backend. Affine weights
+    load two more factor tiles per tile and block (q4_1 against q4_0 at M = 64:
+    55.7 against 44.5 us of GPU time), 16-value sub-blocks scale twice per
+    block.
+  - The acts' kernels: two or three launches (codes, scales, sums: 5.6-7.8 us at
+    M = 64, 29-34 at 512) against GGML's one (4.0, 16.0): each of ours reads the
+    acts again. One kernel needs a reduction over a warp's lanes stored beside
+    another Func's values.
+  - M = 128 (0.57-0.87; the f16 gemm still wins on seven types): the integer
+    gemm is unsplit there, on 4 warps of 16 x 64.
+  - lut formats (iq4_nl, mxfp4, iq4_xs: 0.51-0.72): no K split, a lut load per
+    code.
+  - M = 9..15: the rows, as Phase 3. No guarded tile was added: the integer gemm
+    at M = 16 is no closer to GGML than the rows at 12 were.
+  - M \<= 8: as Phase 3 but for the in-register arithmetic: a second launch and
+    a thread per record in the acts' kernel, per-element decodes in the grid
+    formats' rows.
+  - q2_K, nvfp4, iq2_xxs, iq2_xs, iq3_xxs, iq3_s, iq1_s from M = 16: the f16
+    gemm, as Phase 3.
