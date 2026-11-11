@@ -269,6 +269,24 @@ set(GGML_SCHEDULE_PARAMS
     # acts, M = 32 / 64: q8_0:f16 0.084 -> 0.067 / 0.117 -> 0.091 ms; q5_0:f16
     # 0.081 -> 0.079 / 0.117 -> 0.102). No effect on the Metal libraries.
     "q8_0:f16 mul_mat * cuda_one_warp=true" "q5_0:f16 mul_mat * cuda_one_warp=true"
+    # RTX 3090: the CUDA integer gemm's tiles below M = 64, below 256 and from
+    # 256 (w: wmma's 16 x 16 fragments, m: mma.sync's 16 x 8 tiles, the
+    # default), the faster at 4096^2 (ms at M = 16 / 128 / 512, m -> w: q6_K
+    # 0.045 -> 0.034 / 0.162 -> 0.094 / 0.309 -> 0.319, q4_K 0.038 -> 0.032 /
+    # 0.115 -> 0.090 / 0.279 -> 0.323; q4_0 0.027 -> 0.028 / 0.070 -> 0.083 /
+    # 0.234 -> 0.248). The lut formats run unsplit, on the last's at every M.
+    "q5_1 mul_mat f32:q8_1.soa int_tiles=wmm"
+    "q4_K mul_mat f32:q8_1.soa int_tiles=wwm"
+    "q5_K mul_mat f32:q8_1.soa int_tiles=wwm"
+    "q6_K mul_mat f32:q8_0.soa int_tiles=www"
+    "q3_K mul_mat f32:q8_0.soa int_tiles=www"
+    "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
+    "q2_0 mul_mat f32:q8_0.soa int_tiles=mwm"
+    "iq4_nl mul_mat f32:q8_0.soa int_tiles=www"
+    "mxfp4 mul_mat f32:q8_0.soa int_tiles=www"
+    "iq4_xs mul_mat f32:q8_0.soa int_tiles=www"
+    "iq2_s mul_mat f32:q8_0.soa int_tiles=www"
+    "iq1_m mul_mat f32:q8_0.soa int_tiles=www"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the
@@ -302,7 +320,8 @@ endif ()
 # gpu_int_gemm; as GGML's mmq, which its CUDA backend runs for M > 8): the
 # acts quantized on the GPU to q8_0's codes and scales, one planar array each
 # (.soa: no records to pack), the weights' int8 codes multiplied by them on
-# wmma's int8 fragments for M >= 16 and N % 8 == 0 (else the dp4a rows), each
+# mma.sync's 16 x 8 int8 tiles or wmma's int8 fragments (int_tiles, by M)
+# for M >= 16 and N % 8 == 0 (else the dp4a rows), each
 # 32-value block's (or 16-value sub-block's) int32 tile scaled by the weight's
 # scale of it (a K-quant's: its sub-block's times its super-block's). Weights
 # with an offset or min per block (q4_1, q5_1, q4_K, q5_K) take f32:q8_1.soa
@@ -310,7 +329,7 @@ endif ()
 # q2_K (mins per 16 values: q8_1's sums are per 32), nvfp4 (float sub-block
 # scales) or the grid formats whose f16 gemm is faster (iq2_xxs, iq2_xs,
 # iq3_xxs, iq3_s, iq1_s). code_words=true (GGML_SCHEDULE_PARAMS): its weight
-# codes decoded 8 a word in a GPR (the formats decoded by shifts and masks
+# codes decoded 4 a word in a GPR (the formats decoded by shifts and masks
 # of bytes). Each f16-, bf16- or .soa-act
 # bench library's test checks that its PTX multiplies on the tensor cores
 # (the other acts take dp4a or f32 rows).
@@ -515,10 +534,7 @@ foreach (row IN LISTS GGML_FORMATS)
                 "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
             if ("cuda" IN_LIST features_list AND act MATCHES "(f16|\\.soa)$")
-                add_test(
-                    NAME ${name}_ptx
-                    COMMAND grep -q "wmma.mma.sync" $<TARGET_FILE:${name}_bench>
-                )
+                add_test(NAME ${name}_ptx COMMAND grep -q "mma.sync" $<TARGET_FILE:${name}_bench>)
                 set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
             endif ()
         endforeach ()

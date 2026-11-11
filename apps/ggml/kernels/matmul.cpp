@@ -52,6 +52,10 @@ public:
     // ggml::gpu_int_gemm; else 16 a vector, which PTX computes a code at a
     // time)
     GeneratorParam<bool> code_words{"code_words", false};
+    // CUDA's integer gemm's tiles below M = 64, below 256 and from 256 (or
+    // where K is not split): w, wmma's 16 x 16 fragments, else (m)
+    // mma.sync's 16 x 8 tiles (see ggml::cuda_int_shapes, cuda_int_splits)
+    GeneratorParam<std::string> int_tiles{"int_tiles", "mmm"};
 
     void configure() {
         // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
@@ -240,7 +244,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {
