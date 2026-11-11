@@ -916,5 +916,49 @@ G/H (GGML / ours), T1 before -> after:
 `--check` vec_dot, mul_mat, and codec (`q1_0`, `q5_0`, `q5_1`): 0 failures. M3
 replay (982 Arm/Metal objects): all byte-identical.
 
+### Per-chunk table staging, 1-block interleave, and chunk splitting in blocked() (iq2/iq3/iq1)
+
+On x86, the 7 grid formats (`iq2_xxs`, `iq2_xs`, `iq2_s`, `iq3_xxs`, `iq3_s`,
+`iq1_s`, `iq1_m`) take `blocked()` without sub-block rfactor (`!sub`), stepping
+`rxc` across the 8 32-value chunks of a 256-value super-block. Three generic
+bottlenecks in `blocked()` on x86 (`chunk_tables`: `!sub && t.arch ==
+Target::X86 && block > vec && codes.defined() && table_loads > 0`):
+
+- `tables()` staged every `Tabulate` clone at `LoopLevel(acc, ryo)` (one
+  256-byte buffer per table per block). Even with `rxc` unrolled, producing all
+  64-96 narrow table loads (`vmovq` / `vmovd` + `vpinsrd`) before consuming any
+  of them spilled up to 480 bytes of vector registers to the stack per block
+  (`iq2_xxs` 0.82-0.83 of GGML). Staging `tables()` per chunk (`LoopLevel(codes,
+  rxc)`) shrinks each table buffer to 32 bytes and lets LLVM interleave table
+  loads with the dot product.
+- For `table_loads > 8 && sdec.empty()` (`iq3_xxs`: a `per = 4` grid table plus
+  a `per = 8` signs table = 12 narrow table loads per chunk, 96 per block),
+  fully unrolling all 8 chunks into one basic block still caused LLVM's MI
+  scheduler to hoist table loads across chunks and spill `%ymm` registers
+  (0.90-0.92x). Splitting `rxc` into `(rxco, rxci, 2)` and unrolling `rxci` (2
+  chunks = 64 values per iteration, with `tables()` at `LoopLevel(codes, rxci)`)
+  eliminates all vector spills inside the loop (0.98-0.99x).
+- Setting `il = wper > 1 || chunk_tables ? 1 : ts.interleave` ensures all
+  `chunk_tables` kernels use 1 super-block per outer iteration across `vec_dot`,
+  `q8_K_mul_mat`, and `f32_to_q8_K_mul_mat` (where `iq1_m` and `iq3_s` `vec_dot`
+  and `iq1_s`/`iq1_m`/`iq3_s` `f32:q8_K` `mul_mat` had previously defaulted to
+  `interleave = 2`, doubling live state and spilling).
+
+G/H (GGML / ours), T1 before -> after:
+
+| format | vec_dot K=256 | vec_dot K=4096 | vec_dot K=14336 | mul_mat 4096² M=1 (f32:q8_K) |
+|---|---|---|---|---|
+| iq2_xxs | 0.775 -> 0.957 | 0.819 -> 0.947 | 0.827 -> 1.000 | 0.840 -> 0.998 |
+| iq3_xxs | 0.836 -> 0.979 | 0.882 -> 0.989 | 0.889 -> 0.991 | 0.861 -> 0.983 |
+| iq2_xs | 0.952 -> 1.158 | 0.946 -> 1.241 | 0.977 -> 1.213 | 0.936 -> 1.213 |
+| iq2_s | 0.886 -> 0.979 | 0.894 -> 0.971 | 0.895 -> 1.011 | 0.838 -> 0.964 |
+| iq3_s | 0.897 -> 1.003 | 1.052 -> 1.098 | 1.097 -> 1.098 | 0.822 -> 1.089 |
+| iq1_s | 0.806 -> 0.902 | 0.859 -> 0.911 | 0.832 -> 0.916 | 0.705 -> 0.960 |
+| iq1_m | 0.676 -> 0.933 | 0.743 -> 0.891 | 0.774 -> 0.883 | 0.697 -> 0.926 |
+
+`--check` vec_dot, mul_mat, and codec (all 7 grid formats): 0 failures. M3
+replay (982 Arm/Metal objects): all byte-identical.
+
+
 
 

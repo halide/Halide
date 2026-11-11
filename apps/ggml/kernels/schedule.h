@@ -1073,7 +1073,12 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         Func inner = part.update().hoist_invariants()[0];
         subs.emplace_back(f, part, fsub ? inner.change_type(Int(32)) : inner);
     }
-    int il = wper > 1 ? 1 : ts.interleave;
+    int table_loads = 0;
+    for (Func tf : staged_tables(rs)) {
+        table_loads += vec / tabulate(rs, tf, false)->per;
+    }
+    bool chunk_tables = !sub && t.arch == Target::X86 && block > vec && codes.defined() && table_loads > 0;
+    int il = wper > 1 || chunk_tables ? 1 : ts.interleave;
     s.split(wper > 1 ? ryw : ry, ryo, ryi, il, TailStrategy::GuardWithIf);
     Func acc = sum_tree(s, {{{rl, lane}, {ryi, bacc}}, {{rl, lane}}}, tile_at(out, st), n, m, ryo)[0];
     s.atomic().vectorize(rl).unroll(n).unroll(m);
@@ -1094,9 +1099,15 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         if (wper > 1) rest.bound_storage(w, il).unroll_all_stages(w);
         ts.nt > 1 ? rest.vectorize_all_stages(n) : rest.unroll_all_stages(n);
     }
+    RVar rxco("rxco"), rxci("rxci");
+    bool split_chunks = chunk_tables && table_loads > 8 && sdec.empty();
     for (Func f : {codes, rest}) {
         if (!f.defined() || sub) continue;
         if (f.name() == codes.name() && sdec.empty() && defer && integer && wper == 1 && hoisted_shifts(codes, rxc, block / vec, vec / per, per, LoopLevel(acc, ryo), ts.interleave, n, m)) continue;
+        if (split_chunks && f.name() == codes.name()) {
+            f.update().reorder(rxi, lane, n, m, rxc, u).split(rxc, rxco, rxci, 2).atomic().vectorize(rxi).unroll(rxci);
+            continue;
+        }
         f.update().atomic().vectorize(rxi).unroll(rxc);
     }
     // per block and sub-block, the tile's sub-block dots (inner), then their
@@ -1181,7 +1192,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             w.unroll(w.args()[i]);
         readers.push_back(w);
     }
-    tables(rs, readers, LoopLevel(acc, ryo), t, index_words, k.plain_index_words);
+    tables(rs, readers, chunk_tables ? LoopLevel(codes, split_chunks ? rxci : rxc) : LoopLevel(acc, ryo), t, index_words, k.plain_index_words);
 }
 
 // bf16 weights and acts, with a bf16 dot (AVX512-BF16's vdpbf16ps, GGML's
