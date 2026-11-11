@@ -1613,6 +1613,10 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     std::vector<Func> wc = rs[0].decoded_components(tag::codes), ac = rs[1].decoded_components(tag::codes);
     std::vector<Func> keep = wc;
     keep.insert(keep.end(), ac.begin(), ac.end());
+    // (sub-blocks' scales decoded per block, as GGML's tiles: not per row and
+    // column group in the sub-block loop)
+    std::vector<Func> sc = sub > per ? scale_decoders(rs) : std::vector<Func>{};
+    keep.insert(keep.end(), sc.begin(), sc.end());
     Sums d;
     Func acc = dot;
     // a constant code offset always folded (whatever fold_offsets), as
@@ -1634,7 +1638,11 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // (the macro's own loops under cond: s, acc and the sums are hoisted out
     // of dot, so their stages are every branch's)
     s.split(m, mo, mi, lanes);
-    if (macro) s.specialize(cond).split(n, nb, n, 8).reorder(mi, n, mo, nb, ry).vectorize(mi).unroll(n);
+    if (macro) {
+        s.split(n, nb, n, 8);
+        s.specialize(cond).reorder(mi, n, nb, mo, ry).vectorize(mi).unroll(n);
+        s.reorder(mi, n, nb, mo, ry);
+    }
     s.reorder(mi, n, mo, ry).vectorize(mi).unroll(n);
     std::vector<Func> accs{dot};
     if (acc.name() != dot.name()) accs.push_back(acc);
@@ -1650,7 +1658,11 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         }
         f.vectorize(m, lanes).unroll(n);
     }
-    LoopLevel cols(acc, mo), blocks(acc, ry);
+    // (the derived sums' difference added to dot: across the columns, as
+    // dot is stored, not a scalar loop striding the rows: q4_K 9% of M = 512)
+    // (under cond: an AMX tile's accumulator elsewhere is read whole)
+    if (accs.size() > 1) dot.update(0).specialize(cond).reorder(m, n).vectorize(m, lanes, TailStrategy::GuardWithIf);
+    LoopLevel cols(acc, macro ? VarOrRVar(nb) : VarOrRVar(mo)), blocks(acc, ry);
     std::vector<Func> readers{blk, codes};
     for (Func f : {blk, codes}) {
         f.compute_at(cols).reorder_storage(m, n).vectorize_all_stages(m).unroll_all_stages(n, u);
@@ -1663,6 +1675,15 @@ inline void blocked_cols(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         part.compute_at(codes, rxs).reorder_storage(m, n).vectorize_all_stages(m).unroll_all_stages(n, u, v);
         inner.compute_at(codes, rxs).reorder_storage(m, n).vectorize_all_stages(m).unroll_all_stages(n, u, v);
         readers.insert(readers.end(), {part, inner});
+        for (Func f : sc) {
+            if (Func g = f.clone_in_callers({part}); g.defined()) {
+                g.compute_at(blocks).vectorize(g.args()[0], block / sub);
+                if (!macro) {
+                    for (size_t i = 1; i < g.args().size(); i++)
+                        g.unroll(g.args()[i]);
+                }
+            }
+        }
     }
     inner.update().reorder(rxi, m, n, rxc).atomic().vectorize(rxi).vectorize(m).unroll(n).unroll(rxc);
     // the weight's codes decoded per block, the act's staged up front
