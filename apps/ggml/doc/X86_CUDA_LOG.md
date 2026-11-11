@@ -1516,3 +1516,194 @@ diagnosis) the lever on the integer gemm, and does the compiler reach it.
   by hand), its blocks sharing an SM, and stream-k's balance at M = 512; then
   the scales' loads, which `mma.sync`'s tiles already remove. Below M = 16 as
   Phase 4.
+
+## Phase 6: the generated integer gemm against the hand-written kernel (RTX 3090)
+
+Same machine and conventions as Phase 5. The target: the generated q4_0 integer
+gemm within 5% of the hand-written kernel's best variant (`mq.cu`: GGML's mmq
+formulation, `cp.async` acts, a step's weights loaded before its acts' copies
+are awaited), i.e. q4_0 at or above 0.95 of GGML from M = 16.
+
+- The differences, one at a time (q4_0 on `f32:q8_0.soa`, 4096^2, ms of a call
+  at M = 16 / 64 / 128 / 512; the hand-written kernel on 64-row blocks, K split
+  as its best: 64 x 16 / 4, 64 x 64 / 2, 64 x 128 / 2, 64 x 128 / 1). Imitated
+  by hand: the hand-written kernel changed to make the generated kernel's
+  choice; generated: the generated kernel with that choice changed, in the order
+  of the list:
+
+  | difference                                                                                                                                                                     | how measured                                                                          | cost                                                                                           |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+  | the weights' codes staged a block a lane (8 two-byte loads, the lanes' 18 bytes apart: 4x the L1 wavefronts) against 4 bytes of a block a lane, a block on 4 consecutive lanes | by hand                                                                               | +2.6, +1.4, +1.4, +17.6 us                                                                     |
+  |                                                                                                                                                                                | generated                                                                             | 0.0330, 0.0595, 0.0923, 0.2783 -> 0.0295, 0.0565, 0.0834, 0.2617                               |
+  | the weights' scales staged with lanes along N (a record each) against the step's blocks innermost (4 blocks of a row, 8 rows a load)                                           | by hand                                                                               | +2.2, +1.0, +0.7, +12.8 us                                                                     |
+  |                                                                                                                                                                                | generated                                                                             | -> 0.0293, 0.0546, 0.0762, 0.2537                                                              |
+  | the acts' copies awaited at the end of their producer, before the weights' loads, against at the barrier                                                                       | by hand                                                                               | +1.4, +3.4, +3.1, +17 us                                                                       |
+  |                                                                                                                                                                                | generated (core)                                                                      | 0.0282, 0.0520, 0.0787, 0.2522 -> 0.0283, 0.0501, 0.0752, 0.2502                               |
+  | (the copies committed at the barrier too)                                                                                                                                      | generated                                                                             | 0.0293, 0.0546, 0.0767, 0.2537: slower than awaiting them early                                |
+  | `cp.async.ca` (L1) against `.cg`                                                                                                                                               | by hand                                                                               | +1.3, +3.8, +3.7, +9.5 us                                                                      |
+  |                                                                                                                                                                                | generated, `.cg`                                                                      | +8.9, +11.7, +2.5, +6.5 us (the generated kernels' blocks reread the acts from L1); kept `.ca` |
+  | 255 registers and 44 bytes of spills (16 x 128 per warp, a block's 8 int32 tiles live at once) against 168                                                                     | generated, tiles per fragment of M                                                    | 0.2783 -> 0.2860: not the limiter                                                              |
+  | scale tiles loaded by `wmma.load.c` (8 registers each: per step and lane 288 words of shared loads against the hand's 80)                                                      | generated, `mma.sync` (scales a load per distinct element) on the same 16 x 128 warps | 0.2486 -> 0.2619: not the limiter                                                              |
+  | warps of 16 x 128 against 32 x 64 (operand and scale loads per step and lane 280 words against 176)                                                                            | generated, `mma.sync`, 2 x 2 warps                                                    | 0.2606 -> 0.2320 (kernel 242 -> 200 us)                                                        |
+  | tiles and K split by M: 16 x 16 on 4 parts below 64, 64 x 64 unsplit at 128 (128 blocks), against 32 x 16, 64 x 128 in 2                                                       | generated                                                                             | 0.0271 at 16 (16 x 16 0.0294), 0.0700 at 128 (64 x 64 0.0764)                                  |
+  | the acts' scales staged from their planar f16 array (4 more 2-byte loads per lane and step) against inside the act rows                                                        | generated, loads ablated                                                              | ~ -10 us of 200 at 512 (noisy)                                                                 |
+  | the acts quantized by two kernels (codes, scales: 14.6 + 14.3 us at 512) against one (15.3)                                                                                    | CUPTI                                                                                 | +1.6, +2.5, +2.6, +13.6 us                                                                     |
+
+  After all of them (ablated PTX, M = 512, same tiling as the hand-written
+  kernel): staging alone 113 us against the hand-written kernel's 114-123, the
+  whole kernel 200 against 161. Per step and lane the two issue the same
+  instructions (1192 against 1577 of PTX in the loop, the same 64 multiplies,
+  256 conversions, 256 fmas, 176 words of shared loads); what remains is how the
+  multiplies and the scaling overlap the loads: without the multiplies (their
+  results the operands) the generated kernel takes 145 us, 32 more than its
+  staging, the hand-written one 114, none more.
+
+- Core:
+
+  - `FuseGPUThreadLoops`, `CodeGen_PTX_Dev`: a Func staged in `GPUSharedAsync`
+    memory by the threads of a block waited for its copies at the end of its
+    producer, so whatever the block staged after it (the weights, whose producer
+    the realization order puts after the acts') loaded only once the copies had
+    landed. Each producer now commits its copies at its end, and where the block
+    goes on to stage a Func through registers before the barrier that publishes
+    the copies, leaves the wait to that barrier (which already waits for every
+    copy in flight); followed only by other copies, or run by one thread alone,
+    a producer still waits at its end (deferring the f16 gemm's two copied
+    operands to the barrier: f16 x f16 at 4096^2 x 128 0.0978 -> 0.1031 ms).
+    `gpu_async_copy_wait`: the wait after the other input's loads in both
+    orders, each of two copied inputs awaited where its copies end. Committing
+    at the barrier too was slower than not deferring (above).
+  - `VectorizeSWAR`: a shift by consecutive amounts from a base that is the same
+    in every lane but not constant failed to vectorize in a GPR. q5_0's and
+    q5_1's fifth bits are such a shift once a block's 4-byte runs are on
+    consecutive lanes (the bit position is the lane's run); now a uniform shift
+    by the base, then the lanes' constant shifts (`vectorize_swar`: `ramp_shr`,
+    `ramp_shl`).
+
+- `gpu_int_gemm`: the staging above; tiles of `mma.sync` (16 x 8 x 32, warps of
+  32 x 64 on 2 x 2 or 2 x 1) or of wmma (Phase 5's), per type and range of M
+  (`int_tiles`: below M = 64, below 256, from 256 or wherever K is not split); K
+  split in 4 below M = 64 and in 2 below 256 (`KSplit`, `cuda_int_splits`),
+  tiles of 32 x 16 and 32 x 32 (one warp) on 4 parts, 64 x 64 and 64 x 128 on 2.
+  Where a weight block is several act blocks (the K-quants, iq4_xs, iq2_s,
+  iq1_m) a K split's step is a whole weight block, whose acts in 64 x 128 tiles
+  do not fit 48 KB of shared memory: 32 x 64 there. The weights' scales with the
+  step's blocks innermost where a weight block is one act block or on mma.sync's
+  tiles (on wmma's, a weight block of several blocks' along the row: q4_K at M =
+  64 0.075 -> 0.067 ms; on mma.sync's, at 512, 0.336 -> 0.279 the other way).
+  64-value steps at M >= 256 (q4_0 0.232 -> 0.229 ms) read `w` out of bounds on
+  the K-quants (`--check`: "w is accessed at -255"), under the table's mix of
+  64- and 128-value steps only; not taken.
+
+- Not done: one kernel for the acts' codes and scales (`compute_with` needs the
+  two Funcs' loops to have the same names, which the encoder's Funcs' pure vars
+  do not); the acts' scales copied by `cp.async` (an f16 scale per act row and
+  block: converted where it is staged, so not a plain copy); `ldmatrix` for the
+  operands (by hand 1-5%); more than 48 KB of shared memory (GGML's 128 x 128
+  tiles take 57 KB).
+
+- Results, 4096^2, q4_0 ms at M = 16 / 64 / 128 / 512 (GGML / ours):
+
+  |                                      | M = 16        | M = 64        | M = 128       | M = 512       |
+  | ------------------------------------ | ------------- | ------------- | ------------- | ------------- |
+  | GGML (quantize, mmq, stream-k fixup) | 0.0300        | 0.0470        | 0.0756        | 0.1920        |
+  | the integer gemm, Phase 5            | 0.0343 (0.86) | 0.0607 (0.77) | 0.0938 (0.80) | 0.2866 (0.67) |
+  | the integer gemm, now                | 0.0279 (1.07) | 0.0486 (0.97) | 0.0739 (1.02) | 0.2467 (0.78) |
+  | by hand, the best variant            | 0.0252-0.0263 | 0.0377-0.0401 | 0.0587-0.0618 | 0.189-0.204   |
+
+  So q4_0 is at or above 0.95 from M = 8 to 128 (1.08 at 32), at 1.06-1.11x the
+  hand-written kernel's best at M = 16 and 1.2-1.3x from 64 (the target was
+  1.05). The 16 integer gemm libraries, ms (GGML / ours), Phase 5 -> now:
+
+  | type   | M = 16                          | M = 32                          | M = 64                          | M = 128                         | M = 512                         |
+  | ------ | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
+  | q4_0   | 0.0343 -> 0.0279 (0.86 -> 1.07) | 0.0414 -> 0.0335 (0.88 -> 1.08) | 0.0607 -> 0.0486 (0.77 -> 0.97) | 0.0938 -> 0.0739 (0.80 -> 1.02) | 0.2866 -> 0.2467 (0.67 -> 0.78) |
+  | q8_0   | 0.0455 -> 0.0374 (0.88 -> 1.08) | 0.0550 -> 0.0420 (0.79 -> 1.03) | 0.0753 -> 0.0595 (0.74 -> 0.94) | 0.1293 -> 0.0766 (0.63 -> 1.06) | 0.3163 -> 0.2574 (0.65 -> 0.80) |
+  | q5_0   | 0.0382 -> 0.0324 (0.88 -> 1.03) | 0.0474 -> 0.0394 (0.83 -> 1.00) | 0.0651 -> 0.0532 (0.80 -> 0.98) | 0.1088 -> 0.0772 (0.73 -> 1.03) | 0.3082 -> 0.2640 (0.64 -> 0.75) |
+  | iq4_nl | 0.0539 -> 0.0505 (0.61 -> 0.65) | 0.0603 -> 0.0583 (0.65 -> 0.68) | 0.0790 -> 0.0732 (0.60 -> 0.65) | 0.1068 -> 0.1026 (0.70 -> 0.72) | 0.3115 -> 0.3041 (0.62 -> 0.64) |
+  | mxfp4  | 0.0505 -> 0.0497 (0.62 -> 0.64) | 0.0629 -> 0.0590 (0.60 -> 0.64) | 0.0954 -> 0.0870 (0.52 -> 0.57) | 0.1315 -> 0.1229 (0.57 -> 0.61) | 0.3371 -> 0.3297 (0.58 -> 0.60) |
+  | iq4_xs | 0.0518 -> 0.0513 (0.56 -> 0.57) | 0.0601 -> 0.0591 (0.60 -> 0.61) | 0.0913 -> 0.0892 (0.50 -> 0.52) | 0.1162 -> 0.1123 (0.63 -> 0.65) | 0.3223 -> 0.3163 (0.58 -> 0.60) |
+  | q6_K   | 0.0472 -> 0.0336 (0.78 -> 1.10) | 0.0690 -> 0.0537 (0.65 -> 0.84) | 0.0838 -> 0.0711 (0.70 -> 0.84) | 0.1365 -> 0.1004 (0.64 -> 0.88) | 0.4047 -> 0.3370 (0.59 -> 0.71) |
+  | q3_K   | 0.0364 -> 0.0284 (0.81 -> 1.05) | 0.0549 -> 0.0449 (0.68 -> 0.84) | 0.0812 -> 0.0688 (0.66 -> 0.78) | 0.1165 -> 0.0978 (0.74 -> 0.88) | 0.3757 -> 0.3332 (0.63 -> 0.71) |
+  | q1_0   | 0.0231 -> 0.0227 (0.88 -> 0.90) | 0.0292 -> 0.0283 (0.88 -> 0.90) | 0.0470 -> 0.0481 (0.85 -> 0.82) | 0.0775 -> 0.0763 (0.88 -> 0.89) | 0.2534 -> 0.2459 (0.70 -> 0.72) |
+  | q2_0   | 0.0295 -> 0.0296 (0.77 -> 0.77) | 0.0398 -> 0.0359 (0.78 -> 0.88) | 0.0551 -> 0.0557 (0.80 -> 0.79) | 0.1060 -> 0.1152 (0.66 -> 0.61) | 0.2799 -> 0.2618 (0.65 -> 0.69) |
+  | iq2_s  | 0.0621 -> 0.0625 (0.55 -> 0.54) | 0.0825 -> 0.0787 (0.49 -> 0.52) | 0.1096 -> 0.1095 (0.50 -> 0.50) | 0.1738 -> 0.1728 (0.51 -> 0.51) | 0.4773 -> 0.4750 (0.52 -> 0.52) |
+  | iq1_m  | 0.0654 -> 0.0645 (1.60 -> 1.64) | 0.0817 -> 0.0817 (1.33 -> 1.34) | 0.1144 -> 0.1162 (0.97 -> 0.96) | 0.1798 -> 0.1791 (0.76 -> 0.76) | 0.4882 -> 0.4871 (0.51 -> 0.52) |
+  | q4_1   | 0.0416 -> 0.0339 (0.76 -> 0.93) | 0.0508 -> 0.0434 (0.69 -> 0.81) | 0.0694 -> 0.0581 (0.72 -> 0.86) | 0.1156 -> 0.0857 (0.69 -> 0.93) | 0.3407 -> 0.2850 (0.62 -> 0.74) |
+  | q5_1   | 0.0436 -> 0.0375 (0.83 -> 0.97) | 0.0571 -> 0.0459 (0.67 -> 0.83) | 0.0750 -> 0.0608 (0.71 -> 0.88) | 0.1191 -> 0.0893 (0.73 -> 0.97) | 0.3586 -> 0.2969 (0.62 -> 0.75) |
+  | q4_K   | 0.0338 -> 0.0320 (0.91 -> 0.96) | 0.0471 -> 0.0448 (0.76 -> 0.80) | 0.0728 -> 0.0720 (0.70 -> 0.71) | 0.1265 -> 0.0973 (0.63 -> 0.82) | 0.3765 -> 0.2895 (0.55 -> 0.72) |
+  | q5_K   | 0.0346 -> 0.0324 (0.95 -> 1.01) | 0.0518 -> 0.0476 (0.75 -> 0.82) | 0.0764 -> 0.0707 (0.70 -> 0.75) | 0.1340 -> 0.0972 (0.61 -> 0.84) | 0.3826 -> 0.2935 (0.57 -> 0.74) |
+
+- Best Halide library per cell, GGML / Halide on f32 acts (r, i, h, x as in
+  Phase 3; three runs' spread under 5% in every cell, median 0.3%):
+
+| type    | M = 1 | M = 2 | M = 4 | M = 8     | M = 16    | M = 32    | M = 64    | M = 128   | M = 512   |
+| ------- | ----- | ----- | ----- | --------- | --------- | --------- | --------- | --------- | --------- |
+| q4_0    | 0.93r | 0.92r | 0.89r | **1.15i** | **1.07i** | **1.08i** | **0.97i** | **1.02i** | 0.78i     |
+| q4_1    | 0.94r | 0.92i | 0.83r | **0.98r** | 0.93i     | 0.81i     | 0.86i     | 0.93i     | 0.74i     |
+| q5_0    | 0.91r | 0.89r | 0.81r | **1.08i** | **1.03i** | **1.00i** | **0.98i** | **1.03i** | 0.75i     |
+| q5_1    | 0.93r | 0.89i | 0.84r | **0.98r** | **0.97i** | 0.83i     | 0.88i     | **0.97i** | 0.75i     |
+| q8_0    | 0.94x | 0.95r | 0.84i | **0.96i** | **1.08i** | **1.03i** | 0.94i     | **1.06i** | 0.80i     |
+| mxfp4   | 0.72i | 0.71i | 0.77i | 0.93i     | 0.64i     | 0.64i     | 0.57i     | 0.61i     | 0.60i     |
+| iq4_nl  | 0.83r | 0.80i | 0.76i | **0.97i** | 0.72r     | 0.68i     | 0.65i     | 0.72i     | 0.64i     |
+| q2_0    | 0.67i | 0.65r | 0.90i | **1.06i** | 0.77i     | 0.88i     | 0.79i     | 0.67h     | 0.69i     |
+| q4_K    | 0.78r | 0.74r | 0.85i | **0.97r** | **0.96i** | 0.80i     | 0.71i     | 0.82i     | 0.72i     |
+| q5_K    | 0.70x | 0.60i | 0.70i | 0.78r     | **1.01i** | 0.82i     | 0.75i     | 0.84i     | 0.74i     |
+| q6_K    | 0.79h | 0.69x | 0.73i | **0.95i** | **1.10i** | 0.84i     | 0.84i     | 0.88i     | 0.71i     |
+| q2_K    | 0.85x | 0.64r | 0.89r | **1.00r** | 0.55h     | 0.81h     | 0.75h     | **1.17h** | **0.96h** |
+| q3_K    | 0.83x | 0.61i | 0.86r | **1.05i** | **1.05i** | 0.84i     | 0.78i     | 0.88i     | 0.71i     |
+| iq4_xs  | 0.78r | 0.75i | 0.80i | **0.95i** | 0.61r     | 0.61i     | 0.65h     | 0.65i     | 0.60i     |
+| nvfp4   | 0.55x | 0.42x | 0.47x | 0.51x     | 0.59h     | 0.76h     | 0.59h     | 0.85h     | 0.67h     |
+| q1_0    | 0.73i | 0.69r | 0.88r | **1.01i** | 0.90i     | 0.90i     | 0.82i     | 0.89i     | 0.72i     |
+| iq2_xxs | 0.39h | 0.37r | 0.50r | 0.58r     | 0.39h     | 0.52h     | 0.46h     | 0.50h     | 0.47h     |
+| iq2_xs  | 0.46r | 0.47r | 0.57r | 0.70r     | 0.50r     | 0.54h     | 0.57h     | 0.56h     | 0.61h     |
+| iq2_s   | 0.47i | 0.51i | 0.62i | 0.73i     | 0.55r     | 0.52i     | 0.50i     | 0.51i     | 0.59h     |
+| iq3_xxs | 0.54x | 0.39r | 0.48r | 0.57r     | 0.41r     | 0.54h     | 0.49h     | 0.51h     | 0.46h     |
+| iq3_s   | 0.52x | 0.40r | 0.48r | 0.59r     | 0.43r     | 0.52h     | 0.51h     | 0.45h     | 0.47h     |
+| iq1_s   | 0.83r | 0.77r | 0.83r | 0.94r     | 0.63r     | 0.45r     | 0.45h     | 0.40h     | 0.52h     |
+| iq1_m   | 0.72r | 0.73i | 0.84i | 0.92i     | **2.21r** | **1.34i** | **0.96i** | 0.76i     | 0.60h     |
+
+35 of 207 cells reach 0.95 (Phase 5: 19); none is more than 3% slower than Phase
+5's best. The float gemms (72 cells) are within 3% but f32 weights as `f32:f16`
+on `f32:f16` acts at M = 128, 0.1606 -> 0.1666 ms (3.8%; 512: 1.4%): its acts'
+copies awaited at the barrier, after the weights' conversion, where its one-warp
+blocks gain nothing from the overlap.
+
+- `halide-by-m-<type>_f32_cuda` (`by_m`, re-measured): the rows at M = 16 on
+  iq4_nl, iq4_xs and iq1_m, the f16 gemm at 64 on iq4_xs, at 128 on q2_0, at 512
+  on iq2_s and iq1_m; iq1_s the rows to 32 (q4_1, q5_1, q4_K, q5_K and q6_K's
+  integer gemm is now the fastest at every M from 16).
+
+- The `full` preset's 12 layers, M = 32 / 512, GGML / Halide (by-M; Phase 5 in
+  brackets): q4_0 0.75-1.15 / 0.66-1.08 (0.67-1.22 / 0.60-0.92), q8_0 0.67-1.09
+  / 0.65-1.10 (0.58-1.13 / 0.55-0.89), q4_K 0.52-1.05 / 0.63-0.99 (0.46-1.03 /
+  0.49-0.77), q6_K 0.49-1.14 / 0.57-0.97 (0.44-0.98 / 0.53-0.85); the lowest at
+  M = 32 on K or N of 18944, at 512 on 3584 x 512 (56 tiles).
+
+- Gate: `--check` of every CUDA library on the Phase 3 grid (M in 1, 2, 8, 9,
+  15, 16, 17, 31, 32, 33, 63, 64, 65, 128, 200; N in 31, 33, 36, 40, 127, 512; K
+  in 96, 544, 1024, 768, 1280, 33, 1000; f32, f16 and bf16 acts): 87660 results,
+  0 failures, 0 unchecked; of the integer gemm and by-M libraries of the types
+  with weight blocks of several blocks also on K in 256, 768, 1280, 2304, 3072:
+  9450, 0 failures. `ctest -L ggml` 78/78 (`ggml_check`: 3182 results, 0
+  failures, 53 unchecked, as Phase 4's), `-L ggml_cuda` 67/67; the core tests
+  matching
+  `gpu_|wmma_|mma_|warp_|cuda_|register_shuffle|atomics|lossless_cast|rfactor|vectorize_swar|specialize|deinterleave`
+  under `HL_JIT_TARGET=host-cuda`: 113/113. The 82 Metal libraries' `.stmt` are
+  byte-identical to b09e9eaf3's, the 36 sampled x86 CPU libraries' but for the
+  numbering of temporaries in 3.
+
+- Where the rest is, from M = 16:
+
+  - M = 512 (0.71-0.80 on the integer gemm, but the lut and codebook formats):
+    the gemm kernel itself, 1.2-1.3x the hand-written one's time on the same
+    tiles, whose staging it now matches;
+    the acts' two kernels (+13.6 us against one); 256 tiles on 82 SMs (GGML's
+    stream-k balances them).
+  - The K-quants from M = 32 (0.71-0.88): their K split's steps are whole
+    256-value weight blocks, so tiles of 32 x 64 (48 KB of shared memory); on
+    wmma below M = 128 (q6_K and q3_K at every M: mma.sync's tiles are slower
+    there on them).
+  - The lut formats (iq4_nl, mxfp4, iq4_xs: 0.57-0.72) and iq2_s (0.50-0.59): no
+    K split, a lut load per code; their weights still staged 16 codes a lane.
+  - Below 16: as Phase 4.

@@ -558,15 +558,20 @@ and cuBLAS. The Halide counterparts of a blocked type are:
 - `<type>` on `f32:q8_0.soa` acts (q4_0, q5_0, q8_0, iq4_nl, mxfp4, iq4_xs,
   q6_K, q3_K, q1_0, q2_0, iq2_s, iq1_m) or, for weights with an offset or min
   per block (q4_1, q5_1, q4_K, q5_K), on `f32:q8_1.soa`: `gpu_int_gemm`, the
-  weights' int8 codes times the acts' on wmma's int8 fragments, each block's (or
-  16-value sub-block's) int32 tile scaled into the f32 accumulator by the lanes
-  that hold it: by the weight's scale of it (a K-quant's sub-block scale times
-  its super-block's, staged as one factor per row) and the act's; an offset
-  times the act's block sum (`q8_1`'s third array) is added per block. For M >=
-  16 and N % 8 == 0, K split in 4 below M = 128 (four gemms on every fourth step
-  of K, summed by a second kernel), else the rows. Not q2_K (a min per 16
-  values), nvfp4 (float sub-block scales), nor iq2_xxs, iq2_xs, iq3_xxs, iq3_s,
-  iq1_s (slower than their f16 gemm).
+  weights' int8 codes times the acts' on `mma.sync`'s 16 x 8 x 32 int8 tiles
+  (warps of 32 x 64) or wmma's 16 x 16 x 16 fragments, per type and range of M
+  (`int_tiles` in `GGML_SCHEDULE_PARAMS`), each block's (or 16-value
+  sub-block's) int32 tile scaled into the f32 accumulator by the lanes that hold
+  it: by the weight's scale of it (a K-quant's sub-block scale times its
+  super-block's, staged as one factor per row) and the act's; an offset times
+  the act's block sum (`q8_1`'s third array) is added per block. A step's
+  weights are decoded 4 bytes of a block per lane (a block's codes on
+  consecutive lanes), its acts copied by `cp.async` and awaited at the barrier,
+  after the weights' loads. For M >= 16 and N % 8 == 0, K split in 4 below M =
+  64 and in 2 below 256 (gemms on every fourth or second step of K, summed by a
+  second kernel), else the rows. Not q2_K (a min per 16 values), nvfp4 (float
+  sub-block scales), nor iq2_xxs, iq2_xs, iq3_xxs, iq3_s, iq1_s (slower than
+  their f16 gemm).
 - `<type>:f16` on `f32:f16` (or `f16`) acts: `gpu_gemm` with the same
   `gpu_staged` and `fragments` as Metal's on wmma's 16 x 16 x 16 fragments for M
   \>= 16 and N % 8 == 0 (`wmma.store` writes a tile straight to out and faults on
@@ -577,9 +582,8 @@ and cuBLAS. The Halide counterparts of a blocked type are:
 the `f32:q8_1` rows below 16 rows, then the integer gemm where the type has one,
 else (above 16) the f16 gemm; per type, another of the three where it was
 measured more than 3% faster at the nearest of M = 16, 32, 64, 128, 512 (`by_m`
-in `harness/halide_providers.cpp`: the rows at 16 on q4_1, q5_1, iq4_nl, iq4_xs
-and iq1_m, the f16 gemm around 128 on q4_1, q4_K, q5_K and q6_K, at 512 on iq2_s
-and iq1_m).
+in `harness/halide_providers.cpp`: the rows at 16 on iq4_nl, iq4_xs and iq1_m,
+the f16 gemm at 64 on iq4_xs, at 128 on q2_0, at 512 on iq2_s and iq1_m).
 
 The f16 gemm's staging is Metal's, on 16 bytes per lane and rows padded by 8
 values (a fragment's rows, 128 bytes apart, share their banks): the weights'
@@ -601,26 +605,26 @@ weights are W itself (`f32` on f32 acts: `metal_flat`) or W rounded to f16 for
 the gemm (`f32:f16` on `f32:f16` acts, from M = 8). `--check` derives each
 library's tolerance from its declared roundings (`Precision::w_quant`,
 `act_quant`, `act_nearest`). The gemm libraries' tests (`ctest -L ggml_cuda`)
-check that their PTX multiplies with `wmma.mma.sync`.
+check that their PTX multiplies on the tensor cores (`mma.sync`).
 
 On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
-64, 128, 512: f16 x f16 1.05, 1.06, 1.07, 0.97, 1.02, 1.04, 0.87, 0.78, 0.60;
-f16 on f32 acts (`f32:f16`) 0.89, 0.89, 0.89, 0.89, 0.94, 1.07, 0.89, 0.80,
-0.64; bf16 x bf16 1.02, 0.99, 0.99, 0.98, 1.05, 0.97, 0.90, 0.77, 0.99; f32
-weights (`f32:f16`) 0.89, 0.91, 0.92, 0.82, 0.96, 1.05, 0.95, 0.90, 1.36; on f32
-acts, the best library, q4_0 0.93, 0.92, 0.90, 1.14, 0.88, 0.88, 0.78, 0.80,
-0.67; q8_0 0.93, 0.94, 0.86, 0.97, 0.89, 0.80, 0.74, 0.62, 0.65; q4_K 0.77,
-0.73, 0.86, 0.97, 0.92, 0.77, 0.70, 0.73, 0.55; q6_K 0.78, 0.69, 0.74, 0.93,
-0.78, 0.71, 0.73, 0.70, 0.59; iq2_xs 0.46, 0.47, 0.57, 0.70, 0.51, 0.54, 0.56,
-0.55, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 5) has every type, the `full`
+64, 128, 512: f16 x f16 1.06, 1.07, 1.07, 0.98, 1.04, 1.05, 0.89, 0.79, 0.60;
+f16 on f32 acts (`f32:f16`) 0.89, 0.90, 0.90, 0.90, 0.96, 1.08, 0.92, 0.80,
+0.64; bf16 x bf16 1.08, 1.02, 1.01, 1.02, 1.07, 0.98, 0.89, 0.76, 1.00; f32
+weights (`f32:f16`) 0.89, 0.90, 0.90, 0.81, 0.96, 1.04, 0.95, 0.91, 1.34; on f32
+acts, the best library, q4_0 0.93, 0.92, 0.89, 1.15, 1.07, 1.08, 0.97, 1.02,
+0.78; q8_0 0.94, 0.95, 0.84, 0.96, 1.08, 1.03, 0.94, 1.06, 0.80; q4_K 0.78,
+0.74, 0.85, 0.97, 0.96, 0.80, 0.71, 0.82, 0.72; q6_K 0.79, 0.69, 0.73, 0.95,
+1.10, 0.84, 0.84, 0.88, 0.71; iq2_xs 0.46, 0.47, 0.57, 0.70, 0.50, 0.54, 0.57,
+0.56, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 6) has every type, the `full`
 preset's layers and where the rest of the time is: from M = 16 the integer gemm
-kernel itself (1.4-1.6x the GPU time of GGML's): moving its operands into shared
-memory is 60% of it at M = 512, the multiplies come next, and on `mma.sync`
-(tiles of 16 x 8 x 32, whose scales a lane reads per element, as GGML's) it is
-no faster than on wmma, where it stays (Phase 5); and the acts' two or three
-kernels against GGML's one; below, the second launch, the rows' cost per act
-column and the grid formats' decodes; on f16 from M = 64, cuBLAS's f16
-accumulators.
+kernel (q4_0's at 1.06-1.3x the time of a hand-written kernel of GGML's
+formulation, whose staging it now matches: its multiplies and their scaling
+overlap the loads less), most at M = 512, where 256 tiles also fall unevenly on
+82 SMs (GGML's stream-k balances them); the acts' two or three kernels against
+GGML's one; the lut and codebook formats' decodes (iq4_nl, mxfp4, iq4_xs,
+iq2_s: 0.50-0.72); below 16, the second launch, the rows' cost per act column
+and the grid formats' decodes; on f16 from M = 64, cuBLAS's f16 accumulators.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
