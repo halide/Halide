@@ -789,3 +789,55 @@ By M (in L3 / > L3, blocked-dot median): M = 1 0.94-0.96, M = 8 1.40-1.57,
 M = 32 1.26-1.73, M = 512 0.95-1.10. M = 1 and vec_dot remain the gap.
 q4_K/q5_K/iq4_xs's held-out layout is 16x4 (it wins M = 1 and T12); at T1
 M >= 32 it trails their aos layout's blocked_cols (q4_K 0.66 vs 0.86).
+
+### Vectorized derived_sums accumulator and staged bit-packed sub-block scales
+
+Why `wide = 64` (zmm) lost on Golden Cove (Xeon w5-2455X) even though
+`llvm-mca` predicted 19 cycles a block vs GGML's 22: `perf stat` showed
+`uops_dispatched.port_1` was 1.4% of cycles (vs 34% in GGML's ymm loop) and
+`exe_activity.2_ports_util` was 43%. Any 512-bit instruction shuts off Port 1's
+vector ALUs on Golden Cove, leaving only Ports 0 and 5 for all vector work.
+Even with `wide = 32`, `d.blk` (`float32 * 16`, two blocks of 8 sub-block
+pairs) in `q6_K` `mul_mat` M = 1 was SLP-vectorized by LLVM into one `%zmm`
+FMA, which kept Port 1 shut off.
+
+Three generic changes in `schedule.h` (x86):
+
+- `derived_sums()` / `schedule_sums()` (`sum_lanes`: x86 with `ts.nt <= 2`):
+  splits the sub-block reduction by 2 (`rxt` extent 2 for `vpmaddwd` /
+  `vpdpwssd`) and rfactors `(rtl, r.y)` into `d.blk` before `hoist_invariants()`
+  hoists the block's float factor, then folds `d.part` into `d.sum` and `d.blk`
+  into `sacc` (`sum_tree` over `rtl`) with `eager_inline()`. The offset/mins
+  term accumulates in a `ymm` vector (`sacc`) across blocks and reduces once at
+  the end, with zero `%zmm` instructions. In `blocked()`, `gemv` keeps
+  `wide = 32, sub = 0` for 16-value sub-blocks (`!gemv` keeps `wide = 64`). In
+  `blocked_cols()`, the `macro` (`64x256`) tile's `split(n, nb, n, 8)` moves
+  under `specialize(cond)` (`split(..., 1)` on the fallback) so dead fallback
+  clones in `2x1`/`1x1` branches do not inflate `w`'s bounds check by 7.
+- `packed_sub_scales()`: uses `Internal::load_invariant_bits()` on
+  `scale_decoders(rs)` when `!sub` and a lane step spans multiple sub-blocks
+  (`wsub < vec`). If a scale decoder's load varies across the block (`~m & all`)
+  yet is invariant to any low bit within a step (`m & ((vec / wsub) - 1)`),
+  consecutive sub-blocks in a lane step share a stored byte/word at different
+  bit offsets (`iq2_xs`, `iq2_s`, `iq1_m`). Staging `k.in_callers({codes})` at
+  `(acc, ryo)` vectorized across sub-blocks unpacks the block's scales once with
+  constant shifts and vector interleaves instead of per-step `vpsrlvd` variable
+  shifts.
+
+G/H (GGML / ours), T1 before -> after:
+
+| format | vec_dot K=4096 | vec_dot K=14336 | mul_mat 4096² M=1 (f32 / q8_K) |
+|---|---|---|---|
+| q6_K | 0.814 -> 0.964 | 0.809 -> 0.965 | 0.863 -> 0.978 / 0.924 -> 0.984 |
+| q2_K | 0.757 -> 0.930 | 0.750 -> 0.924 | 0.728 -> 0.901 / 0.768 -> 0.897 |
+| q4_K | 0.910 -> 0.955 | 0.918 -> 0.974 | 1.034 / 1.594 (16x4) |
+| q5_K | 1.147 -> 1.195 | 1.125 -> 1.203 | 1.215 / 1.832 (16x4) |
+| tq2_0 | 0.893 -> 1.069 | 0.900 -> 1.130 | 1.137 / 1.168 |
+| iq2_s | 0.886 -> 1.012 | 0.879 -> 1.014 | 0.838 -> 0.994 / 0.898 -> 1.002 |
+| iq2_xs | 0.956 -> 1.061 | 0.961 -> 1.064 | 0.936 -> 1.044 / 1.006 -> 1.042 |
+| iq1_m | 0.742 -> 0.786 | 0.748 -> 0.792 | 0.713 -> 0.744 / 0.756 -> 0.960 |
+
+Held-out `vec_dot` (54 cases): 38.9% -> 57.4% matched (31/54 >= 0.95), median
+0.908 -> 0.966. `--check` vec_dot and mul_mat (all formats): 0 failures. M3
+replay (982 Arm/Metal objects): all byte-identical.
+
