@@ -341,7 +341,7 @@ def baseline(root):
 
 
 def version_key(v):
-    """Order Dawn versions (date.build.portversion); None when unparseable."""
+    """Order Dawn versions (date.build.portversion); None when unparsable."""
     if v is None:
         return None
     s, pv = v
@@ -405,7 +405,7 @@ def pinstatus(explicit=None, remote=False):
     if kpin is None or kavail is None:
         return "PIN-UNKNOWN", [
             *out,
-            "NOTE: unparseable version string; skipping the comparison",
+            "NOTE: unparsable version string; skipping the comparison",
         ]
 
     verdict = "PIN-UP-TO-DATE"
