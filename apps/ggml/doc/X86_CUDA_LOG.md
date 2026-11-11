@@ -877,4 +877,44 @@ G/H (GGML / ours), T1 before -> after:
 `--check` vec_dot and mul_mat (`q3_K`, `iq2_xs`, `iq2_s`, `iq1_m`): 0 failures.
 M3 replay (982 Arm/Metal objects): all byte-identical.
 
+### Inlining 1-bit-per-lane Tabulate (q5_0, q5_1) and multi-block weight rfactor in blocked() (q1_0)
+
+Two generic bottlenecks in the 32-value activation-block (`q8_0`/`q8_1`)
+kernels on x86:
+
+- `q5_0` (0.81-0.85 of GGML) and `q5_1` (0.74-0.84) decode their high bit plane
+  through `Tabulate{h, 8, 256}` (created for Arm NEON, which has no bit-unpack
+  instruction). On x86, precomputing that 2 KB table emitted 4 scalar byte
+  extractions, 4 `vmovq` table loads, and 3 vector shuffles per block (`q5_0`
+  `llvm-mca`: 14.3 cycles per 2 blocks vs GGML's 10.7). In `register_lut()` /
+  `luts()`, any 1-bit-per-lane `Tabulate` (`t->entries == (1 << t->per)`) is
+  inlined on x86 (`target.arch == Target::X86`); LLVM lowers the 32-bit unpack
+  to `vpbroadcastd` + `vpshufb` + `vptestnmb` + masked move (`llvm-mca`: 10.6
+  cycles per 2 blocks).
+- `q1_0` on `q8_0` activations (0.62-0.78 of GGML, M = 1 `mul_mat` 0.81) has
+  `fmt.per = 4` (four 32-value `q8_0` blocks per 128-value `q1_0` block).
+  `blocked_mmla()` (Arm `i8mm`) split `ry` by `fmt.per` and hoisted the weight
+  block's scale across the 4 activation blocks, but `blocked()` (`vec_dot` and
+  x86 `mul_mat`) did not: splitting `ry` by `ts.interleave = 2 < 4` left
+  `ryo % 2` / `ryo / 2` integer division and modulo addressing inside the inner
+  loop (11 scalar ALU instructions per iteration) and reloaded/multiplied `w.d`
+  4 times per weight block. Passing `wper = fmt.per` (`t.arch == Target::X86 &&
+  !fmt.sub && integer`) to `blocked()` splits `ry` into `(ryw, ryp, wper)`,
+  rfactors `(rl, ryw)` into `wblk`, hoists `w.d` into `win =
+  wblk.update().hoist_invariants()[0]`, and folds `wblk` and `blk` with
+  `eager_inline()`, giving clean pointer induction (`addq $18, %rdi; addq $136,
+  %rcx`) and one `w.d` multiply per 4 `q8_0` blocks.
+
+G/H (GGML / ours), T1 before -> after:
+
+| format | vec_dot K=256 | vec_dot K=4096 | vec_dot K=14336 | mul_mat 4096² M=1 / T10 |
+|---|---|---|---|---|
+| q5_0 | 0.811 -> 0.915 | 0.854 -> 0.960 | 0.853 -> 0.982 | 0.903 -> 0.995 / 0.909 -> 1.060 |
+| q5_1 | 0.741 -> 0.839 | 0.817 -> 0.941 | 0.837 -> 0.958 | 0.862 -> 0.972 / 0.930 -> 0.951 |
+| q1_0 | 0.623 -> 0.816 | 0.770 -> 0.923 | 0.778 -> 0.927 | 0.812 -> 1.095 / 0.769 -> 1.097 |
+
+`--check` vec_dot, mul_mat, and codec (`q1_0`, `q5_0`, `q5_1`): 0 failures. M3
+replay (982 Arm/Metal objects): all byte-identical.
+
+
 

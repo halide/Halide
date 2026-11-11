@@ -300,18 +300,18 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
 // decodes) are precomputed with `tables` (CPUs: the decode leaves the SIMD
 // units; q5_0 vec_dot 0.80x -> 1.01x GGML), else inlined. Call before any
 // other directive on rs's decode.
-inline bool register_lut(const std::vector<ApproximationResult> &rs, const Func &lut) {
+inline bool register_lut(const std::vector<ApproximationResult> &rs, const Func &lut, const Target &target = Target()) {
     const Tabulate *t = tabulate(rs, lut, true);
-    return t && t->per * t->entries * lut.type().bytes() <= 16;
+    return t && (t->per * t->entries * lut.type().bytes() <= 16 || (target.arch == Target::X86 && t->entries == (1 << t->per)));
 }
 
-inline void luts(const std::vector<ApproximationResult> &rs, bool tables) {
+inline void luts(const std::vector<ApproximationResult> &rs, bool tables, const Target &target = Target()) {
     std::set<std::string> seen;
     for (const ApproximationResult &r : rs) {
         for (Func f : r.decode_funcs()) {
             const Tabulate *t = tabulate(r, f, true);
             if (!t || !seen.insert(f.name()).second) continue;
-            if (t->data || (tables && !register_lut(rs, f))) f.precompute();
+            if (t->data || (tables && !register_lut(rs, f, target))) f.precompute();
         }
     }
 }
@@ -956,7 +956,7 @@ inline bool hoisted_shifts(Func codes, RVar rxc, int nchunk, int lanes, int per,
 // index_words.
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
-                    int sub = 0, int act_sub = 0, const Knobs &k = Knobs(), bool gemv = false) {
+                    int sub = 0, int act_sub = 0, const Knobs &k = Knobs(), bool gemv = false, int wper = 1) {
     bool sublanes = gemv && k.sublanes, gpr_scales = gemv && k.gpr_scales, defer = gemv, index_words = !gemv && k.index_words;
     bool fold_offsets = gemv ? k.fold != Fold::None : k.fold == Fold::All;
     Stage s = tile_out(out, st, dot, cond, ts, r);
@@ -1039,7 +1039,21 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxo, vec) : s.split(r.x, rxc, rxo, vec);
     }
     s.split(rxo, rxo, rxi, per);
-    Func blk = s.rfactor({{sl ? rxl : rxo, lane}, {ry, u}});
+    RVar rl = sl ? rxl : rxo, ryw("ryw"), ryp("ryp");
+    Var w("w");
+    Func wblk, win;
+    Stage bs = s;
+    if (wper > 1) {
+        s.split(ry, ryw, ryp, wper);
+        wblk = s.rfactor({{rl, lane}, {ryw, w}});
+        wblk.bound(lane, 0, vec / per);
+        wblk.update().eager_inline(decoders(rs, all_but({tag::codes}), 0, 1));
+        win = wblk.update().hoist_invariants()[0];
+        win.bound(lane, 0, vec / per);
+        s.eager_inline({wblk});
+        bs = win.update();
+    }
+    Func blk = bs.rfactor(wper > 1 ? std::vector<std::pair<RVar, Var>>{{ryp, u}} : std::vector<std::pair<RVar, Var>>{{rl, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
     // float sub-block scales (nvfp4's): the codes' dot is integer per
     // sub-block only
@@ -1049,6 +1063,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     for (auto &[f, _] : sdec)
         bkept.push_back(f);
     Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff, bkept);
+    if (win.defined()) win.update().eager_inline({blk});
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
@@ -1058,28 +1073,35 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         Func inner = part.update().hoist_invariants()[0];
         subs.emplace_back(f, part, fsub ? inner.change_type(Int(32)) : inner);
     }
-    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
-    RVar rl = sl ? rxl : rxo;
+    int il = wper > 1 ? 1 : ts.interleave;
+    s.split(wper > 1 ? ryw : ry, ryo, ryi, il, TailStrategy::GuardWithIf);
     Func acc = sum_tree(s, {{{rl, lane}, {ryi, bacc}}, {{rl, lane}}}, tile_at(out, st), n, m, ryo)[0];
     s.atomic().vectorize(rl).unroll(n).unroll(m);
+    if (win.defined()) {
+        win.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(w, il).vectorize_all_stages(lane).unroll_all_stages(w, n, m);
+        win.update().unroll(ryp);
+    }
     // rfactor put the lanes last in storage; bound_storage keeps the K
     // tail's blocks on the stack
-    for (Func f : {blk, mid, codes}) {
-        if (f.defined()) f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave).vectorize_all_stages(lane).unroll_all_stages(u, n, m);
+    for (Func f : {win.defined() ? Func() : blk, mid, codes}) {
+        if (!f.defined()) continue;
+        f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, wper > 1 ? wper : il).vectorize_all_stages(lane).unroll_all_stages(u, n, m);
+        if (wper > 1) f.bound_storage(w, il).unroll_all_stages(w);
     }
     if (rest.defined()) {
         // the act's block sum, once per act column (n a broadcast)
-        rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave).vectorize_all_stages(lane).unroll_all_stages(u, m);
+        rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, wper > 1 ? wper : il).vectorize_all_stages(lane).unroll_all_stages(u, m);
+        if (wper > 1) rest.bound_storage(w, il).unroll_all_stages(w);
         ts.nt > 1 ? rest.vectorize_all_stages(n) : rest.unroll_all_stages(n);
     }
     for (Func f : {codes, rest}) {
         if (!f.defined() || sub) continue;
-        if (f.name() == codes.name() && sdec.empty() && defer && integer && hoisted_shifts(codes, rxc, block / vec, vec / per, per, LoopLevel(acc, ryo), ts.interleave, n, m)) continue;
+        if (f.name() == codes.name() && sdec.empty() && defer && integer && wper == 1 && hoisted_shifts(codes, rxc, block / vec, vec / per, per, LoopLevel(acc, ryo), ts.interleave, n, m)) continue;
         f.update().atomic().vectorize(rxi).unroll(rxc);
     }
     // per block and sub-block, the tile's sub-block dots (inner), then their
     // scales (part)
-    std::vector<Func> readers{blk, mid, codes, rest};
+    std::vector<Func> readers{win, blk, mid, codes, rest};
     // With VNNI, sub-blocks of a vec's quads in pairs, their dots and scales
     // one vector of both (GGML's AVX2 q6_K): half the dots, multiplies and
     // adds, the scales loaded in pairs. 16-value sub-blocks only: pairs of
@@ -1837,7 +1859,7 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs, int vec 
 // once, up front.
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
-    luts(rs, true);
+    luts(rs, true, t);
     for (Func e : staged) {
         encoder(e.compute_root(), rs, fmt.act_block == 1 ? 4 * t.natural_vector_size<float>() : 0);
     }
@@ -1847,7 +1869,8 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t, bf16_pairs(rs, t));
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true);
+    int wper = t.arch == Target::X86 && !fmt.sub && fmt.act_block == fmt.block ? fmt.per : 1;
+    blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true, wper);
 }
 
 // The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
@@ -2572,7 +2595,7 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (dots[0]). `x`: the act dots[0] reads (X or its round trip), unless staged.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, Func x, const Target &t, const Approximation &acc = Approximation(), const Knobs &k = Knobs()) {
-    luts(rs, !t.has_gpu_feature());
+    luts(rs, !t.has_gpu_feature(), t);
     // GPUs: Metal's schedules, on CUDA with wmma's 16 x 16 fragments (a
     // warp is a simdgroup: 32 lanes); f32 operands' gemm on Metal only
     if (t.has_feature(Target::Metal) || t.has_feature(Target::CUDA)) {
@@ -2723,8 +2746,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             blocked_cols(out, 0, dr, fits(cols8, M), cols8, r, fmt.block, rs, t, fmt.sub, fmt.act_sub, k, false);
         }
     }
+    int wper = t.arch == Target::X86 && !fmt.sub && integer ? fmt.per : 1;
     // (records without i8mm: their gemv per column; blocked()'s tiles gather)
-    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k);
+    if (!(recs && !whole) && (!whole || !tiled)) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, fmt.block, integer, rs, t, !whole, fmt.sub, fmt.act_sub, k, false, wper);
     // The rows past Mr (with whole records, M = 1's): no tasks when there are none.
     Expr rest = whole ? M == 1 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
@@ -2757,8 +2781,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // sharing the act at any row length.
     Expr paired = fits(pairs, 1);
     if (fmt.row_bytes.defined() && !decoded_codes(rs)) paired = paired && two_streams(fmt.row_bytes);
-    if (k.row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, fmt.block, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, fmt.block, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true);
+    if (k.row_pairs && staged_tables(rs).empty()) blocked(out, 2 * whole, dots[0], paired, pairs, r, fmt.block, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true, wper);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, fmt.block, integer, rs, t, true, fmt.sub, fmt.act_sub, k, true, wper);
 }
 
 }  // namespace ggml
