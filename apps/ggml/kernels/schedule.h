@@ -1079,6 +1079,16 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     tables(rs, readers, LoopLevel(acc, ryo), t, index_words, k.plain_index_words);
 }
 
+// bf16 weights and acts, with a bf16 dot (AVX512-BF16's vdpbf16ps, GGML's
+// AVX-512 bf16 vec_dot): flat()'s products summed in pairs.
+inline bool bf16_pairs(const std::vector<ApproximationResult> &rs, const Target &t) {
+    bool pairs = t.with_implied_features().has_feature(Target::AVX512_Zen4) && rs.size() == 2;
+    for (const ApproximationResult &a : rs) {
+        pairs = pairs && a.encoded.size() == 1 && a.encoded[0].type() == BFloat(16);
+    }
+    return pairs;
+}
+
 // Float weights (one value per record): per output, f32 products in vectors
 // of `vec` values of r.y, ts.interleave independent accumulators (the K tail
 // guarded), then summed across them. With `pairs`, each lane sums two
@@ -1751,13 +1761,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     if (fmt.block == 1) {
         // 8 interleaved steps: f16 vec_dot 1.2x, gemv 1.05-1.1x of 4 (M3)
-        // bf16 weights and acts, with a bf16 dot (AVX512-BF16's vdpbf16ps,
-        // GGML's AVX-512 bf16 vec_dot): the products' sums in pairs
-        bool pairs = t.with_implied_features().has_feature(Target::AVX512_Zen4) && rs.size() == 2;
-        for (const ApproximationResult &a : rs) {
-            pairs = pairs && a.encoded.size() == 1 && a.encoded[0].type() == BFloat(16);
-        }
-        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t, pairs);
+        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 8}, r, t, bf16_pairs(rs, t));
         return;
     }
     blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true);
@@ -2549,7 +2553,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
         if (acc.defined()) fg = {2, 2, 1, 32, 32, true};
         for (auto [c, ts] : Chain{{N >= fg.nt && M >= fg.mt, fg}, {Expr(), fr}}) {
-            acc.defined() ? flat_tree(out, 0, dots[0], c, ts, r, acc, staged) : flat(out, 0, dots[0], c, ts, r, t);
+            acc.defined() ? flat_tree(out, 0, dots[0], c, ts, r, acc, staged) : flat(out, 0, dots[0], c, ts, r, t, bf16_pairs(rs, t));
         }
         return;
     }
