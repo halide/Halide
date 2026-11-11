@@ -753,7 +753,7 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 // the rows (n), on gemv tiles one accumulator per interleaved block.
 // `across_rows`: the sub-block sums vectorized across a record's rows too.
 // `act_records`: the act also in whole records.
-inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, const Tiles &ts, const RDom &r, bool gemm, int vec, bool across_rows = false, bool act_records = false) {
+inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, const Tiles &ts, const RDom &r, bool gemm, int vec, bool across_rows = false, bool act_records = false, bool vec_sums = false) {
     if (!d.sums.defined()) return;
     Var u("u"), v("v"), tl("tl");
     RVar ry = r.y, ryo("ryo"), ryi("ryi"), rtl("rtl");
@@ -769,6 +769,16 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         Func sacc = sum_tree(d.sums.update(), {{{rtl, tl}}}, tile, n, m, ryo)[0];
         sacc.update().eager_inline({d.blk}).reorder(tl, ryi, n, m, ryo).unroll(ryi).compute_with(acc.update(), ryo);
         d.sums.update().atomic().vectorize(rtl).unroll(n).unroll(m);
+    } else if (vec >= 32 && ts.interleave > 1 && vec_sums && !d.part.defined() && !d.sub_sums && !d.sum.defined()) {
+        // Without LUTs on Port 5 (q4_1), vectorizing the interleaved blocks'
+        // f16 min*sum conversions (vcvtph2psx + vfmadd231ps) shifts uops off
+        // Ports 0/1 onto Port 5 (vec_dot 0.83x -> 0.95x at K=4096, 1.11x at
+        // K=14336).
+        Func spart = d.sums.update().rfactor(ryi, v);
+        d.sums.update().atomic().vectorize(ryi).unroll(n).unroll(m);
+        spart.compute_at(tile).reorder_storage(v, n, m).vectorize_all_stages(v).unroll_all_stages(n, m);
+        spart.update().eager_inline({d.blk}).reorder(v, n, m, ryo).compute_with(acc.update(), ryo);
+        return;
     } else {
         Func spart = d.sums.update().rfactor(ryi, v);
         d.sums.update().unroll(ryi).unroll(n).unroll(m);
@@ -971,7 +981,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // shuffles).
     bool vnni = t.has_feature(Target::AVXVNNI) || t.has_feature(Target::AVX512_Zen4);
     int wsub = sub;
-    int wide = integer && vnni && sub % 32 == 0 && !(sub && sublanes) ? 32 : 16;
+    int wide = integer && vnni && (sub % 32 == 0 || float_sub_scales(rs)) && !(sub && sublanes) ? 32 : 16;
     // With AVX-512 VNNI, 16-value sub-blocks decoded without tables take a
     // zmm (any sublanes too): four sub-blocks a step, each scale in its
     // lanes' products, which CodeGen_X86 sums as GGML's AVX2 q2_K/q6_K do
@@ -986,7 +996,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         sub = 0;
     }
     int per = integer ? 4 : 1, vec = std::min(t.natural_vector_size<int8_t>(), wide);
-    if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
+    if (sub * per <= vec || block <= vec) sub = 0;  // a sub-block per lane step, or one step per block: no sum across sub-blocks
     // With VNNI, signed codes (no offset term: q3_K's, the iq formats') keep
     // the sub-block scales in their lanes' products, at GGML's AVX step of
     // 32: CodeGen_X86 sums them as GGML's AVX2 does (|codes| x signed acts
@@ -1022,6 +1032,10 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         dkept.insert(dkept.end(), gpr.begin(), gpr.end());
     } else if (!sub && t.arch == Target::X86) {
         sdec = packed_sub_scales(rs, block, wsub, vec);
+        if (gemv && sdec.empty() && float_sub_scales(rs) && wsub > per) {
+            for (Func f : scale_decoders(rs))
+                sdec.emplace_back(f, 1);
+        }
         for (auto &[f, _] : sdec)
             dkept.push_back(f);
     }
@@ -1154,7 +1168,11 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             inner.update().atomic().vectorize(rxi).unroll(rxc);
         }
     }
-    schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
+    bool vec_sums = true;
+    for (const Func &f : rs[0].decode_funcs()) {
+        vec_sums &= !tabulate(rs[0], f, true);
+    }
+    schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec, false, false, vec_sums);
     // gpr_scales: the scales and mins decoded per block, 4 bytes a word in a
     // GPR (q4_K vec_dot +7-12%)
     std::vector<Func> sum_readers;
@@ -1183,11 +1201,11 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     for (auto &[k, run] : sdec) {
         if (!codes.defined()) continue;
-        Func w = k.in_callers({codes});
+        Func w = k.in_callers({codes, blk});
         if (!w.defined()) continue;
         Var kw("kw"), kb("kb");
         w.compute_at(acc, ryo);
-        run < block / wsub ? w.split(w.args()[0], kw, kb, run).unroll(kw).vectorize(kb, run, VectorizeIn::SWAR) : w.vectorize(w.args()[0]);
+        run == 1 ? w.unroll(w.args()[0]) : run < block / wsub ? w.split(w.args()[0], kw, kb, run).unroll(kw).vectorize(kb, run, VectorizeIn::SWAR) : w.vectorize(w.args()[0]);
         for (size_t i = 1; i < w.args().size(); i++)
             w.unroll(w.args()[i]);
         readers.push_back(w);

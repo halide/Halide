@@ -959,6 +959,53 @@ G/H (GGML / ours), T1 before -> after:
 `--check` vec_dot, mul_mat, and codec (all 7 grid formats): 0 failures. M3
 replay (982 Arm/Metal objects): all byte-identical.
 
+### Float sub-block scales at wide = 32 (nvfp4) and vectorized block-sum spart (q4_1)
 
+Two remaining gaps in `blocked()`:
 
+- `nvfp4` on `q8_0` activations (0.76 of GGML at K = 4096/14336; 32-value
+  blocks, 16-value sub-blocks with float scales from a 256-entry `ue4m3` LUT)
+  fell back to `wide = 16` (`sub = 16 % 32 != 0`) and took `blocked_sub_lanes`
+  because `sub * per = 64 > vec = 16`, executing two 16-byte `vpdpbusd` steps
+  per block (`%xmm`) with shuffled int32 reductions instead of a single 32-byte
+  `%ymm` `vpdpbusd` across both 16-value sub-blocks. Admitting
+  `float_sub_scales(rs)` to `wide = 32`, setting `sub = 0` when `block <= vec`
+  (a single lane step covers the whole block, so there are no steps across
+  sub-blocks to sum before scaling; on Arm NEON `vec = 16 < block = 32` is
+  unchanged), and staging `scale_decoders(rs)` (`run = 1`, unrolled in
+  `k.in_callers({codes, blk})`) so each sub-block's scalar LUT scale is hoisted
+  into a `vbroadcastss` instead of gathered per lane drops `nvfp4_q8_0_vec_dot`
+  from 290 ns to 172 ns at K = 4096 (0.764 -> 1.281x GGML).
+- `q4_1` on `q8_1` activations (0.83 of GGML at K = 4096, 168 ns vs 140 ns) has
+  no `Tabulate` or signed-code fixup uops on Port 5 (`uops_dispatched.port_0 =
+  81%`, `port_1 = 85%`, `port_5_11 = 48%`; `llvm-mca` Port 0/1 pressure 10.74
+  cycles vs Port 5 4.53 cycles per 2 blocks), because 8 scalar `vcvtsh2ss` and
+  2 scalar `vfmadd231ss` instructions dispatch 10 uops exclusively to Ports 0
+  and 1. In `schedule_sums()`, when `vec >= 32 && ts.interleave > 1 && vec_sums`
+  (`!tabulate` in `rs[0]`, so Port 5 is not occupied by `vpshufb + vptestnmb`
+  bit-plane unpacks as in `q5_1`), vectorizing `spart` over `v` (`ryi`) with
+  `d.blk` eager-inlined replaces 4 scalar `vcvtsh2ss` + 2 `vfmadd231ss` with
+  `<2 x half>` `vcvtph2psx` + `vfmadd231ps`, shifting uops onto Port 5 and
+  dropping `llvm-mca` block throughput from 10.0 to 8.5 cycles per 2 blocks.
+
+G/H (GGML / ours), T1 before -> after:
+
+| format | vec_dot K=256 | vec_dot K=4096 | vec_dot K=14336 | mul_mat 4096² M=1 (dot / f32) |
+|---|---|---|---|---|
+| nvfp4 | 0.869 -> 1.164 | 0.764 -> 1.281 | 0.763 -> 1.306 | 0.811 -> 1.325 / 0.807 -> 1.414 |
+| q4_1 | 0.820 -> 0.820 | 0.830 -> 0.947 | 0.981 -> 1.115 | 0.982 -> 1.109 (aos) |
+
+Held-out `vec_dot` and M = 1 `mul_mat` (`analyze.py --l3` / `--by-m`, cases
+below 0.97 re-run, minimum kept), baseline `f1000684e` -> now:
+
+| row | T | stratum | cases | before (matched / pct / median) | after (matched / pct / median) |
+|---|---|---|---|---|---|
+| `vec_dot` | 1 | format-specific | 54 | 21 / 38.9% / 0.908 | 41 / 75.9% / 0.990 |
+| `mul_mat@M1` | 1 | blocked-dot | 182 | 93 / 51.4% / 0.951 | 163 / 89.6% / 1.085 |
+| `mul_mat@M1` | 1 | format-specific | 34 | 18 / 51.4% / 0.956 | 27 / 79.4% / 1.002 |
+| `mul_mat@M1` | 12 | blocked-dot | 190 | 104 / 55.0% / 0.970 | 151 / 79.5% / 1.075 |
+| `mul_mat@M1` | 12 | format-specific | 26 | 13 / 48.1% / 0.941 | 18 / 69.2% / 1.173 |
+
+`--check` vec_dot, mul_mat, and codec (all 2392 non-CUDA cases): 0 failures. M3
+replay (982 Arm/Metal objects): all byte-identical.
 
