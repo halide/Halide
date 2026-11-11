@@ -143,7 +143,7 @@ App changes:
   Func `u` and `u + c`, so the staged weights feed plain `vpdpbusd` and the
   offset folds through the act's bsums, as GGML's tiled gemm does (before:
   signed staged codes, each dot `vpbroadcastd` + 2 `vpsignb` +
-  `vinserti64x4`, SPR having no zmm `vpsignb`). The cols gemm always folds,
+  `vinserti64x4`, AVX-512 having no zmm `vpsignb`). The cols gemm always folds,
   whatever `fold_offsets` says. The staging splits K by the vector width and
   unrolls the outer part (constant sub-block shifts, not per-lane u32
   shifts), except for table-decoded formats (iq3_s 3% slower unrolled). One
@@ -162,7 +162,7 @@ App changes:
   bounds, u = q + 9). One thread, 4096^2, M = 32, ms (GGML): iq1_s 9.5 ->
   5.0 (5.0), iq1_m 10.7 -> 6.3 (6.4).
 - The act bsum reduction in `schedule_sums()` vectorized at 16 int32 lanes
-  (zmm `vpmovsxwd` + `vpaddd`) inside the ymm gemv loop; on SPR a zmm uop
+  (zmm `vpmovsxwd` + `vpaddd`) inside the ymm gemv loop; on the test machine a zmm uop
   takes port 1's vector ALUs offline, which llvm-mca doesn't model (tq2_0:
   12.7 cycles per block predicted, 15.9 measured). Now split to the loop's
   width and unrolled. One thread, 4096^2, M = 1, GGML / halide: tq1_0 0.66
@@ -534,7 +534,7 @@ prepacks). The harness's `ggml_repack` transcribes it; `kquants.h`'s
 aos/soa-only guard on q4_K/q5_K is lifted.
 
 Schedule (`blocked_amx(..., packed = true)`, chosen by generic criteria:
-integer, SPR, 16x4 record, one row per piece, block % 64 == 0):
+integer, AVX-512 + AMX, 16x4 record, one row per piece, block % 64 == 0):
 
 - Codes decode in place per block at `(acc, ry)`: one dense 64-byte load and a
   nibble mask per tile row, storage `(ki, row, ko, b)`; no per-sub-block
@@ -755,3 +755,18 @@ its own L2, which exposed the kernel's in-L2 throughput: bf16 T1 4096x64
 `--check` mul_mat bf16/f16/f32 (K 4096, 4097, 4100, 512; M 1-300) and
 vec_dot bf16/f16: 0 failures. M3 replay (982 objects): all byte-identical
 (the rule needs AVX512-BF16).
+
+### q2_K / q6_K vec_dot (diagnosis, no change)
+
+One-thread vec_dot, K = 4096: q2_K 0.76, q6_K 0.80 of GGML. Ours is a zmm
+loop (two blocks a step, 68 instructions a block); GGML's is AVX2 ymm (92 a
+block). llvm-mca (sapphirerapids) puts ours at 19 cycles a block and GGML's
+at 22, but measured ours is 7.4 ns a block and GGML's 5.6. A 256-bit step
+(wide = 32 in place of 64, same structure) is slower still for q6_K (168 vs
+131 us; q2_K's does not generate), so the zmm width (frequency license) is
+not the cause. The one structural difference left: our offset/mins term
+(`d.part`, the act's bsums times the sub-block mins) is reduced to a scalar
+every block (`vpaddd` shuffles, `vcvtdq2ps`, `vmulss`, `vfmadd231ss`), where
+GGML keeps it a vector accumulator across blocks and reduces once. Keeping
+it a vector needs `derived_sums()` to rfactor the act sub-blocks before it
+hoists the block's float factor; not attempted.
