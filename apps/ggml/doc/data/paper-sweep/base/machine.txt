@@ -1,0 +1,10 @@
+Linux 6.18.33.2-microsoft-standard-WSL2 x86_64 GNU/Linux
+CPU(s):                                  24
+Model name:                              Intel(R) Xeon(R) w5-2455X
+Thread(s) per core:                      2
+Core(s) per socket:                      12
+Socket(s):                               1
+L1d cache:                               576 KiB (12 instances)
+L1i cache:                               384 KiB (12 instances)
+L2 cache:                                24 MiB (12 instances)
+L3 cache:                                30 MiB (1 instance)

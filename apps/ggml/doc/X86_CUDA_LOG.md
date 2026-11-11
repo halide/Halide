@@ -602,3 +602,75 @@ q4_K at M >= 8 (0.90-0.95) and q5_K at M = 8/256 (0.93-0.95).
   `blocked_cols()` and `blocked_amx()`, are one helper. Stmts of q4_K, q5_K,
   q6_K, q2_K, q4_K.16x4, iq4_xs.16x4 mul_mat identical (up to generated
   temporaries' numbering).
+
+## x86 gap closure: sub-block scales in the lanes (vec_dot, M = 1)
+
+Baseline (`23ce3ecee`, partial paper sweep in `data/paper-sweep/base/`:
+vec_dot, and mul_mat M = 1 at 4096^2 and 4096x1024, T1 and T12): vec_dot
+held-out 54 cases, 38.9% matched, median 0.868.
+
+Diagnosis (llvm-mca plus measured slopes): the sub-block formats' inner
+loops. Ours did a `vpdpbusd` per sub-block, then a `vpmulld` by its
+scale, plus abs/sign fixups for signed codes; GGML's AVX2 path does
+`pmaddubsw` (|codes| x signed acts) then `pmaddwd` by the int16 scales.
+
+Core (each with a test):
+- `ef3231eef` Deinterleave: a `dynamic_shuffle`'s table is not
+  lane-parallel with its result (only the indices are deinterleaved; other
+  calls with a vector argument of a different lane count are shuffled).
+  It crashed iq4_xs (`Shuffle vector index out of range`).
+  Test: `correctness/deinterleave_dynamic_shuffle`.
+- `f3ba8f1b8` CodeGen_X86: the three-factor (`pmaddubsw` + `pmaddwd`)
+  dot also takes a fourth sign factor (`psignb`), two signed factors as
+  |a| x sign(b, a), factors under `widen_right_mul`, a LUT's bounds (its
+  table's), and pair uniformity lane by lane with let-bound constant
+  vectors. Test: `correctness/x86_dot_three_factor` (each case fails
+  without its piece).
+- Arm/Metal: the M3's 982 libraries (all formats' CPU and 164 Metal
+  ones, `arm-64-osx-arm_dot_prod-arm_fp16-arm_i8mm[-metal]`, the arm knob
+  rows) generated with HEAD's and the new generator and libHalide are
+  byte-identical (headers differ only by the output path in the include
+  guard). The schedule rule below is VNNI-only.
+
+Schedule (`blocked()`, no new knob): with VNNI, a gemv/vec_dot of signed
+codes (not `affine()`: q3_K, the iq formats) keeps its integer sub-block
+scales in the lanes at a step of 32, which the new CodeGen_X86 pattern
+lowers as GGML does. Affine codes (q4_K, q5_K) keep `vpdpbusd` (with the
+scales in the lanes: q4_K 0.91 -> 0.77x, q5_K 1.15 -> 0.88x).
+
+One-thread vec_dot, G/H, 30 rounds (K = 4096 / 14336):
+
+| type | before | after |
+|---|---|---|
+| iq4_xs | 0.99 / 1.01 | 1.17 / 1.21 |
+| iq2_xs | 0.84 / 0.82 | 0.98 / 0.98 |
+| iq2_s | 0.81 / 0.83 | 0.90 / 0.89 |
+| q3_K | 0.72 / 0.74 | 0.79 / 0.80 |
+| iq3_xxs | 0.84 / 0.86 | 0.86 / 0.88 |
+| iq1_s | 0.84 / 0.84 | 0.86 / 0.87 |
+| iq1_m | 0.74 / 0.75 | 0.75 / 0.78 |
+| iq2_xxs | 0.81 / 0.82 | 0.84 / 0.83 |
+| iq3_s | 1.00 / 1.07 | 1.06 / 1.11 |
+| q4_K, q5_K | unchanged (noise) | |
+
+mul_mat 4096^2 M = 1, G/H (fastest of each side), T1 / T12:
+
+| type | before | after |
+|---|---|---|
+| iq1_m | 0.77 / 0.75 | 0.82 / 0.81 |
+| iq1_s | 0.85 / 0.79 | 0.94 / 0.94 |
+| iq2_xs | 0.81 / 0.77 | 0.94 / 0.90 |
+| iq2_xxs | 0.80 / 0.76 | 0.87 / 0.86 |
+| iq3_xxs | 0.89 / 0.81 | 0.90 / 0.92 |
+| iq3_s | 1.03 / 0.94 | 1.08 / 1.12 |
+| q3_K | 0.80 / 0.70 | 0.83 / 0.81 |
+| iq2_s | 0.82 / 0.80 | 0.85 / 0.79 (with the knob below) |
+
+`[x86] iq2_s mul_mat` row gains `interleave=1`: with the scales in the
+lanes its two-row gemv regressed (M = 1, one thread, 1439 -> 1225 us with
+one row; M = 8/32 and the f16/f32 acts within 2%). The other formats'
+gemvs are within 1-4% either way with one row, so no rule.
+
+Checks: `--check` vec_dot 484, codec 714, mul_mat 1572 results, 0
+failures; Halide `correctness_{deinterleave*,x86_dot*,vector_reductions,
+mixed_sign_dot_product,...}` (14) and `simd_op_check_x86` pass.

@@ -234,7 +234,9 @@ set(GGML_SCHEDULE_PARAMS
     "[x86] iq2_xs vec_dot q8_K slp=false"
     "[x86] iq2_xs mul_mat * slp=false"
     "[x86] iq2_s vec_dot q8_K interleave=1 slp=false"
-    "[x86] iq2_s mul_mat * slp=false"
+    # (and iq2_s's gemv one row at a time, with its sub-block scales in the
+    # lanes: one-thread M = 1 0.71 -> 0.85x)
+    "[x86] iq2_s mul_mat * interleave=1 slp=false"
     "[x86] iq3_s vec_dot q8_K slp=false"
     "[x86] iq3_s mul_mat * slp=false"
     # SPR: one block per gemv iteration (M = 1, one thread: iq1_s 1.32 ->

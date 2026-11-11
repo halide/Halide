@@ -1,0 +1,5 @@
+# 23ce3ecee 2026-11-10T19:01:31-05:00 --op mul_mat --shapes 4096x4096x1 --threads 12
+220 results, 0 failures
+# 23ce3ecee 2026-11-10T19:09:04-05:00 --op mul_mat --shapes 4096x1024x1 --threads 12
+220 results, 0 failures
+# 23ce3ecee 2026-11-10T19:16:21-05:00 --op mul_mat --shapes 4096x14336x1 --threads 12
