@@ -5113,6 +5113,67 @@ string eager_inline_level_obstacle(const LoopLevel &level, const char *directive
            eager_inline_schedule_hint;
 }
 
+// If `f` has a pure definition and only unconditional, RDom-free pointwise
+// update definitions on its pure vars (such as the write-back stage produced by
+// hoist_invariants()), fold the updates into the pure definition and return an
+// equivalent pure Function. Otherwise return `f` unchanged.
+Function fold_pointwise_updates(const Function &f) {
+    if (!f.has_pure_definition() || f.has_extern_definition() ||
+        !f.definition().specializations().empty() || !f.has_update_definition()) {
+        return f;
+    }
+    const vector<string> &pure_args = f.args();
+    for (const Definition &u : f.updates()) {
+        if (!u.schedule().rvars().empty() || !is_const_one(u.predicate()) ||
+            !u.specializations().empty() || u.args().size() != pure_args.size()) {
+            return f;
+        }
+        for (size_t i = 0; i < pure_args.size(); i++) {
+            const Variable *v = u.args()[i].as<Variable>();
+            if (!v || v->name != pure_args[i]) {
+                return f;
+            }
+        }
+    }
+    vector<Expr> values = f.values();
+    for (const Definition &u : f.updates()) {
+        vector<Expr> next_values(values.size());
+        for (size_t i = 0; i < values.size(); i++) {
+            Expr v = mutate_with(u.values()[i], [&](auto *self, const Call *op) -> Expr {
+                if (op->call_type == Call::Halide && op->name == f.name()) {
+                    return values[op->value_index];
+                }
+                return self->visit_base(op);
+            });
+            next_values[i] = simplify(common_subexpression_elimination(v));
+        }
+        values = std::move(next_values);
+    }
+    Function folded(f.name());
+    folded.define(pure_args, values);
+    return folded;
+}
+
+string eager_inline_stage_obstacle(const Function &f, const StageSchedule &stage_s) {
+    string obstacle = eager_inline_level_obstacle(stage_s.fuse_level().level, "compute_with()");
+    if (!obstacle.empty()) {
+        return obstacle;
+    }
+    for (const auto &d : stage_s.dims()) {
+        if (d.is_unordered_parallel()) {
+            return ": Cannot parallelize dimension " + d.var + " of function " +
+                   f.name() + " because the function is scheduled inline.\n";
+        } else if (d.for_type == ForType::Unrolled) {
+            return ": Cannot unroll dimension " + d.var + " of function " +
+                   f.name() + " because the function is scheduled inline.\n";
+        } else if (is_vectorized(d.for_type)) {
+            return ": Cannot vectorize dimension " + d.var + " of function " +
+                   f.name() + " because the function is scheduled inline.\n";
+        }
+    }
+    return {};
+}
+
 }  // namespace
 
 namespace Internal {
@@ -5123,7 +5184,7 @@ namespace Internal {
 // validate_schedule_inlined_function()). A schedule directive that lowering
 // merely warns about for an inlined Func (split(), bound(), etc.) is allowed.
 string eager_inline_obstacle(const Function &f) {
-    if (!f.can_be_inlined()) {
+    if (!fold_pointwise_updates(f).can_be_inlined()) {
         return ": it must be a pure Func with no update or extern definition and "
                "no specializations.\n";
     }
@@ -5145,6 +5206,12 @@ string eager_inline_obstacle(const Function &f) {
     if (!error.empty()) {
         return ": " + error;
     }
+    for (const Definition &u : f.updates()) {
+        string obstacle = eager_inline_stage_obstacle(f, u.schedule());
+        if (!obstacle.empty()) {
+            return obstacle;
+        }
+    }
     return {};
 }
 
@@ -5152,7 +5219,7 @@ string eager_inline_obstacle(const Function &f) {
 
 Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     vector<Function> funcs;
-    map<string, Func> by_name;
+    map<string, Function> by_name;
     for (const Func &f : fs) {
         user_assert(f.defined())
             << "eager_inline() was passed an undefined Func.\n";
@@ -5160,8 +5227,9 @@ Stage &Stage::eager_inline(const std::vector<Func> &fs) {
         user_assert(obstacle.empty())
             << "eager_inline() cannot inline " << f.name() << obstacle;
         validate_schedule_inlined_function(f.function(), "inlined by eager_inline()");
-        funcs.push_back(f.function());
-        by_name.emplace(f.name(), f);
+        Function fn = fold_pointwise_updates(f.function());
+        funcs.push_back(fn);
+        by_name.emplace(f.name(), fn);
     }
 
     // Inlining rewrites this stage's definition in place, replacing every direct
@@ -5176,7 +5244,7 @@ Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     for (const string &name : order) {
         auto it = by_name.find(name);
         if (it != by_name.end()) {
-            Internal::inline_function(definition, it->second.function());
+            Internal::inline_function(definition, it->second);
         }
     }
     return *this;
@@ -5206,7 +5274,7 @@ Stage &Stage::eager_inline_all(const std::vector<Func> &except) {
             if (op->call_type == Call::Halide && op->func.defined() &&
                 !kept.count(op->name) && found.insert(op->name).second) {
                 Function g(op->func);
-                if (Internal::eager_inline_obstacle(g).empty()) {
+                if (g.can_be_inlined() && Internal::eager_inline_obstacle(g).empty()) {
                     fs.emplace_back(g);
                 } else {
                     kept.insert(op->name);
