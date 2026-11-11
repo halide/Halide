@@ -493,7 +493,9 @@ public:
      * stages being fused is a stage of an extern Func, this will throw an error.
      *
      * Note that the two stages that are fused together should have the same
-     * exact schedule from the outermost to the innermost fused dimension, and
+     * exact schedule from the outermost to the innermost fused dimension (the
+     * fused dimensions named alike, by the names the schedules give them: of
+     * Funcs over differently named Vars, those of a split, fuse or rename), and
      * the stage we are calling compute_with on should not have specializations,
      * e.g. f2.compute_with(f1, x) is allowed only if f2 has no specializations.
      *

@@ -135,6 +135,7 @@ tests(
     compute_with_fuse_in_specialization.cpp
     compute_with_in.cpp
     compute_with_inlined.cpp
+    compute_with_renamed_dims.cpp
     computed_index.cpp
     concat.cpp
     constant_blob_placement.cpp

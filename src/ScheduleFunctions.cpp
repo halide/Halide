@@ -2665,10 +2665,12 @@ void validate_fused_group_schedule_helper(const string &fn,
         for (int i = 0; i < n_fused; ++i) {
             const Dim &d1 = dims_1[start_fuse_1 + i];
             const Dim &d2 = dims_2[start_fuse_2 + i];
-            user_assert(var_name_match(d1.var, d2.var)) << "Invalid compute_with: names of dim "
-                                                        << i << " of " << p.func_1 << ".s"
-                                                        << p.stage_1 << "(" << d1.var << ") and " << p.func_2
-                                                        << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+            // (by the names a schedule gives them: a dim split or renamed
+            // from differently named pure Vars still fuses)
+            user_assert(split_string(d1.var, ".").back() == split_string(d2.var, ".").back()) << "Invalid compute_with: names of dim "
+                                                                                              << i << " of " << p.func_1 << ".s"
+                                                                                              << p.stage_1 << "(" << d1.var << ") and " << p.func_2
+                                                                                              << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
             user_assert(d1.for_type == d2.for_type) << "Invalid compute_with: for types of dim "
                                                     << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
                                                     << d1.var << " is " << d1.for_type << ") and " << p.func_2
