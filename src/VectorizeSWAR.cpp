@@ -497,6 +497,18 @@ class LowerSWARVectors : public IRMutator {
             return narrow_both(op->a, op->b, Sub::make);
         } else if (const Mul *op = e.as<Mul>()) {
             return narrow_both(op->a, op->b, Mul::make);
+        } else if (const Div *op = e.as<Div>(); op && et.is_uint()) {
+            Type ut = t.with_code(Type::UInt);
+            Expr na = lossless_cast(ut, op->a), nb = lossless_cast(ut, op->b);
+            if (na.defined() && nb.defined()) {
+                return Cast::make(t, na / nb);
+            }
+        } else if (const Mod *op = e.as<Mod>(); op && et.is_uint()) {
+            if (auto m = is_const_power_of_two_integer(op->b); m && *m < t.bits()) {
+                Type ut = t.with_code(Type::UInt);
+                Expr na = narrow(op->a, ut);
+                return na.defined() ? Cast::make(t, na & make_const(ut, low_bits(*m))) : Expr();
+            }
         } else if (const Call *op = e.as<Call>();
                    op && op->is_intrinsic({Call::bitwise_and, Call::bitwise_or, Call::bitwise_xor, Call::bitwise_not})) {
             vector<Expr> args;
