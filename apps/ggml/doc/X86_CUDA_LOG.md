@@ -674,3 +674,33 @@ gemvs are within 1-4% either way with one row, so no rule.
 Checks: `--check` vec_dot 484, codec 714, mul_mat 1572 results, 0
 failures; Halide `correctness_{deinterleave*,x86_dot*,vector_reductions,
 mixed_sign_dot_product,...}` (14) and `simd_op_check_x86` pass.
+
+### 16x4 records for 32-value blocks (q4_0, q4_1, q8_0)
+
+GGML's q4_0 gemv at M = 1 (its AMX backend, 275 us at 4096² T1) beat ours
+(i4.4x8, 343 us): it packs 16 rows in 4-byte pieces (lanes are rows, the act
+broadcast). Our 16x4 layout (`Interleave{16, 4}`) already does this for q4_K,
+q5_K and iq4_xs; three new layout rows add it for q4_0, q4_1 and q8_0 (the
+harness's `interleave_fields` repack; no kernel code). Two generic schedule
+fixes it needed:
+
+- `tile_out`: a tile wider than 16 in n took the macro-tile path, which splits
+  m by 8; for a one-row gemv tile (the two-record `blocked_rows` tile, 32 rows)
+  that read output row -7 when M < 8 (`--check` caught it on the checked
+  kernel). The macro path now needs mt >= 8.
+- the two-record tile's task size (`rows`) is at least its `nt` (16 < 32
+  split n by 0).
+- `amx_recs` admits blocks of up to 64 values (as `amx_ok`): one tile op per
+  32-value block, so M >= 8 runs AMX on the records.
+
+G/H (GGML / ours), 4096², fastest of each side; before -> after (16x4):
+
+| | M=1 T1 | M=8 T1 | M=32 T1 | M=1 T12 | M=8 T12 | M=32 T12 | M=512 T12 |
+|---|---|---|---|---|---|---|---|
+| q4_0 | 0.79 -> 0.97 | 0.68 -> 1.00 | 0.83 -> 1.12 | 0.68 -> 1.02 | 0.85 -> 1.23 | 1.23 -> 1.43 | 1.33 -> 1.52 |
+| q4_1 | 0.89 -> 0.94 | 0.75 -> 0.83 | 0.81 -> 0.89 | 0.68 -> 1.02 | 0.88 -> 1.03 | 1.20 -> 1.29 | 1.12 -> 1.27 |
+| q8_0 | 1.16 (qsi8cx) | 0.85 -> 0.92 | 0.95 -> 1.01 | 1.71 (qsi8cx) | 1.04 -> 1.17 | 1.26 -> 1.33 | 1.22 -> 1.27 |
+
+q4_0 M=1 T1 4096x1024: 0.64 -> 0.88; T12: 1.21. `--check` mul_mat and codec,
+q4_0/q4_1/q8_0: 0 failures. M3 replay (982 Arm/Metal objects, HEAD vs this
+schedule.h): all byte-identical.

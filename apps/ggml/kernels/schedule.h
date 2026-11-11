@@ -258,8 +258,9 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     s.split(n, no, ni, ts.nt, st || whole_n ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
     s.split(m, mo, mi, ts.mt, st || guard_m ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
     s.reorder(ni, mi, mo, no);
-    if (ts.nt > 16 || ts.mt > 32) {
-        // (a macro tile, blocked_cols(): its copy in 16 x 8 pieces)
+    if ((ts.nt > 16 && ts.mt >= 8) || ts.mt > 32) {
+        // (a macro tile, blocked_cols(): its copy in 16 x 8 pieces; not a
+        // wide gemv tile, one row in m)
         VarOrRVar mii = row_var(out, st, "mii");
         Var nii("nii");
         s.split(ni, ni, nii, 16).split(mi, mi, mii, 8).reorder(nii, mii, ni, mi).vectorize(nii).unroll(mii);
@@ -2541,8 +2542,10 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
                   fmt.block % 4 == 0 && (fmt.block <= 64 || fmt.block % 64 == 0);
     // (records of 16 rows in 4-byte pieces: AMX's B tile layout, as GGML's
     // AMX buffer: M >= 16, and M = 8; the rest on the rows path, its gemv
-    // 1.3-1.6x GGML's AMX at M = 1, a 16-row tile op slower below M = 8)
-    bool amx_recs = integer && t.has_feature(Target::AVX512_SapphireRapids) && !whole && fmt.rows == 16 && fmt.chunk == 4 && fmt.per == 1 && fmt.block % 64 == 0;
+    // 1.3-1.6x GGML's AMX at M = 1, a 16-row tile op slower below M = 8;
+    // blocks of 32, q4_0's, as amx_ok: a tile op per block)
+    bool amx_recs = integer && t.has_feature(Target::AVX512_SapphireRapids) && !whole && fmt.rows == 16 && fmt.chunk == 4 && fmt.per == 1 &&
+                    (fmt.block <= 64 || fmt.block % 64 == 0);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
     bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
@@ -2631,6 +2634,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (decoded_codes(rs)) {
             Tiles r2 = rt;
             r2.nt = 2 * fmt.rows;
+            r2.rows = std::max(r2.rows, r2.nt);  // (a task a tile at least)
             Expr two = N % r2.nt == 0;
             if (fmt.row_bytes.defined()) two = two && (two_streams(fmt.row_bytes) || threads() > 4);
             blocked_rows(out, 2 * whole, dots[0], two, r2, r, fmt.block, fmt.chunk, rs);

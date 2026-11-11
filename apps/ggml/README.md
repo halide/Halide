@@ -261,8 +261,8 @@ GGML's `q6_K_8x8` (its 16 int8 scales per row regrouped across the rows, a
 sharing `ql`/`qh` bytes). With act records the gemm loops over such groups of
 sub-blocks (q4_K's pairs, q6_K's 128 values; fully unrolled, the codes' loads
 are scheduled early and spill), each unrolled with those reading the same bytes
-adjacent (`sharing_order`: q6_K's 0, 4, 2, 6, ...). `q4_K.16x4`, `q5_K.16x4`
-and `iq4_xs.16x4` (new layouts, not GGML's byte formats; `Interleave{16, 4}`,
+adjacent (`sharing_order`: q6_K's 0, 4, 2, 6, ...). `q4_K.16x4`, `q5_K.16x4`,
+`iq4_xs.16x4`, `q4_0.16x4`, `q4_1.16x4` and `q8_0.16x4` (new layouts, not GGML's byte formats; `Interleave{16, 4}`,
 the harness's `ggml_repack` transcribing it) put 16 rows' 4-byte pieces
 adjacent, AMX's B tile layout as GGML's AMX buffer prepacks them: on AMX
 (`blocked_amx`, `packed`) each block's codes decode in place to dense tiles

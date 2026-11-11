@@ -12,7 +12,8 @@
 //   CPU;
 // - make_block_q4_1x4: the harness's own x4 of q4_1, which GGML does not
 //   repack (Interleave's layout);
-// - interleave_fields: the harness's own 16x4 of q4_K, q5_K and iq4_xs
+// - interleave_fields: the harness's own 16x4 of q4_0, q4_1, q8_0, q4_K, q5_K
+//   and iq4_xs
 //   (Interleave's layout: AMX's B tile, 16 rows' 4 bytes per K step; GGML's
 //   AMX buffer packs them its own way);
 // - ggml_repack_live: the bytes GGML itself repacks to, read back from its
@@ -518,13 +519,17 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
         repack_rows<8>((const block_q6_K *)src, dst, N, K / QK_K, [c](block_q6_K *in) { return make_block_q6_Kx8(in, c); });
         return true;
     }
-    if (f.codes.empty() && f.rows == 16 && c == 4 && N % 16 == 0 && K % QK_K == 0) {
+    if (f.codes.empty() && f.rows == 16 && c == 4 && N % 16 == 0) {
         std::vector<std::pair<int, int>> fields;
+        int block = QK_K;
+        if (t == GGML_TYPE_Q4_0) fields = {{2, 1}, {1, QK4_0 / 2}}, block = QK4_0;
+        if (t == GGML_TYPE_Q4_1) fields = {{2, 1}, {2, 1}, {1, QK4_0 / 2}}, block = QK4_0;  // (QK4_1 == QK4_0)
+        if (t == GGML_TYPE_Q8_0) fields = {{2, 1}, {1, QK8_0}}, block = QK8_0;
         if (t == GGML_TYPE_Q4_K) fields = {{2, 1}, {2, 1}, {1, 12}, {1, QK_K / 2}};
         if (t == GGML_TYPE_Q5_K) fields = {{2, 1}, {2, 1}, {1, 12}, {1, QK_K / 8}, {1, QK_K / 2}};
         if (t == GGML_TYPE_IQ4_XS) fields = {{2, 1}, {1, 2}, {1, QK_K / 64}, {1, QK_K / 2}};
-        if (fields.empty()) return false;
-        interleave_fields(src, dst, N, K / QK_K, 16, 4, fields);
+        if (fields.empty() || K % block) return false;
+        interleave_fields(src, dst, N, K / block, 16, 4, fields);
         return true;
     }
     if (t != GGML_TYPE_Q4_0 || f.codes != "i4" || N % f.rows || K % QK4_0) return false;
