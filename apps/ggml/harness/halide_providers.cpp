@@ -391,21 +391,15 @@ void register_halide_providers() {
     // else, above 16, the f16 gemm (<type>:f16 on f32:f16, `h`). by_m: the
     // types where another of the three is more than 3% faster at M = 16,
     // 32, 64, 128 or 512 on 4096 x 4096 (RTX 3090), a letter each; an M
-    // from 16 takes the nearest of those five's. (Not q6_K's f16 gemm at M
-    // = 32 and 64, 4-8% faster there: on 4096 x 1024 x 32 and 2048 x 512 x
-    // 32 its integer gemm is 1.5-1.7x faster.)
+    // from 16 takes the nearest of those five's.
     static const std::map<std::string, std::string> by_m = {
         {"iq1_m", "riiih"},
         {"iq1_s", "rrhhh"},
         {"iq2_s", "iiiih"},
         {"iq4_nl", "riiii"},
         {"iq4_xs", "rihii"},
+        {"q2_0", "iiihi"},
         {"q2_K", "hhhhh"},
-        {"q4_1", "riihi"},
-        {"q4_K", "iiihi"},
-        {"q5_1", "riiii"},
-        {"q5_K", "iiihi"},
-        {"q6_K", "iiihi"},
     };
     auto make = [](const std::string &name) {
         for (const Provider &p : providers()) {
