@@ -1795,3 +1795,91 @@ scorecard below is the by-M providers' and GGML's cells of the types worked on.
   needs a profiler's view; q4_1 and q5_1 in the offset term's cost per block and
   the sum's second kernel (fusing it needs the rows to read a copy of the
   encoder of their own); the K-quants as Phase 6.
+
+## Phase 8: the M = 512 kernel's shared-memory bank conflicts (RTX 3090)
+
+Same machine and conventions as Phase 7. The target: q4_0 at M = 512 at 0.95 of
+GGML, by finding why the generated gemm kernel (~204 us) waits where the
+hand-written one on the same tiles (`mq.cu`, 64 x 128, mma.sync, 32 x 64 warps)
+does not.
+
+- The SASS of the two K-step loops (`cuobjdump`, sm_86) is alike: 1182 against
+  1208 instructions per step and warp, the same 64 `IMMA.16832`, 256 each of
+  `I2FP`, `FMUL` and `FFMA`, the same order (the acts' copies, the weights'
+  loads, which ptxas issues early in both, their decoding and stores, the wait
+  and the barrier, then the multiplies interleaved with their scaling), no
+  spills, 167 against 168 registers and two blocks an SM. What differs is where
+  the shared accesses fall. Emulating a warp's address arithmetic over a step's
+  PTX and counting each access's wavefronts: the generated kernel's 8 copies of
+  the acts take 128 wavefronts (32 without conflicts) and its 16 stores of the
+  weights' codes 64 (16), each 4-way conflicted (so are the 2 of the weights'
+  scales); the operand and factor loads have none. The lanes of a copy or store
+  span the step's 4 blocks, stored a block's rows apart (128 or 64 rows of 48
+  bytes: multiples of 128 bytes), so all in the same banks; the hand-written
+  kernel stores a row's blocks next to each other.
+
+- Tried, one at a time (q4_0 on `f32:q8_0.soa` at 4096^2, M = 512; us of the
+  gemm kernel by CUPTI, two interleaved passes, +-3):
+
+  | change                                                                                      | effect                                                         |
+  | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+  | the operands' blocks 2 rows further apart (130 x 48 and 66 x 48 bytes): conflict-free       | 203-213 -> 185                                                 |
+  | then the weights' scales' blocks 72 rows apart (their 2 stores' 4-way conflicts)            | 184.5: not kept                                                |
+  | the weights' scales staged along the row (and their tile strided along both dimensions)     | 183-186: not kept (the core generalization it needed not made) |
+  | the acts' scales' 4 loads a step replaced by a constant / and their stores dropped          | 180 / 182-188: their cost, at most ~4                          |
+  | the scale loads hoisted above the weights' decoding in the PTX                              | 185: ptxas already issues them first                           |
+  | `cp.async.cg` against `.ca`; `ld.global` against `ld.global.nc`                             | 204-212; 186: neither                                          |
+  | without the multiplies (their operands their results)                                       | 125-131 (Phase 6: 145; staging alone 113)                      |
+  | 64-value steps (20 KB, 153 registers: three blocks an SM)                                   | 196-197                                                        |
+  | the acts' rows unpadded (32 bytes: 2-way conflicted loads, 32 KB)                           | 186                                                            |
+  | the weights' rows of 36 bytes too (29 KB)                                                   | 189-194                                                        |
+  | 8 warps: 64 x 128 of 32 x 32; 64 x 128 of 16 x 64; 128 x 128 and 128 x 64 on 64-value steps | 199-204, 220-228, 226-241, 240-251                             |
+  | 128 x 128 on 128-value steps (54 KB, the >48 KB opt-in of Phase 7, core)                    | 188 (a call 0.210 against 0.204 ms): not kept                  |
+
+  So the conflicts were the lever: the kernel now runs in 185 us against the
+  hand-written kernel's 171-174 (re-measured; Phase 6's 161 was another of its
+  variants). Occupancy is not one (three blocks an SM on smaller steps or
+  unpadded rows: no faster), nor the scales' loads' placement.
+
+- `gpu_int_gemm`: each staged operand's blocks a block's rows and `pad_rows` (2)
+  more apart, where a weight block is one block (the K-quants', iq4_xs', iq2_s'
+  and iq1_m's 64 x 128 tiles would no longer fit 48 KB). Not on the one-warp 32
+  x 32 tiles of the K split at M = 32 to 63: their 768 more bytes fit 6 blocks
+  an SM instead of 7, and their 512 blocks at N = 4096 take two waves (M = 32
+  0.030 -> 0.033 ms). The integer gemm of q4_0, q8_0, q5_0, q4_1, q5_1, iq4_nl
+  and mxfp4 changed; iq4_nl's by-M provider at M = 16 / 64 / 128 / 512 0.0457 /
+  0.0686 / 0.0953 / 0.279 -> 0.0455 / 0.0665 / 0.0884 / 0.260 ms, mxfp4's 0.047
+  / 0.082 / 0.116 / 0.304 -> 0.044 / 0.073 / 0.103 / 0.282.
+
+- Scorecard, by-M provider (ms; GGML / it; Phase 7's ratio and ms), 4096^2, f32
+  acts, --rounds 5, medians of 3 passes:
+
+  | type | M = 16                     | M = 32                     | M = 64                     | M = 128                    | M = 512                    |
+  | ---- | -------------------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
+  | q4_0 | 0.0241 (1.22; 1.16, .0255) | 0.0303 (1.18; 1.18, .0303) | 0.0425 (1.08; 1.04, .0442) | 0.0638 (1.14; 1.07, .0683) | 0.2066 (0.92; 0.83, .2269) |
+  | q8_0 | 0.0347 (1.14; 1.12, .0353) | 0.0394 (1.09; 1.10, .0394) | 0.0520 (1.05; 0.98, .0558) | 0.0664 (1.21; 1.12, .0713) | 0.2198 (0.94; 0.85, .2422) |
+  | q5_0 | 0.0296 (1.12; 1.12, .0298) | 0.0365 (1.05; 1.05, .0365) | 0.0487 (1.04; 1.04, .0488) | 0.0685 (1.12; 1.07, .0718) | 0.2273 (0.88; 0.81, .2452) |
+  | q4_1 | 0.0310 (1.00; 0.96, .0324) | 0.0410 (0.84; 0.84, .0410) | 0.0523 (0.93; 0.90, .0544) | 0.0765 (1.00; 0.94, .0810) | 0.2561 (0.82; 0.75, .2776) |
+  | q5_1 | 0.0335 (1.07; 1.01, .0355) | 0.0412 (0.91; 0.87, .0431) | 0.0570 (0.91; 0.92, .0564) | 0.0796 (1.02; 0.97, .0839) | 0.2697 (0.83; 0.77, .2883) |
+  | q4_K | 0.0302 (1.00; 1.00, .0302) | 0.0421 (0.84; 0.83, .0422) | 0.0689 (0.72; 0.72, .0689) | 0.0910 (0.83; 0.83, .0909) | 0.2827 (0.73; 0.73, .2837) |
+  | q5_K | 0.0308 (1.07; 1.06, .0309) | 0.0433 (0.89; 0.85, .0453) | 0.0699 (0.74; 0.74, .0699) | 0.0932 (0.84; 0.84, .0933) | 0.2910 (0.74; 0.74, .2913) |
+  | q6_K | 0.0314 (1.16; 1.16, .0315) | 0.0504 (0.86; 0.86, .0505) | 0.0664 (0.86; 0.86, .0663) | 0.0942 (0.89; 0.89, .0943) | 0.3200 (0.74; 0.74, .3190) |
+  | q3_K | 0.0264 (1.12; 1.12, .0265) | 0.0425 (0.86; 0.86, .0426) | 0.0645 (0.81; 0.81, .0648) | 0.0923 (0.91; 0.91, .0922) | 0.3137 (0.75; 0.75, .3139) |
+
+  No cell more than 3% slower than Phase 7's. f32 weights as `f32:f16` on
+  `f32:f16` acts at M = 128 0.1673 ms (0.1671); f16 x f16 at M = 64, 128, 512
+  0.0597, 0.0971, 0.3079 (0.0598, 0.0967, 0.3077). The by-M table is unchanged.
+
+- Gate: `--check` of the 7 changed libraries' CUDA providers on 96 x 512 x 16,
+  17, 32, 256 x 1000 x 64, 200 and 1024 x 1024 x 512 (f32 acts): 420 results, 0
+  failures. `ctest -L ggml_cuda` 67/67. The 82 Metal libraries' `.stmt` are
+  byte-identical to Phase 7's; of the CUDA ones only those 7 differ.
+
+- Where the rest is (q4_0 at M = 512 0.92; ~6 us of 204 to 0.95): the acts'
+  scales, loaded from their planar f16 field per step (~4 us; inside the act
+  rows, as GGML's and the hand-written kernel's, they would be copied with the
+  codes: an act format of records, not a schedule); the steps' fixed costs
+  (64-value steps +11 us), which more K per step would amortize but for shared
+  memory (two blocks an SM at 128 values; 128 x 128 tiles, one, are no faster)
+  and a second buffer would hide; the act kernel (16.4 us against the
+  hand-written quantizer's 14.8).

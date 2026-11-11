@@ -614,15 +614,15 @@ f16 on f32 acts (`f32:f16`) 0.89, 0.90, 0.90, 0.90, 0.96, 1.08, 0.92, 0.80,
 0.64; bf16 x bf16 1.08, 1.02, 1.01, 1.02, 1.07, 0.98, 0.89, 0.76, 1.00; f32
 weights (`f32:f16`) 0.89, 0.90, 0.90, 0.81, 0.96, 1.04, 0.95, 0.91, 1.34; on f32
 acts, the best library (from M = 16 the by-M provider), q4_0 0.93, 0.92, 0.89,
-1.15, 1.16, 1.18, 1.04, 1.07, 0.83; q8_0 0.94, 0.95, 0.84, 0.96, 1.12, 1.10,
-0.98, 1.12, 0.85; q4_K 0.78, 0.74, 0.85, 0.97, 1.00, 0.83, 0.72, 0.83, 0.73;
+1.15, 1.22, 1.18, 1.08, 1.14, 0.92; q8_0 0.94, 0.95, 0.84, 0.96, 1.14, 1.09,
+1.05, 1.21, 0.94; q4_K 0.78, 0.74, 0.85, 0.97, 1.00, 0.83, 0.72, 0.83, 0.73;
 q6_K 0.79, 0.69, 0.73, 0.95, 1.16, 0.86, 0.86, 0.89, 0.74; iq2_xs 0.46, 0.47,
-0.57, 0.70, 0.50, 0.54, 0.57, 0.56, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 7)
+0.57, 0.70, 0.50, 0.54, 0.57, 0.56, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 8)
 has every type, the `full` preset's layers and where the rest of the time is:
-from M = 16 the integer gemm kernel (q4_0's at 1.06-1.3x the time of a
-hand-written kernel of GGML's formulation, whose staging it now matches; not the
-fit of its tiles to the SMs, at M = 512 its time follows its work), most at M =
-512; q8_1's sum a second act kernel (q4_1, q5_1, q4_K, q5_K); the lut and
+from M = 16 the integer gemm kernel (q4_0's at M = 512 1.07x the time of a
+hand-written kernel of GGML's formulation, the acts' scales loaded from their
+planar field; not the fit of its tiles to the SMs, at M = 512 its time follows
+its work), most at M = 512; q8_1's sum a second act kernel (q4_1, q5_1, q4_K, q5_K); the lut and
 codebook formats' decodes (iq4_nl, mxfp4, iq4_xs, iq2_s: 0.50-0.72); below 16,
 the second launch, the rows' cost per act column and the grid formats' decodes;
 on f16 from M = 64, cuBLAS's f16 accumulators.
