@@ -770,3 +770,22 @@ every block (`vpaddd` shuffles, `vcvtdq2ps`, `vmulss`, `vfmadd231ss`), where
 GGML keeps it a vector accumulator across blocks and reduces once. Keeping
 it a vector needs `derived_sums()` to rfactor the act sub-blocks before it
 hoists the block's float factor; not attempted.
+
+### Paper sweep (final)
+
+`doc/data/paper-sweep/final/` (run.sh, then rerun.sh: 453 cases below 0.97
+re-run, minimum kept; `summary.txt` has the tables and every case below
+0.95). G/H, held-out layout, matched (>= 0.95) / median:
+
+| op | T | blocked-dot | format-specific |
+|---|---|---|---|
+| mul_mat (in L3) | 1 | 71.2% / 1.187 | 48.5% / 0.934 |
+| mul_mat (in L3) | 12 | 77.4% / 1.367 | 72.6% / 1.128 |
+| mul_mat (> L3) | 1 | 79.9% / 1.240 | 63.6% / 1.006 |
+| mul_mat (> L3) | 12 | 80.4% / 1.242 | 85.9% / 1.398 |
+| vec_dot | 1 | | 38.9% / 0.908 |
+
+By M (in L3 / > L3, blocked-dot median): M = 1 0.94-0.96, M = 8 1.40-1.57,
+M = 32 1.26-1.73, M = 512 0.95-1.10. M = 1 and vec_dot remain the gap.
+q4_K/q5_K/iq4_xs's held-out layout is 16x4 (it wins M = 1 and T12); at T1
+M >= 32 it trails their aos layout's blocked_cols (q4_K 0.66 vs 0.86).
