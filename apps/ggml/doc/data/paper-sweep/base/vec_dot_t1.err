@@ -1,0 +1,4 @@
+# 23ce3ecee 2026-11-10T18:53:57-05:00 --op vec_dot --shapes 4096x1x1 --threads 1
+405 results, 0 failures
+# 23ce3ecee 2026-11-10T18:57:41-05:00 --op vec_dot --shapes 14336x1x1 --threads 1
+405 results, 0 failures

@@ -926,6 +926,17 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     int per = integer ? 4 : 1, vec = std::min(t.natural_vector_size<int8_t>(), wide);
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
+    // With VNNI, signed codes (no offset term: q3_K's, the iq formats') keep
+    // the sub-block scales in their lanes' products, at GGML's AVX step of
+    // 32: CodeGen_X86 sums them as GGML's AVX2 does (|codes| x signed acts
+    // by pmaddubsw, then pmaddwd by the scales) in place of a vpdpbusd and
+    // a vpmulld per sub-block (one-thread vec_dot: iq2_xs 0.82 -> 0.96x of
+    // GGML, iq4_xs 1.0 -> 1.2x, q3_K 0.73 -> 0.79x). Not unsigned ones'
+    // (q4_K's, affine), whose dot vpdpbusd takes as is (0.91 -> 0.77x)
+    if (gemv && integer && vnni && sub && sub <= 32 && !float_sub_scales(rs) && !affine(rs)) {
+        wide = vec = std::min(t.natural_vector_size<int8_t>(), 32);
+        sub = 0;
+    }
     int nsub = sub ? block / sub : 0;
     if (nsub && integer && float_sub_scales(rs) && nsub * ts.interleave == vec / per) {
         blocked_sub_lanes(out, st, s, dot.args()[0], dot.args()[1], r, ts, sub, nsub, vec, per, rs, t);
