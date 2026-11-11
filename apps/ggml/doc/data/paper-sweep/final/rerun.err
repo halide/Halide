@@ -1,0 +1,946 @@
+# rerun bf16 mul_mat 4096x1024x1 12
+5 results, 0 failures
+# rerun bf16 mul_mat 4096x1024x1 12
+5 results, 0 failures
+# rerun f16 vec_dot 14336x1x1 1
+18 results, 0 failures
+# rerun f16 vec_dot 4096x1x1 1
+18 results, 0 failures
+# rerun f16 mul_mat 14336x4096x1 1
+8 results, 0 failures
+# rerun f16 mul_mat 4096x1024x1 12
+8 results, 0 failures
+# rerun f16 mul_mat 4096x1024x32 1
+8 results, 0 failures
+# rerun f16 mul_mat 4096x1024x512 1
+8 results, 0 failures
+# rerun f16 mul_mat 4096x1024x8 1
+8 results, 0 failures
+# rerun f16 mul_mat 4096x14336x1 1
+8 results, 0 failures
+# rerun f16 mul_mat 4096x4096x8 1
+8 results, 0 failures
+# rerun iq1_m mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq1_m vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun iq1_m mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq1_m vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun iq1_m mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq1_m mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq1_s vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun iq1_s mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq1_s vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun iq1_s mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq1_s mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x4096x8 1
+6 results, 0 failures
+# rerun iq2_s vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun iq2_s mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq2_s vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun iq2_s mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq2_s mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x8 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 14336x4096x512 12
+6 results, 0 failures
+# rerun iq2_xs vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun iq2_xs mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq2_xs mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq2_xxs vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun iq2_xxs mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq2_xxs vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq2_xxs mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 14336x4096x8 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 14336x4096x8 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq3_s mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x512 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x8 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x8 1
+6 results, 0 failures
+# rerun iq3_xxs vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 14336x4096x8 1
+6 results, 0 failures
+# rerun iq3_xxs vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun iq3_xxs mul_mat 4096x4096x8 1
+6 results, 0 failures
+# rerun iq4_nl mul_mat 14336x4096x1 1
+10 results, 0 failures
+# rerun iq4_nl mul_mat 14336x4096x1 12
+10 results, 0 failures
+# rerun iq4_nl mul_mat 4096x1024x1 1
+10 results, 0 failures
+# rerun iq4_nl mul_mat 4096x1024x1 12
+10 results, 0 failures
+# rerun iq4_nl mul_mat 4096x14336x1 1
+10 results, 0 failures
+# rerun iq4_nl mul_mat 4096x14336x1 12
+10 results, 0 failures
+# rerun iq4_nl mul_mat 4096x4096x1 1
+10 results, 0 failures
+# rerun iq4_nl mul_mat 4096x4096x1 12
+10 results, 0 failures
+# rerun iq4_xs mul_mat 14336x4096x32 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 14336x4096x512 12
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x1024x32 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x1024x512 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x14336x32 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x14336x512 12
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x4096x32 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x4096x512 12
+9 results, 0 failures
+# rerun iq4_xs mul_mat 14336x4096x512 12
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x1024x32 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x1024x512 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x1024x512 12
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x14336x512 12
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x4096x32 1
+9 results, 0 failures
+# rerun iq4_xs mul_mat 4096x4096x512 12
+9 results, 0 failures
+# rerun mxfp4 mul_mat 14336x4096x1 1
+10 results, 0 failures
+# rerun mxfp4 mul_mat 14336x4096x1 12
+10 results, 0 failures
+# rerun mxfp4 mul_mat 4096x1024x1 1
+10 results, 0 failures
+# rerun mxfp4 mul_mat 4096x1024x1 12
+10 results, 0 failures
+# rerun mxfp4 mul_mat 4096x14336x1 1
+10 results, 0 failures
+# rerun mxfp4 mul_mat 4096x14336x1 12
+10 results, 0 failures
+# rerun mxfp4 mul_mat 4096x4096x1 1
+10 results, 0 failures
+# rerun mxfp4 mul_mat 4096x4096x1 12
+10 results, 0 failures
+# rerun nvfp4 mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun nvfp4 vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun nvfp4 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun nvfp4 mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun nvfp4 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x4096x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x4096x1 12
+9 results, 0 failures
+# rerun q1_0 vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x32 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x8 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 14336x4096x8 12
+9 results, 0 failures
+# rerun q1_0 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x32 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x32 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x1024x512 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x32 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x8 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x14336x8 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x4096x1 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x4096x1 12
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x4096x32 1
+9 results, 0 failures
+# rerun q1_0 mul_mat 4096x4096x8 12
+9 results, 0 failures
+# rerun q2_K mul_mat 14336x4096x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 14336x4096x1 12
+7 results, 0 failures
+# rerun q2_K mul_mat 14336x4096x8 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x1 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x8 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x8 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x14336x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x14336x1 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x14336x8 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x14336x8 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x4096x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x4096x1 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x4096x8 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x4096x8 12
+7 results, 0 failures
+# rerun q2_K vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q2_K mul_mat 14336x4096x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 14336x4096x1 12
+7 results, 0 failures
+# rerun q2_K vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x1 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x512 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x1024x512 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x14336x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x14336x1 12
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x4096x1 1
+7 results, 0 failures
+# rerun q2_K mul_mat 4096x4096x1 12
+7 results, 0 failures
+# rerun q3_K mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x32 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x32 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x32 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x32 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun q3_K vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q3_K mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun q3_K vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x32 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x512 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x512 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x32 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x32 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x14336x512 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x32 1
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x32 12
+6 results, 0 failures
+# rerun q3_K mul_mat 4096x4096x512 12
+6 results, 0 failures
+# rerun q4_0 mul_mat 14336x4096x1 1
+18 results, 0 failures
+# rerun q4_0 mul_mat 14336x4096x8 1
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x1024x1 1
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x1024x1 12
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x1024x8 1
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x14336x1 1
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x4096x1 1
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x4096x1 12
+18 results, 0 failures
+# rerun q4_0 mul_mat 4096x4096x8 1
+18 results, 0 failures
+# rerun q4_0 vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q4_0 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q4_1 mul_mat 14336x4096x8 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x1024x1 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x1024x1 12
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x1024x32 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x1024x512 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x1024x8 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x14336x1 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x14336x32 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x4096x1 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x4096x1 12
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x4096x32 1
+11 results, 0 failures
+# rerun q4_1 mul_mat 4096x4096x8 1
+11 results, 0 failures
+# rerun q4_1 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q4_K mul_mat 14336x4096x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 14336x4096x32 12
+13 results, 0 failures
+# rerun q4_K mul_mat 14336x4096x512 12
+13 results, 0 failures
+# rerun q4_K mul_mat 14336x4096x8 1
+13 results, 0 failures
+# rerun q4_K mul_mat 14336x4096x8 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x32 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x512 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x512 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x8 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x8 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x32 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x512 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x8 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x8 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x32 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x512 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x8 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x8 12
+13 results, 0 failures
+# rerun q4_K vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q4_K mul_mat 14336x4096x512 12
+13 results, 0 failures
+# rerun q4_K vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x512 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x1024x512 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x14336x512 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x32 1
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x32 12
+13 results, 0 failures
+# rerun q4_K mul_mat 4096x4096x512 12
+13 results, 0 failures
+# rerun q5_0 mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q5_0 vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q5_0 mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun q5_0 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q5_0 mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun q5_0 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q5_1 mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q5_1 vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q5_1 mul_mat 14336x4096x1 1
+6 results, 0 failures
+# rerun q5_1 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q5_1 mul_mat 4096x1024x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x14336x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x4096x1 1
+6 results, 0 failures
+# rerun q5_1 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun q5_K mul_mat 14336x4096x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 14336x4096x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x32 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x512 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x8 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x8 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x14336x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x14336x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x4096x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x4096x32 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x4096x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x4096x8 1
+12 results, 0 failures
+# rerun q5_K mul_mat 14336x4096x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x512 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x1024x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x14336x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x14336x512 12
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x4096x32 1
+12 results, 0 failures
+# rerun q5_K mul_mat 4096x4096x512 12
+12 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x1 1
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x1 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x512 1
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x8 1
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x8 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x14336x512 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x14336x8 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x4096x1 1
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x4096x1 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x4096x512 12
+10 results, 0 failures
+# rerun q6_K vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun q6_K vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x1 1
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x1 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x512 1
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x1024x512 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x14336x512 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x4096x1 12
+10 results, 0 failures
+# rerun q6_K mul_mat 4096x4096x512 12
+10 results, 0 failures
+# rerun q8_0 mul_mat 14336x4096x1 1
+19 results, 0 failures
+# rerun q8_0 mul_mat 4096x1024x1 12
+19 results, 0 failures
+# rerun q8_0 mul_mat 4096x1024x512 1
+19 results, 0 failures
+# rerun q8_0 mul_mat 4096x1024x8 1
+19 results, 0 failures
+# rerun q8_0 mul_mat 4096x1024x8 12
+19 results, 0 failures
+# rerun q8_0 mul_mat 4096x14336x1 1
+19 results, 0 failures
+# rerun q8_0 mul_mat 4096x4096x8 1
+19 results, 0 failures
+# rerun tq1_0 mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 14336x4096x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 14336x4096x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x1024x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x14336x1 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x14336x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x4096x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x4096x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 14336x4096x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 14336x4096x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x1024x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x1024x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x14336x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x14336x8 12
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x4096x8 1
+6 results, 0 failures
+# rerun tq1_0 mul_mat 4096x4096x8 12
+6 results, 0 failures
+# rerun tq2_0 mul_mat 14336x4096x1 12
+6 results, 0 failures
+# rerun tq2_0 mul_mat 4096x1024x1 12
+6 results, 0 failures
+# rerun tq2_0 mul_mat 4096x4096x1 12
+6 results, 0 failures
+# rerun tq2_0 vec_dot 14336x1x1 1
+15 results, 0 failures
+# rerun tq2_0 vec_dot 4096x1x1 1
+15 results, 0 failures
+# rerun tq2_0 mul_mat 4096x4096x1 12
+6 results, 0 failures

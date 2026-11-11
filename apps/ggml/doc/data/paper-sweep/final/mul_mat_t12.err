@@ -1,0 +1,32 @@
+# f1000684e 2026-11-10T23:27:32-05:00 --op mul_mat --shapes 4096x4096x1 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-10T23:35:22-05:00 --op mul_mat --shapes 4096x1024x1 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-10T23:43:16-05:00 --op mul_mat --shapes 4096x14336x1 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-10T23:54:18-05:00 --op mul_mat --shapes 14336x4096x1 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T00:05:11-05:00 --op mul_mat --shapes 4096x4096x8 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T00:12:47-05:00 --op mul_mat --shapes 4096x1024x8 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T00:19:05-05:00 --op mul_mat --shapes 4096x14336x8 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T00:32:58-05:00 --op mul_mat --shapes 14336x4096x8 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T00:47:03-05:00 --op mul_mat --shapes 4096x4096x32 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T00:56:44-05:00 --op mul_mat --shapes 4096x1024x32 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T01:03:10-05:00 --op mul_mat --shapes 4096x14336x32 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T01:26:06-05:00 --op mul_mat --shapes 14336x4096x32 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T01:48:55-05:00 --op mul_mat --shapes 4096x4096x512 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T01:59:46-05:00 --op mul_mat --shapes 4096x1024x512 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T02:21:23-05:00 --op mul_mat --shapes 4096x14336x512 --threads 12
+226 results, 0 failures
+# f1000684e 2026-11-11T02:53:38-05:00 --op mul_mat --shapes 14336x4096x512 --threads 12
+226 results, 0 failures

@@ -1,0 +1,461 @@
+# x86 CPU paper sweep at f1000684e (binary built at 57f7ffb08; later commits docs/scripts only)
+# python3 analyze.py paper-sweep/final/*.csv --l3   (mul_mat>L3: 4096x14336, 14336x4096)
+op,threads,stratum,cases,matched,pct,median
+mul_mat,1,blocked-dot,312,222,71.2,1.187
+mul_mat,1,format-specific,66,32,48.5,0.934
+mul_mat,12,blocked-dot,359,278,77.4,1.367
+mul_mat,12,format-specific,73,53,72.6,1.128
+mul_mat>L3,1,blocked-dot,269,215,79.9,1.240
+mul_mat>L3,1,format-specific,55,35,63.6,1.006
+mul_mat>L3,12,blocked-dot,368,296,80.4,1.242
+mul_mat>L3,12,format-specific,64,55,85.9,1.398
+vec_dot,1,format-specific,54,21,38.9,0.908
+
+# --l3 --by-m
+op,threads,stratum,cases,matched,pct,median
+mul_mat>L3@M1,1,blocked-dot,92,52,56.5,0.962
+mul_mat>L3@M1,1,format-specific,16,8,50.0,0.953
+mul_mat>L3@M1,12,blocked-dot,97,58,59.8,1.003
+mul_mat>L3@M1,12,format-specific,11,7,63.6,1.262
+mul_mat>L3@M32,1,blocked-dot,90,86,95.6,1.274
+mul_mat>L3@M32,1,format-specific,18,11,61.1,1.052
+mul_mat>L3@M32,12,blocked-dot,90,88,97.8,1.353
+mul_mat>L3@M32,12,format-specific,18,17,94.4,1.446
+mul_mat>L3@M512,12,blocked-dot,95,67,70.5,1.097
+mul_mat>L3@M512,12,format-specific,13,12,92.3,1.530
+mul_mat>L3@M8,1,blocked-dot,87,77,88.5,1.501
+mul_mat>L3@M8,1,format-specific,21,16,76.2,1.094
+mul_mat>L3@M8,12,blocked-dot,86,83,96.5,1.570
+mul_mat>L3@M8,12,format-specific,22,19,86.4,1.300
+mul_mat@M1,1,blocked-dot,89,41,46.1,0.939
+mul_mat@M1,1,format-specific,19,10,52.6,0.980
+mul_mat@M1,12,blocked-dot,92,46,50.0,0.950
+mul_mat@M1,12,format-specific,16,6,37.5,0.905
+mul_mat@M32,1,blocked-dot,90,81,90.0,1.258
+mul_mat@M32,1,format-specific,18,9,50.0,0.961
+mul_mat@M32,12,blocked-dot,88,86,97.7,1.733
+mul_mat@M32,12,format-specific,20,16,80.0,1.190
+mul_mat@M512,1,blocked-dot,47,23,48.9,0.947
+mul_mat@M512,1,format-specific,7,4,57.1,0.961
+mul_mat@M512,12,blocked-dot,93,65,69.9,1.068
+mul_mat@M512,12,format-specific,15,14,93.3,1.361
+mul_mat@M8,1,blocked-dot,86,77,89.5,1.403
+mul_mat@M8,1,format-specific,22,9,40.9,0.913
+mul_mat@M8,12,blocked-dot,86,81,94.2,1.571
+mul_mat@M8,12,format-specific,22,17,77.3,1.069
+vec_dot@M1,1,format-specific,54,21,38.9,0.908
+
+# cases below 0.95 (--l3 --cases)
+0.656 blocke q4_K/q8_K/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.659 blocke q5_K/q8_K/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.696 blocke iq1_m/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.697 blocke iq1_m/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.705 blocke iq1_s/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.705 blocke iq1_s/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.709 blocke iq4_xs/q8_K/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.746 blocke q3_K/f32/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.749 blocke iq3_xxs/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.755 blocke iq2_xs/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xs
+0.766 blocke iq2_xxs/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.769 blocke q5_K/f32/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.771 blocke q3_K/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.773 blocke q2_K/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.781 blocke iq2_s/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_s
+0.784 blocke q2_K/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.787 blocke iq3_s/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.791 blocke q6_K/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:q6_K
+0.791 blocke q3_K/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.796 blocke q2_K/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.798 blocke q2_K/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.798 blocke iq1_s/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.800 blocke iq1_m/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq1_m
+0.816 blocke iq1_m/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.821 blocke iq1_m/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.830 blocke iq2_xs/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xs
+0.836 blocke q5_1/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.836 blocke iq2_xxs/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.837 blocke iq3_s/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.837 blocke iq2_xxs/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.838 blocke q4_K/q8_K/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.841 blocke q3_K/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.841 blocke iq3_xxs/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.841 blocke iq4_xs/f32/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.842 blocke iq2_s/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.843 blocke iq2_s/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_s
+0.843 blocke iq2_s/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.844 blocke iq2_s/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.846 blocke iq2_s/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.846 blocke q3_K/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.846 blocke iq2_xxs/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.847 blocke q5_1/q8_1/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.854 blocke q3_K/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.855 blocke q5_0/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.855 blocke iq1_m/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq1_m
+0.857 blocke q4_K/q8_K/4096/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.859 blocke q5_K/q8_K/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.859 blocke iq2_s/f32/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq2_s
+0.866 blocke nvfp4/q8_0/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.866 blocke q6_K/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.868 blocke q3_K/q8_K/4096/1024/32 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.870 blocke q3_K/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.872 blocke q5_K/q8_K/4096/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.873 blocke q3_K/q8_K/4096/4096/32 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.874 blocke q5_0/q8_0/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.876 blocke q6_K/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:q6_K
+0.877 blocke iq1_s/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.877 blocke iq2_xxs/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.878 blocke nvfp4/q8_0/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.879 blocke iq3_xxs/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.884 blocke q6_K/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.885 blocke iq2_xxs/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.887 blocke q5_1/q8_1/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.888 blocke iq3_xxs/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.890 blocke q5_0/q8_0/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.893 blocke q3_K/f32/4096/4096/32 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.898 blocke nvfp4/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.898 blocke iq3_xxs/q8_K/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.903 blocke iq2_xs/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.904 blocke iq2_xs/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.910 blocke nvfp4/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.910 blocke q5_0/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.912 blocke q1_0/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.914 blocke iq3_xxs/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.914 blocke iq3_xxs/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.921 blocke iq3_s/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.923 blocke q5_1/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.925 blocke iq3_xxs/f32/4096/4096/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.926 blocke iq3_xxs/q8_K/4096/4096/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.927 blocke q3_K/f32/4096/1024/32 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.929 blocke iq4_xs/q8_K/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.932 blocke iq3_xxs/f32/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.936 blocke tq1_0/f32/4096/4096/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.939 blocke tq1_0/q8_K/4096/4096/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.939 blocke q1_0/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.941 blocke q1_0/q8_0/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.941 blocke iq1_s/q8_K/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.943 blocke iq1_s/q8_K/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.946 blocke tq1_0/q8_K/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.947 blocke q2_K/q8_K/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu:tiled:q2_K
+0.685 format q4_K/f32/4096/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.714 format iq4_nl/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.723 format mxfp4/f32/4096/1024/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.729 format q4_K/f32/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.735 format q5_K/f32/4096/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.739 format q4_K/f32/4096/4096/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.753 format q4_K/f32/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.774 format q4_0/f32/4096/1024/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_0:gemv
+0.776 format q4_K/f32/4096/1024/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.787 format q5_K/f32/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.794 format mxfp4/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.796 format q4_1/f32/4096/1024/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.802 format iq4_nl/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.806 format f16/f32/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemm
+0.817 format q4_1/f32/4096/4096/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.829 format f16/f32/4096/1024/512 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemm
+0.831 format q8_0/f32/4096/1024/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q8_0:gemm
+0.837 format q4_1/f32/4096/1024/512 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.857 format iq4_xs/f32/4096/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:iq4_xs:gemm
+0.858 format f16/f32/4096/4096/8 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemm
+0.865 format q5_K/f32/4096/4096/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.867 format q2_K/f32/4096/1024/8 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.880 format q4_1/f32/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.887 format q4_1/f32/4096/4096/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemv
+0.888 format q5_K/f32/4096/1024/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.893 format q4_0/f32/4096/4096/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_0:gemv
+0.894 format q4_1/f32/4096/1024/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemv
+0.897 format q4_1/f32/4096/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.909 format q8_0/f32/4096/4096/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q8_0:gemm
+0.917 format q2_K/f32/4096/4096/8 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.917 format iq4_xs/f32/4096/1024/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:iq4_xs:gemm
+0.928 format q6_K/f32/4096/4096/1 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:q6_K:gemv
+0.928 format f16/f32/4096/1024/32 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemm
+0.940 format q4_0/f32/4096/1024/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_0:gemm
+0.670 blocke iq1_s/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.673 blocke iq1_m/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.721 blocke q6_K/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.735 blocke q2_K/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.735 blocke q2_K/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.757 blocke q2_K/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.758 blocke q5_1/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.759 blocke iq2_xxs/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.765 blocke q4_K/q8_K/4096/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.769 blocke q3_K/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.770 blocke q5_K/q8_K/4096/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.772 blocke iq1_m/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.782 blocke q6_K/q8_K/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.788 blocke iq4_xs/q8_K/4096/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.800 blocke tq2_0/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.809 blocke q3_K/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.811 blocke q5_1/q8_1/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.811 blocke q1_0/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.819 blocke tq1_0/f32/4096/1024/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.820 blocke q1_0/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.823 blocke q3_K/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.824 blocke q5_0/q8_0/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.826 blocke iq1_m/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.828 blocke iq1_s/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.829 blocke q3_K/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.830 blocke q5_0/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.831 blocke q4_K/q8_K/4096/1024/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.832 blocke q1_0/q8_0/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.833 blocke iq2_xxs/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.835 blocke q5_1/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.837 blocke q5_K/f32/4096/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.837 blocke q5_0/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.840 blocke q6_K/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.848 blocke iq2_s/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.850 blocke q2_K/q8_K/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.850 blocke bf16/bf16/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:bf16
+0.850 blocke tq1_0/f32/4096/4096/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.852 blocke q5_K/q8_K/4096/1024/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.855 blocke q6_K/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q6_K
+0.857 blocke q4_K/f32/4096/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.864 blocke iq3_xxs/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.864 blocke iq2_xs/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xs
+0.866 blocke iq2_xs/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.869 blocke iq3_xxs/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.871 blocke iq3_s/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.872 blocke iq4_xs/q8_K/4096/1024/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.873 blocke iq2_xxs/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.879 blocke q6_K/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.880 blocke nvfp4/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.882 blocke iq2_s/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.886 blocke iq3_xxs/q8_K/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.891 blocke q1_0/q8_0/4096/4096/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.892 blocke q2_K/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q2_K
+0.894 blocke q3_K/q8_K/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.896 blocke bf16/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:bf16
+0.900 blocke iq2_s/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_s
+0.907 blocke tq2_0/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.910 blocke iq2_xxs/q8_K/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.912 blocke tq1_0/q8_K/4096/1024/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.915 blocke q3_K/q8_K/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.917 blocke q1_0/q8_0/4096/1024/32 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.917 blocke q4_K/q8_K/4096/4096/32 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.917 blocke iq4_xs/f32/4096/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.921 blocke tq2_0/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.922 blocke iq3_s/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.924 blocke iq3_xxs/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.927 blocke q6_K/q8_K/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q6_K
+0.928 blocke nvfp4/q8_0/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.931 blocke iq1_s/q8_K/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.935 blocke iq2_xs/q8_K/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.936 blocke q3_K/f32/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.937 blocke iq3_s/f32/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.939 blocke iq2_xs/f32/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xs
+0.942 blocke iq1_s/q8_K/4096/1024/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.943 blocke iq1_s/f32/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.944 blocke tq1_0/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.945 blocke tq1_0/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.947 blocke q5_1/q8_1/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.948 blocke iq2_xxs/f32/4096/4096/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.948 blocke tq1_0/q8_K/4096/4096/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.949 blocke iq1_m/q8_K/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.523 format mxfp4/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.534 format iq4_nl/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.732 format iq4_nl/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.743 format q2_K/f32/4096/1024/8 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.770 format mxfp4/f32/4096/4096/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.803 format q4_1/f32/4096/1024/1 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemv
+0.804 format q4_K/f32/4096/1024/8 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.811 format q4_0/f32/4096/1024/1 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_0:gemv
+0.823 format f16/f32/4096/1024/1 T12 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemv
+0.864 format q4_K/f32/4096/1024/512 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.865 format q5_K/f32/4096/1024/8 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.872 format q5_K/f32/4096/4096/32 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.873 format q4_K/f32/4096/4096/8 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.881 format q4_K/f32/4096/1024/32 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.886 format q8_0/f32/4096/1024/1 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q8_0:gemv
+0.908 format q4_K/f32/4096/4096/32 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.912 format q2_K/f32/4096/4096/8 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.924 format q4_0/f32/4096/4096/1 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_0:gemv
+0.940 format q5_K/f32/4096/1024/32 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.941 format q4_1/f32/4096/4096/1 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemv
+0.698 blocke iq1_m/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.704 blocke iq1_m/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.711 blocke iq1_s/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.714 blocke iq1_s/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.765 blocke q2_K/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.771 blocke q2_K/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.804 blocke iq1_m/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.808 blocke iq1_m/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.820 blocke iq2_xxs/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.822 blocke iq2_xxs/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.822 blocke q2_K/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.836 blocke iq2_s/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.839 blocke iq2_s/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.841 blocke q2_K/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.842 blocke iq2_s/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.849 blocke q3_K/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.850 blocke iq2_s/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.855 blocke nvfp4/q8_0/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.859 blocke iq2_xxs/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.865 blocke iq2_xxs/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.867 blocke q5_1/q8_1/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.868 blocke q3_K/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.875 blocke q3_K/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.876 blocke q5_1/q8_1/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.876 blocke iq3_xxs/q8_K/4096/14336/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.881 blocke iq3_xxs/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.883 blocke iq3_xxs/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.887 blocke q3_K/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.887 blocke iq3_xxs/f32/4096/14336/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.897 blocke iq3_xxs/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.899 blocke iq2_xs/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.903 blocke tq1_0/q8_K/4096/14336/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.904 blocke nvfp4/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.905 blocke q1_0/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.905 blocke iq3_xxs/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.905 blocke q5_0/q8_0/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.907 blocke tq1_0/q8_K/14336/4096/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.908 blocke tq1_0/f32/4096/14336/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.909 blocke iq3_s/q8_K/4096/14336/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.912 blocke q5_0/q8_0/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.912 blocke q1_0/q8_0/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.913 blocke q3_K/q8_K/4096/14336/32 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.915 blocke iq3_xxs/q8_K/14336/4096/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.916 blocke iq3_xxs/f32/14336/4096/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.917 blocke q4_K/q8_K/4096/14336/32 T1 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.919 blocke iq2_xs/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.924 blocke tq1_0/f32/14336/4096/8 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.926 blocke q3_K/f32/4096/14336/32 T1 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.935 blocke iq1_s/q8_K/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.937 blocke q5_1/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.939 blocke iq1_s/q8_K/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.939 blocke iq2_xs/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.947 blocke iq3_s/q8_K/14336/4096/8 T1 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.948 blocke q1_0/q8_0/14336/4096/32 T1 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.684 format q4_K/f32/4096/14336/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.702 format q4_K/f32/14336/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.708 format iq4_nl/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.726 format mxfp4/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.780 format q4_K/f32/14336/4096/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.789 format q4_K/f32/4096/14336/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.838 format f16/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemv
+0.869 format q4_1/f32/14336/4096/8 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.871 format q2_K/f32/4096/14336/8 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.888 format mxfp4/f32/14336/4096/1 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.891 format iq4_xs/f32/4096/14336/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:iq4_xs:gemm
+0.892 format q8_0/f32/14336/4096/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q8_0:gemv
+0.894 format q4_1/f32/4096/14336/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemm
+0.925 format q2_K/f32/14336/4096/8 T1 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.927 format q5_K/f32/4096/14336/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.941 format q5_K/f32/14336/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q5_K:gemm
+0.944 format iq4_xs/f32/14336/4096/32 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:iq4_xs:gemm
+0.945 format f16/f32/4096/14336/1 T1 mul_mat ours:aos vs ggml-cpu-amx:amx:f16(avx512):gemv
+0.949 format q4_1/f32/4096/14336/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_1:gemv
+0.949 format q8_0/f32/4096/14336/1 T1 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q8_0:gemv
+0.599 blocke iq1_m/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.647 blocke iq1_s/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.670 blocke iq1_m/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.727 blocke iq1_s/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.780 blocke iq1_m/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.782 blocke q2_K/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.786 blocke iq2_xxs/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.787 blocke q2_K/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.791 blocke q4_K/q8_K/4096/14336/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.798 blocke q2_K/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.806 blocke q3_K/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.807 blocke q1_0/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.817 blocke q5_K/q8_K/4096/14336/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.822 blocke q4_K/q8_K/14336/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.829 blocke iq2_s/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.832 blocke iq2_xxs/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.834 blocke iq3_xxs/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.836 blocke q4_K/f32/4096/14336/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.837 blocke iq3_s/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.837 blocke q2_K/q8_K/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.837 blocke q3_K/q8_K/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.840 blocke iq1_m/q8_K/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.840 blocke iq3_xxs/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.848 blocke iq2_xxs/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.849 blocke q1_0/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.849 blocke iq4_xs/q8_K/14336/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.849 blocke q3_K/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.861 blocke iq4_xs/q8_K/4096/14336/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.861 blocke q3_K/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.862 blocke iq2_xs/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xs
+0.863 blocke iq2_xxs/q8_K/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.863 blocke q5_K/q8_K/14336/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.864 blocke q5_K/f32/4096/14336/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.870 blocke iq2_s/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.871 blocke iq1_s/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.871 blocke iq2_xs/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.872 blocke iq2_s/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.877 blocke iq2_xxs/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.879 blocke iq3_xxs/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_xxs
+0.880 blocke iq2_xxs/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xxs
+0.883 blocke iq3_s/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.884 blocke iq3_xxs/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.887 blocke q5_0/q8_0/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.888 blocke q5_0/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.889 blocke q3_K/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.890 blocke iq2_xs/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.894 blocke iq4_xs/f32/4096/14336/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.895 blocke q1_0/q8_0/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.896 blocke iq2_s/q8_K/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.898 blocke iq3_s/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq3_s
+0.905 blocke nvfp4/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.907 blocke tq1_0/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.913 blocke iq1_s/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_s
+0.913 blocke iq2_xs/q8_K/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.915 blocke iq2_xs/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.917 blocke iq1_s/q8_K/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.917 blocke iq1_m/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_m
+0.920 blocke nvfp4/q8_0/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.922 blocke iq2_s/f32/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_s
+0.923 blocke q4_K/q8_K/4096/14336/32 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q4_K
+0.923 blocke tq1_0/f32/14336/4096/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.924 blocke iq2_s/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_s
+0.927 blocke q1_0/q8_0/14336/4096/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_0
+0.929 blocke iq2_xs/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq2_xs
+0.931 blocke q3_K/f32/4096/14336/32 T12 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.931 blocke q3_K/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q3_K
+0.932 blocke tq1_0/q8_K/4096/14336/8 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_K
+0.934 blocke q5_K/f32/14336/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:q5_K
+0.934 blocke iq1_m/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:iq1_m
+0.940 blocke iq4_xs/f32/14336/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu:tiled:iq4_xs
+0.941 blocke q6_K/q8_K/4096/14336/512 T12 mul_mat ours:aos vs ggml-cpu:tiled:q6_K
+0.949 blocke q5_1/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu:vec_dot:q8_1
+0.784 format iq4_nl/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.798 format mxfp4/f32/4096/14336/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.813 format mxfp4/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:mxfp4_8x8:gemv
+0.836 format iq4_nl/f32/14336/4096/1 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:iq4_nl_8x8:gemv
+0.893 format q4_K/f32/14336/4096/512 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.902 format q4_K/f32/4096/14336/8 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.904 format q4_K/f32/14336/4096/8 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.907 format q4_K/f32/4096/14336/32 T12 mul_mat ours:_16x4 vs ggml-cpu-amx:amx:q4_K:gemm
+0.937 format q2_K/f32/4096/14336/8 T12 mul_mat ours:aos vs ggml-cpu-repack:repack:q2_K_8x8:gemm
+0.743 format iq1_m/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.755 format q2_K/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.757 format q2_K/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.766 format nvfp4/q8_0/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.774 format iq1_m/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.776 format nvfp4/q8_0/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.778 format q3_K/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.801 format q6_K/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.803 format q3_K/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.808 format q6_K/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.816 format q5_1/q8_1/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_1
+0.819 format iq2_xxs/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.827 format iq2_xxs/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.829 format q4_1/q8_1/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_1
+0.832 format iq1_s/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.842 format q5_1/q8_1/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_1
+0.843 format q5_0/q8_0/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.848 format q1_0/q8_0/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.852 format q1_0/q8_0/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.853 format q5_0/q8_0/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.859 format iq1_s/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.882 format iq3_xxs/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.889 format iq3_xxs/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.893 format tq2_0/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.894 format iq2_s/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.895 format iq2_s/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.900 format tq2_0/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.917 format q4_K/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.918 format q4_K/q8_K/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.919 format q4_0/q8_0/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.922 format q4_0/q8_0/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_0
+0.946 format iq2_xs/q8_K/4096/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_K
+0.949 format q4_1/q8_1/14336/1/1 T1 vec_dot ours:aos vs ggml-vec_dot:vec_dot:q8_1

@@ -21,6 +21,8 @@ best = {}
 for f in args:
     for r in csv.DictReader(open(f)):
         p = r['provider']
+        if not r.get('ns'):  # (a row still being written)
+            continue
         if 'cuda' in p or 'metal' in p or p.endswith(':checked') or p == 'ggml-blas':
             continue
         if r['op'] == 'vec_dot' and r['K'] not in ('4096', '14336'):
