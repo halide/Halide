@@ -540,23 +540,28 @@ inline std::vector<Func> scale_decoders(const std::vector<ApproximationResult> &
 }
 
 // The weight's per-sub-block scale decoders whose stored loads are shared
-// across the `step / sub` sub-blocks of a lane step: in place, unpacking their
-// bit fields across the lanes takes a variable shift per step; staged per
-// block, a uniform vector unpack (x86 vec_dot: iq2_xs 0.96 -> 1.06x of GGML,
-// iq2_s 0.89 -> 1.02x, iq1_m 0.74 -> 0.78x).
-inline std::vector<Func> packed_sub_scales(const std::vector<ApproximationResult> &rs, int block, int sub, int step) {
+// across sub-blocks (some, not all, sub-block index bits load-invariant): in
+// place, unpacking their bit fields inside the step loop repeats the loads and
+// shifts at every step. Staged per block: vectorized across the sub-blocks when
+// adjacent sub-blocks share a load (low bit invariant), or unrolled by the
+// bit-field index over contiguous load runs of `1 << ctz(inv)`.
+inline std::vector<std::pair<Func, int>> packed_sub_scales(const std::vector<ApproximationResult> &rs, int block, int sub, int step) {
     if (!sub || sub >= step) return {};
     int bits = 0;
     while ((1 << bits) < block / sub)
         bits++;
-    uint64_t low = (step / sub) - 1, all = (1 << bits) - 1;
-    std::vector<Func> fs;
+    uint64_t all = (1 << bits) - 1;
+    std::vector<std::pair<Func, int>> fs;
     for (Func f : scale_decoders(rs)) {
+        uint64_t inv = 0;
         for (uint64_t m : Internal::load_invariant_bits(f.function().definition(), f.args()[0].name(), bits)) {
-            if ((~m & all) && (m & low)) {
-                fs.push_back(f);
-                break;
-            }
+            if ((~m & all) && (m & all)) inv |= m & all;
+        }
+        if (inv) {
+            int ctz = 0;
+            while (!((inv >> ctz) & 1))
+                ctz++;
+            fs.emplace_back(f, ctz ? (1 << ctz) : (block / sub));
         }
     }
     return fs;
@@ -1010,16 +1015,21 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     bool aff = affine(rs);
     Sums d;
     // scales decoded in GPRs stay their own stage
-    std::vector<Func> dkept = kept, gpr, sdec;
+    std::vector<Func> dkept = kept, gpr;
+    std::vector<std::pair<Func, int>> sdec;
     if (!sl && gpr_scales) {
         gpr = scale_decoders(rs);
         dkept.insert(dkept.end(), gpr.begin(), gpr.end());
     } else if (!sub && t.arch == Target::X86) {
         sdec = packed_sub_scales(rs, block, wsub, vec);
-        dkept.insert(dkept.end(), sdec.begin(), sdec.end());
+        for (auto &[f, _] : sdec)
+            dkept.push_back(f);
     }
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, dkept, fold_offsets, Func(), t.arch == Target::X86 && ts.nt <= 2)) aff = false;
-    if (d.sum.defined() && !sdec.empty()) d.sum.update().eager_inline(sdec);
+    if (d.sum.defined() && !sdec.empty()) {
+        for (auto &[f, _] : sdec)
+            d.sum.update().eager_inline({f});
+    }
     if (t.arch == Target::X86) d.offset_lanes = 16;
     if (aff) kept.clear();
     RVar rxl("rxl");  // (sl: the sub-block's lane)
@@ -1036,7 +1046,8 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     bool fsub = sub && integer && float_sub_scales(rs);
     std::vector<Func> bkept = kept;
     bkept.insert(bkept.end(), gpr.begin(), gpr.end());
-    bkept.insert(bkept.end(), sdec.begin(), sdec.end());
+    for (auto &[f, _] : sdec)
+        bkept.push_back(f);
     Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff, bkept);
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
@@ -1137,11 +1148,13 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             readers.push_back(k);
         }
     }
-    for (Func k : sdec) {
+    for (auto &[k, run] : sdec) {
         if (!codes.defined()) continue;
         Func w = k.in_callers({codes});
         if (!w.defined()) continue;
-        w.compute_at(acc, ryo).vectorize(w.args()[0]);
+        Var kw("kw"), kb("kb");
+        w.compute_at(acc, ryo);
+        run < block / wsub ? w.split(w.args()[0], kw, kb, run).unroll(kw).vectorize(kb, run, VectorizeIn::SWAR) : w.vectorize(w.args()[0]);
         for (size_t i = 1; i < w.args().size(); i++)
             w.unroll(w.args()[i]);
         readers.push_back(w);

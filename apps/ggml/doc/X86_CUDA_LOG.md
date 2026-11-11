@@ -841,3 +841,40 @@ Held-out `vec_dot` (54 cases): 38.9% -> 57.4% matched (31/54 >= 0.95), median
 0.908 -> 0.966. `--check` vec_dot and mul_mat (all formats): 0 failures. M3
 replay (982 Arm/Metal objects): all byte-identical.
 
+### SWAR unpacking for planar bit-packed sub-block scales (q3_K)
+
+`q3_K` `vec_dot` trailed at 0.78-0.80 of GGML (K = 256/4096/14336) and M = 1
+`mul_mat` at 0.87 (4096² T1). Its 16 6-bit sub-block scales are stored planar
+across 12 bytes (`scales_lo[t & 7]` shifted by `2 * (t >> 3)`, `m = 8`;
+`scales_hi[t & 3]` shifted by `2 * (t >> 2)`, `m = 12`). Because bit 0 of the
+sub-block index `t` varies (`!(m & 1)`), the first `packed_sub_scales()` filter
+(`m & low`) missed it and re-unpacked the scale bytes inside each of the 8
+32-value steps. Staging it as a 16-lane SIMD vector improved `llvm-mca` from
+45.8 to 39.9 cycles/block (~0.89x measured), still behind GGML's 36.8 cycles:
+the loop is bound on vector ALU Ports 0, 1 and 5 (~39.7 cycles/block), where
+SIMD scale unpacking competes directly with the dot product.
+
+GGML unpacks the 12 scale bytes as three 32-bit GPR words (`0x0f0f0f0f` /
+`0x03030303` masks and shifts), which execute on scalar ALU Ports 6 and 11 in
+parallel with the vector dot product on Ports 0/1/5. In `packed_sub_scales()`,
+any scale decoder with partial sub-block invariance (`(~m & all) && (m & all)`)
+has contiguous load runs of `run = 1 << ctz(inv)` sub-blocks (`run = 4` for
+`q3_K`, where bit 2 is the lowest invariant bit; `run = block / wsub` when bit
+0 is invariant). When `run < block / wsub`, `blocked()` schedules the staged
+scale clone with `.split(t, kw, kb, run).unroll(kw).vectorize(kb, run,
+VectorizeIn::SWAR)` (supported by extending `LowerSWARVectors::narrow()` in
+`src/VectorizeSWAR.cpp` to narrow `PlanarFieldPack`'s widened unsigned `Div` and
+power-of-two `Mod`). Removing the SIMD scale dependency also lets LLVM's
+`MachineCombiner` break the 8-step serial `vpdpwssd` accumulator chain into
+parallel `vpmaddwd` + `vpaddd`, dropping `llvm-mca` to 35.4 cycles/block.
+
+G/H (GGML / ours), T1 before -> after:
+
+| format | vec_dot K=256 | vec_dot K=4096 | vec_dot K=14336 | mul_mat 4096² M=1 (f32 / q8_K) |
+|---|---|---|---|---|
+| q3_K | 0.781 -> 0.976 | 0.783 -> 1.012 | 0.802 -> 1.018 | 0.870 -> 1.044 / 0.934 -> 1.035 |
+
+`--check` vec_dot and mul_mat (`q3_K`, `iq2_xs`, `iq2_s`, `iq1_m`): 0 failures.
+M3 replay (982 Arm/Metal objects): all byte-identical.
+
+
