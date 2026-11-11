@@ -675,6 +675,7 @@ tests(
     wrong_type.cpp
     x86_cpu_detect.cpp
     x86_dot_product_loaded_bounds.cpp
+    x86_dot_three_factor.cpp
     # keep-sorted end
 )
 
