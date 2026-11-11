@@ -1707,3 +1707,91 @@ blocks gain nothing from the overlap.
   - The lut formats (iq4_nl, mxfp4, iq4_xs: 0.57-0.72) and iq2_s (0.50-0.59): no
     K split, a lut load per code; their weights still staged 16 codes a lane.
   - Below 16: as Phase 4.
+
+## Phase 7: one act kernel; what the M = 512 kernel is not bound by (RTX 3090)
+
+Same machine and conventions as Phase 6. The targets: M = 512 for q4_0, q8_0,
+q5_0, q4_1 and q5_1 at 0.95 of GGML; the K-quants from M = 32; q4_1 and q5_1
+from M = 16; f32 weights as `f32:f16` at M = 128 back to Phase 5's 0.1606 ms;
+the root cause of the 64-value steps' reads of `w` out of bounds. The full
+tables (23 types, float gemms, the `full` preset) were not regenerated; the
+scorecard below is the by-M providers' and GGML's cells of the types worked on.
+
+- Tried, one at a time (q4_0 on `f32:q8_0.soa` at 4096^2 unless said; us of the
+  gemm kernel by CUPTI, two interleaved passes; its run-to-run spread is +-5%):
+
+  | change                                                                                                                   | effect                                                                                       |
+  | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+  | the acts' codes and scales in one kernel (`compute_with`, core), each block's maximum staged once, 16 blocks a GPU block | 14.7 + 14.3 -> 16.4 us at M = 512 (8 blocks 18.0, 32 17.1); q8_1's sum stays a kernel (13.9) |
+  | 64 x 112 tiles at M >= 256 (320 blocks, two full waves of 2 per SM)                                                      | 201 against 204: not the limiter                                                             |
+  | 128 x 128 of 8 warps (53 KB: more than 48 KB, opted in by the runtime, core)                                             | 204 against 204                                                                              |
+  | 128 x 128 of 16 warps of 32 x 32; 64 x 128 of 8; 128 x 128 on 64-value steps                                             | 216, 216-227, 249-267                                                                        |
+  | 64 x 128 tiles at M = 256, 320, 448, 512, 640 (128 .. 320 blocks)                                                        | 107, 160, 203, 203, 213 us: time follows the work, not the waves (balance is not the lever)  |
+  | the int32 tile to float by its bits (`c + 0x4B400000`, a float subtract) against `cvt`                                   | 216 against 203-213 at 512, 56.5 against 54 at 128: slower                                   |
+  | a block's tiles per fragment of M (two mma.sync, then their scaling) against all of a block's                            | 211-212 against 203-213                                                                      |
+  | q4_K: the K split on q4_0's 64 x 64 / 64 x 128 mma.sync tiles (fits only above 48 KB)                                    | M = 64 82 against 54, 128 89 against 80, 200 171 against 160                                 |
+  | q4_K: mma.sync's tiles from M = 64 (`int_tiles=wmm`)                                                                     | M = 64 51.6-55.4 against 54, 128 97.5 against 80                                             |
+  | q4_1: `int_tiles=wmm`, `wwm`                                                                                             | M = 16 24.5-25.7 against 23.7-24.4, 32 30.8-32.2 against 31.4, 128 63.1-80 against 63.1      |
+  | f32:f16 at M = 128: the copies' wait not deferred to the barrier                                                         | the same object: its block stages the weights before the acts, so the deferral never applies |
+
+  So the M = 512 kernel (204 us against the hand-written kernel's 161 on the
+  same tiles) is bound neither by the tile count's fit to the SMs nor by shared
+  memory, the conversions or the order of a block's multiplies: per step and
+  warp it issues 1191 PTX instructions in ~3700 cycles of its SM sub-partition,
+  the tensor cores busy 28% of it, i.e. it waits. On what needs the SASS and a
+  profiler's stall reasons (no `cuobjdump`/`nvdisasm` in the toolbox; `ncu`
+  needs admin rights). The more-than-48 KB opt-in paid nowhere and was not kept.
+
+  q4_1 against q4_0 (the offset term): the gemm kernel +3.4, +8.2, +7.3, +9.0 us
+  at M = 16, 32, 64, 128 for +9% PTX instructions in its loop (an fma per
+  element and block, 32 more words of shared loads, 8 more staged stores), plus
+  the sum's kernel (1.7-3.1 us); GGML's q4_1 costs what its q4_0 does.
+
+- The f32:f16 regression (Phase 5 0.1605 ms, Phase 6 0.1664, now 0.1671): not
+  the wait's deferral (above); its cause was not found.
+
+- 64-value steps at M >= 256 on the K-quants (q4_K, K = 256, N = 512, M =
+  64..200: "Input buffer w is accessed at -255, ... dimension 1"): `w`'s
+  required rows under the M >= 64 shape come out as min(min(N, 64) - 64 st + 1,
+  N) - 64, st the step's blocks (4 there, 2 under the M >= 256 shape), i.e.
+  -255; without the weight factors' `bound_extent` of a step's blocks (`select`
+  over the shapes' steps) they are exact. So the bound on the factors' block
+  dimension leaks into their rows', likely through their staging loop, which
+  fuses the step's blocks with the rows; not reduced to a core repro.
+
+- Core: `compute_with` matched each fused dim by its qualified name, so the
+  encoder's Funcs (over differently named pure Vars) could not fuse even after
+  renaming their dims alike; now by the name a schedule gives a dim
+  (`compute_with_renamed_dims`).
+
+- Scorecard, by-M provider (ms; GGML / it; Phase 6's ratio and ms), 4096^2, f32
+  acts, --rounds 5, medians of 3 passes:
+
+  | type | M = 16                     | M = 32                     | M = 64                     | M = 128                    | M = 512                    |
+  | ---- | -------------------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
+  | q4_0 | 0.0255 (1.16; 1.09, .0275) | 0.0303 (1.18; 1.11, .0327) | 0.0442 (1.04; 0.99, .0475) | 0.0683 (1.07; 1.03, .0733) | 0.2269 (0.83; 0.79, .2431) |
+  | q8_0 | 0.0353 (1.12; 1.10, .0368) | 0.0394 (1.10; 1.03, .0419) | 0.0558 (0.98; 0.93, .0598) | 0.0713 (1.12; 1.06, .0763) | 0.2422 (0.85; 0.80, .2563) |
+  | q5_0 | 0.0298 (1.12; 1.05, .0317) | 0.0365 (1.05; 1.01, .0390) | 0.0488 (1.04; 0.99, .0528) | 0.0718 (1.07; 1.04, .0766) | 0.2452 (0.81; 0.77, .2601) |
+  | q4_1 | 0.0324 (0.96; 0.94, .0335) | 0.0410 (0.84; 0.81, .0432) | 0.0544 (0.90; 0.87, .0576) | 0.0810 (0.94; 0.94, .0855) | 0.2776 (0.75; 0.74, .2836) |
+  | q5_1 | 0.0355 (1.01; 0.98, .0372) | 0.0431 (0.87; 0.84, .0451) | 0.0564 (0.92; 0.90, .0595) | 0.0839 (0.97; 0.99, .0877) | 0.2883 (0.77; 0.77, .2918) |
+  | q4_K | 0.0302 (1.00; 0.97, .0316) | 0.0422 (0.83; 0.81, .0445) | 0.0689 (0.72; 0.71, .0713) | 0.0909 (0.83; 0.72, .1100) | 0.2837 (0.73; 0.72, .2885) |
+  | q5_K | 0.0309 (1.06; 1.01, .0324) | 0.0453 (0.85; 0.82, .0476) | 0.0699 (0.74; 0.75, .0705) | 0.0933 (0.84; 0.83, .0989) | 0.2913 (0.74; 0.74, .2937) |
+  | q6_K | 0.0315 (1.16; 1.12, .0330) | 0.0505 (0.86; 0.84, .0536) | 0.0663 (0.86; 0.84, .0711) | 0.0943 (0.89; 0.87, .1010) | 0.3190 (0.74; 0.71, .3351) |
+  | q3_K | 0.0265 (1.12; 1.06, .0282) | 0.0426 (0.86; 0.83, .0451) | 0.0648 (0.81; 0.78, .0687) | 0.0922 (0.91; 0.87, .0990) | 0.3139 (0.75; 0.72, .3302) |
+
+  No cell slower than Phase 6's. f32 weights as `f32:f16` on `f32:f16` acts at M
+  = 128 0.1671 ms (Phase 6 0.1666); f16 x f16 at M = 64, 128, 512 0.0598,
+  0.0967, 0.3077 (0.0605, 0.0979, 0.3085). The by-M table is unchanged.
+
+- Gate: `--check` of every CUDA library on Phase 6's grid (f32, f16, bf16 acts):
+  107010 results, 0 failures, 9189 unchecked (all GGML's); of the integer gemm
+  and by-M libraries of the multi-block types also on K in 256, 768, 1280, 2304,
+  3072: 9450, 0 failures. `ctest -L ggml_cuda` 67/67; the core GPU tests under
+  `HL_JIT_TARGET=host-cuda` 113/113, the `compute_with` tests 7/7. The 82 Metal
+  libraries' `.stmt` are byte-identical to b09e9eaf3's, the 36 sampled x86 CPU
+  libraries' but for the numbering of temporaries in 3.
+
+- Where the rest is: M = 512 (0.75-0.85) in the gemm kernel's waiting, which
+  needs a profiler's view; q4_1 and q5_1 in the offset term's cost per block and
+  the sum's second kernel (fusing it needs the rows to read a copy of the
+  encoder of their own); the K-quants as Phase 6.

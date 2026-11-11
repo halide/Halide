@@ -567,11 +567,12 @@ and cuBLAS. The Halide counterparts of a blocked type are:
   the act's block sum (`q8_1`'s third array) is added per block. A step's
   weights are decoded 4 bytes of a block per lane (a block's codes on
   consecutive lanes), its acts copied by `cp.async` and awaited at the barrier,
-  after the weights' loads. For M >= 16 and N % 8 == 0, K split in 4 below M =
-  64 and in 2 below 256 (gemms on every fourth or second step of K, summed by a
-  second kernel), else the rows. Not q2_K (a min per 16 values), nvfp4 (float
-  sub-block scales), nor iq2_xxs, iq2_xs, iq3_xxs, iq3_s, iq1_s (slower than
-  their f16 gemm).
+  after the weights' loads; the acts' codes and scales quantized by one kernel
+  (`compute_with`), `q8_1`'s sums by a second. For M >= 16 and N % 8 == 0, K
+  split in 4 below M = 64 and in 2 below 256 (gemms on every fourth or second
+  step of K, summed by a second kernel), else the rows. Not q2_K (a min per 16
+  values), nvfp4 (float sub-block scales), nor iq2_xxs, iq2_xs, iq3_xxs, iq3_s,
+  iq1_s (slower than their f16 gemm).
 - `<type>:f16` on `f32:f16` (or `f16`) acts: `gpu_gemm` with the same
   `gpu_staged` and `fragments` as Metal's on wmma's 16 x 16 x 16 fragments for M
   \>= 16 and N % 8 == 0 (`wmma.store` writes a tile straight to out and faults on
@@ -612,19 +613,19 @@ On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
 f16 on f32 acts (`f32:f16`) 0.89, 0.90, 0.90, 0.90, 0.96, 1.08, 0.92, 0.80,
 0.64; bf16 x bf16 1.08, 1.02, 1.01, 1.02, 1.07, 0.98, 0.89, 0.76, 1.00; f32
 weights (`f32:f16`) 0.89, 0.90, 0.90, 0.81, 0.96, 1.04, 0.95, 0.91, 1.34; on f32
-acts, the best library, q4_0 0.93, 0.92, 0.89, 1.15, 1.07, 1.08, 0.97, 1.02,
-0.78; q8_0 0.94, 0.95, 0.84, 0.96, 1.08, 1.03, 0.94, 1.06, 0.80; q4_K 0.78,
-0.74, 0.85, 0.97, 0.96, 0.80, 0.71, 0.82, 0.72; q6_K 0.79, 0.69, 0.73, 0.95,
-1.10, 0.84, 0.84, 0.88, 0.71; iq2_xs 0.46, 0.47, 0.57, 0.70, 0.50, 0.54, 0.57,
-0.56, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 6) has every type, the `full`
-preset's layers and where the rest of the time is: from M = 16 the integer gemm
-kernel (q4_0's at 1.06-1.3x the time of a hand-written kernel of GGML's
-formulation, whose staging it now matches: its multiplies and their scaling
-overlap the loads less), most at M = 512, where 256 tiles also fall unevenly on
-82 SMs (GGML's stream-k balances them); the acts' two or three kernels against
-GGML's one; the lut and codebook formats' decodes (iq4_nl, mxfp4, iq4_xs,
-iq2_s: 0.50-0.72); below 16, the second launch, the rows' cost per act column
-and the grid formats' decodes; on f16 from M = 64, cuBLAS's f16 accumulators.
+acts, the best library (from M = 16 the by-M provider), q4_0 0.93, 0.92, 0.89,
+1.15, 1.16, 1.18, 1.04, 1.07, 0.83; q8_0 0.94, 0.95, 0.84, 0.96, 1.12, 1.10,
+0.98, 1.12, 0.85; q4_K 0.78, 0.74, 0.85, 0.97, 1.00, 0.83, 0.72, 0.83, 0.73;
+q6_K 0.79, 0.69, 0.73, 0.95, 1.16, 0.86, 0.86, 0.89, 0.74; iq2_xs 0.46, 0.47,
+0.57, 0.70, 0.50, 0.54, 0.57, 0.56, 0.61. `doc/X86_CUDA_LOG.md` (Phases 3 to 7)
+has every type, the `full` preset's layers and where the rest of the time is:
+from M = 16 the integer gemm kernel (q4_0's at 1.06-1.3x the time of a
+hand-written kernel of GGML's formulation, whose staging it now matches; not the
+fit of its tiles to the SMs, at M = 512 its time follows its work), most at M =
+512; q8_1's sum a second act kernel (q4_1, q5_1, q4_K, q5_K); the lut and
+codebook formats' decodes (iq4_nl, mxfp4, iq4_xs, iq2_s: 0.50-0.72); below 16,
+the second launch, the rows' cost per act column and the grid formats' decodes;
+on f16 from M = 64, cuBLAS's f16 accumulators.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
