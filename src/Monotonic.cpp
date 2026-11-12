@@ -139,11 +139,12 @@ class DerivativeBounds : public IRVisitor {
             ConstantInterval rb = result;
 
             // This is essentially the product rule: a*rb + b*ra
-            // but only implemented for the case where a or b is constant.
-            if (auto b = as_const_int_or_uint(op->b)) {
-                result = ra * (*b);
-            } else if (auto a = as_const_int_or_uint(op->a)) {
-                result = rb * (*a);
+            // but only implemented for the case where a or b doesn't
+            // depend on the var.
+            if (rb.is_single_point(0)) {
+                result = ra * constant_integer_bounds(op->b);
+            } else if (ra.is_single_point(0)) {
+                result = rb * constant_integer_bounds(op->a);
             } else {
                 result = ConstantInterval::everything();
             }
@@ -178,6 +179,34 @@ class DerivativeBounds : public IRVisitor {
                     }
                 }
                 return;
+            }
+            op->b.accept(this);
+            if (result.is_single_point(0)) {
+                // The denominator doesn't depend on the var. If it's known
+                // to be nonzero, the quotient moves in the same direction as
+                // the numerator, or the opposite one, by at most as much.
+                ConstantInterval rb = constant_integer_bounds(op->b);
+                bool negative = rb < 0;
+                if (negative) {
+                    rb = -rb;
+                }
+                if (rb > 0) {
+                    op->a.accept(this);
+                    ConstantInterval ra = result;
+                    result = ConstantInterval::everything();
+                    if (ra.min_defined) {
+                        result.min_defined = true;
+                        result.min = std::min<int64_t>(div_imp(ra.min, rb.min), 0);
+                    }
+                    if (ra.max_defined && ra.max != INT64_MIN) {
+                        result.max_defined = true;
+                        result.max = std::max<int64_t>(div_imp(ra.max - 1, rb.min) + 1, 0);
+                    }
+                    if (negative) {
+                        result = -result;
+                    }
+                    return;
+                }
             }
         }
         result = ConstantInterval::everything();

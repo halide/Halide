@@ -163,6 +163,12 @@ private:
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
+        if (op->type.is_bool() && op->type.is_vector()) {
+            Type storage_type = UInt(8, op->type.lanes());
+            Expr value = Load::make(storage_type, op->name, index, op->image, op->param,
+                                    predicate, op->alignment, op->is_streaming);
+            return mutate(value != make_zero(storage_type));
+        }
         return op->with(index, predicate, op->alignment);
     }
 
