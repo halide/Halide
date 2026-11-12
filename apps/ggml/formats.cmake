@@ -279,13 +279,16 @@ set(GGML_SCHEDULE_PARAMS
     # (q4_K at M = 128 0.090 -> 0.075 ms), q4_K below 64 too since its weight
     # blocks are staged per step there (M = 32 0.042 -> 0.036; q5_K's fifth
     # bits, at a position that depends on the step, do not decode in GPRs).
+    # q6_K, q3_K: mma.sync's from M = 64 (q3_K at M = 64 / 128 / 512 0.062 /
+    # 0.090 / 0.291 -> 0.055 / 0.081 / 0.273 ms; q6_K 0.064 / 0.093 / 0.296
+    # -> 0.060 / 0.085 / 0.283).
     # The grid formats with 16-value sub-blocks (iq2_xs, iq2_s, iq1_m) on
     # wmma's at every M (iq2_xs at M = 128 / 512 0.177 -> 0.123 / 0.726 ->
     # 0.362), iq1_s below M = 64 (M = 32 0.050 -> 0.044).
     "q5_1 mul_mat f32:q8_1.soa int_tiles=wmm"
     "q5_K mul_mat f32:q8_1.soa int_tiles=wmm"
-    "q6_K mul_mat f32:q8_0.soa int_tiles=www"
-    "q3_K mul_mat f32:q8_0.soa int_tiles=www"
+    "q6_K mul_mat f32:q8_0.soa int_tiles=wmm"
+    "q3_K mul_mat f32:q8_0.soa int_tiles=wmm"
     "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
     "q2_0 mul_mat f32:q8_0.soa int_tiles=mwm"
     "iq4_nl mul_mat f32:q8_0.soa int_tiles=www"
