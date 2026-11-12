@@ -2585,3 +2585,180 @@ at M = 16 .. 512), from M = 16 to 128.
   tiles 19.8 / 31.3): the weight's code words used as they are loaded, the min
   term's fmas and factor loads, at M = 32 registers; and the act kernel's
   sub-block sums (+0.8-1.0 us, a thread per sub-block recomputing its codes).
+
+## Phase 15: a map below M = 512; the K split's tiles rounded up in M (RTX 3090)
+
+Same machine and conventions as Phase 14. The targets: a whole-picture map of
+the by-M provider below M = 512, then the worst group of cells under 0.95 of
+GGML that scheduling can address.
+
+- The map, before (GGML / `halide-by-m-<type>_f32_cuda`, 4096^2, f32 acts,
+  `--rounds 5`, one pass; 200 of 299 cells under 0.95):
+
+  | type    | 1    | 2    | 4    | 8    | 12   | 16   | 24   | 32   | 48   | 64   | 96   | 128  | 256  |
+  | ------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+  | iq1_m   | 0.71 | 0.70 | 0.81 | 0.87 | 2.21 | 3.13 | 1.65 | 2.25 | 1.33 | 1.86 | 1.09 | 1.22 | 0.90 |
+  | iq1_s   | 0.85 | 0.77 | 0.82 | 0.93 | 0.68 | 0.77 | 0.46 | 0.70 | 0.47 | 1.01 | 0.69 | 1.07 | 0.99 |
+  | iq2_s   | 0.46 | 0.50 | 0.60 | 0.71 | 0.52 | 0.94 | 0.60 | 0.83 | 0.59 | 0.90 | 0.65 | 0.83 | 0.85 |
+  | iq2_xs  | 0.46 | 0.47 | 0.58 | 0.70 | 0.59 | 1.34 | 0.84 | 1.04 | 0.70 | 0.96 | 0.70 | 0.90 | 0.89 |
+  | iq2_xxs | 0.36 | 0.37 | 0.50 | 0.58 | 0.37 | 0.99 | 0.57 | 0.96 | 0.62 | 0.97 | 0.72 | 1.03 | 0.92 |
+  | iq3_s   | 0.36 | 0.40 | 0.48 | 0.58 | 0.43 | 1.06 | 0.73 | 0.96 | 0.61 | 0.80 | 0.58 | 1.02 | 0.96 |
+  | iq3_xxs | 0.37 | 0.38 | 0.48 | 0.56 | 0.42 | 0.94 | 0.64 | 0.97 | 0.60 | 0.93 | 0.68 | 1.00 | 0.89 |
+  | iq4_nl  | 0.83 | 0.78 | 0.74 | 0.91 | 0.71 | 1.28 | 0.91 | 1.19 | 0.79 | 1.01 | 0.77 | 1.09 | 1.00 |
+  | iq4_xs  | 0.77 | 0.73 | 0.78 | 0.88 | 0.61 | 1.12 | 0.78 | 0.93 | 0.65 | 0.90 | 0.67 | 1.03 | 0.95 |
+  | mxfp4   | 0.70 | 0.69 | 0.76 | 0.92 | 0.62 | 1.10 | 0.80 | 1.07 | 0.76 | 0.97 | 0.74 | 1.08 | 1.02 |
+  | nvfp4   | 0.87 | 0.90 | 0.92 | 1.19 | 0.83 | 1.38 | 0.97 | 1.32 | 0.92 | 1.17 | 0.86 | 1.24 | 1.01 |
+  | q1_0    | 0.73 | 0.67 | 0.87 | 0.98 | 0.59 | 1.01 | 0.78 | 0.97 | 0.76 | 0.95 | 0.83 | 0.95 | 0.93 |
+  | q2_0    | 0.67 | 0.65 | 0.86 | 0.99 | 0.63 | 0.83 | 0.58 | 0.89 | 0.65 | 0.91 | 0.56 | 0.67 | 0.84 |
+  | q2_K    | 0.64 | 0.65 | 0.90 | 1.01 | 0.51 | 0.93 | 0.62 | 0.87 | 0.65 | 0.94 | 0.78 | 1.17 | 1.06 |
+  | q3_K    | 0.50 | 0.49 | 0.85 | 0.97 | 0.47 | 1.19 | 0.84 | 0.96 | 0.70 | 0.96 | 0.67 | 1.02 | 0.97 |
+  | q4_0    | 0.92 | 0.92 | 0.89 | 1.10 | 0.88 | 1.21 | 0.87 | 1.17 | 0.81 | 1.08 | 0.80 | 1.12 | 1.06 |
+  | q4_1    | 0.93 | 0.92 | 0.83 | 0.97 | 0.85 | 1.07 | 0.69 | 0.90 | 0.76 | 0.96 | 0.70 | 1.02 | 0.97 |
+  | q4_K    | 0.77 | 0.73 | 0.83 | 0.96 | 0.62 | 1.14 | 0.75 | 0.99 | 0.74 | 0.96 | 0.69 | 1.02 | 0.95 |
+  | q5_0    | 0.90 | 0.88 | 0.78 | 1.04 | 0.82 | 1.15 | 0.80 | 1.07 | 0.79 | 1.10 | 0.80 | 1.16 | 1.05 |
+  | q5_1    | 0.92 | 0.89 | 0.84 | 0.96 | 0.89 | 1.15 | 0.78 | 0.97 | 0.85 | 1.02 | 0.73 | 1.09 | 1.01 |
+  | q5_K    | 0.56 | 0.57 | 0.69 | 0.76 | 0.50 | 1.18 | 0.78 | 0.95 | 0.74 | 0.97 | 0.68 | 1.03 | 0.96 |
+  | q6_K    | 0.62 | 0.62 | 0.70 | 0.86 | 0.58 | 1.20 | 0.87 | 1.02 | 0.79 | 0.94 | 0.64 | 0.99 | 0.92 |
+  | q8_0    | 0.91 | 0.94 | 0.83 | 0.95 | 0.79 | 1.17 | 0.85 | 1.08 | 0.82 | 1.05 | 0.76 | 1.20 | 1.09 |
+
+- The cells under 0.95, by cause (worst first within each):
+
+  - M = 12 (22 cells, 0.37-0.89; iq2_xxs 0.37, iq3_xxs 0.42, iq3_s 0.43, q3_K
+    0.47, q5_K 0.50): the dp4a rows, which the provider ran below M = 16, where
+    GGML runs mmq above 8; ours took 1.5-2.6x their M = 8 time (the rows' cost
+    per act column), GGML's M = 12 its M = 16's.
+  - M = 24, 48, 96 (65 cells, 0.46-0.98; iq1_s 0.46 / 0.47 at 24 / 48, q2_0 0.56
+    at 96): our times were not monotone in M (q4_0 37.4 us at 24 against 30.5 at
+    32, 49.8 at 48 against 42.5 at 64, 75.0 at 96 against 64.3 at 128), GGML's
+    are. An M between two of the integer gemm's shapes took the smaller one's
+    tile twice, the second shifted (`ShiftInwards`), each block decoding its
+    weight tile: two blocks of 32 x 16 at M = 24, of 32 x 32 at 48, of 64 x 64
+    at 96.
+  - M \<= 8 (82 cells): the dp4a rows on `f32:q8_1`; the grid formats at
+    0.36-0.71 (iq2_xxs, iq3_xxs, iq3_s at M = 1 0.36-0.37), q3_K, q5_K, q6_K
+    0.49-0.86, the others 0.64-0.95.
+  - M = 256 (10 cells, 0.84-0.93; q2_0, iq2_s, iq2_xs, iq3_xxs, iq1_m, q6_K,
+    iq2_xxs, q1_0, iq4_xs, q4_K): 64 x 128 tiles unsplit, 128 blocks.
+  - Per type, M = 16 to 128 (20 cells): iq1_s at 16 / 32 (0.77 / 0.70), iq3_s at
+    64 (0.80), q2_0 at 16 / 32 / 64 and on the f16 gemm at 128 (0.83-0.91,
+    0.67), iq2_s at 32 / 64 / 128 (0.83-0.90), q2_K at 16 / 32 / 64 (0.87-0.94),
+    q4_1 at 32 (0.90), iq4_xs at 32 / 64 (0.90-0.93), and 0.94 cells of iq2_s,
+    iq3_xxs, q6_K.
+
+- `gpu_int_gemm`: the act's rows past M are encoded as its last row (the
+  algorithm clamps them, as the f16 gemm's guarded tiles read them), so the K
+  split's partial-sum kernel, whose output is an intermediate, can round its
+  last tile in M up instead of shifting it: a block's tile can have more rows
+  than M. Each range of M then takes the first of its split's shapes at or above
+  it: in 4 to M = 16 (32 x 16, or wmma's 16 x 16) and to 32 (32 x 32, or 16 x
+  32), in 2 to 48 (64 x 48), 64 (64 x 64), 96 (64 x 96) and 255 (64 x 128); the
+  ranges' conditions moved from M < 2L to M \<= L, so that M = 16, 32, 64 and
+  128 keep their tiles. The K split also runs from M = 8 (its 32 x 16 tile
+  rounded up), where the gemm on all of K still needs 16. Where M covers a tile
+  it is still shifted (rounded up there: nvfp4 at M = 128 and q8_0 at 64 2-4%
+  slower). 64 x 48 only where a weight block is several blocks, affine or a
+  grid's (q4_0, iq4_nl, q2_K slower on it than on 64 x 64).
+
+- The by-M provider: the integer gemm from M = 8 (the rows below 8), at M = 8
+  per type the faster of it and the rows (the rows for iq1_m, iq1_s, q2_0, q4_0,
+  q4_1, q5_0, q5_1, q8_0); an M takes the letter of the first of M = 8, 16, 32,
+  64, 128, 512 at or above it. q2_0 takes the integer gemm from 65 to 255 (the
+  f16 gemm 7% faster at 128, 23% slower at 96, 8% at 200).
+
+- Tried, one at a time (ms of a call of the integer gemm library, 4096^2):
+
+  | change                                                                        | effect                                                                                                                                                                                                           |
+  | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | the K split's last tile in M rounded up, its ranges to M = 16, 32, 64, from 8 | q4_0 at M = 12 / 24 / 48 / 96 0.0307 (the library's rows) / 0.0368 / 0.0503 / 0.0748 -> 0.0237 / 0.0294 / 0.0418 / 0.0610; iq2_xxs 0.0656 / 0.0562 / 0.0644 / 0.0830 -> 0.0262 / 0.0356 / 0.0463 / 0.0685; taken |
+  | and 64 x 96 tiles above M = 64                                                | M = 96: q4_0 0.0611 -> 0.0524, q6_K 0.0814 -> 0.0719, iq2_s 0.106 -> 0.075, iq4_nl 0.0648 -> 0.0554; taken                                                                                                       |
+  | and 64 x 48 tiles to M = 48                                                   | q6_K 0.0615 -> 0.0497, q4_K 0.0501 -> 0.0438, q4_1 0.0497 -> 0.0432, iq1_s 0.0481 -> 0.0459; q4_0 0.0418 -> 0.0458, iq4_nl 0.0469 -> 0.0810, q2_K 0.0601 -> 0.0617: taken but for those three's kinds            |
+  | the integer gemm at M = 8 against the rows                                    | faster on 15 types (iq2_xxs 0.0423 -> 0.0259, q3_K 0.0407 -> 0.0244, q6_K 0.0424 -> 0.0301), slower on 8 (q4_0 0.0224 -> 0.0240, iq1_s 0.0260 -> 0.0357): by type                                                |
+  | the K split in 2 at M = 256 too (256 blocks, not 128)                         | q4_0 0.1055 -> 0.1220, iq2_xxs 0.1231 -> 0.1364, q6_K 0.1453 -> 0.1632: not taken                                                                                                                                |
+  | unsplit from M = 129 (128 .. 256 blocks against 256 .. 512)                   | q4_0 at 129 0.109 -> 0.098, at 200 0.116 -> 0.133; q4_K at 129 0.130 -> 0.160: not taken                                                                                                                         |
+  | the last tile rounded up also where M covers it                               | nvfp4 at M = 128 0.0806 -> 0.0825, q8_0 at 64 0.0535 -> 0.0557: shifted there                                                                                                                                    |
+
+- The map, after (the same pass's conventions; M = 512 added; 173 of 322 cells
+  under 0.95, 151 of the 299 measured before):
+
+  | type    | 1    | 2    | 4    | 8    | 12   | 16   | 24   | 32   | 48   | 64   | 96   | 128  | 256  | 512  |
+  | ------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+  | iq1_m   | 0.70 | 0.71 | 0.82 | 0.88 | 3.12 | 3.12 | 2.29 | 2.33 | 1.74 | 1.80 | 1.57 | 1.23 | 0.90 | 0.78 |
+  | iq1_s   | 0.83 | 0.78 | 0.83 | 0.93 | 0.71 | 0.72 | 0.70 | 0.70 | 0.87 | 1.02 | 1.05 | 1.08 | 1.00 | 0.87 |
+  | iq2_s   | 0.46 | 0.50 | 0.60 | 0.88 | 1.01 | 1.01 | 0.75 | 0.83 | 0.78 | 0.91 | 0.90 | 0.84 | 0.85 | 0.78 |
+  | iq2_xs  | 0.48 | 0.47 | 0.58 | 0.85 | 1.02 | 1.04 | 0.88 | 0.98 | 0.79 | 0.96 | 0.95 | 0.91 | 0.88 | 0.80 |
+  | iq2_xxs | 0.36 | 0.37 | 0.50 | 0.94 | 0.94 | 0.95 | 0.85 | 0.98 | 0.86 | 0.98 | 1.01 | 1.02 | 0.93 | 0.81 |
+  | iq3_s   | 0.37 | 0.40 | 0.48 | 0.92 | 1.06 | 1.07 | 0.89 | 0.96 | 0.64 | 0.79 | 0.91 | 1.01 | 0.96 | 0.84 |
+  | iq3_xxs | 0.38 | 0.40 | 0.48 | 0.81 | 0.89 | 0.91 | 0.84 | 0.92 | 0.79 | 0.91 | 0.95 | 1.00 | 0.89 | 0.77 |
+  | iq4_nl  | 0.83 | 0.79 | 0.74 | 1.02 | 1.29 | 1.29 | 1.13 | 1.22 | 0.90 | 1.00 | 1.08 | 1.07 | 1.00 | 0.87 |
+  | iq4_xs  | 0.78 | 0.74 | 0.78 | 1.01 | 1.13 | 1.14 | 0.87 | 0.95 | 0.86 | 0.97 | 0.99 | 1.03 | 0.95 | 0.82 |
+  | mxfp4   | 0.71 | 0.69 | 0.76 | 1.00 | 1.11 | 1.12 | 1.00 | 1.07 | 0.87 | 0.98 | 1.02 | 1.10 | 1.03 | 0.90 |
+  | nvfp4   | 0.88 | 0.90 | 0.93 | 1.24 | 1.38 | 1.39 | 1.20 | 1.29 | 1.03 | 1.18 | 1.13 | 1.25 | 1.01 | 0.91 |
+  | q1_0    | 0.72 | 0.67 | 0.88 | 1.11 | 1.03 | 1.04 | 0.94 | 1.02 | 0.71 | 0.93 | 0.82 | 0.95 | 0.93 | 0.82 |
+  | q2_0    | 0.67 | 0.65 | 0.86 | 0.99 | 0.80 | 0.82 | 0.83 | 0.94 | 0.80 | 0.91 | 0.74 | 0.63 | 0.85 | 0.76 |
+  | q2_K    | 0.64 | 0.64 | 0.88 | 1.14 | 0.90 | 0.92 | 0.76 | 0.86 | 0.78 | 0.95 | 0.77 | 1.15 | 1.05 | 0.99 |
+  | q3_K    | 0.51 | 0.49 | 0.85 | 1.63 | 1.19 | 1.20 | 0.88 | 0.99 | 0.90 | 0.97 | 0.98 | 1.03 | 0.97 | 0.85 |
+  | q4_0    | 0.93 | 0.92 | 0.90 | 1.10 | 1.20 | 1.23 | 1.09 | 1.21 | 0.95 | 1.08 | 1.15 | 1.14 | 1.06 | 0.92 |
+  | q4_1    | 0.94 | 0.92 | 0.82 | 0.96 | 1.07 | 1.07 | 0.79 | 0.86 | 0.93 | 0.97 | 0.98 | 1.03 | 0.97 | 0.86 |
+  | q4_K    | 0.78 | 0.73 | 0.84 | 1.13 | 1.12 | 1.13 | 0.89 | 0.98 | 0.79 | 0.98 | 0.94 | 1.02 | 0.95 | 0.83 |
+  | q5_0    | 0.90 | 0.89 | 0.79 | 1.05 | 1.15 | 1.17 | 1.04 | 1.09 | 0.85 | 1.09 | 1.08 | 1.14 | 1.05 | 0.90 |
+  | q5_1    | 0.92 | 0.88 | 0.83 | 0.97 | 1.15 | 1.16 | 0.92 | 0.97 | 0.99 | 1.01 | 1.08 | 1.14 | 1.01 | 0.89 |
+  | q5_K    | 0.56 | 0.57 | 0.68 | 1.17 | 1.18 | 1.19 | 0.85 | 0.94 | 0.79 | 0.98 | 0.96 | 1.04 | 0.96 | 0.83 |
+  | q6_K    | 0.63 | 0.62 | 0.69 | 1.23 | 1.23 | 1.24 | 0.93 | 1.02 | 0.98 | 0.95 | 0.99 | 1.01 | 0.92 | 0.83 |
+  | q8_0    | 0.91 | 0.94 | 0.83 | 0.96 | 1.16 | 1.17 | 1.11 | 1.08 | 0.98 | 1.02 | 1.14 | 1.19 | 1.09 | 0.94 |
+
+  At M = 12, 24, 48 and 96 the cells under 0.95 went from 22, 21, 22, 22 to 5,
+  16, 17, 6 (M = 12's median 0.62 -> 1.13, 96's 0.70 -> 0.99), at M = 8 from 13
+  to 7. Slower than before by more than 3% of their time: iq2_xs and iq1_s at M
+  = 16 (27.0 -> 28.9, 36.7 -> 38.8 us) and q1_0 at 48 (41.3 -> 43.8: one block
+  of 32 x 64 where two shifted ones of 16 x 32 were faster); q2_0 at 128 on the
+  integer gemm (by design, above).
+
+- Scorecard, by-M provider (ms; GGML / it), 4096^2, f32 acts, --rounds 5; every
+  cell within 3% of Phase 14's but q4_1 at M = 32 (0.0380 -> 0.0397; its kernel
+  by CUPTI 30.0-31.5 -> 32.1 us on the same tiles, not explained) and iq2_xxs at
+  16 (0.0263 -> 0.0274; two-valued run to run as in Phase 11, its kernel by
+  CUPTI 24.2 -> 23.1-23.6 us):
+
+  | type    | M = 16        | M = 32        | M = 64        | M = 128       | M = 512       |
+  | ------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | q4_0    | 0.0239 (1.23) | 0.0299 (1.21) | 0.0426 (1.08) | 0.0637 (1.14) | 0.2074 (0.92) |
+  | q8_0    | 0.0343 (1.17) | 0.0395 (1.08) | 0.0531 (1.02) | 0.0676 (1.19) | 0.2210 (0.94) |
+  | q5_0    | 0.0285 (1.17) | 0.0353 (1.09) | 0.0460 (1.09) | 0.0669 (1.14) | 0.2205 (0.90) |
+  | q4_1    | 0.0290 (1.07) | 0.0397 (0.86) | 0.0504 (0.97) | 0.0748 (1.03) | 0.2464 (0.86) |
+  | q5_1    | 0.0309 (1.16) | 0.0383 (0.97) | 0.0517 (1.01) | 0.0744 (1.14) | 0.2513 (0.89) |
+  | q4_K    | 0.0266 (1.13) | 0.0361 (0.98) | 0.0504 (0.98) | 0.0748 (1.02) | 0.2505 (0.83) |
+  | q5_K    | 0.0277 (1.19) | 0.0407 (0.94) | 0.0526 (0.98) | 0.0767 (1.04) | 0.2598 (0.83) |
+  | q6_K    | 0.0297 (1.24) | 0.0434 (1.02) | 0.0605 (0.95) | 0.0842 (1.01) | 0.2866 (0.83) |
+  | q3_K    | 0.0247 (1.20) | 0.0374 (0.99) | 0.0539 (0.97) | 0.0806 (1.03) | 0.2769 (0.85) |
+  | iq4_nl  | 0.0251 (1.29) | 0.0322 (1.22) | 0.0475 (1.00) | 0.0680 (1.07) | 0.2222 (0.87) |
+  | iq2_xxs | 0.0274 (0.95) | 0.0353 (0.98) | 0.0472 (0.98) | 0.0716 (1.02) | 0.2409 (0.81) |
+  | iq3_s   | 0.0325 (1.07) | 0.0427 (0.96) | 0.0646 (0.79) | 0.0763 (1.01) | 0.2453 (0.84) |
+  | mxfp4   | 0.0282 (1.12) | 0.0350 (1.07) | 0.0500 (0.98) | 0.0679 (1.10) | 0.2216 (0.90) |
+  | q2_K    | 0.0300 (0.92) | 0.0448 (0.86) | 0.0608 (0.95) | 0.1085 (1.15) | 0.3687 (0.99) |
+  | nvfp4   | 0.0275 (1.39) | 0.0356 (1.29) | 0.0509 (1.18) | 0.0784 (1.25) | 0.2938 (0.91) |
+
+- Gate: `--check` of the integer gemm and by-M providers of all 23 types on 4096
+  x 1001 x 8, 4096 x 4099 x 65, 4096^2 x 16, 32, 64, 128, 256, 512, 4096 x 512 x
+  7, 8, 9, 12, 15, 16, 17, 24, 31, 32, 33, 40, 47, 48, 49, 63, 64, 65, 80, 95,
+  96, 97, 127, 128, 129, 200, 255, 256, and K not a multiple of the split's
+  steps or N under 64 (1280 x 512 x 12, 24, 48, 96, 200, 1088 x 512 x 12, 40,
+  96, 768 x 1000 x 17, 48, 96, 4096 x 40 x 12, 48, 96, 4096 x 104 x 24; f32
+  acts): 3393 results, 0 failures, 0 unchecked, on each of the three changes. Of
+  the 146 CUDA libraries' `.stmt` the 23 integer gemms' differ; the 82 Metal
+  ones are byte-identical to Phase 14's.
+
+- Where the rest is:
+
+  - M \<= 8 (the grid formats 0.36-0.94, q3_K, q5_K, q6_K at M = 1 to 4
+    0.49-0.70): the dp4a rows; not worked on.
+  - M = 24 and 48 (16 and 17 cells, mostly 0.85-0.95): the tiles of M = 32 and
+    64 (or 48) at a third or half more rows than M; tiles of 24 and 40 rows, or
+    a guarded store, would be one more shape each.
+  - M from 129 to 255 (not in the map; q4_0 at 129 0.71, 200 0.86): two blocks
+    of 64 x 128, the K split in 2; neither unsplit nor split at 256 is faster.
+  - q4_K and q5_K at M = 48 (0.79): 0.053 / 0.057 ms, where the build that first
+    tried the 64 x 48 tiles (the same shape at M = 48) measured q4_K at 0.044;
+    not explained.
+  - iq1_s at M = 12 to 32 (0.70-0.72), iq2_s at 24 to 48 and 128 (0.75-0.84),
+    iq3_s at 48 and 64 (0.64, 0.79), q2_K and q2_0 from 16 to 96 (0.74-0.94), M
+    = 256 (10 cells 0.85-0.95) and M = 512: as Phases 12-14.
