@@ -33,6 +33,7 @@ tests(
     arm_bit_field_shift.cpp
     arm_cpu_detect.cpp
     arm_dot_product_by_element.cpp
+    arm_dot_product_loaded_bounds.cpp
     associativity.cpp
     async_device_copy.cpp
     async_require_fail.cpp
