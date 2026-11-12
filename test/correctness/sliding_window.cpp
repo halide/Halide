@@ -1,4 +1,6 @@
 #include "Halide.h"
+#include <algorithm>
+#include <climits>
 #include <stdio.h>
 
 using namespace Halide;
@@ -15,6 +17,43 @@ extern "C" void *my_malloc(JITUserContext *, size_t x) {
     exit(1);
 }
 
+// The range of the first coordinate of the stores traced.
+int min_stored = 0, max_stored = 0;
+int record_stored_range(JITUserContext *, const halide_trace_event_t *e) {
+    if (e->event == halide_trace_store) {
+        for (int l = 0; l < e->lanes; l++) {
+            min_stored = std::min(min_stored, e->coordinates[l]);
+            max_stored = std::max(max_stored, e->coordinates[l]);
+        }
+    }
+    return 0;
+}
+
+// Reports the size of a producer's allocation, or 0 if it isn't constant.
+class AllocationSizeOf : public Internal::IRMutator {
+    const std::string producer;
+
+    using IRMutator::visit;
+
+    Internal::Stmt visit(const Internal::Allocate *op) override {
+        if (op->name == producer) {
+            int64_t total = 1;
+            for (const auto &e : op->extents) {
+                total *= Internal::as_const_int(e).value_or(0);
+            }
+            size = (int)total;
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    int size = 0;
+
+    AllocationSizeOf(std::string producer)
+        : producer(std::move(producer)) {
+    }
+};
+
 int main(int argc, char **argv) {
     Var x, y;
 
@@ -23,14 +62,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
+    {
         count = 0;
         Func f, g;
 
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x - 1);
 
-        f.store_root().compute_at(g, x).store_in(store_in);
+        f.store_root().compute_at(g, x);
 
         // Test that sliding window works when specializing.
         g.specialize(g.output_buffer().dim(0).min() == 0);
@@ -76,9 +115,8 @@ int main(int argc, char **argv) {
         g.store_root().compute_at(h, x).store_in(store_in);
 
         Buffer<int> im = h.realize({100});
-        int correct = store_in == MemoryType::Register ? 103 : 102;
-        if (count != correct) {
-            printf("f was called %d times instead of %d times\n", count, correct);
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
             return 1;
         }
     }
@@ -292,24 +330,18 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding with a vectorized producer and consumer, trying to rotate
-        // cleanly in registers.
+        // Sliding with a vectorized producer and consumer, in registers.
         count = 0;
         Func f, g;
         f(x) = call_counter(x, 0);
         g(x) = f(x + 1) + f(x - 1);
 
-        // This currently requires a trick to get everything to be aligned
-        // nicely. This exploits the fact that ShiftInwards splits are
-        // aligned to the end of the original loop (and extending before the
-        // min if necessary).
-        Var xi("xi");
-        f.store_root().compute_at(g, x).store_in(MemoryType::Register).split(x, x, xi, 8).vectorize(xi, 4).unroll(xi);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register).vectorize(x, 4);
         g.vectorize(x, 4, TailStrategy::RoundUp);
 
         Buffer<int> im = g.realize({100});
-        if (count != 102) {
-            printf("f was called %d times instead of %d times\n", count, 102);
+        if (count != 104) {
+            printf("f was called %d times instead of %d times\n", count, 104);
             return 1;
         }
     }
@@ -394,6 +426,53 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding in registers over two loops at once. A window in registers
+        // can't span a loop of non-constant extent, so f can slide over x but
+        // not also over yi.
+        Var yo, yi;
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1);
+
+        g.split(y, yo, yi, 4);
+        f.store_at(g, yo).compute_at(g, x).store_in(MemoryType::Register);
+
+        Buffer<int> im = g.realize({12, 12});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = (x * 3 + y) + ((x - 1) * 3 + y) + (x * 3 + y - 1);
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // A consumer that clamps its coordinate, so that the region required
+        // of the producer is flat for a while and then starts moving. The loop
+        // can't be rewound to warm this up, because rewinding it doesn't move
+        // the window; it has to warm up on the first iteration instead.
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(max(x, 4), y) + f(max(x, 4) + 2, y);
+
+        f.store_root().compute_at(g, x);
+
+        Buffer<int> im = g.realize({15, 15});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = std::max(x, 4) * 3 + y + (std::max(x, 4) + 2) * 3 + y;
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // Sliding a producer along the outer loop of a pair of outputs fused
         // together with compute_with. Previously triggered an internal compiler
         // error referencing a missing .loop_min symbol on the fused loop.
@@ -436,6 +515,381 @@ int main(int argc, char **argv) {
         if (count != 10) {
             printf("f1 was called %d times instead of %d times\n", count, 10);
             return 1;
+        }
+    }
+
+    {
+        // Two funcs sliding over the same loop, where one consumes the other,
+        // and the outer func also consumes both. Both need to warm up their
+        // windows, but over different numbers of iterations.
+        // Sliding warms up its window by computing a little more than is
+        // required at the edges, so give the input some slack.
+        Buffer<int> input(9, 9);
+        input.set_min(-4, -4);
+        input.fill([](int x, int y) { return x * 100 + y; });
+
+        Var yo, yi;
+        Func f, g, h;
+        f(x, y) = input(x, y);
+        g(x, y) = (f(x + 1, y) + f(x - 1, y)) * 2;
+        h(x, y) = (f(x + 1, y) + f(x - 1, y)) + (g(x + 1, y) + g(x - 1, y));
+
+        h.never_partition_all().split(y, yo, yi, 1, TailStrategy::RoundUp);
+        h.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);
+        f.never_partition_all().store_at(h, yo).compute_at(h, x);
+        g.never_partition_all().store_root().compute_at(h, x);
+
+        Buffer<int> im = h.realize({1, 1});
+        // f(x, y) = 100x + y, so g(x, y) = 400x + 4y, and
+        // h(0, 0) = (100 + -100) + (400 + -400) = 0. Any coordinate mix-up
+        // moves this, unlike a constant input.
+        int correct = 0;
+        if (im(0, 0) != correct) {
+            printf("h(0, 0) = %d instead of %d\n", im(0, 0), correct);
+            return 1;
+        }
+    }
+
+    {
+        // g is computed inside h's production and slides over the outermost
+        // loop, while f and h both slide over yi and warm up their windows by
+        // rewinding it. g has to start when h's warm-up does - any earlier and
+        // it runs extra times, which corrupts its own sliding.
+        const int size = 15;
+        Var yo, yi;
+        Buffer<int> ref;
+        for (int slide = 0; slide < 2; slide++) {
+            Func f, g, h, out;
+            f(x, y) = x * 3 + y;
+            g(x, y) = f(x * 2 - 1, y * 2 - 1) + f(x * 2, y * 2 + 2);
+            h(x, y) = (f(x, y + 1) + f(x, y - 2)) +
+                      (g(x / 2 + 2, y / 2 - 2) + g(x / 2 - 2, y / 2 + 2));
+            out(x, y) = h(x * 2 + 1, y * 2 - 2) + h(x * 2 + 1, y * 2 + 2);
+
+            if (slide) {
+                out.split(y, yo, yi, 4, TailStrategy::RoundUp);
+                f.store_at(out, yo).compute_at(out, yi);
+                g.store_at(out, Var::outermost()).compute_at(h, Var::outermost());
+                h.store_at(out, yo).compute_at(out, yi);
+            } else {
+                f.compute_root();
+                g.compute_root();
+                h.compute_root();
+            }
+
+            Buffer<int> im = out.realize({size, size});
+            if (!slide) {
+                ref = im;
+            } else {
+                for (int y = 0; y < size; y++) {
+                    for (int x = 0; x < size; x++) {
+                        if (im(x, y) != ref(x, y)) {
+                            printf("out(%d, %d) = %d instead of %d\n",
+                                   x, y, im(x, y), ref(x, y));
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    {
+        // f slides down over yi. The region required of f by h doesn't depend
+        // on x, so h slides over x, computing everything on the first x
+        // iteration. On later x iterations f is then only required by g, so
+        // f's window over yi has to be worked out from that smaller region,
+        // or rows that g needs are never computed.
+        const int size = 15;
+        Var yo, yi;
+        Func f, g, h, out;
+        f(x, y) = x + y * 32;
+        g(x, y) = f(x / 2 - 2, y / 2);
+        h(x, y) = f(2 * x, 2 * y);
+        out(x, y) = h(7, (14 - y) / 2) + g(2 * (14 - x), 2 * (14 - y));
+
+        out.split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+        f.store_at(out, yo).compute_at(out, x);
+        g.store_at(out, yi).compute_at(out, x);
+        h.store_at(out, yi).compute_at(out, x);
+
+        Buffer<int> im = out.realize({size, size});
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int correct = (14 + ((14 - y) / 2) * 64) + ((12 - x) + (14 - y) * 32);
+                if (im(x, y) != correct) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // Unrolling h's y loop leaves the two copies of f's clamp sharing an
+        // IR node, but f slides differently in each copy, so loop
+        // partitioning must only drop the clamp where it's safe in both.
+        const int size = 15;
+        Param<int> lo, hi;
+        Func f, g, h, out;
+        f(x, y) = x + clamp(likely(y), lo, hi) * 32;
+        g(x, y) = f(x / 2 - 1, y / 2) + f(x / 2 + 1, y / 2);
+        h(x, y) = g(7, y / 2 - 2) + g(7, y / 2);
+        out(x, y) = h(x / 2 - 1, y / 2);
+
+        f.store_at(h, y).compute_at(g, y).unroll(y, 2, TailStrategy::GuardWithIf);
+        g.store_at(out, Var::outermost()).compute_at(h, x);
+        h.compute_at(out, Var::outermost()).unroll(y, 2, TailStrategy::GuardWithIf);
+        lo.set(0);
+        hi.set(14);
+
+        Buffer<int> im = out.realize({size, size});
+        auto div2 = [](int a) { return a >= 0 ? a / 2 : -((1 - a) / 2); };
+        auto f_ref = [](int a, int b) { return a + std::clamp(b, 0, 14) * 32; };
+        auto g_ref = [&](int a, int b) { return f_ref(div2(a) - 1, div2(b)) + f_ref(div2(a) + 1, div2(b)); };
+        auto h_ref = [&](int a, int b) { return g_ref(7, div2(b) - 2) + g_ref(7, div2(b)); };
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int correct = h_ref(div2(x) - 1, div2(y));
+                if (im(x, y) != correct) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // Bounds inference emits a .min/.max let per enclosing loop level, and
+        // sliding rewrites each one with a bound valid where it sits. Here acc
+        // walks rt carrying step, which slides along it. The panel feeding
+        // step is the same for every row, so it can be computed outside the
+        // loop over groups of rows, at a different level from step. Either way
+        // it is read at one step and nowhere else, so its allocation should be
+        // one step's worth, not the whole walk.
+        const int W = 8, Y = 4, R = 2, N = 16;
+        for (bool panel_outside_row_loop : {false, true}) {
+            Var t("t"), yo("yo"), yw("yw"), yi("yi");
+            RDom rt(0, N, "rt");
+            RDom rx(0, W, "rx");
+
+            Func panel("panel"), step("step"), acc("acc"), out("out");
+            panel(x, t) = cast<float>(x + t);
+            step(y, t) = 0.f;
+            step(y, t) += panel(rx, t) + y;
+            acc(x, y) = 0.f;
+            acc(x, y) = acc(x, y) * (step(y, rt) - step(y, rt - 1)) + panel(x, rt);
+            out(x, y) = acc(x, y);
+
+            out.bound(x, 0, W).bound(y, 0, Y).split(y, yo, yi, Y).compute_root();
+            acc.compute_at(out, yo);
+            acc.update().split(y, yw, yi, R).reorder(x, yi, yw, rt);
+            step.store_at(out, yo).compute_at(acc, yw);
+            if (panel_outside_row_loop) {
+                panel.compute_at(acc, rt);
+            } else {
+                panel.compute_at(acc, yw);
+            }
+
+            AllocationSizeOf alloc(panel.name());
+            out.add_custom_lowering_pass(&alloc, nullptr);
+            Buffer<float> result = out.realize({W, Y});
+
+            auto step_of = [&](int yy, int tt) {
+                float s = 0;
+                for (int j = 0; j < W; j++) {
+                    s += (float)(j + tt) + yy;
+                }
+                return s;
+            };
+            for (int yy = 0; yy < Y; yy++) {
+                for (int j = 0; j < W; j++) {
+                    float a = 0;
+                    for (int i = 0; i < N; i++) {
+                        a = a * (step_of(yy, i) - step_of(yy, i - 1)) + (float)(j + i);
+                    }
+                    if (result(j, yy) != a) {
+                        printf("out(%d, %d) = %f instead of %f\n", j, yy,
+                               (double)result(j, yy), a);
+                        return 1;
+                    }
+                }
+            }
+            if (alloc.size != W) {
+                printf("With the panel computed %s it was allocated %d "
+                       "elements instead of %d\n",
+                       panel_outside_row_loop ? "outside the row loop" : "with everything else",
+                       alloc.size, W);
+                return 1;
+            }
+        }
+    }
+
+    for (bool unrolled : {false, true}) {
+        // A cascade of stencils guarded at the boundary. Every stage slides.
+        // Over an unrolled loop, warming up must not change its extent.
+        const int N = 32, K = 4;
+        count = 0;
+        Func in("in");
+        in(x) = x * 13 % 17;
+        Func prev = BoundaryConditions::constant_exterior(in, 0, {{0, N}});
+        std::vector<Func> stages;
+        for (int k = 0; k < K; k++) {
+            Func s("s" + std::to_string(k));
+            s(x) = (prev(x) + select(x < 1, 0, prev(x - 1)) +
+                    select(x < 2, 0, prev(x - 2)) + call_counter(x, k));
+            stages.push_back(s);
+            prev = s;
+        }
+        Func out("out");
+        out(x) = prev(x);
+        in.compute_root();
+        Var xo, xi;
+        if (unrolled) {
+            out.split(x, xo, xi, 4).unroll(xi);
+        }
+        for (Func s : stages) {
+            s.store_root().compute_at(out, unrolled ? xi : x);
+        }
+        Buffer<int> result = out.realize({N});
+
+        std::vector<int> u(N), v(N);
+        for (int i = 0; i < N; i++) {
+            u[i] = i * 13 % 17;
+        }
+        for (int k = 0; k < K; k++) {
+            for (int i = 0; i < N; i++) {
+                v[i] = u[i] + (i >= 1 ? u[i - 1] : 0) + (i >= 2 ? u[i - 2] : 0);
+            }
+            std::swap(u, v);
+        }
+        for (int i = 0; i < N; i++) {
+            if (result(i) != u[i]) {
+                printf("out(%d) = %d instead of %d\n", i, result(i), u[i]);
+                return 1;
+            }
+        }
+        if (!unrolled && count != K * N) {
+            printf("Cascade of %d stencils made %d calls instead of %d\n", K, count, K * N);
+            return 1;
+        }
+    }
+
+    {
+        // h slides over both loops of out. The guard on f's unrolled y loop
+        // then compares two expressions that both increase with h's y loop
+        // variable, so simplify_correlated_differences rewrites it.
+        const int size = 15;
+        Func f, g, h, out;
+        f(x, y) = x + y * 32;
+        g(x, y) = f(x, x);
+        h(x, y) = g(2 * y - 1, 2 * x) + f(2 * x + 2, 2 * x);
+        out(x, y) = h(x / 2 + 2, y / 2);
+
+        f.store_at(out, y).compute_at(h, y).unroll(y, 2, TailStrategy::GuardWithIf);
+        h.store_root().compute_at(out, x);
+
+        Buffer<int> im = out.realize({size, size});
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int hx = x / 2 + 2, hy = y / 2;
+                int correct = (2 * hy - 1) * 33 + (2 * hx + 2) + 2 * hx * 32;
+                if (im(x, y) != correct) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    for (bool up : {true, false}) {
+        // Each iteration needs three values of f and two of them are new, so
+        // rewinding the loop by one iteration to warm up must only compute
+        // the one value of f the first real iteration lacks.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        Expr i = up ? 2 * x : 100 - 2 * x;
+        g(x) = f(i) + f(i + 1) + f(i + 2);
+        f.store_root().compute_at(g, x);
+        g.realize({10});
+        if (count != 21) {
+            printf("Sliding %s: f was called %d times instead of %d times\n",
+                   up ? "up" : "down", count, 21);
+            return 1;
+        }
+    }
+
+    for (bool up : {true, false}) {
+        // A window held in registers can slide in either direction.
+        Func f, g;
+        f(x) = x;
+        Expr i = up ? x : 100 - x;
+        g(x) = f(i - 1) + f(i + 1);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out = g.realize({16});
+        for (int j = 0; j < 16; j++) {
+            int correct = up ? 2 * j : 200 - 2 * j;
+            if (out(j) != correct) {
+                printf("Sliding in registers %s: out(%d) = %d instead of %d\n",
+                       up ? "up" : "down", j, out(j), correct);
+                return 1;
+            }
+        }
+    }
+
+    {
+        // A window slid in registers must only evaluate the producer for the
+        // newly required values.
+        Func f, g, h;
+        Var yo, yi;
+        f(x, y) = x + y;
+        g(x, y) = f(x, y) * 2 + 1;
+        h(x, y) = g(x + 1, y + 2) + g(x, y + 1);
+        f.compute_root();
+        h.split(y, yo, yi, 4, TailStrategy::GuardWithIf);
+        g.store_at(h, yi).compute_at(h, x).store_in(MemoryType::Register).trace_stores();
+        h.jit_handlers().custom_trace = record_stored_range;
+        min_stored = INT_MAX;
+        max_stored = INT_MIN;
+        h.realize({15, 15});
+        if (min_stored != 0 || max_stored != 15) {
+            printf("g was stored over x in [%d, %d] instead of [0, 15]\n",
+                   min_stored, max_stored);
+            return 1;
+        }
+    }
+
+    {
+        // Specializing a consumer duplicates the producer computed inside
+        // it, and each copy has to slide the same way.
+        count = 0;
+        Func f, g, h;
+        Param<bool> p;
+        f(x, y) = call_counter(x, y) + x + y;
+        g(x, y) = f(x, y) + f(x, y + 1);
+        h(x, y) = g(x, y) * 2;
+        g.compute_at(h, y).specialize(p);
+        f.store_root().compute_at(g, x);
+        for (bool pv : {false, true}) {
+            count = 0;
+            p.set(pv);
+            Buffer<int> out = h.realize({8, 8});
+            for (int j = 0; j < 8; j++) {
+                for (int i = 0; i < 8; i++) {
+                    int correct = 2 * (2 * (i + j) + 1);
+                    if (out(i, j) != correct) {
+                        printf("Specialized consumer: out(%d, %d) = %d instead of %d\n",
+                               i, j, out(i, j), correct);
+                        return 1;
+                    }
+                }
+            }
+            if (count != 8 * 9) {
+                printf("Specialized consumer: f was called %d times instead of %d times\n",
+                       count, 8 * 9);
+                return 1;
+            }
         }
     }
 
