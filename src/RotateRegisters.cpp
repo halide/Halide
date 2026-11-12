@@ -1,4 +1,5 @@
 #include "RotateRegisters.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -26,10 +27,26 @@ int64_t euclidean_mod(int64_t a, int64_t b) {
 
 bool uses_other_vars(const Expr &e, const Scope<> &allowed) {
     bool result = false;
-    visit_with(e, [&](auto *, const Variable *op) {
-        result |= !allowed.contains(op->name);
-    });
+    Scope<> lets;
+    visit_with(
+        e,
+        [&](auto *, const Variable *op) {
+            result |= !allowed.contains(op->name) && !lets.contains(op->name);
+        },
+        [&](auto *self, const Let *op) {
+            op->value.accept(self);
+            ScopedBinding<> bind(lets, op->name);
+            op->body.accept(self);
+        });
     return result;
+}
+
+// Inline every let, then share the common subexpressions again, so that
+// the simplifier sees equal subexpressions as equal without the expression
+// growing exponentially.
+Expr canonicalize(const Expr &e) {
+    Expr c = common_subexpression_elimination(substitute_in_all_lets(e));
+    return simplify(remove_likelies(remove_promises(c)));
 }
 
 bool has_loads(const Expr &e) {
@@ -66,24 +83,15 @@ class PlanRotation : public IRVisitor {
     };
     vector<Loop> loops;
 
-    // Lets and loop vars, in terms of the iteration variables and names
-    // defined outside the realization.
-    map<string, Expr> values;
+    // The enclosing lets and loop vars inside the realization, outermost
+    // first. Each loop var is its loop's min plus an iteration variable.
+    vector<std::pair<string, Expr>> bindings;
 
     template<typename Fn>
-    void with_value(const string &n, const Expr &value, Fn &&fn) {
-        auto it = values.find(n);
-        std::optional<Expr> old;
-        if (it != values.end()) {
-            old = it->second;
-        }
-        values[n] = value;
+    void with_binding(const string &n, const Expr &value, Fn &&fn) {
+        bindings.emplace_back(n, value);
         fn();
-        if (old) {
-            values[n] = *old;
-        } else {
-            values.erase(n);
-        }
+        bindings.pop_back();
     }
 
     // The part of the rotation that no loop inside the realization changes.
@@ -95,14 +103,19 @@ class PlanRotation : public IRVisitor {
 
     using IRVisitor::visit;
 
-    Expr expand(const Expr &e) {
-        return simplify(remove_likelies(remove_promises(substitute(values, substitute_in_all_lets(e)))));
+    // An expression in terms of the iteration variables and names defined
+    // outside the realization.
+    Expr in_context(Expr e) {
+        for (auto it = bindings.rbegin(); it != bindings.rend(); it++) {
+            e = Let::make(it->first, it->second, e);
+        }
+        return canonicalize(e);
     }
 
     // How much an expression changes per iteration of a loop.
     std::optional<int64_t> step(const Expr &e, const Loop &l) {
         Expr it = Variable::make(Int(32), l.iteration);
-        return as_const_int(simplify(substitute(l.iteration, it + 1, e) - e));
+        return as_const_int(canonicalize(substitute(l.iteration, it + 1, e) - e));
     }
 
     void access(const IRNode *node, const vector<Expr> &args) {
@@ -120,7 +133,7 @@ class PlanRotation : public IRVisitor {
                 c = m->a;
             }
         }
-        Expr e = expand(c);
+        Expr e = in_context(c);
         if (has_loads(e)) {
             failed = true;
             return;
@@ -149,9 +162,9 @@ class PlanRotation : public IRVisitor {
             }
             residual -= make_const(Int(32), *kc) * it;
         }
-        residual = simplify(residual);
-        Expr o = simplify(substitute(zero, residual));
-        Expr rest = simplify(residual - o);
+        residual = canonicalize(residual);
+        Expr o = canonicalize(substitute(zero, residual));
+        Expr rest = canonicalize(residual - o);
         if (expr_uses_vars(o, all_iterations) || uses_other_vars(rest, constant_vars)) {
             failed = true;
             return;
@@ -159,7 +172,7 @@ class PlanRotation : public IRVisitor {
         if (!offset.defined()) {
             offset = o;
         }
-        auto delta = as_const_int(simplify(o - offset));
+        auto delta = as_const_int(canonicalize(o - offset));
         if (!delta) {
             failed = true;
             return;
@@ -171,7 +184,7 @@ class PlanRotation : public IRVisitor {
                 in_loop_vars[l.iteration] = Variable::make(Int(32), l.op->name) - l.op->min;
             }
         }
-        Expr index = simplify(substitute(in_loop_vars, rest) + make_const(Int(32), *delta));
+        Expr index = canonicalize(substitute(in_loop_vars, rest) + make_const(Int(32), *delta));
         index = simplify(Mod::make(index, make_const(Int(32), extent)));
         auto [it, inserted] = indices.emplace(node, index);
         if (!inserted && !equal(it->second, index)) {
@@ -206,11 +219,10 @@ class PlanRotation : public IRVisitor {
         bool becomes_constant = (op->for_type == ForType::Unrolled ||
                                  op->for_type == ForType::Vectorized);
         enclosed[op] = !loops.empty();
-        Expr min = expand(op->min);
         int before = accesses;
-        Expr var = min + Variable::make(Int(32), iteration);
+        Expr var = op->min + Variable::make(Int(32), iteration);
         loops.push_back({op, iteration, becomes_constant});
-        with_value(op->name, var, [&]() { op->body.accept(this); });
+        with_binding(op->name, var, [&]() { op->body.accept(this); });
         loops.pop_back();
         accesses_inside[op] = accesses - before;
     }
@@ -218,7 +230,7 @@ class PlanRotation : public IRVisitor {
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
         op->value.accept(this);
-        with_value(op->name, expand(op->value), [&]() { op->body.accept(this); });
+        with_binding(op->name, op->value, [&]() { op->body.accept(this); });
     }
 
     void visit(const Let *op) override {

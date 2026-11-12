@@ -18,8 +18,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
         // of x and of 5 * y say on their own.
         if (has_facts() && no_overflow_int(op->type)) {
             ConstantInterval d = known_difference(a.get(), b.get());
-            if (d.min_defined || d.max_defined) {
-                info->bounds = ConstantInterval::make_intersection(info->bounds, d);
+            if (!info->bounds.intersect_if_nonempty(d)) {
+                // The facts contradict the bounds, so this code is unreachable.
+                in_unreachable = true;
+                return unreachable(op->type);
             }
         }
         info->alignment = a_info.alignment - b_info.alignment;

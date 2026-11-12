@@ -193,7 +193,9 @@ WEAK int set_trace_file_already_locked(void *user_context, int fd) {
         free(halide_trace_buffer);
         halide_trace_buffer = nullptr;
     }
-    halide_trace_file = fd;
+    // Release so that lock-free readers in halide_get_trace_file that see the
+    // new fd also see the matching halide_trace_buffer.
+    Synchronization::atomic_store_release(&halide_trace_file, &fd);
     return result;
 }
 
@@ -421,6 +423,14 @@ WEAK void halide_set_trace_file(void *user_context, int fd) {
 extern int errno;
 
 WEAK int halide_get_trace_file(void *user_context) {
+    using namespace Halide::Runtime::Internal::Synchronization;
+
+    int fd;
+    atomic_load_acquire(&halide_trace_file, &fd);
+    if (fd >= 0) {
+        return fd;
+    }
+
     ScopedSpinLock lock(&halide_trace_file_lock);
     if (halide_trace_file < -1) {
         // Error
