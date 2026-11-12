@@ -215,6 +215,9 @@ set(GGML_SCHEDULE_PARAMS
     "q5_K mul_mat f32:q8_1.soa code_words=true"
     "q6_K mul_mat f32:q8_0.soa code_words=true"
     "q3_K mul_mat f32:q8_0.soa code_words=true"
+    # (q2_K at 4096^2 x 16 / 32 / 64 0.037 / 0.051 / 0.068 -> 0.034 / 0.047
+    # / 0.062 ms; RTX 3090)
+    "q2_K mul_mat f32:q8_0.soa code_words=true"
     # (the lut formats' codes looked up in their words: iq4_nl at 4096^2 x
     # 16 / 64 / 512 0.036 / 0.054 / 0.245 -> 0.025 / 0.046 / 0.218 ms, mxfp4
     # 0.039 / 0.065 / 0.275 -> 0.028 / 0.050 / 0.219, iq4_xs 0.035 / 0.051 /
@@ -303,7 +306,9 @@ set(GGML_SCHEDULE_PARAMS
     # 0.362) but from M = 64 to 127, where mma.sync's 2 x 2 warps of 32 x 32
     # are (iq2_s at M = 64 0.076 -> 0.061, iq2_xs 0.065 -> 0.055, iq1_m
     # 0.079 -> 0.062; at 128, 0.10 either way); iq1_s below M = 64 (M = 32
-    # 0.050 -> 0.044).
+    # 0.050 -> 0.044). q2_K: mma.sync's below M = 32 and from 64, wmma's
+    # from 32 to 63 (M = 16 / 32: wmma's 0.0339 / 0.0472 ms, mma.sync's
+    # 0.0326 / 0.0473, these 0.0326 / 0.0452).
     "q4_1 mul_mat f32:q8_1.soa int_tiles=mwmm"
     "q4_K mul_mat f32:q8_1.soa int_tiles=wmmm"
     "iq3_s mul_mat f32:q8_0.soa int_tiles=wmmm"
@@ -312,6 +317,7 @@ set(GGML_SCHEDULE_PARAMS
     "q5_K mul_mat f32:q8_1.soa int_tiles=wmmm"
     "q6_K mul_mat f32:q8_0.soa int_tiles=wmmm"
     "q3_K mul_mat f32:q8_0.soa int_tiles=wmmm"
+    "q2_K mul_mat f32:q8_0.soa int_tiles=mwmmm"
     "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
     "q2_0 mul_mat f32:q8_0.soa int_tiles=mwm"
     "iq2_s mul_mat f32:q8_0.soa int_tiles=wwmww"
@@ -356,10 +362,11 @@ endif ()
 # 32-value block's (or 16-value sub-block's) int32 tile scaled by the weight's
 # scale of it (a K-quant's: its sub-block's times its super-block's). Weights
 # with an offset or min per block (q4_1, q5_1, q4_K, q5_K) take f32:q8_1.soa
-# acts: q8_1's block sums are a third array, which the offsets multiply. Not
-# q2_K (mins per 16 values: q8_1's sums are per 32). nvfp4's float scales
-# per 16-value sub-block scale its sub-blocks' tiles as q6_K's integer ones
-# do. code_words=true (GGML_SCHEDULE_PARAMS): its weight
+# acts: q8_1's block sums are a third array, which the offsets multiply.
+# q2_K's mins are per 16 values (q8_1's sums per 32): on f32:q8_0.soa, the
+# act kernel also sums each 16 codes, which its mins multiply. nvfp4's float
+# scales per 16-value sub-block scale its sub-blocks' tiles as q6_K's
+# integer ones do. code_words=true (GGML_SCHEDULE_PARAMS): its weight
 # codes decoded 4 a word in a GPR (the formats decoded by shifts and masks
 # of bytes). Each f16-, bf16- or .soa-act
 # bench library's test checks that its PTX multiplies on the tensor cores
@@ -395,6 +402,7 @@ set(GGML_HALIDE_CUDA_FORMATS
     "mxfp4 mul_mat f32:q8_0.soa"
     "iq4_xs mul_mat f32:q8_0.soa"
     "nvfp4 mul_mat f32:q8_0.soa"
+    "q2_K mul_mat f32:q8_0.soa"
     "q6_K mul_mat f32:q8_0.soa"
     "q3_K mul_mat f32:q8_0.soa"
     "q1_0 mul_mat f32:q8_0.soa"

@@ -2902,13 +2902,33 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     // warps of 32 x 32, twice the lanes to decode a step's weights; iq4_nl
     // at 4096 x 4096 x 64 0.064 -> 0.056 ms, iq2_xxs 0.054 -> 0.050; q4_0's
     // on 2 x 1 warps of 32 x 64, 0.046 against 0.049)
-    if (!luts.empty() || point) {
+    // An affine weight's offsets per 16-value sub-block (q2_K's: a weight
+    // and an act factor more per sub-block, `subsums`) take those warps too,
+    // and blocks of 64 rows of M at most: 128 take more than 48 KB of
+    // shared memory (q2_K at 4096 x 4096 x 64: 0.094 -> 0.063 ms)
+    const bool subsums = halves && affine(rs);
+    if (!luts.empty() || point || subsums) {
         for (KSplit &sp : splits) {
             for (GemmShape &sh : sp.shapes) {
                 if (!sp.wmma && sh.tm == 8 && sh.wm == 1) sh.tm = 4, sh.wm = 2;
             }
         }
     }
+    if (subsums) {
+        auto narrow = [&](std::vector<GemmShape> &sl, bool wm) {
+            sl.erase(std::remove_if(sl.begin(), sl.end(), [&](const GemmShape &sh) { return fm_of(wm) * sh.tm * sh.wm > 64; }), sl.end());
+            for (GemmShape &sh : sl) {
+                if (!wm && sh.tm == 8 && sh.wm == 1) sh.tm = 4, sh.wm = 2;
+            }
+        };
+        for (KSplit &sp : splits) {
+            narrow(sp.shapes, sp.wmma);
+        }
+        narrow(shapes, wmma);
+    }
+    // (the act's codes' sums per 16-value sub-block, where a weight's
+    // offsets are per sub-block: q2_K's; a port of the act kernel's)
+    Func subsum;
     // A gemm: acc's float32 tiles, a block's (blk: its scales times its
     // codes' dot, codes: int32) and its step's operands in shared memory
     struct Gemm {
@@ -2939,28 +2959,122 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         }
         g.tiles = {g.blk};
         Func sums = g.blk;
+        Func rest;
         if (affine(rs)) {
-            if (halves) throw std::invalid_argument("gpu_int_gemm: an affine weight's offsets per block (the act's sums are)");
             // sums: the codes' terms; the code-free ones read the act's
             // block sums
             FuncVec parts = bs.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
             sums = parts[0];
             g.tiles.push_back(sums);
-            if (!parts[1].defined() || !read_port(parts[1], rs[1].derived_ports(), g.blk)) {
-                throw std::invalid_argument("gpu_int_gemm: an affine weight's code-free terms read a derived port of the act (its block sums)");
+            if (!parts[1].defined()) throw std::invalid_argument("gpu_int_gemm: an affine weight's code-free terms");
+            rest = parts[1];
+            if (!halves) {
+                if (!read_port(parts[1], rs[1].derived_ports(), g.blk)) {
+                    throw std::invalid_argument("gpu_int_gemm: an affine weight's code-free terms read a derived port of the act (its block sums)");
+                }
+                // (the port's value, read through a Func of the tile's vars, at
+                // the block the other terms read: theirs is promised within K)
+                for (const auto &[name, f] : Internal::find_direct_calls(g.blk.function())) {
+                    if (name != g.blk.name() && name != sums.name() && f.dimensions() == g.blk.dimensions()) bs.eager_inline(Func(f));
+                }
+                std::vector<Func> ports;
+                for (const DerivedPort &p : rs[1].derived_ports()) {
+                    ports.push_back(p.stored);
+                }
+                promised_args(g.blk, ports);
+                rest = Func();
             }
-            // (the port's value, read through a Func of the tile's vars, at
-            // the block the other terms read: theirs is promised within K)
-            for (const auto &[name, f] : Internal::find_direct_calls(g.blk.function())) {
-                if (name != g.blk.name() && name != sums.name() && f.dimensions() == g.blk.dimensions()) bs.eager_inline(Func(f));
-            }
-            std::vector<Func> ports;
-            for (const DerivedPort &p : rs[1].derived_ports()) {
-                ports.push_back(p.stored);
-            }
-            promised_args(g.blk, ports);
         }
         sums.update().eager_inline(without(decoders(rs), keep));
+        if (rest.defined()) {
+            // (an affine weight's offsets per 16-value sub-block, q2_K's:
+            // per sub-block (rh), its offset times the act's codes' sum
+            // over it, which the act kernel computes, subsum: a value per
+            // act row and sub-block, so an act factor reads it)
+            using namespace Internal;
+            rest.update().eager_inline(without(decoders(rs), keep));
+            rest.update().split(rx, rxh, rxj, fk);
+            Func rh = rest.update().rfactor(rxh, h);
+            rh.bound(h, 0, fmt.block / fk);
+            Func inner = rh.update().hoist_invariants()[0];
+            const Add *a = substitute_in_all_lets(inner.update_value()).as<Add>();
+            const Call *self = a ? a->a.as<Call>() : nullptr;
+            if (!self || self->name != inner.name()) throw std::invalid_argument("gpu_int_gemm: the act's sums over a sub-block as a sum");
+            // (the act's codes' sum over a sub-block t of block y of row
+            // m: subsum's (y * subs + t, m), the act kernel's)
+            const int subs = fmt.block / fk;
+            Expr cx, cy, cm;
+            int ncalls = 0;
+            Expr inc = mutate_with(a->b, [&](auto *self, const Call *c) -> Expr {
+                if (c->call_type != Call::Halide || c->name != ac[0].name()) return self->visit_base(c);
+                cx = c->args[0], cy = c->args[1], cm = c->args[2];
+                ncalls++;
+                return Variable::make(c->type, "gq_code");
+            });
+            auto bare = [](const Expr &e) {
+                return simplify(mutate_with(e, [](auto *self, const Call *c) -> Expr {
+                    return c->is_intrinsic(Call::promise_clamped) || c->is_intrinsic(Call::likely) ? self->mutate(c->args[0]) : self->visit_base(c);
+                }));
+            };
+            const std::map<std::string, Expr> at0{{rxj.name(), 0}};
+            Expr t = substitute(at0, bare(cx)) / fk, y = substitute(at0, cy), mrow = substitute(at0, cm);
+            if (ncalls != 1 || !equal(simplify(inc), simplify(cast(inc.type(), Variable::make(ac[0].type(), "gq_code")))) ||
+                !can_prove(bare(cx) == t * fk + Variable::make(Int(32), rxj.name())) || expr_uses_var(y, rxj.name()) || expr_uses_var(mrow, rxj.name())) {
+                throw std::invalid_argument("gpu_int_gemm: the act's sums over a sub-block as a sum of its codes");
+            }
+            if (!subsum.defined()) {
+                std::vector<Var> ca = ac[0].args();
+                Var q("q");
+                Expr e;
+                for (int k = 0; k < fk; k++) {
+                    Expr c = cast<int32_t>(ac[0]((q % subs) * fk + k, q / subs, ca[2]));
+                    e = e.defined() ? e + c : c;
+                }
+                subsum = Func("act_subsums");
+                subsum(q, ca[2]) = e;
+            }
+            const Expr sv = cast(inner.type(), subsum(y * subs + t, mrow));
+            Expr &v = rh.function().update(0).values()[0];
+            v = mutate_with(substitute_in_all_lets(v), [&](auto *self, const Call *c) -> Expr {
+                if (c->call_type != Call::Halide || c->name != inner.name()) return self->visit_base(c);
+                std::map<std::string, Expr> at;
+                for (size_t i = 0; i < c->args.size(); i++) {
+                    at[inner.args()[i].name()] = c->args[i];
+                }
+                return substitute(at, sv);
+            });
+            // blk reads rest as its sub-blocks' terms, products distributed
+            // over the sums: an outer product of a weight and an act factor
+            // each (factor_funcs())
+            const Add *ra = substitute_in_all_lets(rh.update_value()).as<Add>();
+            if (!ra) throw std::invalid_argument("gpu_int_gemm: the act's sums' terms as a sum");
+            const Expr term = ra->b;
+            std::function<Expr(const Expr &)> spread = [&](const Expr &e) -> Expr {
+                if (const Add *x = e.as<Add>()) return spread(x->a) + spread(x->b);
+                if (const Sub *x = e.as<Sub>()) return spread(x->a) - spread(x->b);
+                if (const Mul *x = e.as<Mul>()) {
+                    Expr p = spread(x->a), q = spread(x->b);
+                    if (const Add *y = p.as<Add>()) return spread(y->a * q) + spread(y->b * q);
+                    if (const Add *y = q.as<Add>()) return spread(p * y->a) + spread(p * y->b);
+                    return p * q;
+                }
+                return e;
+            };
+            Expr &bv = g.blk.function().update(0).values()[0];
+            bv = spread(mutate_with(substitute_in_all_lets(bv), [&](auto *self, const Call *c) -> Expr {
+                if (c->call_type != Call::Halide || c->name != rest.name()) return self->visit_base(c);
+                Expr t;
+                for (int i = 0; i < fmt.block / fk; i++) {
+                    std::map<std::string, Expr> at{{h.name(), i}};
+                    for (size_t j = 0; j < c->args.size(); j++) {
+                        at[rest.args()[j].name()] = c->args[j];
+                    }
+                    Expr e = substitute(at, term);
+                    t = t.defined() ? t + e : e;
+                }
+                return t;
+            }));
+        }
         if (halves) {
             // the act's scale times the block's sum (whole) of its
             // fragments' (half: each its sub-block's scale times its codes'
@@ -3297,7 +3411,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     // derived port: they read their own copies of the encoder (each Func
     // of it they reach, once its callers there are copied), its own kernel
     std::map<std::string, Func> rc;
-    if (!rs[1].derived_ports().empty()) {
+    if (!rs[1].derived_ports().empty() || subsum.defined()) {
         std::vector<Func> path{rows}, todo;
         for (const auto &[name, f] : Internal::find_transitive_calls(rows.function())) {
             (std::any_of(enc.begin(), enc.end(), [&](const Func &x) { return x.name() == name; }) ? todo : path).push_back(Func(f));
@@ -3326,6 +3440,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         const std::vector<DerivedPort> &dp = rs[1].derived_ports();
         if (std::any_of(dp.begin(), dp.end(), [&](const DerivedPort &p) { return p.name == rs[1].encoded_ports[j].name; })) derived.push_back(rs[1].encoded[j]);
     }
+    if (subsum.defined()) derived.push_back(subsum);
     for (const Func &d : derived) {
         std::vector<Func> chain{d};
         for (const auto &[name, f] : Internal::find_transitive_calls(d.function())) {
@@ -3346,7 +3461,9 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         codes.compute_at(out, Var::outermost()).rename(a[1], blk).rename(a[2], row).split(a[0], a[0], jv, 4).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).fuse(a[0], blk, a[0]).vectorize(jv).gpu_blocks(bo, row).gpu_threads(a[0]);
         for (Func e : fused) {
             a = e.args();
-            e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).rename(a[0], blk).rename(a[1], row).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).gpu_blocks(bo, row).gpu_threads(blk).compute_with(codes, bo);
+            // (the sub-block sums: the sub-blocks of bo's 16 blocks)
+            const int per_bo = subsum.defined() && e.name() == subsum.name() ? 16 * (fmt.block / 16) : 16;
+            e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).rename(a[0], blk).rename(a[1], row).split(blk, bo, blk, per_bo, TailStrategy::GuardWithIf).gpu_blocks(bo, row).gpu_threads(blk).compute_with(codes, bo);
         }
         for (const Func &g : enc) {
             Func f = of(g);
@@ -3361,6 +3478,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     for (const Func &e : ports) {
         if (e.name() != ac[0].name()) fused.push_back(e);
     }
+    if (subsum.defined()) fused.push_back(subsum);
     schedule_acts(ac[0], fused, [](const Func &g) { return g; });
     if (rc.count(ac[0].name())) {
         std::vector<Func> rfused;

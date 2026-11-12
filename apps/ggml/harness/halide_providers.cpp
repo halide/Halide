@@ -394,7 +394,7 @@ void register_halide_providers() {
     // from 16 takes the nearest of those five's.
     static const std::map<std::string, std::string> by_m = {
         {"q2_0", "iiihi"},
-        {"q2_K", "hhhhh"},
+        {"q2_K", "iiihi"},
     };
     auto make = [](const std::string &name) {
         for (const Provider &p : providers()) {
