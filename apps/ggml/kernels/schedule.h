@@ -2861,6 +2861,16 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     for (Func f : decoders(rs)) {
         if (register_lut(rs, f)) luts.insert(f.name());
     }
+    // A grid's points (a precomputed table of `point` codes a row): the
+    // weights' codes staged a point a word, a load of the table each, its
+    // signs applied in the word (iq2_s at 4096 x 4096 x 128 0.167 -> 0.100
+    // ms, iq2_xxs at 512 0.315 -> 0.238; a lane's 16 codes a vector: a byte
+    // load and a multiply each; a point a vector: 0.125, 0.295. RTX 3090)
+    int point = 0;
+    for (Func f : decoders(rs, all_but({}), 0, 1, true)) {
+        const Tabulate *t = tabulate(rs[0], f, false, true);
+        if (t && t->data) point = t->per;
+    }
     // A gemm: acc's float32 tiles, a block's (blk: its scales times its
     // codes' dot, codes: int32) and its step's operands in shared memory
     struct Gemm {
@@ -2966,6 +2976,32 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
             g.wstep = wstep;
         }
         g.ws = wcodes.in(g.codes), g.xs = ac[0].in(g.codes);
+        if (point) {
+            // (a grid's codes: the weight's codes inlined into their staged
+            // copy, a sign's multiply x * (1 - y * 2), y in [0, 1], as (x ^
+            // -y) + y, so that a point's codes decode in a GPR: staging()'s)
+            using namespace Internal;
+            Expr &v = g.ws.function().definition().values()[0];
+            for (;;) {
+                FunctionPtr fp;
+                visit_with(v, [&](auto *self, const Call *c) {
+                    if (c->call_type == Call::Halide && c->func.defined() && !fp.defined() && (has(rs[0].decode_funcs(), c->name) || c->name == wcodes.name())) fp = c->func;
+                    self->visit_base(c);
+                });
+                if (!fp.defined()) break;
+                v = inline_function(v, Function(fp));
+            }
+            v = mutate_with(simplify(substitute_in_all_lets(v)), [&](auto *self, const Mul *op) -> Expr {
+                const Sub *s = op->b.as<Sub>();
+                const Mul *m = s ? s->b.as<Mul>() : nullptr;
+                if (s && m && is_const_one(s->a) && is_const(m->b, 2)) {
+                    Expr y = m->a;
+                    Interval b = bounds_of_expr_in_scope(y, Scope<Interval>::empty_scope());
+                    if (b.is_bounded() && can_prove(b.min >= 0 && b.max <= 1)) return (self->mutate(op->a) ^ (make_zero(y.type()) - y)) + y;
+                }
+                return self->visit_base(op);
+            });
+        }
         // the weights' luts the gemm's own, per block (as gpu_staged()'s)
         for (Func f : clone_paths(g.ws, [&](const Func &f) { return luts.count(f.name()) > 0; })) {
             metal_lut(f, kernel, n);
@@ -3018,9 +3054,20 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
                 lanes(st, l, lt, {jv, jh, jb});
                 st.vectorize(jv, 4, VectorizeIn::SWAR).unroll(jh).unroll(jb);
             } else {
-                st.split(a[0], l, jv, 16).fuse(l, a[1], lt).fuse(lt, a[2], l);
-                lanes(st, l, lt, {jv});
-                st.vectorize(jv);
+                if (point && f.name() == g.ws.name()) {
+                    // (a lane a grid point's codes per 1 / np of the
+                    // block, np points: each a word in a GPR (SWAR), one
+                    // load of the table; the lanes' points consecutive)
+                    Var jo("jo"), jr("jr");
+                    const int e = g.wstep ? g.wstep : fmt.block * fmt.per, np = 16 / point;
+                    st.split(a[0], jo, jr, e / np).split(jr, l, jv, point).fuse(l, a[1], lt).fuse(lt, a[2], l);
+                    lanes(st, l, lt, {jv, jo});
+                    st.vectorize(jv, point, VectorizeIn::SWAR).unroll(jo);
+                } else {
+                    st.split(a[0], l, jv, 16).fuse(l, a[1], lt).fuse(lt, a[2], l);
+                    lanes(st, l, lt, {jv});
+                    st.vectorize(jv);
+                }
             }
         }
         for (bool w : {true, false}) {
