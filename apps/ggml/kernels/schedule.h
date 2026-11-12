@@ -2871,6 +2871,17 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         const Tabulate *t = tabulate(rs[0], f, false, true);
         if (t && t->data) point = t->per;
     }
+    // (a lut's or a grid's codes: the K split's 64 x 64 tiles on 2 x 2
+    // warps of 32 x 32, twice the lanes to decode a step's weights; iq4_nl
+    // at 4096 x 4096 x 64 0.064 -> 0.056 ms, iq2_xxs 0.054 -> 0.050; q4_0's
+    // on 2 x 1 warps of 32 x 64, 0.046 against 0.049)
+    if (!luts.empty() || point) {
+        for (KSplit &sp : splits) {
+            for (GemmShape &sh : sp.shapes) {
+                if (!sp.wmma && sh.tm == 8 && sh.wm == 1) sh.tm = 4, sh.wm = 2;
+            }
+        }
+    }
     // A gemm: acc's float32 tiles, a block's (blk: its scales times its
     // codes' dot, codes: int32) and its step's operands in shared memory
     struct Gemm {
