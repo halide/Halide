@@ -998,13 +998,17 @@ G/H (GGML / ours), T1 before -> after:
 Held-out `vec_dot` and M = 1 `mul_mat` (`analyze.py --l3` / `--by-m`, cases
 below 0.97 re-run, minimum kept), baseline `f1000684e` -> now:
 
-| row | T | stratum | cases | before (matched / pct / median) | after (matched / pct / median) |
-|---|---|---|---|---|---|
-| `vec_dot` | 1 | format-specific | 54 | 21 / 38.9% / 0.908 | 41 / 75.9% / 0.990 |
-| `mul_mat@M1` | 1 | blocked-dot | 182 | 93 / 51.4% / 0.951 | 163 / 89.6% / 1.085 |
-| `mul_mat@M1` | 1 | format-specific | 34 | 18 / 51.4% / 0.956 | 27 / 79.4% / 1.002 |
-| `mul_mat@M1` | 12 | blocked-dot | 190 | 104 / 55.0% / 0.970 | 151 / 79.5% / 1.075 |
-| `mul_mat@M1` | 12 | format-specific | 26 | 13 / 48.1% / 0.941 | 18 / 69.2% / 1.173 |
+| row | T | stratum | before (matched / cases / pct / median) | after (matched / cases / pct / median) |
+|---|---|---|---|---|
+| `vec_dot` | 1 | format-specific | 21 / 54 / 38.9% / 0.908 | 41 / 54 / 75.9% / 0.990 |
+| `mul_mat@M1` | 1 | blocked-dot | 93 / 181 / 51.4% / 0.951 | 163 / 182 / 89.6% / 1.085 |
+| `mul_mat@M1` | 1 | format-specific | 18 / 35 / 51.4% / 0.956 | 27 / 34 / 79.4% / 1.002 |
+| `mul_mat@M1` | 12 | blocked-dot | 104 / 189 / 55.0% / 0.970 | 151 / 190 / 79.5% / 1.075 |
+| `mul_mat@M1` | 12 | format-specific | 13 / 27 / 48.1% / 0.941 | 18 / 26 / 69.2% / 1.173 |
+
+(Each M = 1 row pair totals 216 cases at both revisions; one case moves from
+format-specific to blocked-dot. Only vec_dot and M = 1 were re-run;
+M = 8/32/512 were not re-measured at this revision.)
 
 `--check` vec_dot, mul_mat, and codec (all 2392 non-CUDA cases): 0 failures. M3
 replay (982 Arm/Metal objects): all byte-identical.
