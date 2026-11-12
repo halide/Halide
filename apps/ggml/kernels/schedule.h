@@ -2611,25 +2611,30 @@ struct KSplit {
     bool wmma = false, wstep = false;
 };
 
-// The K splits (gpu_int_gemm()'s KSplit), by M: in 2 from M = 64 to 255, 64
-// x 128 blocks of 2 x 2 warps from 128 (q4_0 at 4096 x 4096 x 128: 0.070 ms;
-// in 4 0.078; unsplit 64 x 64 0.076), 64 x 64 of 2 x 1 below (M = 64:
-// 0.046; in 4, 64 x 64 of 2 x 2 0.049), 32 x 32 where N < 64; in 4 below
-// 64, one warp of 32 x 32 from 32 (0.032; 2 warps 0.034, 4 0.036), else of
-// 32 x 16 (M = 16: 0.027; 16 x 16 0.029, 64 x 16 of 2 warps 0.029; in 2 or 8
-// 0.035, 0.031), on 128-value steps. On wmma's fragments (wmma_tiny below
-// M = 32, wmma_small below 64, wmma_mid below 128, wmma_big below 256),
-// Phase 5's: in 4 below 128, 16 x 32 of 2 warps from 32, 16 x 16 below, 32 x
-// 64 of 2 from 64; unsplit above. (RTX 3090)
+// The K splits (gpu_int_gemm()'s KSplit), by M, each block's tile the
+// first of its shapes at or above M's rows (rounded up; shifted tiles of
+// fewer rows decode a weight tile twice: q4_0 at 4096 x 4096 x 24 / 48 /
+// 96 0.037 / 0.050 / 0.075 -> 0.029 / 0.042 / 0.052 ms): in 2 from M = 33
+// to 255, 64 x 128 blocks of 2 x 2 warps above 96 (q4_0 at 4096 x 4096 x
+// 128: 0.070 ms; in 4 0.078; unsplit 64 x 64 0.076), 64 x 96 above 64, 64
+// x 64 of 2 x 1 above 48 (M = 64: 0.046; in 4, 64 x 64 of 2 x 2 0.049), 64
+// x 48 below (gpu_int_gemm() keeps it for some formats), 32 x 32 where N <
+// 64; in 4 to 32, one warp of 32 x 32 above 16 (0.032; 2 warps 0.034, 4
+// 0.036), else of 32 x 16 (M = 16: 0.027; 16 x 16 0.029, 64 x 16 of 2 warps
+// 0.029; in 2 or 8 0.035, 0.031), on 128-value steps. On wmma's fragments
+// (wmma_tiny to M = 16, wmma_small to 32, wmma_mid to 64 or, with
+// wmma_big, below 128, wmma_big below 256), Phase 5's: in 4 below 128, 16 x
+// 32 of 2 warps above 16, 16 x 16 below, 32 x 64 of 2 above 32; unsplit
+// above. (RTX 3090)
 inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_small, bool wmma_mid, bool wmma_big) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     std::vector<KSplit> splits;
-    // (below 32 and from 32: each shape where it holds; one split of both
-    // where they are on the same tiles)
+    // (to 16 and above: each shape where it holds; one split of both where
+    // they are on the same tiles)
     auto small = [&](bool wm, Expr cond, bool tiny, bool rest) {
         std::vector<GemmShape> shapes;
         if (wm) {
-            if (rest) shapes.push_back(ishape(tiny ? M >= 32 : Expr(), 1, 2, 2, false, 128));
+            if (rest) shapes.push_back(ishape(tiny ? M > 16 : Expr(), 1, 2, 2, false, 128));
             if (tiny) shapes.push_back(ishape(Expr(), 1, 1, 1, false, 128));
             splits.push_back({4, cond, shapes, true});
         } else {
@@ -2637,29 +2642,29 @@ inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_s
             // shared memory, 512 of them at N = 4096 take two waves: M = 32
             // 0.030 -> 0.033 ms; so a weight block of several blocks staged
             // per step: q4_K's whole, 5 blocks an SM, 34.9 -> 27.7 us)
-            if (rest) shapes.push_back(ishape(tiny ? M >= 32 : Expr(), 2, 4, 1, false, 128, 1, 0));
+            if (rest) shapes.push_back(ishape(tiny ? M > 16 : Expr(), 2, 4, 1, false, 128, 1, 0));
             if (tiny) shapes.push_back(ishape(Expr(), 2, 2, 1, false, 128));
             splits.push_back({4, cond, shapes, false, true});
         }
     };
     if (wmma_tiny == wmma_small) {
-        small(wmma_small, M < 64, true, true);
+        small(wmma_small, M <= 32, true, true);
     } else {
-        small(wmma_tiny, M < 32, true, false);
-        small(wmma_small, M < 64, false, true);
+        small(wmma_tiny, M <= 16, true, false);
+        small(wmma_small, M <= 32, false, true);
     }
     if (wmma_mid && wmma_big) {
         // (unsplit from M = 128: q1_0 at 4096 x 4096 x 128 0.078 ms; in 2,
         // 64 x 64 of 4 warps, 0.080)
         splits.push_back({4, M < 128, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
     } else if (!wmma_mid && !wmma_big) {
-        splits.push_back({2, M < 256, {ishape(M >= 128 && N >= 64, 2, 8, 2, false, 128, 2), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}});
+        splits.push_back({2, M < 256, {ishape(M > 96 && N >= 64, 2, 8, 2, false, 128, 2), ishape(M > 64 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}});
     } else if (wmma_mid) {
-        splits.push_back({4, M < 128, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
+        splits.push_back({4, M <= 64, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
         splits.push_back({2, M < 256, {ishape(N >= 64, 2, 8, 2, false, 128, 2), ishape(Expr(), 2, 4, 1, false, 128)}});
     } else {
         // (wmma's from M = 128: unsplit, the gemm on all of K's)
-        splits.push_back({2, M < 128, {ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}});
+        splits.push_back({2, M < 128, {ishape(M > 64 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}});
     }
     return splits;
 }
@@ -2810,8 +2815,9 @@ inline void round_extent(Func f, const RVar &rv, int l, Func out) {
 
 // CUDA on integer codes, as GGML's mul_mat_q: weights' codes on acts
 // quantized in the pipeline to codes and a scale per block (a compute format
-// of planar fields, e.g. f32:q8_0.soa), for out where M >= 16, N >= 32 and N
-// % 8 == 0 (else metal_rows on a clone of dot, as gpu_gemm()'s). A block's
+// of planar fields, e.g. f32:q8_0.soa), for out where M >= 16 (under a K
+// split M >= 8), N >= 32 and N % 8 == 0 (else metal_rows on a clone of dot,
+// as gpu_gemm()'s). A block's
 // codes' dot is an int32 tile of mma.sync's 16 x 8 int8 tiles (the weights
 // the 16-row operand, 32 values of K; 16 where sub-blocks are 16), which each
 // lane then scales into dot's float32 tile by the block's factors: per weight
@@ -2845,8 +2851,8 @@ inline void round_extent(Func f, const RVar &rv, int l, Func out) {
 // stream-k: kz gemms, each on every kz-th step of K (dot's
 // rfactor, part: a partial sum per step index mod kz; dot's K rounded down to
 // whole kz steps, round_extent), in one kernel (pg:
-// part's copy, its blocks over n, m and the partial sums), then out their
-// sums. A block's steps bound its time, so few tiles gain from kz times the
+// part's copy, its blocks over n, m and the partial sums; the last in m
+// rounded up, its rows past M on the act's last row), then out their sums. A block's steps bound its time, so few tiles gain from kz times the
 // blocks. The next split, the gemm on all of K and the rows are then clones'
 // of dot.
 inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, std::vector<GemmShape> shapes, int sg,
@@ -2925,6 +2931,15 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
             narrow(sp.shapes, sp.wmma);
         }
         narrow(shapes, wmma);
+    }
+    // (the K split's 48-row tiles where a weight block is several blocks,
+    // affine or a grid's: at 4096 x 4096 x 48 q4_K 0.050 -> 0.044 ms, q6_K
+    // 0.061 -> 0.050, q4_1 0.050 -> 0.043, iq1_s 0.049 -> 0.046 against 64
+    // rows; q4_0 0.042 -> 0.046, iq4_nl 0.047 -> 0.081, q2_K 0.060 -> 0.062)
+    if (!(fmt.per > 1 || affine(rs) || point) || !luts.empty() || subsums) {
+        for (KSplit &sp : splits) {
+            sp.shapes.erase(std::remove_if(sp.shapes.begin(), sp.shapes.end(), [&](const GemmShape &sh) { return fm_of(sp.wmma) * sh.tm * sh.wm == 48; }), sp.shapes.end());
+        }
     }
     // (the act's codes' sums per 16-value sub-block, where a weight's
     // offsets are per sub-block: q2_K's; a port of the act kernel's)
@@ -3169,10 +3184,13 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         return tile_order(st.tile(n, m, nw, mw, ni, mi, fn * sh.tn, fm * sh.tm).tile(ni, mi, nt, mt, fn, fm), wm).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
     };
     // The kernel's stage so under a shape: its blocks' tiles (over n, m and
-    // zs), acc's tiles per warp
+    // zs; the last in m rounded up where so is the K split's partial sums,
+    // whose rows past M read the last act row: else shifted), acc's tiles
+    // per warp
     auto kernel_tiles = [&](Stage so, const GemmShape &sh, Gemm g, const std::vector<VarOrRVar> &zs) {
         const int fm = fm_of(g.wmma), bn = fn * sh.tn * sh.wn, bm = fm * sh.tm * sh.wm;
-        tile_order(so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, fn * sh.tn, fm * sh.tm).tile(ni, mi, nt, mt, fn, fm), g.wmma);
+        so.tile({n, m}, {n, m}, {ni, mi}, {bn, bm}, {TailStrategy::ShiftInwards, zs.empty() ? TailStrategy::ShiftInwards : TailStrategy::RoundUp});
+        tile_order(so.tile(ni, mi, nw, mw, ni, mi, fn * sh.tn, fm * sh.tm).tile(ni, mi, nt, mt, fn, fm), g.wmma);
         zs.empty() ? so.gpu_blocks(n, m) : so.gpu_blocks(n, m, zs[0]);
         so.gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
         tile(Stage(g.acc).specialize(sh.cond), sh, g.wmma);
@@ -3316,7 +3334,8 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         if (wsteps) order.push_back(kw);
         st.reorder(order).unroll(kb).atomic();
     };
-    Expr cond = M >= 16 && N >= 32 && N % 8 == 0;
+    // (the K split's tiles rounded up in M: from M = 8)
+    Expr cond = M >= 16 && N >= 32 && N % 8 == 0, split_cond = M >= 8 && N >= 32 && N % 8 == 0;
     // out reads dot through a wrapper; the K split takes dot, the gemm on
     // all of K and the rows clones of it (as gpu_gemm()'s rows); a gemm's
     // luts its own, per block of its kernel (blocks())
@@ -3330,7 +3349,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         Expr whole = nb % (kz * kst) == 0;
         Var z("kz_z" + sfx), uo("uo"), ui("ui"), uw("uw"), no("kz_no" + sfx), nj("kz_ni" + sfx);
         RVar kso("kso"), kzr("kzr");
-        Stage sk = Stage(out).specialize(cond && splits[i].cond && whole).eager_inline(via);
+        Stage sk = Stage(out).specialize(split_cond && splits[i].cond && whole).eager_inline(via);
         Func all = dot.clone_in(via);
         // (dot's K whole kz steps: out reads it only under sk, where K is)
         round_extent(dot, ry, kz * kst, out);

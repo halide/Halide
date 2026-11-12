@@ -280,10 +280,12 @@ set(GGML_SCHEDULE_PARAMS
     # acts, M = 32 / 64: q8_0:f16 0.084 -> 0.067 / 0.117 -> 0.091 ms; q5_0:f16
     # 0.081 -> 0.079 / 0.117 -> 0.102). No effect on the Metal libraries.
     "q8_0:f16 mul_mat * cuda_one_warp=true" "q5_0:f16 mul_mat * cuda_one_warp=true"
-    # RTX 3090: the CUDA integer gemm's tiles below M = 64, below 256 and from
+    # RTX 3090: the CUDA integer gemm's tiles to M = 32, below 256 and from
     # 256 (w: wmma's 16 x 16 fragments, m: mma.sync's 16 x 8 tiles, the
-    # default; of 4 letters, below 32, below 64, below 256, from 256; of 5,
-    # below 32, 64, 128, 256, from 256), the faster at 4096^2 (ms at M = 16 / 128 / 512, m -> w: q6_K
+    # default; of 4 letters, to 16, to 32, below 256, from 256; of 5, to 16,
+    # 32, 64, below 256, from 256: a K split's tiles round up in M, so a
+    # range ends at the M its widest tile covers; wmma's fourth from 128),
+    # the faster at 4096^2 (ms at M = 16 / 128 / 512, m -> w: q6_K
     # 0.045 -> 0.034 / 0.162 -> 0.094 / 0.309 -> 0.319, q4_K 0.038 -> 0.032 /
     # 0.115 -> 0.090 / 0.279 -> 0.323; q4_0 0.027 -> 0.028 / 0.070 -> 0.083 /
     # 0.234 -> 0.248).
