@@ -212,6 +212,35 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // The consumer contains a deep chain of lets, each of which uses the
+        // previous one twice. Planning the rotation must not inline them.
+        const int depth = 40;
+        Func f("f"), g("g");
+        f(x) = x;
+        Expr e = x;
+        for (int k = 0; k < depth; k++) {
+            e = (e + e / 3) % 1000;
+        }
+        g(x) = f(x - 1) + f(x + 1) + e;
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out;
+        if (check_registers(g, f.name(), 3, out, {20})) {
+            return 1;
+        }
+        for (int j = 0; j < 20; j++) {
+            int correct = j;
+            for (int k = 0; k < depth; k++) {
+                correct = (correct + correct / 3) % 1000;
+            }
+            correct += 2 * j;
+            if (out(j) != correct) {
+                printf("Let chain: out(%d) = %d instead of %d\n", j, out(j), correct);
+                return 1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
