@@ -2358,3 +2358,118 @@ K-quants and q4_1 at M = 32); M = 512 was not worked on.
   - iq2_s at M = 32, 128 (0.84-0.89), iq4_xs at 32-64 (0.90-0.93); M = 48 is
     slower than 64 for several types (iq1_s 0.083 against 0.049 ms, q6_K 0.065
     against 0.060): the 32 x 32 tiles' shifted tail.
+
+## Phase 13: q4_K's M = 512 kernel's shared-memory traffic (RTX 3090)
+
+Same machine and conventions as Phase 12; `ncu` (CUDA 13.4) now collects
+hardware counters. The target: q4_K at M = 512 (0.83 of GGML; its gemm kernel
+224-228 us against GGML's 169 + 19 of stream-k fixup) through the shared-memory
+traffic a profile had pointed at, by schedule; and a side experiment on the
+tail.
+
+- The profile (4096^2 x 512, f32 acts, one launch under `ncu --set full`, at its
+  base clocks; ours / GGML):
+
+  |                                                | q4_0                              | q4_K                              |
+  | ---------------------------------------------- | --------------------------------- | --------------------------------- |
+  | duration, us                                   | 195.8 / 161.1                     | 237.5 / 183.5                     |
+  | instructions, M                                | 38.98 / 39.12                     | 48.94 / 49.27                     |
+  | issues per cycle and SMSP / warps per SMSP     | 0.40, 1.66 / 0.44, 2.00           | 0.40, 1.65 / 0.50, 2.00           |
+  | stalls per issue: long scoreboard, MIO         | 0.68, 0.46 / 0.48, 0.41           | 0.82, 0.43 / 0.46, 0.20           |
+  | shared wavefronts / store bank conflicts, M    | 8.24, 0.58 / 7.36, 0.59           | 11.85, 1.32 / 7.36, 0.59          |
+  | registers, shared memory a block, blocks an SM | 167, 40.7 KB, 2 / 216, 57.9 KB, 1 | 194, 48.5 KB, 2 / 221, 57.9 KB, 1 |
+
+  - The tail: 256 blocks on 164 slots (82 SMs, 2 blocks each) are 1.56 waves,
+    the SMs active 88% of the kernel. At N = 2624 and 5248 (one and two whole
+    waves) q4_0's kernel takes 157-158 us per 4096 columns against 187.5 at N =
+    4096, q4_K's 188-190 against 228: the tail is ~30 and ~39 us.
+  - q4_0's main stall is on its weights' code loads, used at once (two `LEA`s
+    after their `LDG.U16`, 11% of the samples); loading them a step ahead in
+    registers (prototype, PTX) took its kernel from 188-193 to 181-182 us (left
+    to a separate design).
+  - q4_K's shared wavefronts are 1.44x q4_0's, its store conflicts 2.3x.
+
+- Where q4_K's extra traffic is (ncu's per-instruction counters, per K step of
+  128 values and warp; an `LDS` one wavefront, an `LDS.64` two whatever its
+  lanes broadcast): the operands' loads are q4_0's (32 words of the weights', 64
+  of the acts'), and so are the scales' (80: the weights', 4 rows times 4
+  blocks; the acts', 16 columns times 4); the min term's factors are 80 more, 16
+  words of the weights' mins and 64 of the acts' sums (2.62 M wavefronts in all,
+  the difference: 256 a step against 176). The loads are conflict-free. Of the
+  stores, the weights' codes' (32 `STS` per weight block) are 2-way conflicted
+  (0.52 M wavefronts more than needed) and the weight factors' (4 a step, two
+  Funcs) 4-way (0.39 M; q4_0's one, 0.20 M): their lanes span the step's 4
+  blocks, 64 rows apart. Of q4_K's stall samples, 21.5% are long-scoreboard
+  waits on the weight staging's global loads (the codes' nibble decode, `SHF`,
+  8.6%; the 6-bit scales' decode, `SEL`, 8.0%), ~12% are on `LDS` (MIO throttle
+  4.7%, fixed-latency wait 4.8%, the barrier 2.8%).
+
+- Tried, one at a time (q4_K's gemm kernel, us by CUPTI, interleaved passes;
+  ncu: the kernel's shared load and store wavefronts, M, its instructions):
+
+  | change                                                                                                                                                      | ncu                                                           | effect                                                                                                       |
+  | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+  | warps of 64 x 32 (64 x 128 tiles of 1 x 4 warps: 8 rows and 8 columns a lane, the factors' loads 32 words a block against 40)                               | loads 8.40 -> 7.35, 168 registers                             | 226-227 -> 232 (ncu 237 -> 243)                                                                              |
+  | the act factors staged as their f16 (q8_1's d and s, exactly), widened where read (core: an elementwise update on mma.sync reading a widened 16-bit matrix) | loads 8.40 -> 6.30, instructions +8% (120 `HADD2.F32` a step) | 227.5 -> 225.2; q4_0 189.6-191.1 -> 191.3-192.5; q4_K at M = 32, 128 the same, 64 42.3 -> 42.9               |
+  | the weight factors' rows 72 apart (their stores conflict-free)                                                                                              | store conflicts 1.31 -> 0.92                                  | 227.5 -> 227.1; q4_0 188.2 -> 187.9                                                                          |
+  | both                                                                                                                                                        |                                                               | q4_K 226.6 -> 223.4 (a call 0.2455 -> 0.2432 ms), q5_K 232.2 -> 228.2, q4_1 221.5 -> 226.0; M = 128 the same |
+  | the weight factors staged per weight block, with the codes (else more than 48 KB: with f16 act factors)                                                     | 207 registers                                                 | 221-229: not faster                                                                                          |
+  | ablation (wrong results): the acts' sums read at one column per block (64 load words a step fewer; the compiler then sums the min term per row)             | loads 6.37, instructions -6%                                  | 209                                                                                                          |
+  | that and the weights' mins at one row                                                                                                                       | loads 5.91                                                    | 203                                                                                                          |
+
+  So the extra wavefronts are the min term's factor loads, but cutting them by
+  layout or width moved the kernel by at most 1.5%: the f16 factors' conversions
+  cost about what their loads did (q4_0, with one act factor, slower), and the
+  64 x 32 warps lose more elsewhere (long- and short-scoreboard stalls up). None
+  was kept, nor the core change (1% on q4_K and q5_K, a regression on q4_1 and
+  q4_0). The min term as a whole, its fmas and loads, is ~17-23 us of q4_K's 226
+  (the ablations); GGML's kernel executes the same instructions (49.3 M against
+  48.9 M) at 0.50 issues a cycle against our 0.40.
+
+- Side experiment, the tail: q4_0 at 4096^2 x 512 on other tiles (schedule only:
+  `cuda_int_shapes()`'s shape from M = 256; N a multiple of mma.sync's 16 rows,
+  so no 56- or 104-row tiles), ncu's grid, waves of the blocks an SM holds, SMs
+  active:
+
+  | tile, warps                   | blocks, waves                  | registers              | SMs active | issues per cycle and SMSP, warps | kernel us (ncu)        |
+  | ----------------------------- | ------------------------------ | ---------------------- | ---------- | -------------------------------- | ---------------------- |
+  | 64 x 128 of 2 x 2 (the shape) | 256, 1.56                      | 167                    | 88.4%      | 0.39, 1.65                       | 188.6-192.2 (195.5)    |
+  | 96 x 128 of 2 x 2             | 172, 1.05                      | 254                    | 67.3%      | 0.44, 1.81                       | 203.9-204.3 (215.9)    |
+  | 48 x 128 of 1 x 4             | 344, 2.10                      | 135                    | 81.4%      | 0.40, 1.88                       | 207.6-208.7 (215.3)    |
+  | 64 x 64 of 2 x 2              | 512, 2.08 (3 an SM)            | 116                    | 87.2%      | 0.43, 2.72                       | 208.8-209.8 (211.2)    |
+  | 112 x 64 of 1 x 2             | 296, 1.80 (2 of 2 warps an SM) | 248                    | 90.9%      | 0.37, 1.00                       | 209.4-210.2 (222.8)    |
+  | 80 x 128 of 1 x 2             | 208                            | 255, 964 bytes spilled |            |                                  | 508.5                  |
+  | 112 x 128                     | 148                            |                        |            |                                  | more than 48 KB: fails |
+
+  No shape that fills whole waves at N = 4096 keeps the per-block efficiency of
+  64 x 128 (registers, warps an SM, operand reuse): every one is slower, by more
+  than the tail costs. So whole waves need the work balanced across the tiles,
+  not another tile; the estimate stays N = 2624 / 5248's (~30 us of q4_0's
+  187.5). Nothing committed.
+
+- Gate: no library changed (the tree is Phase 12's; q4_K's and q4_0's PTX
+  rebuilt byte-identical). Scorecard on it, by-M provider (ms; GGML / it),
+  4096^2, f32 acts, --rounds 5; every cell within 2.2% of Phase 11's and 12's
+  (the same libraries; q4_K at M = 32 0.0359 in Phase 12):
+
+  | type    | M = 16        | M = 32        | M = 64        | M = 128       | M = 512       |
+  | ------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | q4_0    | 0.0241 (1.20) | 0.0300 (1.20) | 0.0423 (1.09) | 0.0643 (1.13) | 0.2075 (0.92) |
+  | q8_0    | 0.0340 (1.17) | 0.0392 (1.09) | 0.0520 (1.04) | 0.0671 (1.19) | 0.2207 (0.94) |
+  | q5_0    | 0.0285 (1.15) | 0.0352 (1.09) | 0.0455 (1.10) | 0.0661 (1.16) | 0.2218 (0.90) |
+  | q4_1    | 0.0289 (1.08) | 0.0374 (0.91) | 0.0508 (0.96) | 0.0748 (1.03) | 0.2444 (0.85) |
+  | q5_1    | 0.0306 (1.15) | 0.0380 (0.98) | 0.0512 (1.03) | 0.0748 (1.08) | 0.2509 (0.90) |
+  | q4_K    | 0.0260 (1.15) | 0.0364 (0.97) | 0.0509 (0.97) | 0.0752 (1.02) | 0.2501 (0.83) |
+  | q5_K    | 0.0273 (1.19) | 0.0400 (0.95) | 0.0526 (0.98) | 0.0764 (1.03) | 0.2594 (0.82) |
+  | q6_K    | 0.0297 (1.22) | 0.0431 (1.01) | 0.0602 (0.94) | 0.0847 (1.00) | 0.2881 (0.83) |
+  | q3_K    | 0.0247 (1.20) | 0.0381 (0.97) | 0.0540 (0.97) | 0.0808 (1.02) | 0.2756 (0.86) |
+  | iq4_nl  | 0.0249 (1.30) | 0.0328 (1.20) | 0.0464 (1.02) | 0.0663 (1.10) | 0.2215 (0.87) |
+  | iq2_xxs | 0.0271 (0.95) | 0.0356 (0.95) | 0.0478 (0.96) | 0.0711 (1.03) | 0.2388 (0.81) |
+  | iq3_s   | 0.0320 (1.08) | 0.0426 (0.96) | 0.0636 (0.80) | 0.0752 (1.03) | 0.2459 (0.83) |
+
+- Where the rest is (q4_K at M = 512, 0.83): the weight staging's global loads
+  used at once (21.5% of its stall samples: the load-ahead design), the tail
+  (~39 us), and the min term (17-23 us), which on tensor cores would be one f16
+  multiply of a weight block's 8 six-bit mins by the acts' 8 sums (k = 8) per
+  tile and weight block, then dmin per row: mma.sync's f16 shapes in the core
+  and a second gemm in `gpu_int_gemm`. Not the shared-memory traffic.
