@@ -2616,21 +2616,28 @@ struct KSplit {
 // The K splits (gpu_int_gemm()'s KSplit), by M, each block's tile the
 // first of its shapes at or above M's rows (rounded up; shifted tiles of
 // fewer rows decode a weight tile twice: q4_0 at 4096 x 4096 x 24 / 48 /
-// 96 0.037 / 0.050 / 0.075 -> 0.029 / 0.042 / 0.052 ms): in 2 from M = 33
-// to 255, 64 x 128 blocks of 2 x 2 warps above 96 (q4_0 at 4096 x 4096 x
-// 128: 0.070 ms; in 4 0.078; unsplit 64 x 64 0.076), 64 x 96 above 64, 64
-// x 64 of 2 x 1 above 48 (M = 64: 0.046; in 4, 64 x 64 of 2 x 2 0.049), 64
-// x 48 below (gpu_int_gemm() keeps it for some formats), 32 x 32 where N <
-// 64; in 4 to 32, one warp of 32 x 32 above 16 (0.032; 2 warps 0.034, 4
-// 0.036), else of 32 x 16 (M = 16: 0.027; 16 x 16 0.029, 64 x 16 of 2 warps
-// 0.029; in 2 or 8 0.035, 0.031), on 128-value steps. On wmma's fragments
-// (wmma_tiny to M = 16, wmma_small to 32, wmma_mid to 64 or, with
-// wmma_big, below 128, wmma_big below 256), Phase 5's: in 4 below 128, 16 x
-// 32 of 2 warps above 16, 16 x 16 below, 32 x 64 of 2 above 32; unsplit
-// above. Their kernels on up to 255 registers a thread, where ptxas alone
-// takes 128 or fewer and spills (q4_K at 4096 x 4096 x 48 0.053 -> 0.044
-// ms, q4_1 at 32 0.039 -> 0.036), but a split to M = 16 alone (iq2_xxs at
-// 16 0.0259 -> 0.0266) and wmma's below 128 (q2_0 at 96 0.079 -> 0.082).
+// 96 0.037 / 0.050 / 0.075 -> 0.029 / 0.042 / 0.052 ms; as GGML's tiles of
+// every 8 rows, tiles of 24, 80 and 112 rows: q4_0 at 24 / 80 / 112 0.030
+// / 0.051 / 0.063 -> 0.026 / 0.046 / 0.058): in 2 from M = 33 to 255, 64 x
+// 128 blocks of 2 x 2 warps above 112 (q4_0 at 4096 x 4096 x 128: 0.070
+// ms; in 4 0.078; unsplit 64 x 64 0.076), 64 x 112, 96 and 80 above 96, 80
+// and 64, 64 x 64 of 2 x 1 above 48 (M = 64: 0.046; in 4, 64 x 64 of 2 x 2
+// 0.049), 64 x 48 below (gpu_int_gemm() keeps it for some formats), above
+// 128 two blocks in M of the first of those at or above half of it (q4_0
+// at 129 / 160 0.109 / 0.112 -> 0.082 / 0.084, two of 64 x 128 before), 32
+// x 32 where N < 64; in 4 to 32, one warp of 32 x 32 above 24 (0.032; 2
+// warps 0.034, 4 0.036), 32 x 24 above 16, else 32 x 16 (M = 16: 0.027; 16
+// x 16 0.029, 64 x 16 of 2 warps 0.029; in 2 or 8 0.035, 0.031), on
+// 128-value steps. On wmma's fragments (wmma_tiny to M = 16, wmma_small to
+// 32, wmma_mid to 64 or, with wmma_big, below 128, wmma_big to 96 or below
+// 256), Phase 5's: in 4 below 128, 16 x 32 of 2 warps above 16, 16 x 16
+// below, 32 x 64 of 2 above 32; unsplit above (wmma_big's unsplit from 97:
+// iq2_s at 4096 x 4096 x 97 / 120 0.134 / 0.137 -> 0.101 / 0.103, two
+// shifted blocks of 64 x 96). Their kernels on up to 255 registers a
+// thread, where ptxas alone takes 128 or fewer and spills (q4_K at 4096 x
+// 4096 x 48 0.053 -> 0.044 ms, q4_1 at 32 0.039 -> 0.036), but a split to
+// M = 16 alone (iq2_xxs at 16 0.0259 -> 0.0266) and wmma's below 128 (q2_0
+// at 96 0.079 -> 0.082).
 // (RTX 3090)
 inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_small, bool wmma_mid, bool wmma_big) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
@@ -2648,6 +2655,7 @@ inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_s
             // shared memory, 512 of them at N = 4096 take two waves: M = 32
             // 0.030 -> 0.033 ms; so a weight block of several blocks staged
             // per step: q4_K's whole, 5 blocks an SM, 34.9 -> 27.7 us)
+            if (rest) shapes.push_back(ishape(tiny ? M > 16 && M <= 24 : M <= 24, 2, 3, 1, false, 128));
             if (rest) shapes.push_back(ishape(tiny ? M > 16 : Expr(), 2, 4, 1, false, 128, 1, 0));
             if (tiny) shapes.push_back(ishape(Expr(), 2, 2, 1, false, 128));
             splits.push_back({4, cond, shapes, false, true, tiny ? 0 : 255});
@@ -2664,13 +2672,13 @@ inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_s
         // 64 x 64 of 4 warps, 0.080)
         splits.push_back({4, M < 128, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
     } else if (!wmma_mid && !wmma_big) {
-        splits.push_back({2, M < 256, {ishape(M > 96 && N >= 64, 2, 8, 2, false, 128, 2), ishape(M > 64 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
+        splits.push_back({2, M < 256, {ishape(N >= 64 && ((M > 112 && M <= 128) || M > 224), 2, 8, 2, false, 128, 2), ishape(N >= 64 && ((M > 96 && M <= 112) || M > 192), 2, 7, 2, false, 128, 2), ishape(N >= 64 && ((M > 80 && M <= 96) || M > 160), 2, 6, 2, false, 128, 2), ishape(N >= 64 && M > 64, 2, 5, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
     } else if (wmma_mid) {
         splits.push_back({4, M <= 64, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
         splits.push_back({2, M < 256, {ishape(N >= 64, 2, 8, 2, false, 128, 2), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
     } else {
-        // (wmma's from M = 128: unsplit, the gemm on all of K's)
-        splits.push_back({2, M < 128, {ishape(M > 64 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
+        // (wmma's from M = 97: unsplit, the gemm on all of K's)
+        splits.push_back({2, M <= 96, {ishape(M > 80 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M > 64 && N >= 64, 2, 5, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
     }
     return splits;
 }
