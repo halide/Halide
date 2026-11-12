@@ -734,6 +734,13 @@ int main(int argc, char **argv) {
             ok = ok && test_elementwise<uint8_t>("widened_div_mod", lanes, [](Var x, Func a, Func c) {
                      return cast<uint8_t>((cast<uint32_t>(a(x)) / 4) % 4 + (cast<uint32_t>(c(x)) % 16) * 4);
                  });
+            // Fields shifted and masked out of lanes that were widened
+            // first, then offset and narrowed: done in the narrow lanes.
+            ok = ok && test_elementwise<int8_t>("widened_fields", lanes, [](Var x, Func a, Func c) {
+                     Expr high = cast<uint8_t>((cast<uint32_t>(cast<uint8_t>(a(x))) >> 4) % 16);
+                     Expr low = cast<uint8_t>(cast<uint32_t>(cast<uint8_t>(c(x))) % 16);
+                     return cast<int8_t>(cast<int32_t>(high) - 8) ^ cast<int8_t>(low);
+                 });
             // Signed lanes: arithmetic shifts and floor division.
             ok = ok && test_elementwise<int8_t>("signed", lanes, [](Var x, Func a, Func c) {
                      return (a(x) >> 2) + c(x) / 4 + a(x) % 8 - (c(x) << 1);

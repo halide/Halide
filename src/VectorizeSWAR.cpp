@@ -520,6 +520,24 @@ class LowerSWARVectors : public IRMutator {
             }
             return Call::make(t, op->name, args, op->call_type);
         }
+        // Anything else can be done in the narrower type if its value fits
+        // there anyway, e.g. a field shifted and masked out of narrow lanes
+        // that were widened first. A signed quotient of operands that fit
+        // the narrower unsigned type is their unsigned quotient.
+        const Type ut = t.with_code(Type::UInt);
+        if (const Div *div = e.as<Div>()) {
+            Expr a = lossless_cast(ut, div->a);
+            Expr b = lossless_cast(ut, div->b);
+            if (a.defined() && b.defined()) {
+                Expr q = Div::make(a, b);
+                return t == ut ? q : Cast::make(t, q);
+            }
+        }
+        for (halide_type_code_t code : {Type::UInt, Type::Int}) {
+            if (Expr l = lossless_cast(t.with_code(code), e); l.defined()) {
+                return l.type() == t ? l : Cast::make(t, l);
+            }
+        }
         return Expr();
     }
 
