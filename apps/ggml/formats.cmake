@@ -285,8 +285,8 @@ set(GGML_SCHEDULE_PARAMS
     # 0.234 -> 0.248).
     # q4_K, q5_K: mma.sync's from M = 64 since its K split takes q4_0's tiles
     # (q4_K at M = 128 0.090 -> 0.075 ms), q4_K below 64 too since its weight
-    # blocks are staged per step there (M = 32 0.042 -> 0.036; q5_K's fifth
-    # bits, at a position that depends on the step, do not decode in GPRs);
+    # blocks are staged per step there (M = 32 0.042 -> 0.036), q5_K from 32
+    # to 63 (M = 32 0.0420 -> 0.0400, 48 0.068 -> 0.062; at 16 its wmma's);
     # q4_K, iq3_s and iq4_xs on wmma's below 32 (M = 16: q4_K 0.029 ->
     # 0.027, iq3_s 0.038 -> 0.034, iq4_xs 0.031 -> 0.026), q4_1 from 32 to
     # 63 (M = 32 0.0388 -> 0.0374, 48 0.060 -> 0.055).
@@ -295,8 +295,8 @@ set(GGML_SCHEDULE_PARAMS
     # 0.045 / 0.089 / 0.265 -> 0.033 / 0.074 / 0.247 ms).
     # q6_K, q3_K: mma.sync's from M = 64 (q3_K at M = 64 / 128 / 512 0.062 /
     # 0.090 / 0.291 -> 0.055 / 0.081 / 0.273 ms; q6_K 0.064 / 0.093 / 0.296
-    # -> 0.060 / 0.085 / 0.283), q6_K from 32 too (M = 32 0.049 -> 0.043, 48
-    # 0.075 -> 0.067; at 16 0.030 -> 0.038).
+    # -> 0.060 / 0.085 / 0.283), and from 32 too (M = 32: q6_K 0.049 ->
+    # 0.043, q3_K 0.0404 -> 0.0373; at 16 q6_K 0.030 -> 0.038).
     # The grid formats with 16-value sub-blocks (iq2_xs, iq2_s, iq1_m) on
     # wmma's at every M (iq2_xs at M = 128 / 512 0.177 -> 0.123 / 0.726 ->
     # 0.362) but from M = 64 to 127, where mma.sync's 2 x 2 warps of 32 x 32
@@ -308,9 +308,9 @@ set(GGML_SCHEDULE_PARAMS
     "iq3_s mul_mat f32:q8_0.soa int_tiles=wmmm"
     "iq4_xs mul_mat f32:q8_0.soa int_tiles=wmmm"
     "q5_1 mul_mat f32:q8_1.soa int_tiles=wmm"
-    "q5_K mul_mat f32:q8_1.soa int_tiles=wmm"
+    "q5_K mul_mat f32:q8_1.soa int_tiles=wmmm"
     "q6_K mul_mat f32:q8_0.soa int_tiles=wmmm"
-    "q3_K mul_mat f32:q8_0.soa int_tiles=wmm"
+    "q3_K mul_mat f32:q8_0.soa int_tiles=wmmm"
     "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
     "q2_0 mul_mat f32:q8_0.soa int_tiles=mwm"
     "iq2_s mul_mat f32:q8_0.soa int_tiles=wwmww"
