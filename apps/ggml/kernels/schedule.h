@@ -3184,15 +3184,21 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         return tile_order(st.tile(n, m, nw, mw, ni, mi, fn * sh.tn, fm * sh.tm).tile(ni, mi, nt, mt, fn, fm), wm).gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
     };
     // The kernel's stage so under a shape: its blocks' tiles (over n, m and
-    // zs; the last in m rounded up where so is the K split's partial sums,
-    // whose rows past M read the last act row: else shifted), acc's tiles
-    // per warp
+    // zs; the last in m shifted, or, where M is less than a tile's rows and
+    // so is the K split's partial sums, whose rows past M read the last act
+    // row, rounded up; rounded up where it could be shifted, nvfp4 at 4096 x
+    // 4096 x 128 0.0806 -> 0.0825 ms, q8_0 at 64 0.0535 -> 0.0557), acc's
+    // tiles per warp
     auto kernel_tiles = [&](Stage so, const GemmShape &sh, Gemm g, const std::vector<VarOrRVar> &zs) {
         const int fm = fm_of(g.wmma), bn = fn * sh.tn * sh.wn, bm = fm * sh.tm * sh.wm;
-        so.tile({n, m}, {n, m}, {ni, mi}, {bn, bm}, {TailStrategy::ShiftInwards, zs.empty() ? TailStrategy::ShiftInwards : TailStrategy::RoundUp});
-        tile_order(so.tile(ni, mi, nw, mw, ni, mi, fn * sh.tn, fm * sh.tm).tile(ni, mi, nt, mt, fn, fm), g.wmma);
-        zs.empty() ? so.gpu_blocks(n, m) : so.gpu_blocks(n, m, zs[0]);
-        so.gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+        auto blocks = [&](Stage s, TailStrategy tm) {
+            s.tile({n, m}, {n, m}, {ni, mi}, {bn, bm}, {TailStrategy::ShiftInwards, tm});
+            tile_order(s.tile(ni, mi, nw, mw, ni, mi, fn * sh.tn, fm * sh.tm).tile(ni, mi, nt, mt, fn, fm), g.wmma);
+            zs.empty() ? s.gpu_blocks(n, m) : s.gpu_blocks(n, m, zs[0]);
+            s.gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
+        };
+        if (!zs.empty()) blocks(so.specialize(M >= bm), TailStrategy::ShiftInwards);
+        blocks(so, zs.empty() ? TailStrategy::ShiftInwards : TailStrategy::RoundUp);
         tile(Stage(g.acc).specialize(sh.cond), sh, g.wmma);
     };
     // The step's operands under a shape: each lane 4 bytes of a block of a
