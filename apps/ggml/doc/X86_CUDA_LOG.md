@@ -2249,3 +2249,112 @@ and mxfp4 (Phase 10: 0.70-0.95), M = 256 and 1024 spot-checked.
   - The lut formats: iq4_nl 199.5 us against q4_0's 185, its lookups (4 `PRMT`
     and ~6 more per word of 4 codes; GGML's permutes the packed nibbles, ~5 per
     word).
+
+## Phase 12: small- and mid-M stragglers; tiles by narrower ranges of M (RTX 3090)
+
+Same machine and conventions as Phase 11. The targets: the cells from M = 16 to
+128 below 0.95 of GGML (q2_K, iq1_s, iq2_xs, iq2_s, iq3_s, iq4_xs, and the
+K-quants and q4_1 at M = 32); M = 512 was not worked on.
+
+- Attribution at 4096^2 (us of GPU time per kernel, CUPTI; SASS per K step and
+  warp):
+
+  - iq1_s at M = 16 / 32: its gemm 34.1 / 34.8 us (wmma, 16 x 16 of one warp,
+    1024 blocks; 16 x 32 of two) against q4_0's 18.1 / 23.2 (mma.sync, 32 x 16
+    and 32 x 32 of one warp) and GGML's 19.2 / 24.1 (+ 3.1 / 4.1 of stream-k
+    fixup, 82 blocks of 8 warps). Per 256-value step 1004 instructions for 256
+    outputs (16 `LDG.64` grid points, 41 index loads, ~330 of scaling) against
+    q4_0's 1206 per 256 values for 512; no bank conflicts (`banks.py`); about a
+    quarter of the SMs' issue slots used, as q4_0's, at 130 registers (12 one-
+    warp blocks an SM). Not the K split's parts (in 2 or 8: the same, +-5%) nor
+    mma.sync's tiles (39.4 us, 152 registers).
+  - q2_K at M = 16 / 32 / 64 (the f16 gemm; no integer gemm: its mins are per 16
+    values, q8_1's sums per 32): 43.8 / 43.8 / 70.1 us, 256 blocks of one warp
+    (M = 16) each over all of K, no K split; GGML 19.9 + 3.8 / - / 42.3 + 8.9.
+    The rows (`r`, 0.053 ms at 16) are no faster.
+  - iq2_s and iq2_xs at M = 64: 66.1 / 59.5 us on wmma's 32 x 64 tiles of two
+    warps (K in 4, 39 KB: two blocks an SM) against iq2_xxs's 41.7 on mma.sync's
+    64 x 64 of 2 x 2 warps of 32 x 32 (K in 2).
+  - iq3_s at M = 64 (0.80): the same inner step as iq2_xxs's (582 against 606
+    instructions); its weight block's staging 98 byte loads a lane (each 4-code
+    point's index byte, high bit and signs) and 32 grid loads, against iq2_xxs's
+    70 two-byte loads and 16 of 64 bits.
+
+- Tried, one at a time (ms of a call of the integer gemm library at 4096^2):
+
+  | change                                                                                   | effect                                                                                                                                                                             |
+  | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | iq1_s on mma.sync's tiles below M = 64                                                   | M = 16 / 32 0.036-0.039 / 0.043 -> 0.045 / 0.048: not taken                                                                                                                        |
+  | iq1_s's K split in 8 / in 2 below 64 (wmma)                                              | 0.038-0.041 / 0.036-0.039 at 16 against 0.036-0.039, 0.047 / 0.045 at 32 against 0.043: not taken                                                                                  |
+  | wmma's fragments below M = 32 only, mma.sync's from 32 to 63 (`int_tiles` of 4 letters)  | q6_K M = 32 0.049 -> 0.043, 48 0.075 -> 0.067 (at 16 mma.sync's 0.030 -> 0.038); taken                                                                                             |
+  | the other way (mma.sync's below 32, wmma's from 32)                                      | q4_1 M = 32 0.0388 -> 0.0374, 48 0.060 -> 0.055; iq2_s 0.0503 -> 0.0516: q4_1 taken                                                                                                |
+  | wmma's below 32 on the mma.sync types                                                    | M = 16: q4_K 0.029 -> 0.027, iq3_s 0.038 -> 0.033, iq4_xs 0.031 -> 0.026 (taken); iq4_nl 0.025 -> 0.028, mxfp4 0.028 -> 0.030, iq2_xxs the same (not)                              |
+  | q5_K, q3_K on mma.sync's from M = 32                                                     | failed to lower: the per-step weights' high bits shifted by the step, a loop variable the SWAR lowering could not bound (core, below); after it 0.0420 -> 0.0400, 0.0404 -> 0.0373 |
+  | iq2_s, iq2_xs, iq1_m on mma.sync's 2 x 2 warps of 32 x 32 from M = 64 to 127 (5 letters) | M = 64: 0.076 -> 0.059-0.063, 0.065 -> 0.055, 0.079 -> 0.060; 96, 127 -14%; taken (at 128 wmma's, unsplit, as before)                                                              |
+  | iq3_s on wmma's from M = 64 to 127                                                       | 0.063 -> 0.082-0.087: not taken                                                                                                                                                    |
+
+- Core: `VectorizeLoops` passes the constant bounds of the loops around a SWAR
+  loop to `lower_swar_vectors`, which narrows a widened field's right shift by
+  an amount the same in every lane when those bounds keep it below the lanes'
+  width (`vectorize_swar`: `shift_by_loop_var`). Every CPU row of
+  `formats.cmake` (848 x86 Sapphire Rapids, 371 host, 1012 arm64 with the Metal
+  ones) with and without it: the assembly byte-identical, the `.stmt` identical
+  after renumbering temporaries (whose numbering also differs between runs of
+  one compiler); the 164 Metal `.stmt` byte-identical.
+
+- `gpu_int_gemm`: `int_tiles` takes 4 letters (below M = 32, below 64, below
+  256, from 256) or 5 (below 32, 64, 128, 256, from 256); `cuda_int_splits()`
+  splits K once per range where neighbouring ranges' tiles differ (the 3-letter
+  strings' libraries are unchanged). q4_K, iq3_s, iq4_xs `wmmm`; q4_1 `mwmm`;
+  q5_K, q6_K, q3_K `wmmm`; iq2_s, iq2_xs, iq1_m `wwmww`.
+
+- Before / after, by-M provider (ms after; GGML / it, before -> after), 4096^2,
+  f32 acts, --rounds 5:
+
+  | type   | M = 16                | M = 32                | M = 64                | M = 128               |
+  | ------ | --------------------- | --------------------- | --------------------- | --------------------- |
+  | q4_K   | 0.0266 (1.03 -> 1.13) | 0.0359 (0.99 -> 0.98) | 0.0508 (0.96 -> 0.97) | 0.0749 (1.02 -> 1.02) |
+  | iq3_s  | 0.0322 (0.90 -> 1.08) | 0.0422 (1.00 -> 0.97) | 0.0635 (0.81 -> 0.80) | 0.0749 (1.03 -> 1.03) |
+  | iq4_xs | 0.0261 (0.92 -> 1.12) | 0.0381 (0.95 -> 0.93) | 0.0494 (0.91 -> 0.90) | 0.0688 (1.03 -> 1.03) |
+  | q4_1   | 0.0292 (1.07 -> 1.06) | 0.0375 (0.88 -> 0.92) | 0.0509 (0.96 -> 0.96) | 0.0742 (1.03 -> 1.03) |
+  | q5_K   | 0.0273 (1.18 -> 1.20) | 0.0400 (0.90 -> 0.96) | 0.0529 (0.98 -> 0.97) | 0.0763 (1.04 -> 1.04) |
+  | q6_K   | 0.0300 (1.22 -> 1.22) | 0.0432 (0.89 -> 1.03) | 0.0601 (0.96 -> 0.95) | 0.0842 (1.01 -> 1.02) |
+  | q3_K   | 0.0248 (1.19 -> 1.18) | 0.0383 (0.89 -> 0.97) | 0.0541 (0.96 -> 0.96) | 0.0807 (1.03 -> 1.03) |
+  | iq2_s  | 0.0302 (1.12 -> 1.14) | 0.0465 (0.90 -> 0.89) | 0.0593 (0.74 -> 0.91) | 0.1032 (0.84 -> 0.84) |
+  | iq2_xs | 0.0285 (1.07 -> 1.03) | 0.0399 (0.97 -> 0.96) | 0.0550 (0.79 -> 0.95) | 0.0943 (0.91 -> 0.90) |
+  | iq1_m  | 0.0341 (3.06)         | 0.0483 (2.24)         | 0.0595 (1.42 -> 1.85) | 0.1102 (1.22)         |
+  | iq1_s  | 0.0364 (0.70 -> 0.71) | 0.0426 (0.70 -> 0.73) | 0.0493 (0.99 -> 0.99) | 0.0724 (1.08 -> 1.06) |
+  | q2_K   | 0.0491 (0.55 -> 0.56) | 0.0464 (0.84 -> 0.82) | 0.0752 (0.77 -> 0.77) | 0.1087 (1.17 -> 1.15) |
+
+  (q4_K's before: Phase 11's; iq1_m's at 64: Phase 10's.) iq1_s, q2_K and nvfp4
+  are unchanged: nvfp4 has no `f32:q8_1` rows, so no by-M provider (GGML runs
+  its mmq on the GPU: 0.0376 / 0.0449 / 0.0591 / 0.0955 ms at M = 16 to 128).
+
+- Scorecard (the Phase 11 types and these, M = 16 to 512, rounds 5): no cell
+  more than 3% slower than Phase 11's on a quiet machine (one pass during a
+  system update was 3-20% slower on unchanged libraries, GGML's too, and was
+  rerun).
+
+- Gate: `--check` of the integer gemm and by-M providers of the 10 changed types
+  on 4096 x 1001 x 8, 4096 x 4099 x 65, 4096^2 x 16, 32, 64, 128, 512, 1024 x
+  512 x 15, 17, 31, 33, 2048 x 512 x 63, 65, 127, 129, 768 x 1000 x 33, 256 x
+  1000 x 200, 3072 x 512 x 24 (f32 acts): 540 results, 0 failures, 0 unchecked.
+  Of the 142 CUDA libraries' `.stmt` those 10 differ; the 82 Metal ones are
+  byte-identical. The core vectorization and GPU tests (`vector*`, `vectorize*`,
+  `gpu_*`, `cuda_*`, `mma*`, `wmma*`, `deinterleave*`, `interleave*`,
+  `register_shuffle`, `warp_shuffle_hoisting`, `atomics_gpu*`) under `host` and
+  `host-cuda`: 157 pass, 59 skip, 0 fail.
+
+- Where the rest is:
+
+  - q2_K from M = 16 to 64 (0.56-0.82): the f16 gemm over all of K per block; an
+    integer gemm needs the acts' sums per 16 values (an act format with them,
+    and `gpu_int_gemm`'s affine terms on 16-value sub-blocks, which it rejects),
+    or the f16 gemm a K split.
+  - iq1_s at M = 16, 32 (0.71-0.73): its one-warp blocks' instruction latency
+    (issue slots a quarter used, 12 warps an SM), as q4_0's but on 1.7x the
+    instructions; GGML's 8-warp blocks share a decoded weight tile.
+  - iq3_s at M = 64 (0.80): its weights' byte loads, a point at a time.
+  - iq2_s at M = 32, 128 (0.84-0.89), iq4_xs at 32-64 (0.90-0.93); M = 48 is
+    slower than 64 for several types (iq1_s 0.083 against 0.049 ms, q6_K 0.065
+    against 0.060): the 32 x 32 tiles' shifted tail.

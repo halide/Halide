@@ -618,10 +618,10 @@ f16 on f32 acts (`f32:f16`) 0.89, 0.90, 0.90, 0.90, 0.96, 1.08, 0.92, 0.80,
 weights (`f32:f16`) 0.89, 0.90, 0.90, 0.81, 0.96, 1.04, 0.95, 0.91, 1.34; on f32
 acts, the best library (from M = 16 the by-M provider), q4_0 0.93, 0.92, 0.89,
 1.15, 1.22, 1.18, 1.08, 1.14, 0.92; q8_0 0.94, 0.95, 0.84, 0.96, 1.14, 1.09,
-1.05, 1.21, 0.94; q4_K 0.78, 0.74, 0.85, 0.97, 1.03, 0.98, 0.97, 1.02, 0.83;
-q6_K 0.79, 0.69, 0.73, 0.95, 1.20, 0.88, 0.95, 1.00, 0.83; iq2_xs 0.46, 0.47,
-0.57, 0.70, 1.04, 0.98, 0.81, 0.92, 0.80; iq4_nl from M = 16 1.29, 1.20, 1.02,
-1.11, 0.87. `doc/X86_CUDA_LOG.md` (Phases 3 to 11) has every type, the `full`
+1.05, 1.21, 0.94; q4_K 0.78, 0.74, 0.85, 0.97, 1.13, 0.98, 0.97, 1.02, 0.83;
+q6_K 0.79, 0.69, 0.73, 0.95, 1.22, 1.03, 0.95, 1.02, 0.83; iq2_xs 0.46, 0.47,
+0.57, 0.70, 1.03, 0.96, 0.95, 0.90, 0.80; iq4_nl from M = 16 1.29, 1.20, 1.02,
+1.11, 0.87. `doc/X86_CUDA_LOG.md` (Phases 3 to 12) has every type, the `full`
 preset's layers and where the rest of the time is: from M = 16 the integer gemm
 kernel (q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
 formulation, the acts' scales loaded from their planar field; not the fit of its
