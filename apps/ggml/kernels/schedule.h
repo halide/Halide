@@ -1990,9 +1990,12 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // (integer acts): the codes' dot in int32, each lane's run of 8 values one
 // vector reduction (CUDA: two dp4a), as is an affine weight's sum of the act's
 // codes (its min's term; CUDA: dp4a by ones, reusing the codes' loads: q4_1,
-// q5_1, q4_K, q5_K at M = 8 1.6-2.4x).
+// q5_1, q4_K, q5_K at M = 8 1.6-2.4x). `narrow` (integer): a row a warp
+// at M = 1 and 2, two at 3 and 4, so that more warps hide the decodes'
+// latency (CUDA at 4096 x 4096 x 1: iq2_xxs 0.036 -> 0.029 ms, q3_K 0.035
+// -> 0.025, q4_0 0.017 either way; RTX 3090).
 inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
-                       bool integer = false, int sg = 2) {
+                       bool integer = false, int sg = 2, bool narrow = false) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -2002,7 +2005,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         bits++;
     if (block != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
     const int run = 3, vals = std::min(5, bits - 1);
-    const int nr = std::max(1, (8 >> (vals - 4)) / sg);
+    const int nr = narrow ? 1 : std::max(1, (8 >> (vals - 4)) / sg);
     // the bits each kind: run, shared, the lane's
     enum Kind { Run,
                 Shared,
@@ -2022,11 +2025,15 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     for (int i = 0; i < vals - run; i++) {
         kind[order[i]] = Shared;
     }
-    // (integer: 4 rows at every M; at M = 8 2 rows 0.72-0.89x, 8 rows
-    // 0.74-1.07x; RTX A4500)
+    // (integer: 4 rows at every M but `narrow`'s; at M = 8 2 rows
+    // 0.72-0.89x, 8 rows 0.74-1.07x; RTX A4500)
     // (8 columns: 2 warps a block also where the gemv takes one; CUDA, q4_K
     // on f32 acts at 4096^2 x 64..512 1.05-1.08x)
-    metal_tiles(out, dot, nr, sg, [=](int cols) { return cols > 4 && !integer ? 2 : 4; }, std::max(sg, 2));
+    auto tile_rows = [=](int cols) {
+        if (narrow && cols <= 4) return cols > 2 ? 2 : 1;
+        return cols > 4 && !integer ? 2 : 4;
+    };
+    metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2));
     // (integer: the gemv's lanes at every M, their runs the dp4a's)
     if (!integer) {
         Var lx("lx");
@@ -3750,7 +3757,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             }
         }
         metal_luts(out, rs);
-        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg);
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer);
         return;
     }
     if (fmt.rowwise) {
