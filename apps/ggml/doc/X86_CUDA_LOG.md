@@ -2473,3 +2473,115 @@ tail.
   multiply of a weight block's 8 six-bit mins by the acts' 8 sums (k = 8) per
   tile and weight block, then dmin per row: mma.sync's f16 shapes in the core
   and a second gemm in `gpu_int_gemm`. Not the shared-memory traffic.
+
+## Phase 14: integer gemms of q2_K and nvfp4 (RTX 3090)
+
+Same machine and conventions as Phase 13. The targets: the two blocked types
+with no integer gemm, q2_K (a min per 16 values; on the f16 gemm, 0.54, 0.82,
+0.77 of GGML at M = 16, 32, 64) and nvfp4 (float scales per 16 values; no
+`f32:q8_1` rows, so no by-M provider: its f16 gemm 0.59, 0.76, 0.61, 0.85, 0.70
+at M = 16 .. 512), from M = 16 to 128.
+
+- nvfp4: `gpu_int_gemm`'s 16-value sub-blocks (`halves`, q6_K's and q3_K's)
+  already take a float scale per sub-block; what failed was the rows (the
+  integer gemm library's, and on `f32:q8_1`): `metal_rows` on integer acts made
+  a byte-sharing bit of r.x a sub-block bit (`sub_vars`), and nvfp4's shared bit
+  is its nibbles' (bit 3), inside a sub-block, whose scale had already hoisted
+  out of the int32 dot with the lane bit above it, so the sub-block's part had
+  nothing to hoist. With float sub-block scales on integer acts, a shared bit is
+  a sub-block's only from the sub-block size up. nvfp4 on `f32:q8_0.soa`
+  (`code_words`, the default `int_tiles`) and its rows on `q8_0` and `f32:q8_1`
+  are registered; no other library's `.stmt` changed.
+
+- q2_K: on `f32:q8_0.soa`, the code-free terms of an affine weight with 16-value
+  sub-blocks are split per sub-block as its codes' are (`halves`): per
+  sub-block, its min times the act's codes' sum over it. That sum is a value per
+  act row and sub-block (`subsum`, int32), computed by the act kernel with the
+  codes (`compute_with`, a thread per sub-block on copies of the encoder, as
+  `q8_1`'s sum is; the rows, which do not read it, on copies of their own), and
+  read through an act factor; dmin times the min is a weight factor, so the
+  block's tile adds an outer product per sub-block (the terms distributed over
+  the sub-blocks' sum, so that `factor_funcs` finds each product). The sums are
+  exact (int32 of q8_0's codes), so the act format, and `--check`'s tolerance,
+  are q8_0's.
+
+- Tried, one at a time (q2_K on `f32:q8_0.soa` at 4096^2; us of the gemm kernel
+  by CUPTI at M = 16 / 32 / 64, or ms of a call):
+
+  | change                                                                                                                                  | effect                                                                                                           |
+  | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+  | the sub-block sums computed in the gemm, a vector of the act's 16 codes from global memory per act factor staged (q3_K's tiles, `wmmm`) | 34.3 / 45.2 / 87.2 (q3_K 18.8 / 31.3 / 45.3): the sums' loads used at once (long-scoreboard stalls)              |
+  | the sums in the act kernel (`subsum`)                                                                                                   | 29.1 / 42.2 / 83.4; the act kernel 2.5 -> 3.3 us at M = 16                                                       |
+  | and `code_words`                                                                                                                        | 26.0 / 38.8 / 76.8                                                                                               |
+  | and mma.sync's tiles below M = 32 / wmma's from 32 to 63                                                                                | 24.8 at 16 / 36.2 at 32 (taken: `int_tiles=mwmmm`)                                                               |
+  | M = 64 on 2 x 2 warps of 32 x 32 (2 x 1 of 32 x 64: 255 registers, 604 bytes spilled)                                                   | 82.4 -> 55.0, a call 0.0937 -> 0.0633 ms; M = 96 0.169 -> 0.110                                                  |
+  | M >= 128 on 64 x 128 tiles                                                                                                              | fails to launch: more than 48 KB of shared memory (2 more factors per sub-block); blocks of at most 64 rows of M |
+  | then mma.sync's / wmma's tiles from M = 128                                                                                             | M = 128 0.114 / 0.114, 256 0.207 / 0.218, 512 0.371 / 0.402 ms: mma.sync's                                       |
+
+- Attribution at 4096^2 (us of GPU time per kernel, CUPTI; ours: the acts'
+  kernel, the gemm, the K split's sum; GGML: its quantizer, `mul_mat_q`, its
+  stream-k fixup):
+
+  | type, M    | ours             | GGML                | q3_K (ours)      |
+  | ---------- | ---------------- | ------------------- | ---------------- |
+  | q2_K, 16   | 3.2 + 24.6 + 2.1 | 2.2 + 19.8 + 3.8    | 2.5 + 19.8 + 2.2 |
+  | q2_K, 32   | 3.8 + 35.6 + 2.9 | 2.6 + 28.7 + 5.3    | 3.1 + 31.3 + 2.6 |
+  | q2_K, 64   | 5.0 + 51.3 + 3.0 | 4.0 + 42.3 + 8.9    |                  |
+  | nvfp4, 16  | 2.5 + 22.8 + 2.2 | 2.2 + 29.6 + 4.2    |                  |
+  | nvfp4, 64  | 3.7 + 42.6 + 3.1 | 4.0 + 44.4 + 8.9    |                  |
+  | nvfp4, 512 | 15.6 + 272.9     | 15.9 + 226.9 + 19.2 |                  |
+
+  q2_K's M = 16 kernel (ncu) issues 4.79 M instructions against q3_K's 4.01 M
+  (the min term: two more fmas per element and act block, its factors' loads), a
+  fifth of its stall samples on the shift that decodes the weight's code word
+  just loaded (long scoreboard: the load-ahead design of Phase 13); the M = 32
+  one takes 239 registers against q3_K's 136.
+
+- Before / after, by-M provider (ms after; GGML / it, before -> after), 4096^2,
+  f32 acts, --rounds 5 (nvfp4's before: its f16 gemm library):
+
+  | type  | M = 16                | M = 32                | M = 64                | M = 128               | M = 512               |
+  | ----- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- |
+  | q2_K  | 0.0298 (0.54 -> 0.93) | 0.0444 (0.82 -> 0.87) | 0.0612 (0.77 -> 0.94) | 0.1095 (1.17 -> 1.17) | 0.3682 (0.98 -> 0.99) |
+  | nvfp4 | 0.0277 (0.59 -> 1.38) | 0.0346 (0.76 -> 1.33) | 0.0509 (0.61 -> 1.18) | 0.0784 (0.85 -> 1.23) | 0.2938 (0.70 -> 0.91) |
+
+  q2_K's by-M provider takes the f16 gemm at M = 128 (0.108 against the integer
+  gemm's 0.113 ms), the integer gemm elsewhere from 16. nvfp4 below 16, on the
+  `f32:q8_1` rows: M = 1, 2, 4, 8 0.88, 0.91, 0.95, 1.18 (the exact `f32` rows
+  0.55, 0.42, 0.47, 0.51).
+
+- Scorecard, by-M provider (ms; GGML / it), 4096^2, f32 acts, --rounds 5; every
+  cell within 2.5% of Phase 13's (Phase 11's for mxfp4); of the 147 CUDA
+  libraries' `.stmt` only the 4 new ones (nvfp4's three, q2_K's integer gemm)
+  are not Phase 13's:
+
+  | type    | M = 16        | M = 32        | M = 64        | M = 128       | M = 512       |
+  | ------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | q4_0    | 0.0238 (1.23) | 0.0305 (1.18) | 0.0428 (1.08) | 0.0642 (1.12) | 0.2075 (0.92) |
+  | q8_0    | 0.0342 (1.16) | 0.0394 (1.10) | 0.0523 (1.05) | 0.0670 (1.20) | 0.2201 (0.94) |
+  | q5_0    | 0.0286 (1.15) | 0.0355 (1.09) | 0.0458 (1.09) | 0.0659 (1.17) | 0.2214 (0.90) |
+  | q4_1    | 0.0291 (1.07) | 0.0380 (0.91) | 0.0509 (0.96) | 0.0750 (1.03) | 0.2450 (0.85) |
+  | q5_1    | 0.0308 (1.15) | 0.0380 (0.98) | 0.0514 (1.02) | 0.0748 (1.08) | 0.2501 (0.90) |
+  | q4_K    | 0.0263 (1.14) | 0.0360 (0.98) | 0.0508 (0.96) | 0.0753 (1.01) | 0.2509 (0.83) |
+  | q5_K    | 0.0275 (1.19) | 0.0400 (0.96) | 0.0527 (0.98) | 0.0766 (1.04) | 0.2585 (0.84) |
+  | q6_K    | 0.0301 (1.21) | 0.0434 (1.01) | 0.0605 (0.94) | 0.0849 (0.99) | 0.2869 (0.83) |
+  | q3_K    | 0.0248 (1.20) | 0.0386 (0.96) | 0.0537 (0.97) | 0.0809 (1.02) | 0.2751 (0.86) |
+  | iq4_nl  | 0.0251 (1.29) | 0.0331 (1.19) | 0.0465 (1.02) | 0.0669 (1.10) | 0.2213 (0.87) |
+  | iq2_xxs | 0.0263 (0.99) | 0.0358 (0.96) | 0.0476 (0.97) | 0.0713 (1.03) | 0.2399 (0.81) |
+  | iq3_s   | 0.0328 (1.05) | 0.0424 (0.96) | 0.0633 (0.80) | 0.0758 (1.02) | 0.2452 (0.84) |
+  | mxfp4   | 0.0284 (1.12) | 0.0347 (1.08) | 0.0500 (0.97) | 0.0690 (1.08) | 0.2215 (0.89) |
+
+- Gate: `--check` of the integer gemm, rows and by-M providers of q2_K and nvfp4
+  on 4096 x 1001 x 8, 4096 x 4099 x 65, 4096^2 x 16, 32, 64, 128, 256, 512, 1024
+  x 512 x 15, 17, 2048 x 512 x 63, 65, 1280 x 512 x 16, 33, 300, 2304 x 512 x
+  64, 512, 768 x 1000 x 130, 768 x 512 x 17 and, for nvfp4, whose K is a
+  multiple of 64, 1088 x 512 x 16, 33, 64, 130, 1344 x 1000 x 17, 3008 x 512 x
+  24 (f32 acts): 220 results, 0 failures, 0 unchecked. `ctest -L ggml_cuda`
+  74/74 (2 new). The 82 Metal libraries' `.stmt` are byte-identical to Phase
+  13's.
+
+- Where the rest is (q2_K at M = 16, 32, 64: 0.93, 0.87, 0.94): its gemm kernel
+  (24.6 / 35.6 / 51.3 us against GGML's 19.8 / 28.7 / 42.3; q3_K's on the same
+  tiles 19.8 / 31.3): the weight's code words used as they are loaded, the min
+  term's fmas and factor loads, at M = 32 registers; and the act kernel's
+  sub-block sums (+0.8-1.0 us, a thread per sub-block recomputing its codes).

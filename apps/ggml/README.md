@@ -553,18 +553,18 @@ and cuBLAS. The Halide counterparts of a blocked type are:
 
 - `<type>` on `f32:q8_1` acts: the acts quantized by a kernel of their own (a
   thread per record), then `metal_rows` with integer acts: each lane's run of 8
-  codes two `dp4a`. Every blocked type but nvfp4. (On pre-quantized `q8_0`,
-  `q8_1` or `q8_K` acts the same rows, without the kernel.)
+  codes two `dp4a`. Every blocked type. (On pre-quantized `q8_0`, `q8_1` or
+  `q8_K` acts the same rows, without the kernel.)
 - `<type>` on `f32:q8_0.soa` acts (q4_0, q5_0, q8_0, iq4_nl, mxfp4, iq4_xs,
-  q6_K, q3_K, q1_0, q2_0, iq2_s, iq1_m) or, for weights with an offset or min
-  per block (q4_1, q5_1, q4_K, q5_K), on `f32:q8_1.soa`: `gpu_int_gemm`, the
-  weights' int8 codes times the acts' on `mma.sync`'s 16 x 8 x 32 int8 tiles
-  (warps of 32 x 64) or wmma's 16 x 16 x 16 fragments, per type and range of M
-  (`int_tiles` in `GGML_SCHEDULE_PARAMS`), each block's (or 16-value
-  sub-block's) int32 tile scaled into the f32 accumulator by the lanes that hold
-  it: by the weight's scale of it (a K-quant's sub-block scale times its
-  super-block's, staged as one factor per row) and the act's; an offset times
-  the act's block sum (`q8_1`'s third array) is added per block. A step's
+  nvfp4, q6_K, q3_K, q2_K, q1_0, q2_0, iq2_s, iq1_m) or, for weights with an
+  offset or min per block (q4_1, q5_1, q4_K, q5_K), on `f32:q8_1.soa`:
+  `gpu_int_gemm`, the weights' int8 codes times the acts' on `mma.sync`'s 16 x 8
+  x 32 int8 tiles (warps of 32 x 64) or wmma's 16 x 16 x 16 fragments, per type
+  and range of M (`int_tiles` in `GGML_SCHEDULE_PARAMS`), each block's (or
+  16-value sub-block's) int32 tile scaled into the f32 accumulator by the lanes
+  that hold it: by the weight's scale of it (a K-quant's sub-block scale times
+  its super-block's, staged as one factor per row) and the act's; an offset
+  times the act's block sum (`q8_1`'s third array) is added per block. A step's
   weights are decoded 4 bytes of a block per lane (a block's codes on
   consecutive lanes), its acts copied by `cp.async` and awaited at the barrier,
   after the weights' loads; the acts' codes, scales and `q8_1`'s sums quantized
@@ -575,8 +575,9 @@ and cuBLAS. The Halide counterparts of a blocked type are:
   table, its signs applied in the word); a lut's, a byte load of the gemm's own
   copy of it in shared memory per code. For M >= 16 and N % 8 == 0, K split in 4
   below M = 64 and in 2 below 256 (gemms on every fourth or second step of K, or
-  of weight block, summed by a second kernel), else the rows. Not q2_K (a min
-  per 16 values) nor nvfp4 (float sub-block scales).
+  of weight block, summed by a second kernel), else the rows. q2_K's mins are
+  per 16 values: the act kernel also sums each 16 codes, and each sub-block's
+  min times its sum is added per block.
 - `<type>:f16` on `f32:f16` (or `f16`) acts: `gpu_gemm` with the same
   `gpu_staged` and `fragments` as Metal's on wmma's 16 x 16 x 16 fragments for M
   \>= 16 and N % 8 == 0 (`wmma.store` writes a tile straight to out and faults on
@@ -587,7 +588,7 @@ and cuBLAS. The Halide counterparts of a blocked type are:
 the `f32:q8_1` rows below 16 rows, then the integer gemm where the type has one,
 else (above 16) the f16 gemm; per type, another of the three where it was
 measured more than 3% faster at the nearest of M = 16, 32, 64, 128, 512 (`by_m`
-in `harness/halide_providers.cpp`: the f16 gemm at 128 on q2_0).
+in `harness/halide_providers.cpp`: the f16 gemm at 128 on q2_0 and q2_K).
 
 The f16 gemm's staging is Metal's, on 16 bytes per lane and rows padded by 8
 values (a fragment's rows, 128 bytes apart, share their banks): the weights'
@@ -621,15 +622,16 @@ acts, the best library (from M = 16 the by-M provider), q4_0 0.93, 0.92, 0.89,
 1.05, 1.21, 0.94; q4_K 0.78, 0.74, 0.85, 0.97, 1.13, 0.98, 0.97, 1.02, 0.83;
 q6_K 0.79, 0.69, 0.73, 0.95, 1.22, 1.03, 0.95, 1.02, 0.83; iq2_xs 0.46, 0.47,
 0.57, 0.70, 1.03, 0.96, 0.95, 0.90, 0.80; iq4_nl from M = 16 1.29, 1.20, 1.02,
-1.11, 0.87. `doc/X86_CUDA_LOG.md` (Phases 3 to 12) has every type, the `full`
-preset's layers and where the rest of the time is: from M = 16 the integer gemm
-kernel (q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
-formulation, the acts' scales loaded from their planar field; not the fit of its
-tiles to the SMs, at M = 512 its time follows its work), most at M = 512 (q4_K's
-also an fma per element and block for its mins; the grid formats' 0.78-0.84, a
-weight block of several blocks as the K-quants'); below 16, the second launch,
-the rows' cost per act column and the grid formats' decodes; on f16 from M = 64,
-cuBLAS's f16 accumulators.
+1.11, 0.87; q2_K from M = 16 0.93, 0.87, 0.94, 1.17, 0.99; nvfp4 0.88, 0.91,
+0.95, 1.18, 1.38, 1.33, 1.18, 1.23, 0.91. `doc/X86_CUDA_LOG.md` (Phases 3 to 14)
+has every type, the `full` preset's layers and where the rest of the time is:
+from M = 16 the integer gemm kernel (q4_0's at M = 512 1.07x the time of a
+hand-written kernel of GGML's formulation, the acts' scales loaded from their
+planar field; not the fit of its tiles to the SMs, at M = 512 its time follows
+its work), most at M = 512 (q4_K's also an fma per element and block for its
+mins; the grid formats' 0.78-0.84, a weight block of several blocks as the
+K-quants'); below 16, the second launch, the rows' cost per act column and the
+grid formats' decodes; on f16 from M = 64, cuBLAS's f16 accumulators.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
