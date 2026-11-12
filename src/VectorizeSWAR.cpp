@@ -1,4 +1,5 @@
 #include "VectorizeSWAR.h"
+#include "ConstantBounds.h"
 #include "Deinterleave.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -469,6 +470,40 @@ class LowerSWARVectors : public IRMutator {
         return fail(op, "a shuffle that moves values between lanes");
     }
 
+    // A mux of 8-bit constants whose index is in range and fits 8-bit
+    // lanes is a lookup in a table of them: a dynamic_shuffle of the
+    // index's word (as a vector of its lanes), which targets with a byte
+    // permute do in a general-purpose register. Otherwise an undefined Expr.
+    Expr word_of_lookup(const Call *op) {
+        const Type &t = op->type;
+        const int n = (int)op->args.size() - 1;
+        const Expr &index = op->args[0];
+        if (!op->is_intrinsic(Call::mux) || t.bits() != 8 || n < 2 || n > 256 ||
+            index.type().lanes() != t.lanes() || !index.type().is_int_or_uint() ||
+            !ConstantInterval(0, n - 1).contains(constant_integer_bounds(index))) {
+            return Expr();
+        }
+        vector<Expr> table;
+        for (int i = 1; i <= n; i++) {
+            Expr v = op->args[i];
+            if (const Broadcast *b = v.as<Broadcast>()) {
+                v = b->value;
+            }
+            if (!v.type().is_scalar() || !as_const_integer(v)) {
+                return Expr();
+            }
+            table.push_back(v);
+        }
+        const Type it = UInt(8, t.lanes());
+        Expr i = narrow(index, it);
+        if (!i.defined()) {
+            return Expr();
+        }
+        Expr lanes = Reinterpret::make(it, to_word(simplify(i)));
+        Expr lookup = Call::make(t, Call::dynamic_shuffle, {Shuffle::make_concat(table), lanes, 0, n - 1}, Call::PureIntrinsic);
+        return Reinterpret::make(word_type(t), lookup);
+    }
+
     // The word for a vector, or the bits of a scalar as an unsigned
     // integer of the same width.
     Expr to_word_or_scalar(const Expr &e) {
@@ -718,6 +753,8 @@ class LowerSWARVectors : public IRMutator {
                     return shift_lanes(t, shift_uniform(t, to_word(op->args[0]), mutate(base), left), *offsets, left);
                 }
                 return fail(e, "a shift by an amount that varies across the lanes and is not constant");
+            } else if (Expr w = word_of_lookup(op); w.defined()) {
+                return w;
             }
         }
 

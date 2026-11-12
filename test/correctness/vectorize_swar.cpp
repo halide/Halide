@@ -12,10 +12,22 @@ using namespace Halide::Internal;
 
 namespace {
 
+// The lookup of each lane of a word in a table of constants: a
+// dynamic_shuffle of the word reinterpreted as its lanes. Returns the word.
+Expr lookup_word(const Expr &e) {
+    const Call *c = Call::as_intrinsic(e, {Call::dynamic_shuffle});
+    const Reinterpret *index = c ? c->args[1].as<Reinterpret>() : nullptr;
+    if (index && index->value.type().is_scalar()) {
+        return index->value;
+    }
+    return Expr();
+}
+
 // Look for vector values in the producer of a Func vectorized with
 // VectorizeIn::SWAR. The only vectors allowed are dense loads and stores of
 // words, which appear as reinterprets between a vector load or store and
-// a scalar word.
+// a scalar word, and lookups of a word's lanes (which targets without a byte
+// permute in a general-purpose register do in a vector one).
 class FindVectors : public IRVisitor {
     using IRVisitor::visit;
 
@@ -55,6 +67,8 @@ class FindVectors : public IRVisitor {
     void visit(const Reinterpret *op) override {
         if (const Load *l = op->value.as<Load>(); l && op->type.is_scalar()) {
             visit_dense_index(l->index, l->predicate);
+        } else if (Expr w = lookup_word(op->value); w.defined() && op->type.is_scalar()) {
+            w.accept(this);
         } else {
             bad(op);
             IRVisitor::visit(op);
@@ -76,6 +90,9 @@ class FindVectors : public IRVisitor {
         const Reinterpret *r = value.as<Reinterpret>();
         if (r && r->value.type().is_scalar()) {
             r->value.accept(this);
+            visit_dense_index(op->index, op->predicate);
+        } else if (Expr w = lookup_word(value); w.defined()) {
+            w.accept(this);
             visit_dense_index(op->index, op->predicate);
         } else {
             bad(op->value);
@@ -181,8 +198,9 @@ class FindNarrowVectorOps : public IRVisitor {
 
     void visit(const Call *op) override {
         // Lanes of predicated loads are loaded one at a time, guarded by
-        // if_then_else, before being packed into a word.
-        if (!op->is_intrinsic(Call::if_then_else)) {
+        // if_then_else, before being packed into a word. A lookup of the
+        // lanes of the words is a shuffle of them.
+        if (!op->is_intrinsic({Call::if_then_else, Call::dynamic_shuffle})) {
             check(op);
         }
         IRVisitor::visit(op);
@@ -770,6 +788,17 @@ int main(int argc, char **argv) {
             // evaluated one lane at a time.
             ok = ok && test_elementwise<uint8_t>("varying_select", lanes, [](Var x, Func a, Func c) {
                      return select(a(x) < c(x) || x % 3 == 0, a(x), c(x) ^ (uint8_t)0x55);
+                 });
+            // Lookups in tables of constants, of at most 16 entries and more.
+            ok = ok && test_elementwise<uint8_t>("lookup", lanes, [](Var x, Func a, Func c) {
+                     return mux(a(x) % 4, {cast<uint8_t>(10), cast<uint8_t>(200), cast<uint8_t>(30), cast<uint8_t>(40)});
+                 });
+            ok = ok && test_elementwise<uint8_t>("lookup_19", lanes, [](Var x, Func a, Func c) {
+                     std::vector<Expr> table;
+                     for (int i = 0; i < 19; i++) {
+                         table.push_back(cast<uint8_t>(i * 13 + 1));
+                     }
+                     return mux(a(x) % 16 + a(x) / 64, table) ^ c(x);
                  });
             // Uniform shifts by a runtime amount.
             ok = ok && test_elementwise<uint8_t>("uniform_shift", lanes, [](Var x, Func a, Func c) {

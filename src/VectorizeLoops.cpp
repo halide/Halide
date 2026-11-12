@@ -617,6 +617,19 @@ protected:
 
         if (!changed && max_lanes <= 1) {
             return op;
+        } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
+            // The lookup table is not lane-parallel with the result; only
+            // the indices are. (The table is loop-invariant: a dynamic_shuffle
+            // inside a loop being vectorized is a lookup in constants made by
+            // lowering a SWAR-vectorized loop within it.)
+            internal_assert(new_args[0].same_as(op->args[0]) && new_args[2].same_as(op->args[2]) &&
+                            new_args[3].same_as(op->args[3]))
+                << "dynamic_shuffle with a table or range that varies across a vectorized loop: " << Expr(op) << "\n";
+            if (new_args[1].same_as(op->args[1])) {
+                return op;
+            }
+            return Call::make(op->type.with_lanes(new_args[1].type().lanes()), op->name, new_args,
+                              op->call_type, op->func, op->value_index, op->image, op->param);
         } else if (op->name == Call::trace) {
             auto event = as_const_int(op->args[6]);
             internal_assert(event);

@@ -155,6 +155,7 @@ tests(
     cuda_8_bit_dot_product.cpp
     cuda_8_bit_sum.cpp
     cuda_f16_product.cpp
+    cuda_swar_lookup.cpp
     custom_allocator.cpp
     custom_auto_scheduler.cpp
     custom_cuda_context.cpp

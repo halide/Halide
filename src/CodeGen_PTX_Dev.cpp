@@ -173,6 +173,10 @@ protected:
     /** Wait for every asynchronous copy issued so far to have landed. */
     void await_all_copies();
 
+    /** A dynamic_shuffle of 8-bit lanes from a table of at most 16 of them:
+     * byte permutes (prmt) of the table's words, four lanes at a time. */
+    llvm::Value *codegen_byte_permutes(const Call *op);
+
     /** Emit calls to the nvvm warp-level matrix multiply-accumulate
      * intrinsics that drive the tensor cores. */
     // @{
@@ -719,6 +723,12 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         return;
     }
 
+    if (op->is_intrinsic(Call::dynamic_shuffle) && op->type.bits() == 8 && op->type.lanes() >= 2 &&
+        op->args[0].type().lanes() <= 16) {
+        value = codegen_byte_permutes(op);
+        return;
+    }
+
     // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
     value = call_overloaded_intrin(op->type, op->name, op->args);
     if (!value) {
@@ -824,6 +834,62 @@ Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
         << "Could not find the nvvm intrinsic " << name << "\n";
     llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id, overloads);
     return builder->CreateCall(fn, args);
+}
+
+Value *CodeGen_PTX_Dev::codegen_byte_permutes(const Call *op) {
+    internal_assert(op->args.size() == 4 && is_const_zero(op->args[2]))
+        << "dynamic_shuffle with a table that does not start at index 0: " << Expr(op) << "\n";
+    const int n = op->args[0].type().lanes(), lanes = op->type.lanes(), groups = (lanes + 3) / 4;
+    // (v's lanes and zeros, to `to` lanes)
+    auto pad = [&](Value *v, int from, int to) {
+        if (from == to) {
+            return v;
+        }
+        vector<int> indices(to);
+        for (int i = 0; i < to; i++) {
+            indices[i] = i < from ? i : from;
+        }
+        return builder->CreateShuffleVector(v, llvm::Constant::getNullValue(v->getType()), indices);
+    };
+    // The table as four words: entries 0-3, 4-7, 8-11 and 12-15
+    Value *table = pad(codegen(op->args[0]), n, 16);
+    table = builder->CreateBitCast(table, get_vector_type(i32_t, 4));
+    Value *t[4];
+    for (int i = 0; i < 4; i++) {
+        t[i] = builder->CreateExtractElement(table, (uint64_t)i);
+    }
+    llvm::Intrinsic::ID id = llvm::Intrinsic::lookupIntrinsicID("llvm.nvvm.prmt");
+    internal_assert(id != llvm::Intrinsic::not_intrinsic) << "Could not find the nvvm intrinsic llvm.nvvm.prmt\n";
+    llvm::Function *prmt = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id, {});
+    auto permute = [&](Value *a, Value *b, Value *sel) {
+        return builder->CreateCall(prmt, {a, b, sel});
+    };
+    // Each group of four indices (in [0, 15]) as a word of four bytes
+    Value *index = codegen(cast(UInt(8, op->args[1].type().lanes()), op->args[1]));
+    index = builder->CreateBitCast(pad(index, lanes, groups * 4), get_vector_type(i32_t, groups));
+    Value *result = llvm::PoisonValue::get(get_vector_type(i32_t, groups));
+    for (int g = 0; g < groups; g++) {
+        Value *w = builder->CreateExtractElement(index, (uint64_t)g);
+        // The four indices as the nibbles of a selector: byte 0 is lanes 0
+        // and 1, byte 2 lanes 2 and 3, which permute into bytes 0 and 1
+        Value *nibbles = builder->CreateOr(w, builder->CreateLShr(w, 4));
+        Value *sel = permute(nibbles, ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, 0x20));
+        Value *word;
+        if (n <= 8) {
+            // (an index's top bit is clear, so prmt does not replicate its sign)
+            word = permute(t[0], t[1], sel);
+        } else {
+            // A lane's entry is in the first or the last eight by its top
+            // bit, which then picks between the two permutes' bytes
+            Value *low3 = builder->CreateAnd(sel, 0x7777);
+            Value *lo = permute(t[0], t[1], low3), *hi = permute(t[2], t[3], low3);
+            Value *pick = builder->CreateOr(builder->CreateLShr(builder->CreateAnd(sel, 0x8888), 1), 0x3210);
+            word = permute(lo, hi, pick);
+        }
+        result = builder->CreateInsertElement(result, word, (uint64_t)g);
+    }
+    result = builder->CreateBitCast(result, get_vector_type(i8_t, groups * 4));
+    return slice_vector(result, 0, lanes);
 }
 
 void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
