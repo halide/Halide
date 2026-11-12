@@ -393,8 +393,6 @@ void register_halide_providers() {
     // 32, 64, 128 or 512 on 4096 x 4096 (RTX 3090), a letter each; an M
     // from 16 takes the nearest of those five's.
     static const std::map<std::string, std::string> by_m = {
-        {"iq4_nl", "riiii"},
-        {"iq4_xs", "rihii"},
         {"q2_0", "iiihi"},
         {"q2_K", "hhhhh"},
     };

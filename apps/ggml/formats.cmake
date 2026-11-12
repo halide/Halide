@@ -274,11 +274,14 @@ set(GGML_SCHEDULE_PARAMS
     # default), the faster at 4096^2 (ms at M = 16 / 128 / 512, m -> w: q6_K
     # 0.045 -> 0.034 / 0.162 -> 0.094 / 0.309 -> 0.319, q4_K 0.038 -> 0.032 /
     # 0.115 -> 0.090 / 0.279 -> 0.323; q4_0 0.027 -> 0.028 / 0.070 -> 0.083 /
-    # 0.234 -> 0.248). The lut formats run unsplit, on the last's at every M.
+    # 0.234 -> 0.248).
     # q4_K, q5_K: mma.sync's from M = 64 since its K split takes q4_0's tiles
     # (q4_K at M = 128 0.090 -> 0.075 ms), q4_K below 64 too since its weight
     # blocks are staged per step there (M = 32 0.042 -> 0.036; q5_K's fifth
     # bits, at a position that depends on the step, do not decode in GPRs).
+    # The lut formats (iq4_nl, mxfp4, iq4_xs) on mma.sync's at every M, K
+    # split as the others (iq4_nl at M = 16 / 128 / 512, unsplit on wmma's:
+    # 0.045 / 0.089 / 0.265 -> 0.033 / 0.074 / 0.247 ms).
     # q6_K, q3_K: mma.sync's from M = 64 (q3_K at M = 64 / 128 / 512 0.062 /
     # 0.090 / 0.291 -> 0.055 / 0.081 / 0.273 ms; q6_K 0.064 / 0.093 / 0.296
     # -> 0.060 / 0.085 / 0.283).
@@ -291,9 +294,6 @@ set(GGML_SCHEDULE_PARAMS
     "q3_K mul_mat f32:q8_0.soa int_tiles=wmm"
     "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
     "q2_0 mul_mat f32:q8_0.soa int_tiles=mwm"
-    "iq4_nl mul_mat f32:q8_0.soa int_tiles=www"
-    "mxfp4 mul_mat f32:q8_0.soa int_tiles=www"
-    "iq4_xs mul_mat f32:q8_0.soa int_tiles=www"
     "iq2_s mul_mat f32:q8_0.soa int_tiles=www"
     "iq1_m mul_mat f32:q8_0.soa int_tiles=www"
     "iq2_xs mul_mat f32:q8_0.soa int_tiles=www"

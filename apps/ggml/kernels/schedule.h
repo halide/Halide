@@ -3162,11 +3162,10 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     };
     Expr cond = M >= 16 && N >= 32 && N % 8 == 0;
     // out reads dot through a wrapper; the K split takes dot, the gemm on
-    // all of K and the rows clones of it (as gpu_gemm()'s rows)
-    // (not with a lut: the definitions the split leaves unrun read it too,
-    // outside the partial sums' kernel)
+    // all of K and the rows clones of it (as gpu_gemm()'s rows); a gemm's
+    // luts its own, per block of its kernel (blocks())
     Func via = dot.in(out);
-    for (size_t i = 0; i < splits.size() && luts.empty(); i++) {
+    for (size_t i = 0; i < splits.size(); i++) {
         const int kz = splits[i].kz;
         const std::vector<GemmShape> &split_shapes = splits[i].shapes;
         const std::string sfx = std::to_string(i);
