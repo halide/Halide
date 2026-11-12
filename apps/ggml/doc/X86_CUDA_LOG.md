@@ -2109,3 +2109,143 @@ by-M provider, its f32:q8_1 rows absent). The grid formats were the worse
     x 64 tiles, their mma.sync tiles spilling.
   - M = 16, 32: mxfp4 (0.80), iq4_xs (0.81-0.84), iq1_s (0.72-0.81), iq3_s and
     iq2_s (0.85-0.91); not attributed.
+
+## Phase 11: M = 512; lut codes and bit fields in GPR words (RTX 3090)
+
+Same machine and conventions as Phase 10. The target: M = 512 at 0.95 of GGML
+for q4_0, q8_0, q5_0, q4_1, q5_1, q4_K, q5_K, q6_K, q3_K, iq4_nl, iq2_xxs, iq3_s
+and mxfp4 (Phase 10: 0.70-0.95), M = 256 and 1024 spot-checked.
+
+- Attribution at 4096^2, M = 512 (us of GPU time per kernel, CUPTI; ours: the
+  acts' kernel, the gemm; GGML: its quantizer, `mul_mat_q` on 82 blocks of 8
+  warps in 57 KB, its stream-k fixup):
+
+  | type   | ours                                            | GGML                |
+  | ------ | ----------------------------------------------- | ------------------- |
+  | q4_0   | 15.6 + 185.6 (64 x 128, 40.7 KB, 167 registers) | 16.0 + 154.0 + 19.6 |
+  | q4_K   | 17.5 + 224.4 (64 x 128, 48.5 KB, 194 registers) | 16.0 + 168.2 + 19.1 |
+  | iq4_nl | 15.6 + 227.8 (64 x 128, 40.7 KB, 165 registers) | 16.0 + 153.9 + 19.5 |
+
+  GGML's gemm kernel takes 14 us more on q4_K than on q4_0 and none more on
+  iq4_nl; ours 39 and 42. SASS of the K-step loop, per step of 128 values and
+  warp (where a weight block is 256 values, plus its staging per two steps):
+  q4_0 1182 (64 `IMMA.16832`, 256 each of `I2FP`, `FMUL` and `FFMA`, 147 `LDS`),
+  q8_0 1150, q5_0 1406 (its fifth bits: 112 `LOP3`, 72 `SHF`, 55 `IMAD`), q4_1
+  1469 (the offset term: 256 more `FFMA`, 48 more `LDS`), q4_K 1403 + 169,
+  iq2_xxs 1128 + 779, iq4_nl 1469 (64 `LDS.U8` of the shared lut, 112 `PRMT`, 64
+  `SHF`). The offset term's fmas are GGML's too (an fma per element and act
+  block for the min, beside the scale's); the int8 tensor cores cannot take it
+  (the min and the act's sum are not integer multiples of the scales), so it
+  stays.
+
+- Tried, one at a time (us of the gemm kernel by CUPTI, two interleaved passes,
+  or ms of a call of the library; 4096^2):
+
+  | change                                                                                                             | effect                                                                                                                                                      |
+  | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | q4_K at M = 512 on 128 x 128 tiles of 4 x 2 warps of 32 x 64 (68 KB: Phase 7's opt-in to more than 48 KB, core)    | 250-267 against 224: not kept (nor the opt-in)                                                                                                              |
+  | the harness's device allocations reused (`halide_reuse_device_allocations`, as GGML's pool)                        | q4_0 / q4_K at M = 16 0.024 / 0.029, 512 0.202 / 0.243 ms either way: the calls' few us past their kernels are not the intermediates' allocations; not kept |
+  | iq4_nl's lut ablated (the code its own value; wrong results), on 16 codes a lane / staged as q4_0's (`code_words`) | 227.5 -> 205 / 184 (q4_0 185): the lut's byte load per code ~22, the staging ~21                                                                            |
+  | iq4_nl's codes looked up in their GPR words (core, below), staged as q4_0's                                        | M = 16 30.5 -> 19.1, 64 45.5 -> 37.8, 512 227 -> 199.5 (1469 -> 1324 instructions a step: 64 `PRMT`, no `LDS.U8`); taken, and for mxfp4 and iq4_xs          |
+  | q4_K's weight codes 4 lanes a row, two words a lane (their stores conflict-free at 272-byte rows)                  | M = 64 42-44 -> 43-46, 128 60 -> 61.5, 512 225 -> 231 (a row's 32 bytes in two loads a lane): not kept                                                      |
+  | q5_0's and q5_1's fifth bits spread to their lanes by a multiply (core, below)                                     | 1406 -> 1294 instructions; M = 64 0.0481 -> 0.0453 ms, 512 0.2222 -> 0.2161; q5_1 0.0552 -> 0.0513, 0.2552 -> 0.2465; taken                                 |
+  | that in runs of 7 lanes of a 64-bit word, the eighth by a choice (iq2_xxs's signs and their parity; iq3_s's signs) | iq2_xxs's weight block 1907 -> 1731 instructions, M = 64 0.0498 -> 0.0474, 512 0.237 -> 0.236; iq3_s M = 16 0.0399 -> 0.0379, 512 0.2498 -> 0.2412; taken   |
+  | the gemm's blocks M-fastest (one fused block dimension: a weight tile's 4 blocks launched together)                | q4_0 M = 512 186-188 -> 185.3-185.7, 1024 339.2-339.7 -> 338.7-339.3; q4_K 225.7 -> 225.3: not the lever; not kept                                          |
+
+- Core:
+
+  - `VectorizeSWAR`: a mux of 8-bit constants in a SWAR-vectorized loop failed
+    to lower; where its index is provably in range and fits 8-bit lanes it is
+    now a `dynamic_shuffle` of the index's word, as a vector of its lanes, which
+    the backends with a table lookup already lower (tbl, pshufb).
+    `CodeGen_PTX_Dev` lowers a `dynamic_shuffle` of 8-bit lanes from a table of
+    at most 16 to byte permutes: per 4 lanes, the indices packed into a
+    selector's nibbles, then one `prmt` of the table's first two words (up to 8
+    entries), or two and a third picking between them by each index's top bit
+    (`cuda_swar_lookup`).
+  - `VectorizeSWAR`: (x >> ramp(b, 1)) % 2 of an unsigned scalar x (lane i bit b
+    \+ i of x) was x in every lane, shifted by b, then by each lane's amount and
+    masked; now x >> b masked to the lanes' bits times a constant that puts a
+    copy at the start of each lane, masked, in runs of one lane fewer than the
+    lanes' bits (the copies do not overlap); a modulo of a choice by a constant
+    condition per lane is the choice of the modulos (`vectorize_swar`:
+    `ramp_bits`, `ramp_bits_select`).
+  - Neither changes x86 or ARM code: the first lowers what failed to; the
+    second's 261 x86 and 261 ARM CPU libraries' `.stmt` (every CPU row of
+    `formats.cmake`) are byte-identical with and without it.
+
+- `gpu_int_gemm`: with `code_words`, the weights' luts are inlined into the
+  staged codes (a lookup in each word, not a shared copy of the lut);
+  `code_words` for iq4_nl, mxfp4 and iq4_xs on `f32:q8_0.soa`.
+
+- Before / after, by-M provider (ms; GGML / it, before -> after), 4096^2, f32
+  acts, --rounds 5:
+
+  | type    | M = 256               | M = 512               | M = 1024              |
+  | ------- | --------------------- | --------------------- | --------------------- |
+  | q4_0    | 0.1046 (1.07 -> 1.06) | 0.2055 (0.92 -> 0.93) | 0.3740 (0.94 -> 0.93) |
+  | q8_0    | 0.1110 (1.09 -> 1.09) | 0.2181 (0.95 -> 0.95) | 0.3998 (0.95 -> 0.95) |
+  | q5_0    | 0.1105 (1.03 -> 1.06) | 0.2195 (0.88 -> 0.91) | 0.3973 (0.90 -> 0.93) |
+  | q4_1    | 0.1229 (0.99 -> 0.99) | 0.2437 (0.86 -> 0.86) | 0.4424 (0.87 -> 0.87) |
+  | q5_1    | 0.1261 (0.97 -> 1.01) | 0.2489 (0.86 -> 0.89) | 0.4530 (0.87 -> 0.89) |
+  | q4_K    | 0.1261 (0.95 -> 0.95) | 0.2483 (0.83 -> 0.83) | 0.4597 (0.83 -> 0.83) |
+  | q5_K    | 0.1288 (0.96 -> 0.96) | 0.2565 (0.84 -> 0.84) | 0.4696 (0.85 -> 0.85) |
+  | q6_K    | 0.1439 (0.92 -> 0.93) | 0.2860 (0.83 -> 0.84) | 0.5186 (0.85 -> 0.85) |
+  | q3_K    | 0.1382 (0.95 -> 0.97) | 0.2760 (0.86 -> 0.86) | 0.4946 (0.87 -> 0.87) |
+  | iq4_nl  | 0.1126 (0.90 -> 1.00) | 0.2210 (0.77 -> 0.87) | 0.4022 (0.77 -> 0.89) |
+  | iq2_xxs | 0.1216 (0.92 -> 0.93) | 0.2390 (0.81 -> 0.81) | 0.4366 (0.82 -> 0.83) |
+  | iq3_s   | 0.1235 (0.93 -> 0.97) | 0.2448 (0.80 -> 0.84) | 0.4592 (0.80 -> 0.83) |
+  | mxfp4   | 0.1123 (0.81 -> 1.03) | 0.2195 (0.70 -> 0.90) | 0.3969 (0.73 -> 0.93) |
+
+  Only q5_0, q5_1, iq4_nl, iq3_s and mxfp4 changed by more than noise (the
+  others' libraries are the same; their ratios move with GGML's run to run).
+
+- Scorecard, by-M provider (ms; GGML / it), 4096^2, f32 acts, --rounds 5; no
+  cell more than 3% slower than Phase 10's (iq2_xxs at M = 16 0.0269 -> 0.0274,
+  two-valued run to run at 0.0276 / 0.0298 before and after; iq2_s at 32 0.0463
+  -> 0.0470):
+
+  | type    | M = 16        | M = 32        | M = 64        | M = 128       | M = 512       |
+  | ------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | q4_0    | 0.0240 (1.22) | 0.0301 (1.18) | 0.0427 (1.08) | 0.0635 (1.13) | 0.2055 (0.93) |
+  | q8_0    | 0.0347 (1.14) | 0.0394 (1.08) | 0.0521 (1.04) | 0.0662 (1.20) | 0.2181 (0.95) |
+  | q5_0    | 0.0287 (1.15) | 0.0354 (1.08) | 0.0457 (1.09) | 0.0649 (1.18) | 0.2195 (0.91) |
+  | q4_1    | 0.0294 (1.06) | 0.0392 (0.88) | 0.0506 (0.96) | 0.0743 (1.04) | 0.2437 (0.86) |
+  | q5_1    | 0.0309 (1.16) | 0.0382 (0.98) | 0.0515 (1.02) | 0.0742 (1.14) | 0.2489 (0.89) |
+  | q4_K    | 0.0294 (1.03) | 0.0356 (0.99) | 0.0512 (0.96) | 0.0746 (1.02) | 0.2483 (0.83) |
+  | q5_K    | 0.0277 (1.19) | 0.0422 (0.90) | 0.0531 (0.97) | 0.0763 (1.04) | 0.2565 (0.84) |
+  | q6_K    | 0.0306 (1.20) | 0.0491 (0.88) | 0.0601 (0.95) | 0.0841 (1.00) | 0.2860 (0.84) |
+  | q3_K    | 0.0248 (1.19) | 0.0408 (0.90) | 0.0546 (0.96) | 0.0802 (1.05) | 0.2760 (0.86) |
+  | iq4_nl  | 0.0254 (1.29) | 0.0327 (1.20) | 0.0463 (1.02) | 0.0664 (1.11) | 0.2210 (0.87) |
+  | iq2_xxs | 0.0274 (0.94) | 0.0356 (0.96) | 0.0476 (0.97) | 0.0703 (1.04) | 0.2390 (0.81) |
+  | iq3_s   | 0.0377 (0.91) | 0.0417 (0.98) | 0.0634 (0.81) | 0.0748 (1.03) | 0.2448 (0.84) |
+  | mxfp4   | 0.0283 (1.12) | 0.0344 (1.09) | 0.0497 (0.98) | 0.0683 (1.09) | 0.2195 (0.90) |
+  | iq4_xs  | 0.0316 (0.91) | 0.0374 (0.94) | 0.0493 (0.90) | 0.0685 (1.04) | 0.2311 (0.81) |
+  | iq2_s   | 0.0303 (1.14) | 0.0470 (0.88) | 0.0724 (0.75) | 0.1032 (0.84) | 0.3162 (0.78) |
+  | iq2_xs  | 0.0284 (1.04) | 0.0396 (0.98) | 0.0659 (0.81) | 0.0942 (0.92) | 0.3060 (0.80) |
+
+- Gate: `--check` of the integer gemm and by-M providers of the 9 changed types
+  (iq4_nl, mxfp4, iq4_xs, q5_0, q5_1, iq2_xxs, iq2_xs, iq2_s, iq3_s) on 4096 x
+  1001 x 8, 4096 x 4099 x 65, 4096^2 x 16, 32, 64, 128, 255, 256, 257, 512, 4096
+  x 4099 x 513, 1024 x 512 x 15, 17, 2048 x 512 x 63, 768 x 1000 x 65, 256 x
+  1000 x 200, 3072 x 512 x 33 (f32 acts): 425 results, 0 failures, 0 unchecked;
+  their CUDA libraries also on K of 96 to 2304 (96 x 512 x 16, 544 x 512 x 64,
+  1056 x 512 x 200, 2304 x 512 x 512, 768 x 1000 x 17, 1280 x 512 x 300): 240, 0
+  failures. `ctest -L ggml_cuda` 72/72; the core GPU tests under
+  `HL_JIT_TARGET=host-cuda` and the SWAR and table lookup tests on the CPU pass.
+  The 82 Metal libraries' `.stmt` are byte-identical to Phase 10's; of the 142
+  CUDA ones those 9 differ.
+
+- Where the rest is (M = 512: q8_0 at 0.95, the others 0.81-0.93):
+
+  - The gemm kernel on every type: q4_0's 185 us against GGML's 154 (+ its 20 us
+    fixup), the same instructions per step (Phase 8); neither its tiles' fit to
+    the SMs, its blocks' order, 128 x 128 tiles nor occupancy.
+  - The offset term (q4_1, q5_1, q4_K, q5_K: +33-39 us of kernel against GGML's
+    +14-20): GGML's instructions, which its kernel overlaps better.
+  - The K-quants' and grids' weight blocks of several act blocks (q4_K without
+    its offset term +13 us over q4_0; iq2_xxs's staging 1731 instructions per
+    weight block, its 8-byte groups loaded per point as four 2-byte loads).
+  - The lut formats: iq4_nl 199.5 us against q4_0's 185, its lookups (4 `PRMT`
+    and ~6 more per word of 4 codes; GGML's permutes the packed nibbles, ~5 per
+    word).
