@@ -1,6 +1,9 @@
 #include "Halide.h"
 #include "fuzz_helpers.h"
+#include <array>
+#include <climits>
 #include <iostream>
+#include <map>
 #include <random>
 #include <sstream>
 
@@ -61,6 +64,26 @@ enum IndexMode {
     NUM_INDEX_MODES
 };
 constexpr bool generate_index_modes = true;
+// Which of a consumer's dimensions each dimension of a producer indexed with
+// the given mode depends on, as a bitmask over the consumer's dimensions.
+std::array<int, 2> dims_used_by_index_mode(IndexMode mode, std::array<int, 2> c) {
+    switch (mode) {
+    case BROADCAST_X:
+        return {0, c[1]};
+    case BROADCAST_Y:
+        return {c[0], 0};
+    case DIAGONAL:
+        return {c[0], c[0]};
+    case TRANSPOSE:
+        return {c[1], c[0]};
+    case SHEAR_X:
+        return {c[0] | c[1], c[1]};
+    case SHEAR_Y:
+        return {c[0], c[0] | c[1]};
+    default:
+        return c;
+    }
+}
 // Give some stages update definitions. A Func with updates slides differently:
 // the bounds of every stage have to move together, and the region computed has
 // to cover what the earlier stages wrote. An update that scatters along the
@@ -79,6 +102,7 @@ constexpr bool generate_vectorize = true;
 constexpr bool generate_unroll = true;
 constexpr bool generate_specialize = true;
 constexpr bool generate_prefetch = true;
+constexpr bool generate_slide_directive = true;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -92,6 +116,34 @@ constexpr bool verbose = false;
 
 Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"};
 Param<int> scale_param{"scale_param"};
+
+// Check that sliding never computes a value outside the region the
+// compute_root reference computes, which a window that over-advances or fails
+// to clamp at the end of its loop would do.
+constexpr bool check_overcompute = true;
+
+// The bounding box of the stores to each Func, as [min, max] per dimension.
+using StoreBoxes = std::map<std::string, std::vector<std::pair<int, int>>>;
+StoreBoxes *current_store_boxes = nullptr;
+
+int32_t record_store_box(JITUserContext *, const halide_trace_event_t *e) {
+    if (e->event != halide_trace_store) {
+        return 0;
+    }
+    auto &box = (*current_store_boxes)[e->func];
+    int dims = e->dimensions / e->lanes;
+    if (box.empty()) {
+        box.resize(dims, {INT_MAX, INT_MIN});
+    }
+    for (int d = 0; d < dims; d++) {
+        for (int l = 0; l < e->lanes; l++) {
+            int c = e->coordinates[d * e->lanes + l];
+            box[d].first = std::min(box[d].first, c);
+            box[d].second = std::max(box[d].second, c);
+        }
+    }
+    return 0;
+}
 
 // Bend a coordinate into a monotonically increasing but non-affine function of
 // itself, so that the monotonicity analysis has to cope with something other
@@ -115,7 +167,7 @@ Expr make_piecewise_affine(const Expr &e, FuzzingContext &fuzz) {
         return select(e < k, e, e + 2);
     default:
         // Two different slopes.
-        return select(e < k, e, (e * 2) - k);
+        return max(e, (e * 2) - k);
     }
 }
 
@@ -138,7 +190,7 @@ Expr resample_factor(int mode) {
 }
 
 Expr random_use_of(Func f, FuzzingContext &fuzz, int rate, bool flip, int scale_mode,
-                   IndexMode index_mode, bool *symbolic) {
+                   IndexMode index_mode, bool *symbolic, std::array<bool, 2> *wide) {
     auto r = [&]() { return (int)(fuzz() % 5) - 2; };
 
     int x1 = r();
@@ -198,6 +250,24 @@ Expr random_use_of(Func f, FuzzingContext &fuzz, int rate, bool flip, int scale_
     } else if (rate > 0 && generate_downsamples) {
         xc = xc * down;
         yc = yc * down;
+    }
+
+    // Which of the consumer's coordinates have a footprint more than one wide.
+    // An upsample reads the same value from adjacent iterations.
+    bool wide_x = x1 != x2 || rate < 0;
+    bool wide_y = y1 != y2 || rate < 0;
+    switch (generate_index_modes ? index_mode : NORMAL) {
+    case BROADCAST_X:
+        *wide = {false, wide_y};
+        break;
+    case BROADCAST_Y:
+        *wide = {wide_x, false};
+        break;
+    case TRANSPOSE:
+        *wide = {wide_y, wide_x};
+        break;
+    default:
+        *wide = {wide_x, wide_y};
     }
 
     // A coordinate in the middle of the Func, for the broadcast modes.
@@ -280,6 +350,9 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
     struct Node {
         Func f;
         std::vector<Node *> used_by;
+        // For each entry in used_by, which dimensions of this stage that use
+        // reads more than one of at a time.
+        std::vector<std::array<bool, 2>> used_wide;
         std::vector<Var> vars;
         Loop hoist_storage, store_at, compute_at;
         LoopNest innermost;
@@ -293,10 +366,20 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         // Whether this stage has an update definition, which makes the
         // region it computes bigger than the region required.
         bool has_update = false;
+        // The dimension an update scatters along, if any.
+        int scatter_dim = -1;
+        // For each dimension, which of the output's loop vars (x = 1, y = 2)
+        // the region required of it depends on.
+        std::array<int, 2> output_vars = {0, 0};
         // Whether any consumer indexes this stage in a way that stops its
         // footprint being a constant size: non-affinely, or by a symbolic
         // amount.
         bool bent = false;
+        // A schedule placement aimed at a rarely reached path.
+        enum Goal { NoGoal,
+                    SlideY,
+                    SlideXY,
+                    Registers } goal = NoGoal;
 
         Node(const std::string &name)
             : f(name) {
@@ -363,18 +446,21 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         Node *in_1 = &stages[i1];
         Node *in_2 = &stages[i2];
 
+        std::array<bool, 2> wide_1, wide_2;
         Expr rhs =
             (random_use_of(in_1->f, fuzz, level[i] - level[i1],
                            flipped[i] != flipped[i1], scale_mode,
-                           index_mode[i1], &in_1->bent) +
+                           index_mode[i1], &in_1->bent, &wide_1) +
              random_use_of(in_2->f, fuzz, level[i] - level[i2],
                            flipped[i] != flipped[i2], scale_mode,
-                           index_mode[i2], &in_2->bent));
+                           index_mode[i2], &in_2->bent, &wide_2));
 
         stages[i].f(x, y) = rhs;
 
         stages[i1].used_by.push_back(&stages[i]);
+        stages[i1].used_wide.push_back(wide_1);
         stages[i2].used_by.push_back(&stages[i]);
+        stages[i2].used_wide.push_back(wide_2);
 
         if (i == num_stages - 1) {
             stages[i].vars.push_back(Var::outermost());
@@ -427,6 +513,9 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             default:
                 break;
             }
+            if (update_kind == 2 || update_kind == 3) {
+                stages[i].scatter_dim = update_kind - 2;
+            }
             if (update_kind < 4) {
                 stages[i].has_update = true;
                 // We only ever schedule the last stage of a Func, which
@@ -457,6 +546,17 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         }
     }
 
+    stages.back().output_vars = {1, 2};
+    for (int i = num_stages - 2; i >= 0; i--) {
+        for (const Node *consumer : stages[i].used_by) {
+            if (live_funcs.count(consumer)) {
+                auto used = dims_used_by_index_mode(stages[i].index_mode, consumer->output_vars);
+                stages[i].output_vars[0] |= used[0];
+                stages[i].output_vars[1] |= used[1];
+            }
+        }
+    }
+
     // A copy of the pipeline with everything compute_root, to get a reference
     // output from.
     Func reference;
@@ -469,6 +569,9 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             auto it = env.find(n.f.name());
             if (it != env.end()) {
                 Func(it->second).compute_root();
+                if (check_overcompute) {
+                    Func(it->second).trace_stores();
+                }
             }
         }
     }
@@ -519,6 +622,44 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             }
         }
         std::sort(levels.begin(), levels.end());
+        // Sometimes aim for a placement that a rarer path needs, and that a
+        // uniformly random one hardly ever produces: a slide directive over
+        // the output's y needs the stage computed at yi and stored outside
+        // yo, one over both dimensions needs it computed at x, and a window
+        // in registers needs it computed at x and stored at yo or yi.
+        // Draw unconditionally to keep the rng stream the same when these
+        // are turned off.
+        int goal_draw = fuzz() % 8;
+        int goal_store_draw = fuzz() % 2;
+        auto output_loop = [&](int var) {
+            for (int j = 0; j < (int)loc.size(); j++) {
+                if (loc[j] == Loop{num_stages - 1, var}) {
+                    return j;
+                }
+            }
+            return -1;
+        };
+        int goal_compute = -1, goal_store = -1;
+        if (goal_draw == 0 && generate_slide_directive) {
+            producer->goal = Node::SlideY;
+            goal_compute = output_loop(2);
+            goal_store = goal_store_draw ? 0 : output_loop(0);
+        } else if (goal_draw == 1 && generate_slide_directive) {
+            producer->goal = Node::SlideXY;
+            goal_compute = output_loop(3);
+            goal_store = goal_store_draw ? 0 : output_loop(0);
+        } else if (goal_draw == 2 && enable_registers) {
+            producer->goal = Node::Registers;
+            goal_compute = output_loop(3);
+            goal_store = output_loop(1 + goal_store_draw);
+        }
+        if (goal_compute >= 0 && goal_store >= 0) {
+            levels[2] = goal_compute;
+            levels[1] = goal_store;
+            levels[0] = std::min(levels[0], goal_store);
+        } else {
+            producer->goal = Node::NoGoal;
+        }
         producer->hoist_storage = loc[levels[0]];
         producer->store_at = loc[levels[1]];
         producer->compute_at = loc[levels[2]];
@@ -526,7 +667,7 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
         // Slide in registers sometimes. Draw the rng value
         // unconditionally, so that turning this off doesn't change the
         // rest of the schedule.
-        bool want_registers = (fuzz() % 4) != 0;
+        bool want_registers = (fuzz() % 4) != 0 || producer->goal == Node::Registers;
 
         // A register allocation must have constant extent in every
         // dimension. That needs the func to be computed in the
@@ -679,6 +820,124 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             }
         }
 
+        // Sometimes name the dimension to slide over instead of
+        // letting sliding window pick a loop. Only the output's y is
+        // split, so it's the only dimension that isn't a loop by the
+        // time sliding window runs. Draw unconditionally to keep the
+        // rng stream the same when this is turned off.
+        bool want_slide_directive = (fuzz() % 3) == 0 || stages[i].goal == Node::SlideY;
+        // Sometimes name x too. Unlike y it is still a loop by the
+        // time sliding window runs, and naming both dimensions slides
+        // the window along both at once.
+        bool want_slide_x = (fuzz() % 3) == 0 || stages[i].goal == Node::SlideXY;
+        // Only legal if the storage lives across every loop y spans.
+        // y is split into yo and yi, so the storage has to be outside
+        // both of them.
+        bool storage_outlives_y =
+            store_at.is_root() ||
+            (store_at.func == num_stages - 1 && store_at.var == 0);
+        // Whether the region required of this stage moves monotonically
+        // along exactly one of its dimensions as the output's loop var with
+        // the given bit advances, so that the window can slide along it. If
+        // `only` is set, that dimension must not move with the output's other
+        // loop var either. A scale factor of unknown sign could resample
+        // backwards, and an update that scatters along the dimension stops it
+        // sliding. On a finer level of the pyramid than the output, the window
+        // can advance by more than its width each iteration, leaving nothing
+        // to slide, and the same goes for a consumer that reads only one
+        // value at a time along the dimension.
+        auto can_slide = [&](int var, bool only) {
+            int dim = -1;
+            for (int d = 0; d < 2; d++) {
+                if (stages[i].output_vars[d] & var) {
+                    if (dim >= 0) {
+                        return false;
+                    }
+                    dim = d;
+                }
+            }
+            if (dim < 0) {
+                return false;
+            }
+            for (size_t j = 0; j < stages[i].used_by.size(); j++) {
+                const Node *c = stages[i].used_by[j];
+                if (live_funcs.count(c) &&
+                    (dims_used_by_index_mode(stages[i].index_mode, c->output_vars)[dim] & var) &&
+                    !stages[i].used_wide[j][dim]) {
+                    return false;
+                }
+            }
+            return (!only || stages[i].output_vars[dim] == var) &&
+                   stages[i].scatter_dim != dim &&
+                   stages[i].level >= stages.back().level &&
+                   scale_mode != 1;
+        };
+        // A consumer stored outside one of the given loops of the output
+        // (a bitmask over the output's vars) and computed inside it may slide
+        // over that loop first. For one of the loops y is built from, that
+        // makes the region required of this stage depend on that loop and not
+        // just on y. For x, the window it slides is monotonic only because
+        // each iteration starts where the last one ended, which the analysis
+        // can't see.
+        auto consumer_slides_over = [&](int loops) {
+            std::set<const Node *> consumers{&stages[i]};
+            for (int j = i; j < num_stages - 1; j++) {
+                if (!consumers.count(&stages[j])) {
+                    continue;
+                }
+                for (const Node *c : stages[j].used_by) {
+                    if (live_funcs.count(c)) {
+                        consumers.insert(c);
+                    }
+                }
+                if (j == i || stages[j].store_at == stages[j].compute_at) {
+                    continue;
+                }
+                const LoopNest &nest = stages[j].innermost;
+                bool inside_store = false;
+                for (const Loop &l : nest) {
+                    if (inside_store && l.func == num_stages - 1 && ((loops >> l.var) & 1)) {
+                        return true;
+                    }
+                    if (l == stages[j].compute_at) {
+                        break;
+                    }
+                    inside_store |= l == stages[j].store_at;
+                }
+            }
+            return false;
+        };
+        if (generate_slide_directive && want_slide_directive &&
+            store_at != compute_at &&
+            storage_outlives_y &&
+            !consumer_slides_over((1 << 1) | (1 << 2)) &&
+            !compute_at.is_root() &&
+            compute_at.func == num_stages - 1 &&
+            // Computing further in than yi is only legal if the region
+            // required doesn't move with the loops in between, which
+            // depends on the index expressions rather than the
+            // schedule, so we can't tell from here.
+            compute_at.var == 2 &&
+            can_slide(2, false)) {
+            stages[i].f.slide(stages.back().f, y);
+            source << ".slide(f[" << (num_stages - 1) << "], y)";
+        } else if (generate_slide_directive && want_slide_x &&
+                   store_at != compute_at &&
+                   storage_outlives_y &&
+                   !consumer_slides_over((1 << 1) | (1 << 2) | (1 << 3)) &&
+                   !compute_at.is_root() &&
+                   compute_at.func == num_stages - 1 &&
+                   // Computed at the output's innermost loop, so both
+                   // x and y are dimensions the window can advance
+                   // along from here.
+                   compute_at.var == 3 &&
+                   can_slide(1, true) &&
+                   can_slide(2, true)) {
+            stages[i].f.slide(stages.back().f, x).slide(stages.back().f, y);
+            source << ".slide(f[" << (num_stages - 1) << "], x)"
+                   << ".slide(f[" << (num_stages - 1) << "], y)";
+        }
+
         // Vectorizing or unrolling the producer's own loops changes
         // the region it provides, which sliding has to account for.
         // Draw the rng values unconditionally so that turning these
@@ -733,8 +992,46 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
     }
     first_run = false;
 
+    // A PredicateStores split runs its producers for the predicated-off tail
+    // of the output, so it computes outside the region the reference does.
+    bool checking_overcompute =
+        check_overcompute && strat != TailStrategy::PredicateStores;
+    StoreBoxes reference_boxes, sliding_boxes;
+    if (checking_overcompute) {
+        // When a consumer slides by rewinding a loop, the extra iterations
+        // also compute what its producers' other consumers would need there,
+        // and a window in registers asks its producers for the whole window
+        // every iteration. Either way producers upstream of it compute a
+        // little outside the reference's box, so only check stages that
+        // reach the output through a chain of single consumers, none in
+        // registers.
+        std::vector<bool> exact(num_stages, false);
+        exact[num_stages - 1] = true;
+        for (int i = num_stages - 2; i >= 0; i--) {
+            std::set<const Node *> consumers;
+            for (const Node *c : stages[i].used_by) {
+                if (live_funcs.count(c)) {
+                    consumers.insert(c);
+                }
+            }
+            if (consumers.size() == 1) {
+                const Node *c = *consumers.begin();
+                int j = c - &stages[0];
+                exact[i] = exact[j] && !c->in_registers;
+            }
+            if (exact[i]) {
+                stages[i].f.trace_stores();
+            }
+        }
+        reference.jit_handlers().custom_trace = record_store_box;
+        stages.back().f.jit_handlers().custom_trace = record_store_box;
+    }
+
+    current_store_boxes = &reference_boxes;
     Buffer<uint8_t> correct_output = reference.realize({size, size});
+    current_store_boxes = &sliding_boxes;
     Buffer<uint8_t> sliding_output = stages.back().f.realize({size, size});
+    current_store_boxes = nullptr;
 
     bool ok = true;
     for (int y = 0; y < correct_output.height(); y++) {
@@ -745,6 +1042,22 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                     << (int)correct_output(x, y) << "\n"
                     << "sliding_output(" << x << ", " << y << ") = "
                     << (int)sliding_output(x, y) << "\n";
+                ok = false;
+            }
+        }
+    }
+    for (const auto &[name, box] : sliding_boxes) {
+        auto it = reference_boxes.find(name);
+        if (it == reference_boxes.end()) {
+            continue;
+        }
+        for (size_t d = 0; ok && d < box.size(); d++) {
+            if (box[d].first < it->second[d].first ||
+                box[d].second > it->second[d].second) {
+                std::cout << name << " was computed over [" << box[d].first << ", "
+                          << box[d].second << "] in dimension " << d
+                          << ", but only [" << it->second[d].first << ", "
+                          << it->second[d].second << "] is needed\n";
                 ok = false;
             }
         }
