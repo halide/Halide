@@ -159,7 +159,9 @@ void test_parallel_hist(const Backend &backend) {
 
 template<typename T>
 void test_parallel_cas_update(const Backend &backend) {
-    int img_size = 1000;
+    // Few enough updates that no bin reaches the cap, so a lost update
+    // changes the result.
+    int img_size = 500;
     int hist_size = 13;
 
     Func im, hist;
@@ -1002,6 +1004,51 @@ void test_all(const Backend &backend) {
     }
 }
 
+void test_gpu_cas_tiles(DeviceAPI device_api) {
+    // Many blocks each update a sequence of tiles, staggered so that a block
+    // updates a tile shortly after other blocks did. Each update is done with
+    // a compare-and-swap loop, and a lost update changes the result.
+    const int tile_w = 64, tile_h = 64, tiles_x = 3, tiles_y = 2, unroll = 4;
+    const int num_tiles = tiles_x * tiles_y, steps = 16, blocks = 200;
+
+    Func out;
+    Var x, y;
+    out(x, y) = 0;
+    RDom r({{0, unroll}, {0, unroll}, {0, tile_w / unroll}, {0, tile_h / unroll}, {0, steps}, {0, blocks}});
+    RVar rxi = r[0], ryi = r[1], rxo = r[2], ryo = r[3], step = r[4], block = r[5];
+    Expr tile = (block + step) % num_tiles;
+    Expr ox = (tile % tiles_x) * tile_w + rxo * unroll + rxi;
+    Expr oy = (tile / tiles_x) * tile_h + ryo * unroll + ryi;
+    Expr delta = block % 7 - 3;
+    // Can't do this with atomic rmw, need to generate a CAS loop.
+    out(ox, oy) = min(out(ox, oy) + delta, 1 << 30);
+
+    out.update()
+        .atomic(true /*override_associativity_test*/)
+        .gpu_blocks(block, device_api)
+        .gpu_threads(rxo, ryo, device_api)
+        .unroll(rxi)
+        .unroll(ryi);
+
+    std::vector<int> correct(num_tiles, 0);
+    for (int b = 0; b < blocks; b++) {
+        for (int s = 0; s < steps; s++) {
+            correct[(b + s) % num_tiles] += b % 7 - 3;
+        }
+    }
+
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
+        Buffer<int> result = out.realize({tiles_x * tile_w, tiles_y * tile_h});
+        result.copy_to_host();
+        for (int j = 0; j < tiles_y * tile_h; j++) {
+            for (int i = 0; i < tiles_x * tile_w; i++) {
+                check(__LINE__, result(i, j), correct[(j / tile_h) * tiles_x + i / tile_w]);
+            }
+        }
+    }
+}
+
 extern "C" HALIDE_EXPORT_SYMBOL int extern_func(int x) {
     return x + 1;
 }
@@ -1236,6 +1283,7 @@ int main(int argc, char **argv) {
             test_all<int64_t>(Backend::OpenCL);
             test_all<double>(Backend::OpenCL);
         }
+        test_gpu_cas_tiles(DeviceAPI::OpenCL);
     }
     if (target.has_feature(Target::CUDA)) {
         // No support for 8-bit & 16-bit atomics in CUDA
@@ -1253,6 +1301,8 @@ int main(int argc, char **argv) {
         test_all<uint64_t>(Backend::CUDAVectorize);
         test_all<int64_t>(Backend::CUDAVectorize);
         test_all<double>(Backend::CUDAVectorize);
+
+        test_gpu_cas_tiles(DeviceAPI::CUDA);
     }
     test_extern_func(Backend::CPU);
     test_extern_func(Backend::CPUVectorize);

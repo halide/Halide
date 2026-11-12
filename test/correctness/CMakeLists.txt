@@ -21,6 +21,7 @@ tests(
     associativity.cpp
     async_device_copy.cpp
     async_require_fail.cpp
+    atomics_cas_loop.cpp
     atomics_gpu_8_bit.cpp
     atomics_gpu_mutex.cpp
     atomics_self_reference.cpp

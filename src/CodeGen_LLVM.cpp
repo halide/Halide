@@ -16,6 +16,7 @@
 #include "ExternFuncArgument.h"
 #include "FindIntrinsics.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IntegerDivisionTable.h"
@@ -3067,11 +3068,51 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
         //   %success = extractvalue %val_success, 1
         //   br %success, label %casloop.end, label %casloop.start
         // casloop.end:
+        //
+        // %val must be computed from %cmp, not from a fresh load of the
+        // location: the cmpxchg only checks that the memory still holds
+        // %cmp. So each load of op->name in the value is replaced with %cmp
+        // where its index is equal to the index stored to. Where that isn't
+        // known at compile time, the load is kept, and %cmp is selected
+        // instead of it when the indices are equal at run time.
         Value *vec_index = nullptr;
         if (!value_type.is_scalar()) {
             // Precompute index for vector store.
             vec_index = codegen(op->index);
         }
+        const std::string cmp_name = unique_name("cas_cmp");
+        const Expr cmp_var = Variable::make(value_type.element_of(), cmp_name);
+        auto use_cmp_for_self_loads = [&](const Expr &value, const Expr &index) {
+            return mutate_with(value, [&](auto *self, const Load *load) -> Expr {
+                Expr e = self->visit_base(load);
+                load = e.as<Load>();
+                if (load->name != op->name) {
+                    return e;
+                }
+                Type t = load->type;
+                Expr replacement = cmp_var;
+                if (t.element_of() != cmp_var.type()) {
+                    // The value is stored as a different type (see
+                    // upgrade_type_for_storage).
+                    replacement = t.bits() == cmp_var.type().bits() ?
+                                      reinterpret(t.element_of(), replacement) :
+                                      cast(t.element_of(), replacement);
+                }
+                Expr store_index = index;
+                if (t.is_vector()) {
+                    replacement = Broadcast::make(replacement, t.lanes());
+                    store_index = Broadcast::make(index, t.lanes());
+                }
+                Expr same_index = simplify(load->index == store_index);
+                if (is_const_one(same_index)) {
+                    return replacement;
+                } else if (is_const_zero(same_index)) {
+                    return e;
+                } else {
+                    return select(same_index, replacement, e);
+                }
+            });
+        };
         // Scalarize vector store.
         for (int lane_id = 0; lane_id < value_type.lanes(); lane_id++) {
             LLVMContext &ctx = builder->getContext();
@@ -3100,11 +3141,14 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
             Value *cmp_val = cmp;
             cmp->addIncoming(orig, bb);
             Value *val = nullptr;
+            sym_push(cmp_name, cmp);
             if (value_type.is_scalar()) {
-                val = codegen(op->value);
+                val = codegen(use_cmp_for_self_loads(op->value, op->index));
             } else {
-                val = codegen(extract_lane(op->value, lane_id));
+                val = codegen(use_cmp_for_self_loads(extract_lane(op->value, lane_id),
+                                                     extract_lane(op->index, lane_id)));
             }
+            sym_pop(cmp_name);
             llvm::Type *val_type = val->getType();
             bool need_bit_cast = val_type->isFloatingPointTy();
             if (need_bit_cast) {
