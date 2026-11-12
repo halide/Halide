@@ -20,11 +20,6 @@ using std::vector;
 
 namespace {
 
-int64_t euclidean_mod(int64_t a, int64_t b) {
-    int64_t r = a % b;
-    return r < 0 ? r + b : r;
-}
-
 bool uses_other_vars(const Expr &e, const Scope<> &allowed) {
     bool result = false;
     Scope<> lets;
@@ -156,7 +151,7 @@ class PlanRotation : public IRVisitor {
                 return;
             }
             auto [step, inserted] = steps.emplace(l.op, *kc);
-            if (!inserted && euclidean_mod(step->second - *kc, extent) != 0) {
+            if (!inserted && mod_imp<int64_t>(step->second - *kc, extent) != 0) {
                 failed = true;
                 return;
             }
@@ -270,7 +265,7 @@ public:
         }
         bool any = false;
         for (const auto &[loop, k] : steps) {
-            if (euclidean_mod(k, extent) != 0) {
+            if (mod_imp<int64_t>(k, extent) != 0) {
                 if (loop->for_type != ForType::Serial) {
                     // Can't rotate between the iterations of a parallel loop.
                     return false;
@@ -405,7 +400,7 @@ class ApplyRotation : public IRMutator {
         vector<Stmt> restores;
         for (const PlanRotation &plan : plans) {
             auto it = plan.steps.find(op);
-            int64_t k = it == plan.steps.end() ? 0 : euclidean_mod(it->second, plan.size());
+            int64_t k = it == plan.steps.end() ? 0 : mod_imp<int64_t>(it->second, plan.size());
             if (k == 0) {
                 continue;
             }
