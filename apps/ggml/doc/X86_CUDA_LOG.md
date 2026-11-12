@@ -1883,3 +1883,110 @@ does not.
   memory (two blocks an SM at 128 values; 128 x 128 tiles, one, are no faster)
   and a second buffer would hide; the act kernel (16.4 us against the
   hand-written quantizer's 14.8).
+
+## Phase 9: q4_K's integer gemm (RTX 3090)
+
+Same machine and conventions as Phase 8. The target: q4_K on f32 acts at 0.95 of
+GGML for M = 32 .. 512 (Phase 8: 0.84, 0.72, 0.83, 0.73 at M = 32, 64, 128, 512,
+where q4_0 is at 1.18, 1.08, 1.14, 0.92).
+
+- Attribution at 4096^2 (us of GPU time per kernel, CUPTI; shared memory per
+  block; the acts' kernels: codes and scales, then q8_1's sum; GGML: its
+  quantizer, `mul_mat_q`, its stream-k fixup):
+
+  | M   | q4_K                                                                                      | q4_0                                           | GGML q4_K         |
+  | --- | ----------------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------- |
+  | 32  | 3.1 + 2.0, 34.3 (wmma 32 x 32 of 2 warps, K in 4, 256-value steps, 25.6 KB: 3 an SM), 3.2 | 3.0, 23.2 (32 x 32 of 1 warp, 13.3 KB: 7), 2.6 | 2.6, 24.9, 5.6    |
+  | 64  | 3.8 + 2.3, 53.8 (wmma 32 x 64, K in 4, 256-value steps, 39.9 KB), 5.4                     | 3.8, 34.0 (64 x 64, K in 2, 27.4 KB), 3.0      | 3.9, 34.1, 8.8    |
+  | 128 | 5.3 + 3.1, 79.6 (wmma 64 x 64, unsplit, 34.8 KB)                                          | 5.9, 50.3 (64 x 128, K in 2, 40.7 KB), 5.9     | 6.0, 51.0, 16.0   |
+  | 512 | 15.6 + 14.4, 241.5 (64 x 128, the weight block per 2 steps, 48 KB)                        | 15.6, 185.3 (64 x 128, 40.7 KB)                | 16.0, 167.4, 19.0 |
+
+  - Bank conflicts (`banks.py` over a step's PTX): every q4_K kernel's acts'
+    copies 4-way (M = 512 128 wavefronts against 32; the K split's at M = 64 256
+    against 64): Phase 8's padding was not applied where a weight block is
+    several blocks. The weights' operand loads at M = 512 2-way (160 against
+    128): a weight block's row is 256 values aligned to 48, i.e. 288 bytes, 72
+    words, so rows 4 apart share banks.
+  - Instruction mix (SASS, the M = 512 kernel's step of 128 values per warp):
+    1403 against q4_0's 1182, the same 64 `IMMA.16832` and 256 `I2FP`, 512
+    `FFMA` against 256 and 64 `LDS.64` against 32: the min term, an fma per
+    element and act block. Without those fmas (PTX ablated) the kernel takes 198
+    against 224 us (below, padded); at M = 128 (wmma) 69-73 against 75.
+  - The sum's kernel recomputes the codes from the f32 acts (its own copies of
+    the encoder): 14.4 us at M = 512, a launch at every M.
+
+- Tried, one at a time (q4_K on `f32:q8_1.soa`, 4096^2; us of the gemm kernel by
+  CUPTI, two interleaved passes, or ms of a call of the by-M provider):
+
+  | change                                                                                                                           | effect                                                                                                                                                 |
+  | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | a weight block's rows 256 + 16 bytes apart, the acts' blocks `pad_rows` apart as q4_0's                                          | M = 512 243 -> 224, 128 80 -> 75, 64 53.5 -> 50.4, 32 32-34 -> 31-33; conflict-free but the weights' code stores (now 2-way)                           |
+  | the weights' rows 256 + 32 (stores conflict-free, loads 2-way), acts padded                                                      | M = 32, 64, 128 the same; at 512 more than 48 KB                                                                                                       |
+  | the K split on 128-value steps, the weights per step as they are (a 256-value region)                                            | wrong results: bounds inference stages the whole weight block (its index is k % 256), more than its bound                                              |
+  | the K split in whole weight blocks (`kz` of them apart), 128-value steps, the weights per weight block, on q4_0's mma.sync tiles | M = 64 50.3 + 5.4 -> 41.4 + 2.9 (64 x 64, K in 2), 128 75 -> 59.8 + 5.8 (64 x 128); M = 32 (32 x 32 of 1 warp, 5 an SM) 33.5 + 3.2 -> 35.2 + 2.6       |
+  | the same on wmma's tiles                                                                                                         | M = 32 39, 64 51.5, 128 75.2: not taken                                                                                                                |
+  | the weights staged per 128-value step (their codes read as a Func of the step's values, below)                                   | M = 32 (32 x 32 of 1 warp, 12.8 KB, 7 an SM) 31.3-33.5 + 3.2 -> 27.7 + 2.6; 64 41.3 -> 44.4, 128 59.4 -> 59.8, 512 224 -> 224: taken below M = 64 only |
+  | the sum's kernel on the encoded codes, not its own copies of the encoder                                                         | 14.5 -> 4.6 us at M = 512, 2.0 -> 1.5 at 32; of 128 threads a block 4.6, 1.7                                                                           |
+  | the sum in the act kernel (`compute_with`), the rows on their own copies of the encoder                                          | the act kernel +0.8 (M = 32) / +2.0 (512) us, its kernel gone: a call at M = 32 0.0370 -> 0.0356 ms, 64 0.0521 -> 0.0510, 512 0.2515 -> 0.250          |
+  | the M >= 256 gemm's weights per step                                                                                             | 224-225 against 224-225                                                                                                                                |
+  | q5_K: q4_K's tiles (`wmm`; per-step weights do not decode its fifth bits in GPRs, at a position that depends on the step)        | M = 64 0.0669 -> 0.0535 ms, 128 0.0884 -> 0.0776                                                                                                       |
+
+- `gpu_int_gemm`: a weight block of several blocks has rows 16 bytes past it and
+  the acts' blocks are `pad_rows` apart as elsewhere. On mma.sync's tiles the K
+  split splits K in whole weight blocks (`ry = (kw * kz + kzr) * per + kr`, each
+  part's steps the acts' 128 values, its weight block staged once as in the gemm
+  on all of K), so its shapes are q4_0's (`cuda_int_splits()`'s 32 x 64 for
+  those weights dropped); on the one-warp tiles below M = 64 (`KSplit::wstep`)
+  the weights are staged per step: the codes read the weight's codes through a
+  Func of (value in a step, step, row), at the act's (x + (y % sb) * 32, y / sb)
+  for the weight's (x + (y % 8) * 32, y / 8), checked (`can_prove`) before it is
+  substituted: equal by y's digits, and bounds inference then finds a step's
+  values alone. The acts' kernel computes q8_1's sums too, a thread per block
+  from its codes (copies of the codes' encoder in the sum's, the block's maximum
+  the staged one); the rows, which read no sums, read copies of the encoder of
+  their own, scheduled likewise, as a fused group is computed whole or not at
+  all. `int_tiles`: q4_K `mmm` (the default), q5_K `wmm`. Changed: the integer
+  gemm of q4_K, q5_K, q6_K, q3_K, q1_0, q2_0, iq4_xs, iq2_s, iq1_m (the
+  padding), q4_1, q5_1 (the sum's kernel). Of the others at 4096^2 by the by-M
+  provider, iq1_m at M = 128 is 3.6% slower (0.1707 -> 0.1769 ms; its gemm
+  kernel 165 -> 171 us, the acts' padding: on its unsplit wmma tiles, unpadded
+  164), the rest the same or faster (q1_0 at M = 128 / 512 0.1045 / 0.292 ->
+  0.094 / 0.270; iq4_xs 512 0.227 -> 0.212). Phase 7's out-of-bounds reads of
+  `w` (64-value steps) were not met: the per-step weights are indexed by the
+  step, not bounded per step.
+
+- Scorecard, by-M provider (ms; GGML / it; Phase 8's ratio and ms, Phase 7's for
+  the K-quants), 4096^2, f32 acts, --rounds 5, medians of 3 passes:
+
+  | type | M = 16                     | M = 32                     | M = 64                     | M = 128                    | M = 512                    |
+  | ---- | -------------------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
+  | q4_0 | 0.0241 (1.22; 1.22, .0241) | 0.0304 (1.18; 1.18, .0303) | 0.0425 (1.09; 1.08, .0425) | 0.0637 (1.14; 1.14, .0638) | 0.2059 (0.92; 0.92, .2066) |
+  | q8_0 | 0.0347 (1.14; 1.14, .0347) | 0.0395 (1.09; 1.09, .0394) | 0.0520 (1.05; 1.05, .0520) | 0.0669 (1.20; 1.21, .0664) | 0.2191 (0.94; 0.94, .2198) |
+  | q5_0 | 0.0296 (1.12; 1.12, .0296) | 0.0364 (1.05; 1.05, .0365) | 0.0486 (1.04; 1.04, .0487) | 0.0685 (1.12; 1.12, .0685) | 0.2264 (0.88; 0.88, .2273) |
+  | q4_1 | 0.0294 (1.06; 1.00, .0310) | 0.0393 (0.88; 0.84, .0410) | 0.0509 (0.96; 0.93, .0523) | 0.0746 (1.03; 1.00, .0765) | 0.2437 (0.86; 0.82, .2561) |
+  | q5_1 | 0.0320 (1.12; 1.07, .0335) | 0.0395 (0.95; 0.91, .0412) | 0.0552 (0.94; 0.91, .0570) | 0.0778 (1.04; 1.02, .0796) | 0.2577 (0.87; 0.83, .2697) |
+  | q4_K | 0.0294 (1.03; 1.00, .0302) | 0.0359 (0.98; 0.83, .0422) | 0.0510 (0.97; 0.72, .0689) | 0.0749 (1.02; 0.83, .0909) | 0.2500 (0.83; 0.73, .2837) |
+  | q5_K | 0.0276 (1.19; 1.06, .0309) | 0.0424 (0.90; 0.85, .0453) | 0.0528 (0.98; 0.74, .0699) | 0.0766 (1.03; 0.84, .0933) | 0.2573 (0.84; 0.74, .2913) |
+  | q6_K | 0.0305 (1.20; 1.16, .0315) | 0.0492 (0.88; 0.86, .0505) | 0.0643 (0.90; 0.86, .0663) | 0.0943 (0.89; 0.89, .0943) | 0.3024 (0.79; 0.74, .3190) |
+  | q3_K | 0.0247 (1.20; 1.12, .0265) | 0.0426 (0.86; 0.86, .0426) | 0.0624 (0.84; 0.81, .0648) | 0.0908 (0.93; 0.91, .0922) | 0.2963 (0.80; 0.75, .3139) |
+
+  No cell more than 3% slower. f32 weights as `f32:f16` on `f32:f16` acts at M =
+  128 0.1671 ms (0.1673); f16 x f16 at M = 64, 128, 512 0.0599, 0.0971, 0.3058
+  (0.0597, 0.0971, 0.3079). The by-M table is unchanged.
+
+- Gate: `--check` of the 11 changed types' CUDA providers on 96 x 512 x 16, 17,
+  32 (not the K-quants: K % 256), 256 x 1000 x 64, 200, 1024 x 1024 x 512, 1024
+  x 512 x 16, 2048 x 512 x 32, 3072 x 512 x 17, 1536 x 1000 x 64, 768 x 1000 x
+  128 and 4096^2 x 32, 64, 128, 512 (f32 acts): 1380 results, 0 failures, 12
+  unchecked (GGML's iq1_m); q4_K's rows path (N = 1001, M = 8, 40) too.
+  `ctest -L ggml_cuda` 67/67. The 82 Metal libraries' `.stmt` are byte-identical
+  to Phase 8's; of the CUDA ones only those 11 differ.
+
+- Where the rest is (q4_K at M = 512 0.83): the min term's fma per element and
+  act block (26 us of 224, measured by ablation; GGML's kernel does the same
+  work, on 128 x 128 tiles of 8 warps at 57 KB), which tensor cores would take
+  (an f16 or tf32 mma of the mins times the acts' scaled sums, per weight block:
+  a second gemm in the kernel, which `gpu_int_gemm` does not build), and what
+  q4_0's M = 512 kernel waits on (Phase 8). The weights' code stores (2-way at
+  272-byte rows; 4 lanes a row instead of 8 would make both them and the operand
+  loads conflict-free) were not changed.
