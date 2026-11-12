@@ -3013,9 +3013,13 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
                 return self->visit_base(op);
             });
         }
-        // the weights' luts the gemm's own, per block (as gpu_staged()'s)
+        // the weights' luts the gemm's own, per block (as gpu_staged()'s),
+        // or with code_words inlined: a lookup of a word's 4 codes in a GPR,
+        // byte permutes of the lut's words (iq4_nl at 4096 x 4096 x 16 /
+        // 512 0.036 / 0.245 -> 0.025 / 0.218 ms; a byte load of the shared
+        // lut per code, 16 codes a lane. RTX 3090)
         for (Func f : clone_paths(g.ws, [&](const Func &f) { return luts.count(f.name()) > 0; })) {
-            metal_lut(f, kernel, n);
+            if (!code_words) metal_lut(f, kernel, n);
         }
         return g;
     };

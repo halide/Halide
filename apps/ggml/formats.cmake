@@ -215,6 +215,13 @@ set(GGML_SCHEDULE_PARAMS
     "q5_K mul_mat f32:q8_1.soa code_words=true"
     "q6_K mul_mat f32:q8_0.soa code_words=true"
     "q3_K mul_mat f32:q8_0.soa code_words=true"
+    # (the lut formats' codes looked up in their words: iq4_nl at 4096^2 x
+    # 16 / 64 / 512 0.036 / 0.054 / 0.245 -> 0.025 / 0.046 / 0.218 ms, mxfp4
+    # 0.039 / 0.065 / 0.275 -> 0.028 / 0.050 / 0.219, iq4_xs 0.035 / 0.051 /
+    # 0.238 -> 0.031 / 0.049 / 0.227; RTX 3090)
+    "iq4_nl mul_mat f32:q8_0.soa code_words=true"
+    "mxfp4 mul_mat f32:q8_0.soa code_words=true"
+    "iq4_xs mul_mat f32:q8_0.soa code_words=true"
     "iq3_s mul_mat q8_K gemm_index_words=true"
     "iq3_s mul_mat f32 gemm_index_words=true"
     "iq3_s mul_mat f32:q8_K gemm_index_words=true"
