@@ -273,8 +273,8 @@ void add_device(ggml_backend_dev_t dev) {
     std::string name = cpu ? "ggml-cpu" : metal ? "ggml-metal" :
                                       cuda      ? "ggml-cuda" :
                                                   "ggml-" + lower(dname);
-    providers().push_back({name, GQ_mul_mat, true, [dev, cpu, metal, cuda](const Inputs &in) -> std::unique_ptr<Kernel> {
-                               std::optional<std::string> probe = cpu ? std::optional<std::string>("") : gpu_probe(in);
+    providers().push_back({name, GQ_mul_mat, true, [dev, cpu, gpu, metal, cuda](const Inputs &in) -> std::unique_ptr<Kernel> {
+                               std::optional<std::string> probe = gpu ? gpu_probe(in) : std::optional<std::string>("");
                                if (!probe) return nullptr;
                                auto k = make_graph(dev, nullptr, in);
                                if (!k) return nullptr;
