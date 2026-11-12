@@ -78,6 +78,12 @@ struct ConstantInterval {
      * error if the interval is empty. */
     static ConstantInterval make_intersection(const ConstantInterval &a, const ConstantInterval &b);
 
+    /** Narrow this interval to its intersection with another, unless that
+     * would be empty, in which case leave it unchanged and return false. Two
+     * sound bounds on the same value can only be disjoint in unreachable code,
+     * where keeping either one is still sound. */
+    bool intersect_if_nonempty(const ConstantInterval &other);
+
     /** Equivalent to same_as. Exists so that the autoscheduler can
      * compare two map<string, Interval> for equality in order to
      * cache computations. */
