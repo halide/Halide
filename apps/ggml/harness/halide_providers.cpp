@@ -385,16 +385,26 @@ void register_halide_providers() {
     }
     // halide-by-m-<type>_f32_cuda: a blocked weight's CUDA libraries on f32
     // acts by M, as GGML's CUDA backend picks mmvq or mmq (and as an
-    // integration would dispatch): below 16 rows the dp4a rows on acts
-    // quantized to q8_1 (<type> on f32:q8_1, `r`); from 16 the integer gemm
+    // integration would dispatch): below 8 rows the dp4a rows on acts
+    // quantized to q8_1 (<type> on f32:q8_1, `r`); from 8 the integer gemm
     // (<type> on f32:q8_0.soa or f32:q8_1.soa, `i`) where the type has one,
     // else, above 16, the f16 gemm (<type>:f16 on f32:f16, `h`). by_m: the
-    // types where another of the three is more than 3% faster at M = 16,
+    // types where another of the three is more than 3% faster at M = 8, 16,
     // 32, 64, 128 or 512 on 4096 x 4096 (RTX 3090), a letter each; an M
-    // from 16 takes the nearest of those five's.
+    // takes the letter of the first of those six at or above it (as the
+    // integer gemm's K split rounds its tiles up in M), from 256 512's.
+    // (q2_0 the integer gemm from 65 to 255: the f16 gemm 7% faster at 128,
+    // 23% slower at 96 and 8% at 200.)
     static const std::map<std::string, std::string> by_m = {
-        {"q2_0", "iiihi"},
-        {"q2_K", "iiihi"},
+        {"iq1_m", "riiiii"},
+        {"iq1_s", "riiiii"},
+        {"q2_0", "riiiii"},
+        {"q2_K", "iiiihi"},
+        {"q4_0", "riiiii"},
+        {"q4_1", "riiiii"},
+        {"q5_0", "riiiii"},
+        {"q5_1", "riiiii"},
+        {"q8_0", "riiiii"},
     };
     auto make = [](const std::string &name) {
         for (const Provider &p : providers()) {
@@ -414,8 +424,8 @@ void register_halide_providers() {
         const bool has_int = (bool)make(int_name);
         if (!make(has_int ? int_name : f16_name)) continue;
         auto it = by_m.find(type);
-        const std::string picks = it != by_m.end() ? it->second : has_int ? "iiiii" :
-                                                                            "rhhhh";
+        const std::string picks = it != by_m.end() ? it->second : has_int ? "iiiiii" :
+                                                                            "rrhhhh";
         std::map<char, std::string> names = {{'r', rows_name}, {'i', int_name}, {'h', f16_name}};
         std::map<char, std::function<std::unique_ptr<Kernel>(const Inputs &)>> makes;
         bool all = true;
@@ -427,12 +437,13 @@ void register_halide_providers() {
         providers().push_back({"halide-by-m-" + id + "_f32_cuda", GQ_mul_mat, true,
                                [mv = make(rows_name), makes, names, rows_name, picks](const Inputs &in) {
                                    const int M = in.s.M;
-                                   const char c = M < 16 ? 'r' : picks[M < 24 ? 0 : M < 48 ? 1 :
-                                                                                M < 96     ? 2 :
-                                                                                M < 256    ? 3 :
-                                                                                             4];
-                                   auto k = (M < 16 ? mv : makes.at(c))(in);
-                                   if (k) k->path = "halide:cuda:" + (M < 16 ? rows_name : names.at(c));
+                                   const char c = M < 8 ? 'r' : picks[M <= 8 ? 0 : M <= 16 ? 1 :
+                                                                               M <= 32     ? 2 :
+                                                                               M <= 64     ? 3 :
+                                                                               M < 256     ? 4 :
+                                                                                             5];
+                                   auto k = (c == 'r' ? mv : makes.at(c))(in);
+                                   if (k) k->path = "halide:cuda:" + (c == 'r' ? rows_name : names.at(c));
                                    return k;
                                }});
     }
