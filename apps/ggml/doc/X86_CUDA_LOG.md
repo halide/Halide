@@ -1013,3 +1013,39 @@ M = 8/32/512 were not re-measured at this revision.)
 `--check` vec_dot, mul_mat, and codec (all 2392 non-CUDA cases): 0 failures. M3
 replay (982 Arm/Metal objects): all byte-identical.
 
+
+### Arm smmla lost behind loaded-bounds annotations (correction)
+
+Merged into `ggml-quant` (`181cb5d04`), this branch made the M3's M = 32
+gemm slower: q5_0 2.0x, q5_1 1.7-1.8x, the iq formats 1.4-1.8x (M = 1 and
+Metal unaffected). The "M3 replay byte-identical" checks above compared each
+change with the M3 libraries generated at `0f37e02fb`, mid-branch, not with
+the merge base `d8f92521b`, so they missed the branch's earlier core changes.
+Bisecting the 8 regressed Arm objects from `d8f92521b` to `0f37e02fb`:
+
+- `71717f0e2` (iq1_s, iq1_m, iq2_s, iq3_s) and `fecbc0001` (q5_0, q5_1):
+  `FindIntrinsics` wraps a staged byte operand of a `widening_mul` (or of a
+  Mul by a sign) in `unsafe_promise_clamped` carrying its Func's value
+  bounds, for x86's `vpdpbusd`/`psignb` choices. On Arm, the `smmla` matcher's
+  `tile_rows()` pushes shuffles down through lane-wise ops (`shuffle_lanes`)
+  to prove that one operand's rows repeat; the annotation was opaque to it,
+  so the tile wasn't found and each 2x2 tile was computed by `smull` +
+  `addp` + `sadalp` (q5_0: 32 `smmla` -> 128 `smull`, 96 `addp`).
+- `9046eba86` (iq4_nl, iq4_xs; the `madd()` reference-quantizer rounding):
+  one `ldp` split into two `ldr`s and a two-instruction reorder; noise.
+
+Fix (core): `unsafe_promise_clamped` is lane-wise (its bounds are per lane),
+so CodeGen_ARM's `is_lane_wise()` lists it, and `shuffle_lanes` sees
+through it. Test: `correctness/arm_dot_product_loaded_bounds` (a staged
+operand in [0, 15] in a 2x2 tile: fails without, no `smmla`).
+
+The 982 M3 objects, now vs the merge base's generator (958; 24 are layouts
+added on this branch): the 8 regressed q5_0/q5_1/iq1/iq2_s/iq3_s objects
+(bench and checked, `q8_*` and `f32_to_q8_*` acts) are byte-identical again.
+CPU objects that still differ have the same `smmla`/`sdot`/`usdot`/`tbl`
+counts and differ in spills and register allocation (K-quants, the 8x8 and
+4x4 layouts, mxfp4, iq4), except q2_0 (32 `smull` -> 32 more `sdot`) and
+tq1_0 (`saddlv` reductions -> `addp`/`sadalp`, 5% fewer instructions).
+The Metal kernels also differ (shader source from this branch's changes);
+not investigated, since Metal timings were unchanged. x86 objects are
+unaffected (CodeGen_ARM only). Arm timings not measured here (no hardware).
