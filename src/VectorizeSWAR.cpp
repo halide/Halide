@@ -504,6 +504,43 @@ class LowerSWARVectors : public IRMutator {
         return Reinterpret::make(word_type(t), lookup);
     }
 
+    // (x >> ramp(b, 1)) % 2 of an unsigned scalar x, whose lane i is bit b +
+    // i of x: those bits in the low ones of a word, spread to the lanes by a
+    // multiply that puts a copy of them at the start of each lane, shifted by
+    // the lane's index, and masked. The copies do not overlap where the lanes
+    // are fewer than their bits; so in runs of that many lanes, each its own
+    // multiply. Otherwise an undefined Expr.
+    Expr word_of_bits(const Mod *op) {
+        const Type &t = op->type;
+        const int lanes = t.lanes(), bits = t.bits();
+        const Call *shift = Call::as_intrinsic(op->a, {Call::shift_right});
+        const Broadcast *x = shift ? shift->args[0].as<Broadcast>() : nullptr;
+        auto two = const_lanes(op->b);
+        Expr base;
+        auto offsets = x ? unsigned_ramp_lanes(shift->args[1], bits, &base) : std::nullopt;
+        if (!t.is_uint() || bits < 2 || !two || !x || !x->value.type().is_scalar() || !offsets) {
+            return Expr();
+        }
+        for (int i = 0; i < lanes; i++) {
+            if ((*two)[i] != 2 || (*offsets)[i] != i) {
+                return Expr();
+            }
+        }
+        const Type wt = word_type(t), st = UInt(std::max(32, x->value.type().bits()));
+        Expr value = cast(st, mutate(x->value)) >> cast(st, mutate(base)), result;
+        for (int start = 0; start < lanes; start += bits - 1) {
+            const int run = std::min(lanes - start, bits - 1);
+            uint64_t copies = 0;
+            for (int i = 0; i < run; i++) {
+                copies |= shl(1, (start + i) * bits - i);
+            }
+            Expr low = start ? value >> make_const(st, start) : value;
+            Expr part = (cast(wt, low & make_const(st, low_bits(run))) * word_const(t, copies)) & swar_splat(t, 1);
+            result = result.defined() ? (result | part) : part;
+        }
+        return result;
+    }
+
     // The word for a vector, or the bits of a scalar as an unsigned
     // integer of the same width.
     Expr to_word_or_scalar(const Expr &e) {
@@ -708,7 +745,12 @@ class LowerSWARVectors : public IRMutator {
             }
             return fail(e, "a division (only division by a constant power of two is supported)");
         } else if (const Mod *op = e.as<Mod>()) {
-            if (auto amounts = const_log2_lanes(op->b, false)) {
+            if (const Select *s = op->a.as<Select>(); s && const_lanes(s->condition) && const_lanes(op->b)) {
+                // (a choice per lane between two values, each modulo the same)
+                return to_word(Select::make(s->condition, Mod::make(s->true_value, op->b), Mod::make(s->false_value, op->b)));
+            } else if (Expr w = word_of_bits(op); w.defined()) {
+                return w;
+            } else if (auto amounts = const_log2_lanes(op->b, false)) {
                 vector<int64_t> masks(t.lanes());
                 for (int i = 0; i < t.lanes(); i++) {
                     masks[i] = (int64_t)(low_bits((int)(*amounts)[i]));

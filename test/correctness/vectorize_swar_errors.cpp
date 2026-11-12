@@ -100,6 +100,9 @@ int main(int argc, char **argv) {
     ok &= expect_user_error("ramp_shift_left_runtime_base", "a shift by an amount that varies across the lanes", [=] {
         ramp_shift([](Func a, Var x, Expr base) { return a(x) << cast<uint8_t>(x % 4 + base); });
     });
+    ok &= expect_user_error("ramp_bits_runtime_base", "a shift by an amount that varies across the lanes", [=] {
+        ramp_shift([](Func a, Var x, Expr base) { return (a(x / 4) >> cast<uint8_t>(x % 4 + base)) % 2; });
+    });
     // A base that is at least zero, but may take the last lane past the
     // lanes' width.
     ok &= expect_user_error("ramp_shift_large_base", "a shift by an amount that varies across the lanes", [=] {

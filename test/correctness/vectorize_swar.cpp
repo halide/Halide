@@ -811,11 +811,24 @@ int main(int argc, char **argv) {
             // clamped to keep every lane's amount below the lanes' width (a
             // base that may not is an error: see vectorize_swar_errors).
             ok = ok && test_elementwise<uint8_t>("ramp_shr_clamped_base", lanes, [lanes](Var x, Func a, Func c) { return a(x) >> cast<uint8_t>(x % lanes + clamp(ramp_base, 0, 8 - lanes)); }, 64, TailStrategy::RoundUp, true);
+            ok = ok && test_elementwise<uint8_t>("ramp_bits_clamped_base", lanes, [lanes](Var x, Func a, Func c) { return (a(x / lanes) >> cast<uint8_t>(x % lanes + clamp(ramp_base, 0, 8 - lanes))) % 2 + c(x); }, 64, TailStrategy::RoundUp, true);
             // Shifts by consecutive amounts from a base that is the same in
             // every lane of a word (and of the SIMD vector around it) but
             // not constant.
             ok = ok && test_elementwise<uint8_t>("ramp_shr", lanes, [lanes](Var x, Func a, Func c) { return a(x) >> cast<uint8_t>(x % lanes + (x / (lanes * simd_lanes)) % (9 - lanes)); }, 64, TailStrategy::RoundUp, true);
             ok = ok && test_elementwise<uint8_t>("ramp_shl", lanes, [lanes](Var x, Func a, Func c) { return c(x) << cast<uint8_t>(x % lanes + (x / (lanes * simd_lanes)) % (9 - lanes)); }, 64, TailStrategy::RoundUp, true);
+            // Consecutive bits of a value that is the same in every lane of
+            // a word, one a lane (GGML's q5_0 fifth bits), moved up.
+            ok = ok && test_elementwise<uint8_t>("ramp_bits", lanes, [lanes](Var x, Func a, Func c) { return (a(x / lanes) >> cast<uint8_t>(x % lanes + (x / (lanes * simd_lanes)) % (9 - lanes))) % 2 * 16 + c(x) % 16; }, 64, TailStrategy::RoundUp, true);
+            // (the last lane's from another value: GGML's iq2_xxs signs, the
+            // eighth their parity. Not in a SIMD loop, where the per-word
+            // value's own arithmetic is on narrow SIMD lanes, which
+            // check_words_in_simd rejects)
+            if (simd == 1) {
+                ok = ok && test_elementwise<uint8_t>("ramp_bits_select", lanes, [lanes](Var x, Func a, Func c) {
+                    Expr w = a(x / lanes) % 128;
+                    return select(x % lanes == lanes - 1, cast<uint8_t>(popcount(w)), w >> cast<uint8_t>(x % lanes)) % 2 + c(x); }, 64, TailStrategy::RoundUp, true);
+            }
             // Tails.
             ok = ok && test_elementwise<uint8_t>("tail_shift_inwards", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37);
             ok = ok && test_elementwise<uint8_t>("tail_guard_with_if", lanes, [](Var x, Func a, Func c) { return a(x) + c(x); }, 37, TailStrategy::GuardWithIf);
