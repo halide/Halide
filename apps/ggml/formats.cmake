@@ -279,6 +279,9 @@ set(GGML_SCHEDULE_PARAMS
     # (q4_K at M = 128 0.090 -> 0.075 ms), q4_K below 64 too since its weight
     # blocks are staged per step there (M = 32 0.042 -> 0.036; q5_K's fifth
     # bits, at a position that depends on the step, do not decode in GPRs).
+    # The grid formats with 16-value sub-blocks (iq2_xs, iq2_s, iq1_m) on
+    # wmma's at every M (iq2_xs at M = 128 / 512 0.177 -> 0.123 / 0.726 ->
+    # 0.362), iq1_s below M = 64 (M = 32 0.050 -> 0.044).
     "q5_1 mul_mat f32:q8_1.soa int_tiles=wmm"
     "q5_K mul_mat f32:q8_1.soa int_tiles=wmm"
     "q6_K mul_mat f32:q8_0.soa int_tiles=www"
@@ -290,6 +293,8 @@ set(GGML_SCHEDULE_PARAMS
     "iq4_xs mul_mat f32:q8_0.soa int_tiles=www"
     "iq2_s mul_mat f32:q8_0.soa int_tiles=www"
     "iq1_m mul_mat f32:q8_0.soa int_tiles=www"
+    "iq2_xs mul_mat f32:q8_0.soa int_tiles=www"
+    "iq1_s mul_mat f32:q8_0.soa int_tiles=wmm"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the
@@ -329,9 +334,8 @@ endif ()
 # scale of it (a K-quant's: its sub-block's times its super-block's). Weights
 # with an offset or min per block (q4_1, q5_1, q4_K, q5_K) take f32:q8_1.soa
 # acts: q8_1's block sums are a third array, which the offsets multiply. Not
-# q2_K (mins per 16 values: q8_1's sums are per 32), nvfp4 (float sub-block
-# scales) or the grid formats whose f16 gemm is faster (iq2_xxs, iq2_xs,
-# iq3_xxs, iq3_s, iq1_s). code_words=true (GGML_SCHEDULE_PARAMS): its weight
+# q2_K (mins per 16 values: q8_1's sums are per 32) or nvfp4 (float
+# sub-block scales). code_words=true (GGML_SCHEDULE_PARAMS): its weight
 # codes decoded 4 a word in a GPR (the formats decoded by shifts and masks
 # of bytes). Each f16-, bf16- or .soa-act
 # bench library's test checks that its PTX multiplies on the tensor cores
@@ -372,6 +376,11 @@ set(GGML_HALIDE_CUDA_FORMATS
     "q2_0 mul_mat f32:q8_0.soa"
     "iq2_s mul_mat f32:q8_0.soa"
     "iq1_m mul_mat f32:q8_0.soa"
+    "iq2_xxs mul_mat f32:q8_0.soa"
+    "iq2_xs mul_mat f32:q8_0.soa"
+    "iq3_xxs mul_mat f32:q8_0.soa"
+    "iq3_s mul_mat f32:q8_0.soa"
+    "iq1_s mul_mat f32:q8_0.soa"
     "q4_1 mul_mat f32:q8_1.soa"
     "q5_1 mul_mat f32:q8_1.soa"
     "q4_K mul_mat f32:q8_1.soa"
