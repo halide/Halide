@@ -136,6 +136,10 @@ class LowerSWARVectors : public IRMutator {
     const string loop_name;
     const int max_word_bits;
 
+    // The constant bounds of the loops around the loop's body, and of the
+    // integer lets in it.
+    Scope<ConstantInterval> bounds;
+
     // Names of vector lets and let stmts, which are now bound to words.
     Scope<> word_vars;
 
@@ -280,7 +284,7 @@ class LowerSWARVectors : public IRMutator {
         // The bounds of the base before its conversion to v's lane type, in
         // which a negative base, or one that wraps around, is not in range.
         if (offsets.back() >= bits ||
-            !ConstantInterval(0, bits - 1 - offsets.back()).contains(constant_integer_bounds(r->base))) {
+            !ConstantInterval(0, bits - 1 - offsets.back()).contains(constant_integer_bounds(r->base, bounds))) {
             return std::nullopt;
         }
         *base = cast(v.type().element_of(), r->base);
@@ -480,7 +484,7 @@ class LowerSWARVectors : public IRMutator {
         const Expr &index = op->args[0];
         if (!op->is_intrinsic(Call::mux) || t.bits() != 8 || n < 2 || n > 256 ||
             index.type().lanes() != t.lanes() || !index.type().is_int_or_uint() ||
-            !ConstantInterval(0, n - 1).contains(constant_integer_bounds(index))) {
+            !ConstantInterval(0, n - 1).contains(constant_integer_bounds(index, bounds))) {
             return Expr();
         }
         vector<Expr> table;
@@ -571,6 +575,8 @@ class LowerSWARVectors : public IRMutator {
             new_value = mutate(value);
         }
         ScopedBinding<> bind(value.type().is_vector(), word_vars, op->name);
+        ScopedBinding<ConstantInterval> bind_bounds(t.is_int_or_uint(), bounds, op->name,
+                                                    t.is_int_or_uint() ? constant_integer_bounds(value, bounds) : ConstantInterval());
         auto new_body = mutate_body(body);
         return LetOrLetStmt::make(op->name, new_value, new_body);
     }
@@ -579,8 +585,9 @@ class LowerSWARVectors : public IRMutator {
     // there because the values it is computed from do: an unsigned quotient
     // or remainder fits where its operands do, and so does a right shift, by
     // an amount that is the same in every lane and less than the narrower
-    // width, of a value that fits. Returns an undefined Expr otherwise.
-    static Expr narrow_unsigned(const Expr &e, const Type &ut) {
+    // width (given the bounds of the loops around it), of a value that fits.
+    // Returns an undefined Expr otherwise.
+    Expr narrow_unsigned(const Expr &e, const Type &ut) {
         if (Expr l = lossless_cast(ut, e); l.defined()) {
             return l;
         } else if (!e.type().is_uint()) {
@@ -598,7 +605,8 @@ class LowerSWARVectors : public IRMutator {
             const Broadcast *amount = op->args[1].as<Broadcast>();
             Expr value = narrow_unsigned(op->args[0], ut);
             if (value.defined() && amount && amount->value.type().is_scalar() &&
-                can_prove(amount->value >= 0 && amount->value < ut.bits())) {
+                (can_prove(amount->value >= 0 && amount->value < ut.bits()) ||
+                 ConstantInterval(0, ut.bits() - 1).contains(constant_integer_bounds(amount->value, bounds)))) {
                 return value >> Broadcast::make(cast(ut.element_of(), amount->value), amount->lanes);
             }
         }
@@ -608,7 +616,7 @@ class LowerSWARVectors : public IRMutator {
     // Truncate the lanes of e to the narrower integer type t, by
     // truncating the leaves of operations that commute with truncation.
     // Returns an undefined Expr if that's not possible.
-    static Expr narrow(const Expr &e, const Type &t) {
+    Expr narrow(const Expr &e, const Type &t) {
         const Type &et = e.type();
         if (!(et.is_int() || et.is_uint()) || et.bits() < t.bits()) {
             return Expr();
@@ -794,7 +802,9 @@ class LowerSWARVectors : public IRMutator {
                     // lane shifted by the base, then by its constant offset.
                     return shift_lanes(t, shift_uniform(t, to_word(op->args[0]), mutate(base), left), *offsets, left);
                 }
-                return fail(e, "a shift by an amount that varies across the lanes and is not constant");
+                return fail(e, "a shift by an amount that varies across the lanes and is not constant, "
+                               "nor consecutive from a base known to keep every lane's amount at least "
+                               "zero and less than the lanes' width");
             } else if (Expr w = word_of_lookup(op); w.defined()) {
                 return w;
             }
@@ -807,8 +817,9 @@ class LowerSWARVectors : public IRMutator {
     }
 
 public:
-    LowerSWARVectors(const string &loop_name, int max_word_bits)
+    LowerSWARVectors(const string &loop_name, int max_word_bits, const Scope<ConstantInterval> &loop_bounds)
         : loop_name(loop_name), max_word_bits(max_word_bits) {
+        bounds.set_containing_scope(&loop_bounds);
     }
 
     Expr mutate(const Expr &e) override {
@@ -932,9 +943,10 @@ protected:
 
 }  // namespace
 
-Stmt lower_swar_vectors(const Stmt &s, const string &loop_name, const Target &target) {
+Stmt lower_swar_vectors(const Stmt &s, const string &loop_name, const Target &target,
+                        const Scope<ConstantInterval> &loop_bounds) {
     Stmt result = simplify(s);
-    result = LowerSWARVectors(loop_name, target.bits)(result);
+    result = LowerSWARVectors(loop_name, target.bits, loop_bounds)(result);
     return result;
 }
 

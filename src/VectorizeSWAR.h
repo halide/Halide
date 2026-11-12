@@ -6,7 +6,9 @@
  * with VectorizeIn::SWAR into general-purpose integer registers.
  */
 
+#include "ConstantInterval.h"
 #include "Expr.h"
+#include "Scope.h"
 
 #include <string>
 
@@ -29,8 +31,11 @@ namespace Internal {
  * which targets with a byte permute in a general-purpose register (CUDA)
  * do there. Reports a user error for any vector that is
  * too wide for a general-purpose register of the target, or any
- * operation that cannot be done lane-wise within one. */
-Stmt lower_swar_vectors(const Stmt &s, const std::string &loop_name, const Target &target);
+ * operation that cannot be done lane-wise within one. loop_bounds: the
+ * constant bounds of the loops around s, which say which values its
+ * scalars can take. */
+Stmt lower_swar_vectors(const Stmt &s, const std::string &loop_name, const Target &target,
+                        const Scope<ConstantInterval> &loop_bounds = Scope<ConstantInterval>::empty_scope());
 
 /** Arithmetic on the lanes of vectors of integer type t packed as above into
  * words: unsigned integers of t.bits() * t.lanes() bits, which may be up to

@@ -143,15 +143,25 @@ enum class VectorizeIn {
      * the target), its lanes must be integers, and only a restricted
      * set of operations is supported: dense loads and stores,
      * broadcasts and ramps, bitwise operations, shifts by constant
-     * (possibly different per lane) or uniform amounts, multiplication,
-     * division, and modulo by constant powers of two, addition and
-     * subtraction, same-width casts and reinterprets, and selects.
-     * Anything else is a compile-time error. Selects on conditions that
-     * vary across the lanes at runtime, and loads and stores in vector
-     * tails predicated by the tail strategy, are done one lane at a
-     * time. Inside an enclosing SIMD-vectorized loop, each SIMD lane
-     * holds one such word. Where the words are stored between Funcs is
-     * a separate choice: see MemoryType::GPR. */
+     * (possibly different per lane) or uniform amounts, or by
+     * consecutive amounts from a runtime base that provably keeps every
+     * lane's amount below the lane width (given the constant bounds of
+     * the enclosing loops), multiplication, division, and modulo by
+     * constant powers of two, addition and subtraction, same-width casts
+     * and reinterprets, and selects. Values computed in wider lanes and
+     * cast back to the lanes' type (e.g. a field shifted and masked out
+     * of widened lanes) are computed in the narrow lanes where their
+     * value provably fits. Consecutive bits of a value that is the same
+     * in every lane, one per lane, are spread to the lanes with a
+     * multiply. A mux of 8-bit constants (a lookup in a small table) is
+     * a byte permute of the index's lanes: in a general-purpose register
+     * on CUDA, and in a SIMD register on other targets. Anything else is
+     * a compile-time error. Selects on conditions that vary across the
+     * lanes at runtime, and loads and stores in vector tails predicated
+     * by the tail strategy, are done one lane at a time. Inside an
+     * enclosing SIMD-vectorized loop, each SIMD lane holds one such
+     * word. Where the words are stored between Funcs is a separate
+     * choice: see MemoryType::GPR. */
     SWAR,
 };
 

@@ -684,6 +684,45 @@ bool test_elementwise(const char *name, int lanes,
     return true;
 }
 
+// A field of widened lanes shifted out by an amount that is the same in
+// every lane, an enclosing loop's variable (GGML's K-quants' high bits at
+// the position of a step of their block): narrowed to the lanes' type,
+// as the loop's bounds keep the amount below their width.
+bool test_shift_by_loop_var(int lanes) {
+    Buffer<uint8_t> a_buf = random_buffer<uint8_t>({64});
+    Var x("x"), k("k");
+    Func a("a"), f("shift_by_loop_var_swar");
+    a(x) = a_buf(x);
+    f(x, k) = cast<uint8_t>((cast<uint32_t>(a(x)) >> cast<uint32_t>(k * 4)) % 2) + a(x) % 16;
+    f.bound(k, 0, 2).vectorize(x, lanes, VectorizeIn::SWAR);
+    if (!check_no_vectors(Pipeline(f), f)) {
+        printf("  in test shift_by_loop_var with %d lanes\n", lanes);
+        return false;
+    }
+    Buffer<uint8_t> out = f.realize({64, 2});
+    for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 64; i++) {
+            uint8_t e = ((a_buf(i) >> (j * 4)) & 1) + a_buf(i) % 16;
+            if (out(i, j) != e) {
+                printf("shift_by_loop_var: out(%d, %d) = %d instead of %d\n", i, j, out(i, j), e);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// A SWAR loop inside a loop with constant bounds that runs no iterations
+// (min > max), which has no bounds for its variable to take.
+bool test_in_empty_loop() {
+    Expr v = Variable::make(Int(32), "v");
+    Stmt store = Store::make("buf", cast<uint8_t>(v), v);
+    Stmt inner = For::make("v", 0, 3, ForType::VectorizedSWAR, Partition::Auto, DeviceAPI::None, store);
+    Stmt outer = For::make("k", 5, 4, ForType::Serial, Partition::Auto, DeviceAPI::None, inner);
+    Stmt s = vectorize_loops(outer, {}, get_host_target());
+    return s.defined();
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -717,6 +756,12 @@ int main(int argc, char **argv) {
     ok = ok && test_kscales_simd_blocks(4);
     ok = ok && test_kscales_simd_blocks(8);
     ok = ok && test_kscales_in_simd_consumer();
+    ok = ok && test_shift_by_loop_var(2);
+    ok = ok && test_shift_by_loop_var(4);
+    if (word_bits >= 64) {
+        ok = ok && test_shift_by_loop_var(8);
+    }
+    ok = ok && test_in_empty_loop();
     // Bytes staged in MemoryType::GPR.
     for (int lanes : {4, word_bits / 8}) {
         for (MemoryType m : {MemoryType::Stack, MemoryType::GPR}) {

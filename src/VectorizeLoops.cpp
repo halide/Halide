@@ -1699,8 +1699,16 @@ protected:
     // loops (but not the SWAR loops within them) to an enclosing pass.
     const bool only_swar;
 
+    // The constant bounds of the enclosing loops (lower_swar_vectors()).
+    Scope<ConstantInterval> loop_bounds;
+
     Stmt visit(const For *for_loop) override {
         Stmt stmt;
+        ScopedBinding<ConstantInterval> bind_bounds(loop_bounds, for_loop->name,
+                                                    ConstantInterval::bounds_of_type(for_loop->min.type()));
+        if (const auto lo = as_const_int(for_loop->min), hi = as_const_int(for_loop->max); lo && hi && *lo <= *hi) {
+            loop_bounds.ref(for_loop->name) = ConstantInterval(*lo, *hi);
+        }
         ScopedValue<const For *> old_device_loop(device_loop, device_loop);
         if (for_loop->device_api != DeviceAPI::None &&
             for_loop->device_api != DeviceAPI::Host) {
@@ -1733,13 +1741,13 @@ protected:
                 // to scalar words of packed lanes, which this loop then
                 // vectorizes like any other scalars: each SIMD lane holds
                 // one word ("SWAR within a vector register").
-                body = VectorizeLoops(target, true, device_loop)(body);
+                body = VectorizeLoops(target, true, device_loop, &loop_bounds)(body);
             }
 
             VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
             stmt = VectorSubs(vectorized_var, swar, target)(body);
             if (swar) {
-                stmt = lower_swar_vectors(stmt, for_loop->name, target);
+                stmt = lower_swar_vectors(stmt, for_loop->name, target, loop_bounds);
             }
         } else {
             stmt = IRMutator::visit(for_loop);
@@ -1749,8 +1757,10 @@ protected:
     }
 
 public:
-    VectorizeLoops(const Target &target, bool only_swar = false, const For *device_loop = nullptr)
+    VectorizeLoops(const Target &target, bool only_swar = false, const For *device_loop = nullptr,
+                   const Scope<ConstantInterval> *enclosing_bounds = nullptr)
         : target(target), device_loop(device_loop), only_swar(only_swar) {
+        loop_bounds.set_containing_scope(enclosing_bounds);
     }
 };
 

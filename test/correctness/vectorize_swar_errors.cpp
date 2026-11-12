@@ -109,6 +109,19 @@ int main(int argc, char **argv) {
         ramp_shift([](Func a, Var x, Expr base) { return a(x) >> cast<uint8_t>(x % 4 + clamp(base, 0, 5)); });
     });
 
+    // A field of widened lanes shifted out by an enclosing loop's variable,
+    // whose loop has no constant bounds to keep the amount below the narrow
+    // lanes' width.
+    ok &= expect_user_error("shift_by_unbounded_loop_var", "cannot be done lane-wise", [] {
+        ImageParam a(UInt(8), 1, "a");
+        Var x("x"), k("k");
+        Func fa("fa"), f("f");
+        fa(x) = a(x);
+        f(x, k) = cast<uint8_t>((cast<uint32_t>(fa(x)) >> cast<uint32_t>(k * 4)) % 2) + fa(x) % 16;
+        f.vectorize(x, 4, VectorizeIn::SWAR);
+        f.compile_jit();
+    });
+
     ok &= expect_user_error("nested_simd_in_swar", "can't be nested inside a SWAR-vectorized one", [] {
         Func f("f");
         Var x("x"), y("y");
