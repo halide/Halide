@@ -2597,12 +2597,13 @@ inline std::vector<GemmShape> cuda_int_shapes(Func out, bool wmma) {
             ishape(Expr(), 1, 2, 1, false, 256)};
 }
 
-// A split of K in kz (gpu_int_gemm()), where cond holds, on its shapes.
+// A split of K in kz (gpu_int_gemm()), where cond holds, on its shapes;
+// `wstep`: a weight block of several blocks staged per step, not whole.
 struct KSplit {
     int kz;
     Expr cond;
     std::vector<GemmShape> shapes;
-    bool wmma = false;
+    bool wmma = false, wstep = false;
 };
 
 // The K splits (gpu_int_gemm()'s KSplit), by M: in 2 from M = 64 to 255, 64
@@ -2614,7 +2615,7 @@ struct KSplit {
 // 0.035, 0.031), on 128-value steps. On wmma's fragments (wmma_small below
 // M = 64, wmma_mid below 256), Phase 5's: in 4 below 128, 16 x 32 of 2 warps
 // from 32, 16 x 16 below, 32 x 64 of 2 from 64; unsplit above. (RTX 3090)
-inline std::vector<KSplit> cuda_int_splits(Func out, int per, bool wmma_small, bool wmma_mid) {
+inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_small, bool wmma_mid) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     std::vector<KSplit> splits;
     if (wmma_small) {
@@ -2622,17 +2623,14 @@ inline std::vector<KSplit> cuda_int_splits(Func out, int per, bool wmma_small, b
     } else {
         // (32 x 32 unpadded: padded, 7 blocks of it no longer fit an SM's
         // shared memory, 512 of them at N = 4096 take two waves: M = 32
-        // 0.030 -> 0.033 ms)
-        splits.push_back({4, M < 64, {ishape(M >= 32, 2, 4, 1, false, 128, 1, 0), ishape(Expr(), 2, 2, 1, false, 128)}});
+        // 0.030 -> 0.033 ms; so a weight block of several blocks staged
+        // per step: q4_K's whole, 5 blocks an SM, 34.9 -> 27.7 us)
+        splits.push_back({4, M < 64, {ishape(M >= 32, 2, 4, 1, false, 128, 1, 0), ishape(Expr(), 2, 2, 1, false, 128)}, false, true});
     }
     if (wmma_mid) {
         // (unsplit from M = 128: q1_0 at 4096 x 4096 x 128 0.078 ms; in 2,
         // 64 x 64 of 4 warps, 0.080)
         splits.push_back({4, M < 128, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
-    } else if (per > 1) {
-        // (a weight block of several blocks, whose steps are each a whole
-        // one of them: 32 x 64, to fit the step's acts in shared memory)
-        splits.push_back({2, M < 256, {ishape(Expr(), 1, 8, 2, false, 128)}});
     } else {
         splits.push_back({2, M < 256, {ishape(M >= 128 && N >= 64, 2, 8, 2, false, 128, 2), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}});
     }
@@ -2804,10 +2802,17 @@ inline void round_extent(Func f, const RVar &rv, int l, Func out) {
 // in a GPR each; else 16 codes a vector), the act's copied from the kernel
 // that encodes them (awaited at the barrier, after the weights' loads), both
 // a block's rows 48 bytes apart (16 past the block: 32 puts a tile's rows in
-// the same banks) and its blocks a block's rows and `pad_rows` more apart
-// (where a weight block is one block), and the factors, dense along N or M. A weight block of several of the
+// the same banks) and its blocks a block's rows and `pad_rows` more apart,
+// and the factors, dense along N or M. A weight block of several of the
 // reduction's (the K-quants' 256 values on 32-value act blocks) is staged
-// whole, once (kw), its steps the acts'.
+// whole, once (kw), its rows 16 bytes past it, its steps the acts' (a K
+// split on mma.sync's tiles splits K in whole ones of it; on wmma's its
+// steps are whole ones), or per step (KSplit's wstep). (q4_K at 4096 x 4096
+// x 512: its rows 256 + 32 bytes apart and the acts' blocks unpadded, the
+// operands' loads and copies 2- and 4-way conflicted, 243 us, 256 + 16 and
+// padded 224; on q4_0's K split's tiles from M = 64, against 32 x 64 ones
+// on whole weight blocks, 54 + 5.4 -> 41.5 + 2.9 us at M = 64, 80 -> 60 +
+// 5.8 at 128)
 // Under each of `splits`, first first (where its cond holds and K is a
 // multiple of kz steps of its shapes' kstep), K is split, as GGML's
 // stream-k: kz gemms, each on every kz-th step of K (dot's
@@ -2820,12 +2825,14 @@ inline void round_extent(Func f, const RVar &rv, int l, Func out) {
 inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, std::vector<GemmShape> shapes, int sg,
                          bool code_words, std::vector<KSplit> splits = {}, bool wmma = false) {
     const int fn = 16, pad = 16;
-    // (a weight block of several blocks is staged whole: the K split's
-    // steps are of it, the gemm on all of K stages it per `kw`, its steps
-    // the acts')
+    // (a weight block of several blocks is staged whole, once per `kw`,
+    // its steps the acts'; on wmma's fragments the K split's steps are
+    // whole ones of it)
+    auto wsteps_of = [&](const KSplit &sp) { return fmt.per > 1 && !sp.wmma && fmt.per % (sp.shapes[0].kstep / fmt.block) == 0; };
     for (KSplit &sp : splits) {
+        const bool whole = fmt.per > 1 && !wsteps_of(sp);
         for (GemmShape &sh : sp.shapes) {
-            sh.kstep = std::max(sh.kstep, fmt.block * fmt.per);
+            if (whole) sh.kstep = std::max(sh.kstep, fmt.block * fmt.per);
         }
     }
     RVar kw("kw"), kr("kr");
@@ -2861,6 +2868,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         std::vector<Func> tiles, wfs, xfs;  // (tiles: blk to codes)
         Var b;                              // a step's blocks
         bool wmma = false;
+        int wstep = 0;  // (the weight's values per staged step, blocks())
     };
     // s (acc's update, or a partial sum's) by its blocks (`by`: its RVars
     // over them, as Vars)
@@ -2868,7 +2876,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         std::vector<Var> a = f.args();
         return std::any_of(a.begin(), a.end(), [&](const Var &x) { return x.same_as(v); });
     };
-    auto blocks = [&](Func acc, Stage s, const std::vector<std::pair<RVar, Var>> &by, Func kernel, bool wm) {
+    auto blocks = [&](Func acc, Stage s, const std::vector<std::pair<RVar, Var>> &by, Func kernel, bool wm, int wstep = 0) {
         Gemm g;
         g.acc = acc;
         g.wmma = wm;
@@ -2926,7 +2934,38 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
                 g.xfs.push_back(x);
             }
         }
-        g.ws = wc[0].in(g.codes), g.xs = ac[0].in(g.codes);
+        Func wcodes = wc[0];
+        if (wstep) {
+            // (the weight's codes per `wstep` values of its block: wv's
+            // (v, s, row) is the block's codes at its step s, v within
+            // it. The codes read the weight's at (x + (y % per) * block, y
+            // / per) of the act's (x, y), so wv's at (x + (y % sb) *
+            // block, y / sb), sb the act blocks of a step: the same value
+            // (y's digits), whose bounds are a step's alone)
+            using namespace Internal;
+            const int bw = fmt.block * fmt.per, sb = wstep / fmt.block;
+            if (wstep % fmt.block || bw % wstep) throw std::invalid_argument("gpu_int_gemm: a weight step of whole act blocks within a weight block");
+            std::vector<Var> a = wc[0].args();
+            Func wv(wc[0].name() + "_steps");
+            wv(a[0], a[1], a[2]) = wc[0](a[0] + (a[1] % (bw / wstep)) * wstep, a[1] / (bw / wstep), a[2]);
+            Expr &v = g.codes.function().update(0).values()[0];
+            v = substitute_in_all_lets(v);
+            Expr ax, ay;
+            visit_with(v, [&](auto *self, const Call *c) {
+                if (c->call_type == Call::Halide && c->name == ac[0].name()) ax = c->args[0], ay = c->args[1];
+                self->visit_base(c);
+            });
+            v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
+                if (c->call_type != Call::Halide || c->name != wc[0].name()) return self->visit_base(c);
+                if (!ax.defined() || !can_prove(c->args[0] == ax + (ay % fmt.per) * fmt.block && c->args[1] == ay / fmt.per)) {
+                    throw std::invalid_argument("gpu_int_gemm: the weight's codes not at the act's k");
+                }
+                return wv(ax + (ay % sb) * fmt.block, ay / sb, c->args[2]);
+            });
+            wcodes = wv;
+            g.wstep = wstep;
+        }
+        g.ws = wcodes.in(g.codes), g.xs = ac[0].in(g.codes);
         // the weights' luts the gemm's own, per block (as gpu_staged()'s)
         for (Func f : clone_paths(g.ws, [&](const Func &f) { return luts.count(f.name()) > 0; })) {
             metal_lut(f, kernel, n);
@@ -3034,15 +3073,21 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         for (Func f : {g.ws, g.xs}) {
             std::vector<Var> a = f.args();
             const bool w = f.name() == g.ws.name();
-            f.compute_at(g.acc, w && wsteps ? kw : ks).store_in(w ? MemoryType::GPUShared : MemoryType::GPUSharedAsync);
-            f.reorder_storage(a[0], a[2], a[1]).align_storage(a[0], fmt.block + pad);
+            f.compute_at(g.acc, w && wsteps && !g.wstep ? kw : ks).store_in(w ? MemoryType::GPUShared : MemoryType::GPUSharedAsync);
+            f.reorder_storage(a[0], a[2], a[1]);
+            // (a weight block of several blocks: its row 16 bytes past it,
+            // as a block's)
+            if (w && fmt.per > 1) {
+                f.bound_storage(a[0], (g.wstep ? g.wstep : fmt.block * fmt.per) + pad);
+            } else {
+                f.align_storage(a[0], fmt.block + pad);
+            }
             // (a block's rows and pad_rows more: the lanes of a copy or a
             // store span the step's blocks, which a multiple of 8 rows of
             // 48 bytes puts in the same banks, 4-way conflicted; q4_0 at
-            // 4096 x 4096 x 512, 64 x 128 tiles, 203-213 -> 185 us. Not
-            // where a weight block is several blocks: its 64 x 128 tiles
-            // would no longer fit 48 KB)
-            if (fmt.per == 1) {
+            // 4096 x 4096 x 512, 64 x 128 tiles, 203-213 -> 185 us. A
+            // weight block of several blocks is one per step)
+            if (fmt.per == 1 || !w) {
                 Expr rows;
                 for (auto it = shapes_of.rbegin(); it != shapes_of.rend(); ++it) {
                     const int r = (w ? fn * it->tn * it->wn : fm * it->tm * it->wm) + it->pad_rows;
@@ -3051,7 +3096,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
                 f.bound_storage(a[2], rows);
             }
             // (a weight block of several blocks: whole ones per step)
-            if (blocks_per_step.defined()) f.bound_extent(a[1], w ? max(1, blocks_per_step / fmt.per) : blocks_per_step);
+            if (blocks_per_step.defined()) f.bound_extent(a[1], w ? max(1, blocks_per_step / ((g.wstep ? g.wstep : fmt.block * fmt.per) / fmt.block)) : blocks_per_step);
         }
         for (const auto &v : {g.wfs, g.xfs}) {
             for (Func f : v) {
@@ -3078,31 +3123,42 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         const int kz = splits[i].kz;
         const std::vector<GemmShape> &split_shapes = splits[i].shapes;
         const std::string sfx = std::to_string(i);
-        const int st = split_shapes[0].kstep / fmt.block;
-        Expr whole = nb % (kz * st) == 0;
-        Var z("kz_z" + sfx), uo("uo"), ui("ui"), no("kz_no" + sfx), nj("kz_ni" + sfx);
+        const bool sw = wsteps_of(splits[i]);
+        const int st = split_shapes[0].kstep / fmt.block, kst = sw ? fmt.per : st;
+        Expr whole = nb % (kz * kst) == 0;
+        Var z("kz_z" + sfx), uo("uo"), ui("ui"), uw("uw"), no("kz_no" + sfx), nj("kz_ni" + sfx);
         RVar kso("kso"), kzr("kzr");
         Stage sk = Stage(out).specialize(cond && splits[i].cond && whole).eager_inline(via);
         Func all = dot.clone_in(via);
         // (dot's K whole kz steps: out reads it only under sk, where K is)
-        round_extent(dot, ry, kz * st, out);
-        // ry = (ks * kz + kzr) * st + kb
+        round_extent(dot, ry, kz * kst, out);
+        // ry = (ks * kz + kzr) * st + kb; sw: a weight block of several
+        // blocks the split's unit, ry = (kw * kz + kzr) * per + kr, kr
+        // its steps (as the gemm on all of K's)
         Stage su = dot.update();
-        su.split(ry, kso, kb, st).split(kso, ks, kzr, kz);
+        if (sw) {
+            su.split(ry, kso, kr, fmt.per).split(kso, kw, kzr, kz);
+        } else {
+            su.split(ry, kso, kb, st).split(kso, ks, kzr, kz);
+        }
         Func part = su.rfactor(kzr, z);
         Func pg = part.in(dot);
         Stage pu = part.update();
-        Gemm g = blocks(part, pu, {{ks, uo}, {kb, ui}}, pg, splits[i].wmma);
+        Gemm g = sw ? blocks(part, pu, {{kw, uw}, {kr, ui}}, pg, splits[i].wmma, splits[i].wstep ? st * fmt.block : 0) : blocks(part, pu, {{ks, uo}, {kb, ui}}, pg, splits[i].wmma);
         pg.compute_at(out, Var::outermost());
         for (const GemmShape &sh : split_shapes) {
             Expr c = sh.cond.defined() ? sh.cond : Internal::const_true();
             kernel_tiles(Stage(pg).specialize(c), sh, g, {z});
-            steps(tile(pu.specialize(sh.cond), sh, g.wmma), g.wmma);
+            if (sw) {
+                steps(tile(pu.specialize(sh.cond), sh, g.wmma).split(kr, ks, kb, st), g.wmma, true);
+            } else {
+                steps(tile(pu.specialize(sh.cond), sh, g.wmma), g.wmma);
+            }
             staging(sh, g);
         }
         // (a step's blocks: dot's K is whole kz steps, which the bounds of
         // the partial sums' blocks, clamped to it, don't show)
-        storage(g, pg, split_shapes, st);
+        storage(g, pg, split_shapes, st, sw);
         sk.split(n, no, nj, 128, TailStrategy::GuardWithIf).gpu_blocks(no, m).gpu_threads(nj);
         dot.compute_at(out, nj);
         su.unroll(kzr);
@@ -3141,52 +3197,89 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     metal_rows(out, rows, r, fmt.block, rs, fmt.sub, true, true, sg);
     // the acts, encoded by one kernel of 16 blocks a GPU block: the codes 4
     // values a thread, the scales (dense along M: the gemms' act factors
-    // decode them as they stage them, as the rows do) a thread per block,
-    // each block's maximum staged once (q4_0 at 4096 x 4096 x 512: a kernel
-    // each 14.7 + 14.3 us, one 16.4; of 8 blocks 18.0, 32 17.1; RTX 3090). A
-    // derived port (q8_1's sum, which not every path reads: a fused group
-    // is computed whole or not at all) a kernel of its own, on its own
-    // copies of what it reads, a thread per block. The reductions (the
-    // scale's maximum, the codes' sum) of vectors.
-    std::set<std::string> enc;
-    for (Func f : encoder_funcs(rs[1].encoded[0], rs)) {
-        enc.insert(f.name());
+    // decode them as they stage them, as the rows do) and a derived port
+    // (q8_1's sum) a thread per block, each block's maximum staged once
+    // (q4_0 at 4096 x 4096 x 512: a kernel each 14.7 + 14.3 us, one 16.4;
+    // of 8 blocks 18.0, 32 17.1; RTX 3090). The reductions (the scale's
+    // maximum, the codes' sum) of vectors.
+    Var bo("bo"), jv("jv"), row("enc_row"), blk("enc_blk");
+    std::vector<Func> enc = encoder_funcs(rs[1].encoded[0], rs);
+    auto calls = [](const Func &f, const std::string &g) { return Internal::find_direct_calls(f.function()).count(g) > 0; };
+    // A fused group is computed whole or not at all, and the rows read no
+    // derived port: they read their own copies of the encoder (each Func
+    // of it they reach, once its callers there are copied), its own kernel
+    std::map<std::string, Func> rc;
+    if (!rs[1].derived_ports().empty()) {
+        std::vector<Func> path{rows}, todo;
+        for (const auto &[name, f] : Internal::find_transitive_calls(rows.function())) {
+            (std::any_of(enc.begin(), enc.end(), [&](const Func &x) { return x.name() == name; }) ? todo : path).push_back(Func(f));
+        }
+        while (!todo.empty()) {
+            auto ready = std::find_if(todo.begin(), todo.end(), [&](const Func &g) {
+                return std::none_of(todo.begin(), todo.end(), [&](const Func &h) { return h.name() != g.name() && calls(h, g.name()); });
+            });
+            if (ready == todo.end()) throw std::invalid_argument("gpu_int_gemm: the acts' encoder is not a DAG");
+            std::vector<Func> callers;
+            for (const Func &f : path) {
+                if (calls(f, ready->name())) callers.push_back(f);
+            }
+            for (const auto &[name, f] : rc) {
+                if (calls(f, ready->name())) callers.push_back(f);
+            }
+            rc[ready->name()] = Func(*ready).clone_in(callers);
+            todo.erase(ready);
+        }
+    }
+    // a derived port reads the other ports' values, as a copy of each in
+    // its encoder (not their kernel's output: it is the same kernel)
+    std::vector<Func> ports, derived;
+    for (size_t j = 0; j < rs[1].encoded.size(); j++) {
+        ports.push_back(rs[1].encoded[j]);
+        const std::vector<DerivedPort> &dp = rs[1].derived_ports();
+        if (std::any_of(dp.begin(), dp.end(), [&](const DerivedPort &p) { return p.name == rs[1].encoded_ports[j].name; })) derived.push_back(rs[1].encoded[j]);
+    }
+    for (const Func &d : derived) {
+        std::vector<Func> chain{d};
+        for (const auto &[name, f] : Internal::find_transitive_calls(d.function())) {
+            if (std::any_of(enc.begin(), enc.end(), [&](const Func &x) { return x.name() == name; })) chain.push_back(Func(f));
+        }
+        for (const Func &q : ports) {
+            if (q.name() == d.name()) continue;
+            std::vector<Func> callers;
+            for (const Func &f : chain) {
+                if (f.name() != q.name() && calls(f, q.name())) callers.push_back(f);
+            }
+            if (!callers.empty()) Func(q).clone_in(callers);
+        }
     }
     std::vector<Func> copies;
-    std::function<void(Func)> own = [&](Func f) {
-        for (const auto &[name, c] : Internal::find_direct_calls(f.function())) {
-            if (name == f.name() || !enc.count(name)) continue;
-            Func cc = Func(c).clone_in(f);
-            copies.push_back(cc);
-            own(cc);
+    auto schedule_acts = [&](Func codes, const std::vector<Func> &fused, const std::function<Func(const Func &)> &of) {
+        std::vector<Var> a = codes.args();
+        codes.compute_at(out, Var::outermost()).rename(a[1], blk).rename(a[2], row).split(a[0], a[0], jv, 4).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).fuse(a[0], blk, a[0]).vectorize(jv).gpu_blocks(bo, row).gpu_threads(a[0]);
+        for (Func e : fused) {
+            a = e.args();
+            e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).rename(a[0], blk).rename(a[1], row).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).gpu_blocks(bo, row).gpu_threads(blk).compute_with(codes, bo);
+        }
+        for (const Func &g : enc) {
+            Func f = of(g);
+            if (!f.defined() || !f.has_update_definition() || f.dimensions() >= codes.dimensions()) continue;
+            a = f.args();
+            f.compute_at(codes, bo).gpu_threads(a[0]);
+            f.update().gpu_threads(a[0]);
+            copies.push_back(f);
         }
     };
-    Var bo("bo"), jv("jv"), row("enc_row"), blk("enc_blk");
-    std::vector<Func> fused, derived;
-    for (size_t j = 0; j < rs[1].encoded.size(); j++) {
-        Func e = rs[1].encoded[j];
-        if (e.name() == ac[0].name()) continue;
-        const std::vector<DerivedPort> &dp = rs[1].derived_ports();
-        const bool d = std::any_of(dp.begin(), dp.end(), [&](const DerivedPort &p) { return p.name == rs[1].encoded_ports[j].name; });
-        (d ? derived : fused).push_back(e);
-        if (d) own(e);
+    std::vector<Func> fused;
+    for (const Func &e : ports) {
+        if (e.name() != ac[0].name()) fused.push_back(e);
     }
-    std::vector<Var> a = ac[0].args();
-    ac[0].compute_at(out, Var::outermost()).rename(a[1], blk).rename(a[2], row).split(a[0], a[0], jv, 4).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).fuse(a[0], blk, a[0]).vectorize(jv).gpu_blocks(bo, row).gpu_threads(a[0]);
-    for (Func e : fused) {
-        a = e.args();
-        e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).rename(a[0], blk).rename(a[1], row).split(blk, bo, blk, 16, TailStrategy::GuardWithIf).gpu_blocks(bo, row).gpu_threads(blk).compute_with(ac[0], bo);
-    }
-    for (Func e : derived) {
-        a = e.args();
-        e.compute_at(out, Var::outermost()).reorder_storage(a[1], a[0]).split(a[0], bo, a[0], 32, TailStrategy::GuardWithIf).gpu_blocks(bo, a[1]).gpu_threads(a[0]);
-    }
-    for (Func f : encoder_funcs(rs[1].encoded[0], rs)) {
-        if (!f.has_update_definition() || f.dimensions() >= ac[0].dimensions()) continue;
-        a = f.args();
-        f.compute_at(ac[0], bo).gpu_threads(a[0]);
-        f.update().gpu_threads(a[0]);
-        copies.push_back(f);
+    schedule_acts(ac[0], fused, [](const Func &g) { return g; });
+    if (rc.count(ac[0].name())) {
+        std::vector<Func> rfused;
+        for (const Func &e : fused) {
+            if (rc.count(e.name())) rfused.push_back(rc[e.name()]);
+        }
+        schedule_acts(rc[ac[0].name()], rfused, [&](const Func &g) { return rc.count(g.name()) ? rc[g.name()] : Func(); });
     }
     for (Func f : copies) {
         if (f.has_update_definition() && f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);
@@ -3387,7 +3480,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // integer gemm, K split in 4 below M = 64 and in 2 below 256
         // (cuda_int_splits())
         if (!staged.empty() && rs.size() == 2 && rs[1].encoded.size() > 1) {
-            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, k.int_tiles[2] == 'w'), 2, k.code_words, cuda_int_splits(out, fmt.per, k.int_tiles[0] == 'w', k.int_tiles[1] == 'w'), k.int_tiles[2] == 'w');
+            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, k.int_tiles[2] == 'w'), 2, k.code_words, cuda_int_splits(out, k.int_tiles[0] == 'w', k.int_tiles[1] == 'w'), k.int_tiles[2] == 'w');
             return;
         }
         // CUDA: acts quantized here (f32:q8_1, as GGML's mmvq quantizes its

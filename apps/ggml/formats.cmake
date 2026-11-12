@@ -275,9 +275,12 @@ set(GGML_SCHEDULE_PARAMS
     # 0.045 -> 0.034 / 0.162 -> 0.094 / 0.309 -> 0.319, q4_K 0.038 -> 0.032 /
     # 0.115 -> 0.090 / 0.279 -> 0.323; q4_0 0.027 -> 0.028 / 0.070 -> 0.083 /
     # 0.234 -> 0.248). The lut formats run unsplit, on the last's at every M.
+    # q4_K, q5_K: mma.sync's from M = 64 since its K split takes q4_0's tiles
+    # (q4_K at M = 128 0.090 -> 0.075 ms), q4_K below 64 too since its weight
+    # blocks are staged per step there (M = 32 0.042 -> 0.036; q5_K's fifth
+    # bits, at a position that depends on the step, do not decode in GPRs).
     "q5_1 mul_mat f32:q8_1.soa int_tiles=wmm"
-    "q4_K mul_mat f32:q8_1.soa int_tiles=wwm"
-    "q5_K mul_mat f32:q8_1.soa int_tiles=wwm"
+    "q5_K mul_mat f32:q8_1.soa int_tiles=wmm"
     "q6_K mul_mat f32:q8_0.soa int_tiles=www"
     "q3_K mul_mat f32:q8_0.soa int_tiles=www"
     "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
