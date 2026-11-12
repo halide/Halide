@@ -2879,6 +2879,7 @@ bool is_lane_wise(const Call *op) {
         Call::saturating_sub,
         Call::shift_left,
         Call::shift_right,
+        Call::unsafe_promise_clamped,
         Call::widen_right_add,
         Call::widen_right_mul,
         Call::widen_right_sub,
