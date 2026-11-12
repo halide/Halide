@@ -1398,7 +1398,7 @@ void CodeGen_LLVM::optimize_module() {
         // split and concatenate native vectors, producing illegal types
         // that lower poorly on ARM (e.g. widening multiplies of uint8 by
         // uint16). On ARM it otherwise buys little.
-        pic.registerShouldRunOptionalPassCallback([](StringRef name, llvm::Any) {
+        pic.registerShouldRunOptionalPassCallback([](StringRef name, const auto &) {
             return name != "VectorCombinePass";
         });
     }
