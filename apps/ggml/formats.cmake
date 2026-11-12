@@ -278,32 +278,44 @@ set(GGML_SCHEDULE_PARAMS
     "q8_0:f16 mul_mat * cuda_one_warp=true" "q5_0:f16 mul_mat * cuda_one_warp=true"
     # RTX 3090: the CUDA integer gemm's tiles below M = 64, below 256 and from
     # 256 (w: wmma's 16 x 16 fragments, m: mma.sync's 16 x 8 tiles, the
-    # default), the faster at 4096^2 (ms at M = 16 / 128 / 512, m -> w: q6_K
+    # default; of 4 letters, below 32, below 64, below 256, from 256; of 5,
+    # below 32, 64, 128, 256, from 256), the faster at 4096^2 (ms at M = 16 / 128 / 512, m -> w: q6_K
     # 0.045 -> 0.034 / 0.162 -> 0.094 / 0.309 -> 0.319, q4_K 0.038 -> 0.032 /
     # 0.115 -> 0.090 / 0.279 -> 0.323; q4_0 0.027 -> 0.028 / 0.070 -> 0.083 /
     # 0.234 -> 0.248).
     # q4_K, q5_K: mma.sync's from M = 64 since its K split takes q4_0's tiles
     # (q4_K at M = 128 0.090 -> 0.075 ms), q4_K below 64 too since its weight
     # blocks are staged per step there (M = 32 0.042 -> 0.036; q5_K's fifth
-    # bits, at a position that depends on the step, do not decode in GPRs).
+    # bits, at a position that depends on the step, do not decode in GPRs);
+    # q4_K, iq3_s and iq4_xs on wmma's below 32 (M = 16: q4_K 0.029 ->
+    # 0.027, iq3_s 0.038 -> 0.034, iq4_xs 0.031 -> 0.026), q4_1 from 32 to
+    # 63 (M = 32 0.0388 -> 0.0374, 48 0.060 -> 0.055).
     # The lut formats (iq4_nl, mxfp4, iq4_xs) on mma.sync's at every M, K
     # split as the others (iq4_nl at M = 16 / 128 / 512, unsplit on wmma's:
     # 0.045 / 0.089 / 0.265 -> 0.033 / 0.074 / 0.247 ms).
     # q6_K, q3_K: mma.sync's from M = 64 (q3_K at M = 64 / 128 / 512 0.062 /
     # 0.090 / 0.291 -> 0.055 / 0.081 / 0.273 ms; q6_K 0.064 / 0.093 / 0.296
-    # -> 0.060 / 0.085 / 0.283).
+    # -> 0.060 / 0.085 / 0.283), q6_K from 32 too (M = 32 0.049 -> 0.043, 48
+    # 0.075 -> 0.067; at 16 0.030 -> 0.038).
     # The grid formats with 16-value sub-blocks (iq2_xs, iq2_s, iq1_m) on
     # wmma's at every M (iq2_xs at M = 128 / 512 0.177 -> 0.123 / 0.726 ->
-    # 0.362), iq1_s below M = 64 (M = 32 0.050 -> 0.044).
+    # 0.362) but from M = 64 to 127, where mma.sync's 2 x 2 warps of 32 x 32
+    # are (iq2_s at M = 64 0.076 -> 0.061, iq2_xs 0.065 -> 0.055, iq1_m
+    # 0.079 -> 0.062; at 128, 0.10 either way); iq1_s below M = 64 (M = 32
+    # 0.050 -> 0.044).
+    "q4_1 mul_mat f32:q8_1.soa int_tiles=mwmm"
+    "q4_K mul_mat f32:q8_1.soa int_tiles=wmmm"
+    "iq3_s mul_mat f32:q8_0.soa int_tiles=wmmm"
+    "iq4_xs mul_mat f32:q8_0.soa int_tiles=wmmm"
     "q5_1 mul_mat f32:q8_1.soa int_tiles=wmm"
     "q5_K mul_mat f32:q8_1.soa int_tiles=wmm"
-    "q6_K mul_mat f32:q8_0.soa int_tiles=wmm"
+    "q6_K mul_mat f32:q8_0.soa int_tiles=wmmm"
     "q3_K mul_mat f32:q8_0.soa int_tiles=wmm"
     "q1_0 mul_mat f32:q8_0.soa int_tiles=www"
     "q2_0 mul_mat f32:q8_0.soa int_tiles=mwm"
-    "iq2_s mul_mat f32:q8_0.soa int_tiles=www"
-    "iq1_m mul_mat f32:q8_0.soa int_tiles=www"
-    "iq2_xs mul_mat f32:q8_0.soa int_tiles=www"
+    "iq2_s mul_mat f32:q8_0.soa int_tiles=wwmww"
+    "iq1_m mul_mat f32:q8_0.soa int_tiles=wwmww"
+    "iq2_xs mul_mat f32:q8_0.soa int_tiles=wwmww"
     "iq1_s mul_mat f32:q8_0.soa int_tiles=wmm"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
