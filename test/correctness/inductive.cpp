@@ -389,6 +389,42 @@ int data_dependent_select_test() {
     return 0;
 }
 
+int let_test() {
+    // Lets in the definition, around the base-case guard and inside the
+    // recursive step. The step contains a deep chain of lets, each of which
+    // uses the previous one twice, so they must not be inlined.
+    const int depth = 40;
+    Func f(Int(32), 1, "f"), g("g");
+    Var x("x");
+    Expr chain = x;
+    for (int k = 0; k < depth; k++) {
+        std::string n = unique_name('t');
+        Expr v = Variable::make(Int(32), n);
+        chain = Let::make(n, chain, (v + v / 3) % 1000);
+    }
+    std::string xm_name = unique_name('t');
+    Expr xm = Variable::make(Int(32), xm_name);
+    f(x) = Let::make(xm_name, x - 1, select(xm >= 0, f(xm) + chain, 0));
+    g(x) = f(x);
+    f.compute_root();
+    Buffer<int> im = g.realize({50});
+    int correct = 0;
+    for (int i = 0; i < 50; i++) {
+        if (i > 0) {
+            int c = i;
+            for (int k = 0; k < depth; k++) {
+                c = (c + c / 3) % 1000;
+            }
+            correct += c;
+        }
+        if (im(i) != correct) {
+            printf("im(%d) = %d instead of %d\n", i, im(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -402,6 +438,7 @@ int main(int argc, char **argv) {
         {"reordering test", reorder_test},
         {"distinct inductive reorder test", distinct_inductive_reorder_test},
         {"data-dependent select test", data_dependent_select_test},
+        {"let test", let_test},
         {"summed area table test", summed_area_table},
         {"large baseline test", large_baseline},
         {"fibonacci test", fibonacci},

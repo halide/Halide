@@ -9,7 +9,8 @@
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Simplify.h"
-#include "Substitute.h"
+
+#include <set>
 
 namespace Halide {
 namespace Internal {
@@ -32,9 +33,60 @@ class BaseCaseSolver : public IRVisitor {
 
     Scope<Interval> bounds;
 
+    // The inductive vars, and the enclosing lets that depend on them.
     Scope<> inductive_vars;
 
+    // The enclosing lets whose values refer to the function. These are
+    // checked where they are used, once per select arm.
+    Scope<Expr> recursive_lets;
+    int arm = 0, arms = 0;
+    std::set<std::pair<string, int>> checked_lets;
+
+    // The enclosing lets, outermost first.
+    vector<std::pair<string, Expr>> lets;
+
     int nested_select = 0;
+
+    bool recurses(const Expr &e) const {
+        bool result = false;
+        visit_with(
+            e,
+            [&](auto *self, const Call *op) {
+                result |= op->name == func;
+                self->visit_base(op);
+            },
+            [&](auto *, const Variable *op) {
+                result |= recursive_lets.contains(op->name);
+            });
+        return result;
+    }
+
+    Expr in_context(const Expr &e) const {
+        return rewrap_used_lets(e, lets);
+    }
+
+    void visit_arm(const Expr &e) {
+        ScopedValue<int> old_arm(arm, ++arms);
+        e.accept(this);
+    }
+
+    void visit(const Variable *op) override {
+        if (recursive_lets.contains(op->name) && checked_lets.emplace(op->name, arm).second) {
+            recursive_lets.get(op->name).accept(this);
+        }
+    }
+
+    void visit(const Let *op) override {
+        bool recursive = recurses(op->value);
+        if (!recursive) {
+            op->value.accept(this);
+        }
+        ScopedBinding<> bind_inductive(expr_uses_vars(op->value, inductive_vars), inductive_vars, op->name);
+        ScopedBinding<Expr> bind_recursive(recursive, recursive_lets, op->name, op->value);
+        lets.emplace_back(op->name, op->value);
+        op->body.accept(this);
+        lets.pop_back();
+    }
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
@@ -45,14 +97,7 @@ class BaseCaseSolver : public IRVisitor {
             // recurrence, not a base-case guard, and both of its branches
             // may recurse (each self-reference in them is still checked).
             bool cond_is_inductive = expr_uses_vars(op->args[0], inductive_vars);
-            bool cond_recurses = false;
-            visit_with(op->args[0], [&](auto *self, const Call *inner_op) {
-                if (inner_op->name == func) {
-                    cond_recurses = true;
-                }
-                self->visit_base(inner_op);
-            });
-            if (!cond_is_inductive || cond_recurses) {
+            if (!cond_is_inductive || recurses(op->args[0])) {
                 IRVisitor::visit(op);
                 return;
             }
@@ -62,19 +107,9 @@ class BaseCaseSolver : public IRVisitor {
             // which means the condition cannot have any recursive calls.
             op->args[0].accept(this);
 
-            bool left_recurse = false, right_recurse = false;
-            visit_with(op->args[1], [&](auto *self, const Call *inner_op) {
-                if (inner_op->name == func) {
-                    left_recurse = true;
-                }
-                self->visit_base(inner_op);
-            });
-            visit_with(op->args[2], [&](auto *self, const Call *inner_op) {
-                if (inner_op->name == func) {
-                    right_recurse = true;
-                }
-                self->visit_base(inner_op);
-            });
+            bool left_recurse = recurses(op->args[1]);
+            bool right_recurse = recurses(op->args[2]);
+            Expr cond = simplify(in_context(op->args[0]));
             // Again, this check is theoretically unnecessary
             user_assert(!(left_recurse && right_recurse)) << "Select node in inductive function " << func << " does not have a base case";
 
@@ -82,22 +117,22 @@ class BaseCaseSolver : public IRVisitor {
             vector<Interval> old_intervals = condition_intervals;
             if (left_recurse) {
                 for (size_t i = 0; i < vars.size(); i++) {
-                    Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(op->args[0]), vars[i]));
+                    Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(cond, vars[i]));
                     condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
                     bounds.push(vars[i], condition_intervals[i]);
                 }
-                op->args[1].accept(this);
+                visit_arm(op->args[1]);
                 for (const auto &var : vars) {
                     bounds.pop(var);
                 }
             }
             if (right_recurse) {
                 for (size_t i = 0; i < vars.size(); i++) {
-                    Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!op->args[0]), vars[i]));
+                    Interval inter = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!cond), vars[i]));
                     condition_intervals[i] = Interval(inter.min, Interval::pos_inf());
                     bounds.push(vars[i], condition_intervals[i]);
                 }
-                op->args[2].accept(this);
+                visit_arm(op->args[2]);
                 for (const auto &var : vars) {
                     bounds.pop(var);
                 }
@@ -111,7 +146,7 @@ class BaseCaseSolver : public IRVisitor {
                 bool exact_pure_self_reference = true;
                 for (size_t position = 0; position < vars.size() && exact_pure_self_reference; position++) {
                     if (is_inductive_var[position] &&
-                        (position >= op->args.size() || !equal(op->args[position], Variable::make(op->args[position].type(), vars[position])))) {
+                        (position >= op->args.size() || !equal(simplify(in_context(op->args[position])), Variable::make(op->args[position].type(), vars[position])))) {
                         exact_pure_self_reference = false;
                     }
                 }
@@ -125,7 +160,7 @@ class BaseCaseSolver : public IRVisitor {
             user_assert(nested_select == 1) << "Function " << func << " contains an inductive function reference inside a nested select operation.\n";
             bool found_inductive = false;
             for (size_t position = 0; position < vars.size(); position++) {
-                const Expr inductive_expr = op->args[position];
+                const Expr inductive_expr = simplify(in_context(op->args[position]));
                 if (!is_inductive_var[position]) {
                     continue;
                 }
@@ -178,10 +213,9 @@ public:
 Box expand_to_include_base_case(const vector<string> &vars, const vector<bool> &is_inductive_var,
                                 const Expr &RHS, const string &func, const Box &box_required,
                                 bool is_update) {
-    Expr substed = substitute_in_all_lets(RHS);
     Box box2 = box_required;
     BaseCaseSolver b(vars, is_inductive_var, func, box_required.bounds, is_update);
-    substed.accept(&b);
+    RHS.accept(&b);
 
     Scope<Interval> non_inductive_scope;
     for (size_t i = 0; i < vars.size(); i++) {
