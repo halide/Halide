@@ -222,6 +222,7 @@ set(GGML_SCHEDULE_PARAMS
     "iq4_nl mul_mat f32:q8_0.soa code_words=true"
     "mxfp4 mul_mat f32:q8_0.soa code_words=true"
     "iq4_xs mul_mat f32:q8_0.soa code_words=true"
+    "nvfp4 mul_mat f32:q8_0.soa code_words=true"
     "iq3_s mul_mat q8_K gemm_index_words=true"
     "iq3_s mul_mat f32 gemm_index_words=true"
     "iq3_s mul_mat f32:q8_K gemm_index_words=true"
@@ -356,8 +357,9 @@ endif ()
 # scale of it (a K-quant's: its sub-block's times its super-block's). Weights
 # with an offset or min per block (q4_1, q5_1, q4_K, q5_K) take f32:q8_1.soa
 # acts: q8_1's block sums are a third array, which the offsets multiply. Not
-# q2_K (mins per 16 values: q8_1's sums are per 32) or nvfp4 (float
-# sub-block scales). code_words=true (GGML_SCHEDULE_PARAMS): its weight
+# q2_K (mins per 16 values: q8_1's sums are per 32). nvfp4's float scales
+# per 16-value sub-block scale its sub-blocks' tiles as q6_K's integer ones
+# do. code_words=true (GGML_SCHEDULE_PARAMS): its weight
 # codes decoded 4 a word in a GPR (the formats decoded by shifts and masks
 # of bytes). Each f16-, bf16- or .soa-act
 # bench library's test checks that its PTX multiplies on the tensor cores
@@ -377,7 +379,7 @@ set(GGML_HALIDE_CUDA_FORMATS
     "iq4_xs mul_mat f32,q8_K,f32:q8_1"
     "q2_K mul_mat f32,q8_K,f32:q8_1"
     "q3_K mul_mat f32,q8_K,f32:q8_1"
-    "nvfp4 mul_mat f32"
+    "nvfp4 mul_mat f32,q8_0,f32:q8_1"
     "q1_0 mul_mat f32,q8_0,f32:q8_1"
     "iq2_xxs mul_mat f32,q8_K,f32:q8_1"
     "iq2_xs mul_mat f32,q8_K,f32:q8_1"
@@ -392,6 +394,7 @@ set(GGML_HALIDE_CUDA_FORMATS
     "iq4_nl mul_mat f32:q8_0.soa"
     "mxfp4 mul_mat f32:q8_0.soa"
     "iq4_xs mul_mat f32:q8_0.soa"
+    "nvfp4 mul_mat f32:q8_0.soa"
     "q6_K mul_mat f32:q8_0.soa"
     "q3_K mul_mat f32:q8_0.soa"
     "q1_0 mul_mat f32:q8_0.soa"

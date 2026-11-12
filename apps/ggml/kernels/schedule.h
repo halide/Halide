@@ -2049,6 +2049,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     struct Seg {
         RVar r;
         Kind kind;
+        int lo;  // (its lowest bit)
     };
     std::vector<Seg> segs;
     RVar rest_x = rx;
@@ -2062,15 +2063,19 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         if (e < bits) {
             RVar in(name), o("rx" + std::to_string(segs.size()) + "o");
             s.split(rest_x, o, in, 1 << (e - b));
-            segs.push_back({in, kind[b]});
+            segs.push_back({in, kind[b], b});
             rest_x = o;
         } else {
-            segs.push_back({rest_x, kind[b]});
+            segs.push_back({rest_x, kind[b], b});
         }
         b = e;
     }
     std::vector<std::pair<RVar, Var>> lane_vars, acc_vars, sub_vars;
     std::vector<RVar> lane_rs, inner_rs, sub_rs;
+    // (integer, float sub-block scales: nvfp4's, whose nibbles share bytes
+    // within a sub-block; its scale hoists out of the int32 dot where its
+    // bits are the lane's, so a shared bit below them is of the dot)
+    const bool fsub = integer && float_sub_scales(rs);
     // (runs first: innermost)
     std::stable_partition(segs.begin(), segs.end(), [](const Seg &g) { return g.kind == Run; });
     for (const Seg &g : segs) {
@@ -2078,7 +2083,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
             lane_vars.emplace_back(g.r, Var("uh" + std::to_string(lane_vars.size())));
             acc_vars.emplace_back(g.r, Var("ua" + std::to_string(acc_vars.size())));
             lane_rs.push_back(g.r);
-        } else if (sub && g.kind == Shared) {
+        } else if (sub && g.kind == Shared && (!fsub || (1 << g.lo) >= sub)) {
             sub_vars.emplace_back(g.r, Var("v" + std::to_string(sub_vars.size())));
             sub_rs.push_back(g.r);
         } else {
@@ -2816,8 +2821,8 @@ inline void round_extent(Func f, const RVar &rv, int l, Func out) {
 // (q4_1, q4_K: an offset or min per block) code-free terms are its offset
 // times the act's block sum, read from the act's derived port (q8_1.soa's
 // sum): two more factors, no multiply. A weight's sub-blocks of 16 values
-// (q6_K, q3_K: `halves`) scale each fragment's tile apart, the act's scale
-// their sum.
+// (q6_K, q3_K, nvfp4's float scales: `halves`) scale each fragment's tile
+// apart, the act's scale their sum.
 // Per step of K (the shape's kstep values, or the largest of its halves K is
 // a multiple of) the operands are staged in shared memory: the weight's codes
 // decoded 4 bytes of a block's run per lane (`code_words`: words of 4 codes,
