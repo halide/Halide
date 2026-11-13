@@ -325,8 +325,10 @@ set(GGML_SCHEDULE_PARAMS
     # wmma's at every M (iq2_xs at M = 128 / 512 0.177 -> 0.123 / 0.726 ->
     # 0.362) but from M = 64 to 127, where mma.sync's 2 x 2 warps of 32 x 32
     # are (iq2_s at M = 64 0.076 -> 0.061, iq2_xs 0.065 -> 0.055, iq1_m
-    # 0.079 -> 0.062; at 128, 0.10 either way); iq1_s below M = 64 (M = 32
-    # 0.050 -> 0.044). q2_K: mma.sync's below M = 32 and from 64, wmma's
+    # 0.079 -> 0.062; at 128, 0.10 either way), and iq2_xs from 17 to 32
+    # (M = 20 / 24 0.0383 / 0.0388 -> 0.0333 / 0.0340; iq2_s 0.0409 /
+    # 0.0414 -> 0.0481 / 0.0487); iq1_s below M = 64 (M = 32 0.050 ->
+    # 0.044). q2_K: mma.sync's below M = 32 and from 64, wmma's
     # from 32 to 63 (M = 16 / 32: wmma's 0.0339 / 0.0472 ms, mma.sync's
     # 0.0326 / 0.0473, these 0.0326 / 0.0452). q1_0: wmma's to 32 and from
     # 256 (M = 40 / 96 / 128: wmma's 0.044 / 0.066 / 0.070, mma.sync's
@@ -349,7 +351,7 @@ set(GGML_SCHEDULE_PARAMS
     "q1_0 mul_mat f32:q8_0.soa int_tiles=wwmmw"
     "iq2_s mul_mat f32:q8_0.soa int_tiles=wwmww"
     "iq1_m mul_mat f32:q8_0.soa int_tiles=wwmww"
-    "iq2_xs mul_mat f32:q8_0.soa int_tiles=wwmww"
+    "iq2_xs mul_mat f32:q8_0.soa int_tiles=wmmww"
     "iq1_s mul_mat f32:q8_0.soa int_tiles=wmm"
     "q2_K mul_mat f32:q8_0.soa int_m24=true"
     "q4_1 mul_mat f32:q8_1.soa int_m24=true"
