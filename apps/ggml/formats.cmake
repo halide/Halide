@@ -331,6 +331,11 @@ set(GGML_SCHEDULE_PARAMS
     # 0.035 / 0.051 / 0.062; at 12 / 16 / 32 wmma's 3% faster), q2_0
     # mma.sync's (M = 96 / 128 0.078 / 0.109 -> 0.059 / 0.069). iq1_s: the K
     # split's 64 x 48 (int_narrow48=false; M = 40 0.047, 32 x 48 0.049).
+    # int_m24=true (mma.sync's 32 x 24 to M = 24 where 17 to 32 take
+    # wmma's): q2_K at 24 0.0428 -> 0.0344 ms, q4_1 0.0357 -> 0.0323, q1_0
+    # 0.0249 -> 0.0226 (mma.sync's to 32: at 32 q2_K 0.0434 -> 0.0456, q4_1
+    # 0.0365 -> 0.0389; iq2_s and iq2_xs at 24 0.0416 / 0.0384 -> 0.0492 /
+    # 0.0405).
     "q4_1 mul_mat f32:q8_1.soa int_tiles=mwmm"
     "q4_K mul_mat f32:q8_1.soa int_tiles=wmmm"
     "iq3_s mul_mat f32:q8_0.soa int_tiles=wmmm"
@@ -346,6 +351,9 @@ set(GGML_SCHEDULE_PARAMS
     "iq2_xs mul_mat f32:q8_0.soa int_tiles=wwmww"
     "iq1_s mul_mat f32:q8_0.soa int_tiles=wmm"
     "iq1_s mul_mat f32:q8_0.soa int_narrow48=false"
+    "q2_K mul_mat f32:q8_0.soa int_m24=true"
+    "q4_1 mul_mat f32:q8_1.soa int_m24=true"
+    "q1_0 mul_mat f32:q8_0.soa int_m24=true"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the
