@@ -286,7 +286,9 @@ const MatrixUnit cuda_matrix_unit{
     // (sm_86) does, and correctness_wmma_elementwise checks it on whatever
     // device it runs on, by scaling the int32 accumulators of multiplies by
     // float32 matrices that differ in every row and column. mma.sync's are
-    // specified.
+    // specified. A half accumulator keeps each element in the lane a float32
+    // one does, two to a register, which correctness_wmma_half_accumulator
+    // checks likewise.
     true,
 };
 
@@ -541,11 +543,18 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
     // A product of 8-bit integers may have been computed in 16 bits and then
     // widened to the accumulator's type, which is the same product so long as
     // 16 bits hold it.
-    Type narrow_product;
+    // A product of floats may have been computed in a wider float and rounded
+    // to the accumulator's type, which is the product in that type so long as
+    // the wider one holds it exactly.
+    Type narrow_product, wide_product;
     if (const Cast *c = reduce_value.as<Cast>();
         c && c->value.as<Mul>() && c->value.type().is_int_or_uint() &&
         c->type.is_int() && c->type.bits() > c->value.type().bits()) {
         narrow_product = c->value.type().element_of();
+        reduce_value = c->value;
+    } else if (c && c->value.as<Mul>() && c->value.type().is_float() && c->type.is_float() &&
+               c->type.bits() < c->value.type().bits()) {
+        wide_product = c->value.type().element_of();
         reduce_value = c->value;
     }
     const auto *mul = reduce_value.as<Mul>();
@@ -579,6 +588,11 @@ MatmulInfo analyze_matmul(const MatrixUnit &unit, const Store *op) {
         !(operand_type == Int(8) && narrow_product == Int(16)) &&
         !(operand_type == UInt(8) && (narrow_product == UInt(16) || narrow_product.bits() > 16))) {
         return fail("the product is computed in a type that may not hold it");
+    }
+    // (a half's 11 significant bits squared: 22, which float32's 24 hold)
+    if (wide_product.bits() && !(operand_type == Float(16) && wide_product == Float(32) &&
+                                 info.accumulator_type == Float(16))) {
+        return fail("the product is rounded from a type that may not hold it exactly");
     }
     if (!unit.types_supported(operand_type, info.accumulator_type)) {
         user_error << "Matrix multiply not recognized. There is no " << unit.name
@@ -982,7 +996,7 @@ class ExtractWMMAOperations : public IRMutator {
         Expr fail(const std::string &reason) {
             user_error << "Elementwise update of a tensor core accumulator not "
                        << "supported. Its value must be a function of the "
-                       << "corresponding elements of 32-bit accumulators and of "
+                       << "corresponding elements of 32-bit or float16 accumulators and of "
                        << "matrices in memory, but in the following store, "
                        << reason << ".\n"
                        << Stmt(store);
@@ -1003,13 +1017,16 @@ class ExtractWMMAOperations : public IRMutator {
             if (!is_const_one(load->predicate)) {
                 return fail("a load is predicated");
             }
-            // The 32-bit types a fragment can hold, which leaves out uint32.
-            if (load->type.bits() != 32 ||
+            // The 32-bit types a fragment can hold, which leaves out uint32,
+            // and a half precision accumulator, whose lanes hold the elements
+            // a float32 accumulator's do, two to a register.
+            Fragment *src = pass->find_fragment(load->name);
+            if (!(load->type.bits() == 32 || (src && load->type.element_of() == Float(16))) ||
                 !dst->unit->fragment_type_supported(load->type.element_of())) {
-                return fail("an operand is not float32 or int32");
+                return fail("an operand is not float32 or int32, or a float16 accumulator");
             }
             const Shape &shape = dst->shape;
-            if (Fragment *src = pass->find_fragment(load->name)) {
+            if (src) {
                 if (!e.as<Load>()) {
                     return fail("an accumulator is not read a whole tile at a time");
                 }
