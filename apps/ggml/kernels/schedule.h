@@ -2520,21 +2520,23 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 // CUDA's shapes, of wmma's 16 x 16 fragments, by M. Weights staged by the
 // copy engine (`copied`; f16 x f16 at 4096 x 4096), each warp one fragment of
 // N: 4 warps of 16 x 64 from M = 128 (M = 128 0.097 ms, 512 0.31; 8 warps
-// of 16 x 32 0.097, 0.34; 4 of 32 x 64 0.13, 0.34), of 16 x 32 from 64 on
-// 128-value steps (0.060; 64-value 0.073), below 2 warps of 16 x 16 (M = 16
-// 0.045 on 256-value steps, 0.052 on 128; M = 32 0.048 on 128). A block's
-// time is its steps' (a step's loads take ~1-2 us to arrive, whatever their
-// size), so few rows of M take long steps; its shared memory (48 KB) bounds
-// them. Below 16 rows one 16-row tile, guarded (M = 2..15 0.046-0.047 ms; the
-// rows 0.048 at M = 2, 0.065 at 4, 0.111 at 8); from 17 to 31 one of 32 rows
-// (0.057; two of 16, the second shifted, 0.065). Flat weights converted in
-// the kernel (f32:f16), their blocks in M innermost (Staging::mfirst): one
-// warp per block of 16 x 16 to 16 x 64 rows of M, a tile of 16 x 48 from 49
-// to 63 and from 65 to 96 (M = 80 0.165 -> 0.104 ms, 96 0.169 -> 0.124), 2
-// warps of 16 x 64 in M from 128 (0.164 -> 0.150), 2 of 16 x 128 in N from
-// 256; to M = 16 on 256-value steps, to 48 on 128 (M = 40 0.140 -> 0.091
-// ms); below 16 rows one warp's guarded tile (M = 8 / 12 0.101 -> 0.090; 2
-// warps of 16 x 16 before).
+// of 16 x 32 0.097, 0.34; 4 of 32 x 64 0.13, 0.34), but from 193 to 256 2 x
+// 2 warps of 32 x 64 (M = 224 / 256 0.182 -> 0.155; at 160 0.144 -> 0.154,
+// from 320 1.1-1.3x slower), of 16 x 32 from 64 on 128-value steps (0.060;
+// 64-value 0.073), below 2 warps of 16 x 16 (M = 16 0.045 on 256-value
+// steps, 0.052 on 128; M = 32 0.048 on 128), from 17 to 31 two of them, the
+// second shifted (M = 20 / 28 0.058 -> 0.049; one guarded tile of 32 rows
+// 0.058). A block's time is its steps' (a step's loads take ~1-2 us to
+// arrive, whatever their size), so few rows of M take long steps; its
+// shared memory (48 KB) bounds them. Below 16 rows one 16-row tile, guarded
+// (M = 2..15 0.046-0.047 ms; the rows 0.048 at M = 2, 0.065 at 4, 0.111 at
+// 8). Flat weights converted in the kernel (f32:f16), their blocks in M
+// innermost (Staging::mfirst): one warp per block of 16 x 16 to 16 x 64
+// rows of M, a tile of 16 x 48 from 49 to 63 and from 65 to 96 (M = 80 0.165
+// -> 0.104 ms, 96 0.169 -> 0.124), 2 warps of 16 x 64 in M from 128 (0.164
+// -> 0.150), 2 of 16 x 128 in N from 256; to M = 16 on 256-value steps, to
+// 48 on 128 (M = 40 0.140 -> 0.091 ms); below 16 rows one warp's guarded
+// tile (M = 8 / 12 0.101 -> 0.090; 2 warps of 16 x 16 before).
 // Blocked weights (`block` > 1), decoded in the kernel: 64 x 128
 // of 2 x 2 warps from M = 256, each weight decoded once per 128 act rows; 128
 // x 64 of 4 x 1 above 128; 32 x 64 of 2 x 2 from 64; 16 x 32 of 1 x 2 from
@@ -2554,8 +2556,8 @@ inline std::vector<GemmShape> cuda_shapes(Func out, bool copied, int block, bool
         return sh;
     };
     if (copied) {
-        return {shape(M >= 128 && N >= 64, 1, 4, 4), shape(M >= 64 && N >= 64, 1, 2, 4, false, 128), shape(M >= 32, 1, 1, 2, false, 128),
-                shape(M > 16, 1, 2, 2, true, 128), shape(M >= 16, 1, 1, 2, false, 256), shape(Expr(), 1, 1, 2, true, 256)};
+        return {shape(M > 192 && M <= 256 && N >= 64, 2, 4, 2, false, 64, 2), shape(M >= 128 && N >= 64, 1, 4, 4), shape(M >= 64 && N >= 64, 1, 2, 4, false, 128),
+                shape(M > 16, 1, 1, 2, false, 128), shape(M >= 16, 1, 1, 2, false, 256), shape(Expr(), 1, 1, 2, true, 256)};
     }
     if (block > 1) {
         std::vector<GemmShape> shapes{shape(M >= 256 && N >= 64, 2, 4, 2, false, 64, 2), shape(M > 128 && N >= 128, 2, 4, 4)};
@@ -2587,6 +2589,14 @@ struct Staged {
     RVar ks, ko;
 };
 
+// A K split's partial sums (gpu_gemm()) to gpu_staged(): their index z (an
+// outer block dimension) and the steps of K already split from r.y (ks:
+// the steps, rxk: a step's `step` values).
+struct SplitSteps {
+    Var z;
+    int step;
+};
+
 // A GPU gemm on f16 or f32 operands (wh, xh), as GGML's Metal kernel_mul_mm,
 // for `o` (out's specialization): the macro-kernel. A block (Metal: a
 // threadgroup) takes a bn x bm tile, its warps wn x wm sub-tiles of frag * tn
@@ -2598,8 +2608,9 @@ struct Staged {
 // Tile memory doesn't lower), its stores guarded; the rows past M it computes
 // read the last act row (the algorithm clamps them).
 inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                         const std::vector<GemmShape> &shapes, int frag, const Staging &sg = Staging()) {
+                         const std::vector<GemmShape> &shapes, int frag, const Staging &sg = Staging(), const SplitSteps *split = nullptr) {
     if (fmt.block % frag && fmt.block != 1) throw std::invalid_argument("gpu_staged: flat, or blocks of a multiple of frag values");
+    if (split && (fmt.block != 1 || std::any_of(shapes.begin(), shapes.end(), [](const GemmShape &sh) { return sh.guard; }))) throw std::invalid_argument("gpu_staged: a K split of flat weights on unguarded tiles");
     // (names apart from the other specializations' loops, which compute
     // other Funcs at theirs)
     Var n = out.args()[0], m = out.args()[1], ni("mm_ni"), mi("mm_mi"), nw("mm_nw"), mw("mm_mw"), nt("mm_nt"), mt("mm_mt");
@@ -2657,7 +2668,9 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             so.eager_inline(edge);
             so.tile(n, m, ni, mi, bn, bm, TailStrategy::ShiftInwards).tile(ni, mi, nw, mw, ni, mi, frag * sh.tn, frag * sh.tm).tile(ni, mi, nt, mt, frag, frag);
             if (mfirst) so.reorder(m, n);
-            so.gpu_blocks(mfirst ? m : n, mfirst ? n : m);
+            if (split) so.gpu_blocks(mfirst ? m : n, mfirst ? n : m, split->z);
+            else
+                so.gpu_blocks(mfirst ? m : n, mfirst ? n : m);
             so.gpu_threads(nw, mw).unroll(ni).unroll(mi).vectorize(nt).vectorize(mt);
         }
         tile(sd.specialize(sh.cond));
@@ -2678,10 +2691,17 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             }
             st.unroll(ko).atomic().vectorize(kt);
         };
-        for (int st = kstep; st > std::max(fmt.block, 32); st /= 2) {
-            steps(u, st, nb % (st / fmt.block) == 0);
+        if (split) {
+            // (ks and rxk already split from ry: one step)
+            rows.emplace_back(sh.cond.defined() ? sh.cond : Internal::const_true(), split->step);
+            tile(u);
+            u.split(rxk, ko, kt, frag).reorder(kt, nt, mt, ni, mi, ko, rx, nw, mw, ks).unroll(ko).atomic().vectorize(kt);
+        } else {
+            for (int st = kstep; st > std::max(fmt.block, 32); st /= 2) {
+                steps(u, st, nb % (st / fmt.block) == 0);
+            }
+            steps(u, fmt.block == 1 ? 32 : std::min(fmt.block, kstep));  // (gpu_gemm: flat K % 32 == 0)
         }
-        steps(u, fmt.block == 1 ? 32 : std::min(fmt.block, kstep));  // (gpu_gemm: flat K % 32 == 0)
         // each lane sg.vec values of K of a row of the step's weights or acts
         // (blocked (j, b, i) or flat (k, i)), unrolled (f32 acts on 64 x 56
         // 0.92 -> 1.0x of GGML's); two-level weights on the M >= 256 tiles
@@ -2759,6 +2779,29 @@ inline void fragments(const Staged &st, Func dot, int frag) {
     }
 }
 
+inline void round_extent(Func f, const RVar &rv, int l, Func out);
+
+// A split of K in kz (gpu_gemm()) where cond holds, on one shape.
+struct GemmSplit {
+    int kz;
+    Expr cond;
+    GemmShape shape;
+};
+
+// CUDA's K splits of the gemm on copied operands (cuda_shapes()): in 2 at
+// M = 128, 64 x 128 blocks of 2 x 2 warps of 32 x 64 (f16 x f16 at 4096 x
+// 4096 x 128: 0.097 -> 0.086 ms, bf16 x bf16 0.098 -> 0.084; 64 x 64 blocks
+// in 2 0.099, in 4 0.094; 128 x 128 in 2 0.113; from 129 two such tiles in
+// M, the second shifted, or 64 x 64 in 2, are slower than unsplit tiles:
+// 0.143 -> 0.166 at 160). (RTX 3090)
+inline std::vector<GemmSplit> cuda_splits(Func out, bool copied) {
+    Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
+    if (!copied) return {};
+    GemmShape sh{Expr(), 2, 4, 2, false, 2};
+    sh.kstep = 64;
+    return {{2, M == 128 && N >= 64, sh}};
+}
+
 // GPU on f16 or f32 operands: gpu_staged() on `shapes` of frag x frag
 // fragments() where M >= min_m and N >= 32 (flat:
 // K % 32 == 0 and `large`, else M * N >= 2^16: below it flat's rows win on
@@ -2770,19 +2813,54 @@ inline void fragments(const Staged &st, Func dot, int frag) {
 // tiles at multiples of frag or shifted in from N: CUDA's wmma.store wants
 // each fragment's rows 32 bytes aligned (an RTX 3090 faults on rows not 8
 // bytes aligned: CUDA_ERROR_MISALIGNED_ADDRESS), i.e. N % 8 == 0. `sg`: the
-// rows' warps per block (metal_rows(), metal_flat()); `staging`: gpu_staged()'s;
-// `flat_c`: metal_flat()'s c.
+// rows' warps per block (metal_rows(), metal_flat()); `staging`: gpu_staged()'s.
+// `splits` (flat weights, where K is whole kz steps of the split's shape):
+// K split in kz, each part every kz-th step of K (dot's rfactor, part: a
+// kernel over n, m and the parts, its tiles shifted in, as gpu_staged()'s),
+// then out their sums; `flat_c`: metal_flat()'s c.
 inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
                      const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}, int n_align = 1, int sg = 2, const Staging &staging = Staging(),
-                     Expr large = Expr(), int flat_c = 16) {
+                     Expr large = Expr(), const std::vector<GemmSplit> &splits = {}, int flat_c = 16) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    // out reads dot through a wrapper (via): the gemm's branch inlines it at
-    // once, reading edge (dot's copy, inlined unless guarded); then via reads
-    // pass, reading the clone, and the other branches inline both
-    Func via = dot.in(out), edge = dot.in(via);
     Expr cond = M >= min_m && N >= 32;
     if (fmt.block == 1) cond = cond && r.y.extent() % 32 == 0 && (large.defined() ? large : cast<int64_t>(M) * N >= (1 << 16));
     if (n_align > 1) cond = cond && N % n_align == 0;
+    // out reads dot through a wrapper (via): the gemm's branch inlines it at
+    // once, reading edge (dot's copy, inlined unless guarded); then via reads
+    // pass, reading the clone, and the other branches inline both
+    Func via = dot.in(out);
+    for (size_t i = 0; i < splits.size(); i++) {
+        const GemmSplit &sp = splits[i];
+        const int step = sp.shape.kstep;
+        Var n = out.args()[0], m = out.args()[1], z("gz_z" + std::to_string(i)), no("gz_no"), nj("gz_nj");
+        RVar kso("kso"), ks("ks"), rxk("rxk"), kzr("kzr");
+        Stage sk = Stage(out).specialize(cond && sp.cond && r.y.extent() % (sp.kz * step) == 0).eager_inline(via);
+        Func all = dot.clone_in(via);
+        round_extent(dot, r.y, sp.kz * step, out);
+        Stage su = dot.update();
+        su.split(r.y, kso, rxk, step).split(kso, ks, kzr, sp.kz);
+        Func part = su.rfactor(kzr, z);
+        Func pg = part.in(dot), pe = part.in(pg);
+        pg.compute_at(out, Var::outermost());
+        SplitSteps ss{z, step};
+        GemmShape sh = sp.shape;
+        sh.cond = Expr();
+        Staged st = gpu_staged(Stage(pg), pg, part, pe, wh, xh, r, fmt, rs, {sh}, frag, staging, &ss);
+        fragments(st, part, frag);
+        // (a step's values of K: dot's K is whole kz steps, which the
+        // bounds of the steps, clamped to it, don't show)
+        for (Func f : {st.ws, st.xs}) {
+            f.bound_extent(f.args()[0], step);
+        }
+        for (Func f : {st.wf, st.xf}) {
+            f.bound_extent(f.args()[0], frag);
+        }
+        sk.split(n, no, nj, 128, TailStrategy::GuardWithIf).gpu_blocks(no, m).gpu_threads(nj);
+        dot.compute_at(out, nj);
+        su.unroll(kzr);
+        dot = all;
+    }
+    Func edge = dot.in(via);
     Stage mm = Stage(out).specialize(cond).eager_inline(via);
     Func pass = edge.clone_in(via);
     Func rows = dot.clone_in(pass);
@@ -3951,7 +4029,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             // 8 0.058, 0.046; 2048 x 512 x 16 0.017, 0.024). (RTX 3090)
             Expr M = out.output_buffer().dim(1).extent(), MN = cast<int64_t>(M) * out.output_buffer().dim(0).extent();
             Expr large = cs.wcopy ? MN >= (1 << 13) : (M >= 16 && MN >= (1 << 13)) || (M >= 8 && MN >= (1 << 15));
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp), 16, staged, 8, sg, cs, large, flat_c);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp), 16, staged, 8, sg, cs, large, cuda_splits(out, cs.wcopy), flat_c);
             return;
         }
         if (metal && (f16_operands(rs, staged, fmt, wh, xh) || f32_operands(dots[0], x, rs, staged, fmt, wh, xh))) {
