@@ -221,6 +221,7 @@ struct Knobs {
     Fold fold = Fold::All;
     bool row_pairs = true, index_words = false, plain_index_words = true, cuda_one_warp = false, code_words = false;
     std::string int_tiles = "mmm";
+    int act_lanes = 8;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -3742,16 +3743,48 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             return;
         }
         // CUDA: acts quantized here (f32:q8_1, as GGML's mmvq quantizes its
-        // f32 acts) by a kernel of their own, a thread per record,
+        // f32 acts) by a kernel of their own, a thread per record (with
+        // act_lanes, the codes and scales a lane per value first, below),
         // its block's reductions (the scale's maximum) once per record
         // (inlined, each is a loop inside the next's and the codes'), the
         // order-independent ones as vector reductions: trees, not chains of
         // the block's length
         for (Func e : staged) {
             Var b = e.args()[0], rec = e.args().back(), bo("bo");
-            e.compute_root().split(b, bo, b, 32, TailStrategy::GuardWithIf).gpu_blocks(bo, rec).gpu_threads(b);
-            for (Func f : encoder_funcs(e, rs)) {
-                if (f.name() == e.name() || !f.has_update_definition() || f.dimensions() > e.dimensions()) continue;
+            const int R = k.act_lanes;
+            e.compute_root().split(b, bo, b, R ? R : 32, TailStrategy::GuardWithIf).gpu_blocks(bo, rec).gpu_threads(b);
+            std::vector<Func> fs = encoder_funcs(e, rs);
+            std::set<std::string> laned;
+            for (Func p : R ? fs : std::vector<Func>{}) {
+                // (R: blocks of R records, a lane a value: the per-value
+                // Funcs that read a per-record one (the codes, by the
+                // scale) and that one, each a stage of the block in shared
+                // memory, the per-record one's reductions (its maximum)
+                // across the lanes, in registers; a thread a record packs
+                // them. At 4096 x 4096 x 1 to 8 the act kernel 3.6 -> 2.3
+                // us, GGML's 2.1; RTX 3090)
+                if (p.name() == e.name() || p.dimensions() != e.dimensions() + 1 || p.has_update_definition()) continue;
+                std::vector<Func> per;
+                for (const auto &[name, fn] : Internal::find_direct_calls(p.function())) {
+                    Func g(fn);
+                    if (has(fs, name) && g.dimensions() == e.dimensions() && !g.has_update_definition()) per.push_back(g);
+                }
+                if (per.empty()) continue;
+                std::vector<Var> pa = p.args();
+                p.compute_at(e, bo).store_in(MemoryType::GPUShared).gpu_lanes(pa[0]).gpu_threads(pa[1]);
+                for (Func g : per) {
+                    g.compute_at(e, bo).store_in(MemoryType::GPUShared).gpu_threads(g.args()[0]);
+                    for (const auto &[name, fn] : Internal::find_direct_calls(g.function())) {
+                        Func red(fn);
+                        if (!has(fs, name) || !red.has_update_definition() || !red.update().is_order_independent()) continue;
+                        red.compute_at(g, g.args()[0]);
+                        red.update().atomic(true).gpu_lanes(red.rvars()[0]);
+                        laned.insert(name);
+                    }
+                }
+            }
+            for (Func f : fs) {
+                if (f.name() == e.name() || !f.has_update_definition() || f.dimensions() > e.dimensions() || laned.count(f.name())) continue;
                 f.compute_at(e, b);
                 if (f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);
             }

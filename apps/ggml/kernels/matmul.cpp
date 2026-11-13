@@ -58,6 +58,9 @@ public:
     // of 4 letters, below 32, below 64, below 256, from 256; of 5, below 32,
     // 64, 128, 256, from 256
     GeneratorParam<std::string> int_tiles{"int_tiles", "mmm"};
+    // CUDA's dp4a rows' act kernel: blocks of act_lanes records, a lane a
+    // value (0: a thread a record, blocks of 32)
+    GeneratorParam<int> act_lanes{"act_lanes", 8};
 
     void configure() {
         // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
@@ -246,7 +249,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, act_lanes};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {
