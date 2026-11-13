@@ -3716,6 +3716,125 @@ the quantized types; this one the float weights.
 
 - Where the rest is:
 
+
+## Phase 23: f16 accumulators for f16 weights (RTX 3090)
+
+Same machine and conventions (4096^2, `--rounds 7`, GGML and Halide back to back
+in one invocation; GGML / Halide). GGML's CUDA backend runs f16 weights on
+cuBLAS's f16 gemm (`CUBLAS_COMPUTE_16F`, f16 accumulators) from M = 24 on f32
+acts and at every M on f16 acts; ours accumulated in f32, at half the tensor
+cores' rate. `f16.acc16` (the CPU's acc16 format: an `Accumulate` at f16, a
+separate library, declared lossy, never the default) now has CUDA rows, on f16
+and `f32:f16` acts, and `halide-by-m-f16.acc16_f32_cuda` picks it by M beside
+`halide-by-m-f16_f32_cuda`, which keeps f32 accumulators.
+
+- What the tensor cores do with an f16 accumulator (a CUDA probe of wmma's
+  m16n16k16 f16 x f16 -> f16, chosen products into C = 1 or 0): one rounding to
+  nearest (ties to even) per 8 values of K: two products of 3/8 ulp at k = 0 and
+  1 to 7 give 1 + 1 ulp, at k = 0 and 8 to 15 (one mma) or 16 (the next) 1; the
+  8 products are summed first without loss to 2^-24 of the largest (1 + 2^-24 -
+  1 = 2^-24 exactly). So each output of the library's gemm is one f16 chain of K
+  (of K / kz per part where K is split in kz), K / 8 roundings of at most half
+  an ulp each, then widened to f32 (a split's parts summed in f32). Its
+  `Precision`: `acc_bits` 11, `chain` K, and a new field, `acc_block` 8 (terms
+  summed in the accumulator's precision or better per rounding:
+  `gamma_{chain/acc_block+4}`); declared for the whole library (its rows, below
+  the gemm's M or N, accumulate in f32: within it). A partial sum past 65504
+  overflows to inf (GGML's cuBLAS f16 gemm alike): safe while every 8-value
+  prefix sum of an output stays below it (sum_k |w a| < 65504 suffices).
+
+- The bound: `tol_scale` (the tolerance over an output's random-sign scale) is
+  0.63 at K = 256 (checked), 1.6 at 512 and 43 at 4096 (`unchecked`; cuBLAS's
+  model, one f16 chain of K without blocks, is unbounded from K = 2044). A
+  finite bound at K = 4096 needs chains of about 256 values in f16, i.e. f32
+  every 256 values: a split of K in 16, or the f16 fragments widened into f32
+  ones per step, which wmma's opaque accumulators do not allow (only elementwise
+  between whole tiles, below).
+
+- Core (one commit below the app's, `correctness_wmma_half_accumulator`):
+  ExtractWMMAOperations recognizes a product of halves computed in float32 and
+  rounded to a half accumulator (change_type's f16 reduction of
+  `f32(w) * f32(x)`; f32 holds the product exactly) as wmma's f16 x f16 -> f16,
+  and lets an elementwise update of a float32 accumulator read a half
+  accumulator (a lane holds the same elements of both, two to a register;
+  checked on the device for the three wmma shapes). The mma.sync path lowers
+  8-bit integers only; the float gemm is wmma's.
+
+- The library (`gpu_gemm`'s `acc`): the gemm's dot approximated by the
+  `Accumulate`, its accumulators widened in Tile memory to f32 fragments that
+  out stores as before (first tried: an f16 copy of the tile in shared memory,
+  widened as out stores it: 16 KB more a 64 x 128 block, M = 512 0.265 ms on the
+  f32 library's tiles). Tiles (N >= 128; `cuda_shapes`/`cuda_splits`' `narrow`),
+  from sweeps of 46 shapes and splits (ms, f16 x f16; the f32 library's tiles
+  with f16 accumulators -> the chosen):
+
+  | M        | tiles                                 | ms                  |
+  | -------- | ------------------------------------- | ------------------- |
+  | 33-64    | 128 x 64, 4 x 2 warps of 32 x 32, K/4 | 48: 0.063 -> 0.054  |
+  | 65-128   | 128 x 64, K / 2                       | 96: 0.078 -> 0.067  |
+  | 129-176  | 128 x 80, 4 warps of 32 x 80, K / 2   | 160: 0.095 -> 0.081 |
+  | 177-192  | 128 x 64, K / 2                       | 192: 0.110 -> 0.097 |
+  | 193-351  | 128 x 64 unsplit                      | 256: 0.127 -> 0.108 |
+  | 352-479  | 128 x 96, 4 warps of 32 x 96          | 384: 0.192 -> 0.144 |
+  | from 480 | 128 x 128, 2 x 2 warps of 64 x 64     | 512: 0.265 -> 0.189 |
+
+  Below M = 33 the f32 library's (two 16 x 16 warps; shifted pairs from 17).
+  Slower: 32-value steps below M = 256 (64 x 128 at 64 0.141 against 0.096), 128
+  x 128 of 8 warps of 32 x 64 at 512 0.208, at 256 0.152 (64 blocks: fewer than
+  the 82 SMs); a K split at 24 (0.050), at 256 (0.125-0.148), in 8 at 48
+  (0.064).
+
+- `halide-by-m-f16.acc16_f32_cuda`: the exact rows below M = 3, the f32 library
+  (`f16_f32_to_f16`) to 16 (GGML's `mul_mat_f`, f32 accumulators), `f16.acc16`
+  on `f32:f16` from 17 (GGML's cuBLAS).
+
+- The map, before -> after (before: `f16` on f16 acts and
+  `halide-by-m-f16_f32_cuda`; after: `f16.acc16` on f16 acts and
+  `halide-by-m-f16.acc16_f32_cuda`; GGML's f16 time):
+
+  | w x act   | 1    | 2    | 4    | 8    | 12   | 16   | 24   | 32   | 48   | 64   | 96   | 128  | 256  | 512  |
+  | --------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+  | f16 x f16 | 1.13 | 1.07 | 1.08 | 0.97 | 0.99 | 1.05 | 0.91 | 1.02 | 0.74 | 0.86 | 0.73 | 0.90 | 0.53 | 0.60 |
+  | after     | 1.13 | 1.10 | 1.11 | 1.00 | 1.01 | 1.06 | 0.95 | 1.07 | 0.90 | 0.94 | 0.93 | 1.15 | 0.82 | 0.96 |
+  | f16 x f32 | 1.00 | 0.98 | 0.90 | 0.89 | 0.93 | 0.96 | 0.98 | 1.06 | 0.74 | 0.88 | 0.75 | 0.90 | 0.56 | 0.63 |
+  | after     | 1.00 | 0.99 | 0.89 | 0.89 | 0.93 | 0.96 | 1.00 | 1.08 | 0.90 | 0.97 | 0.97 | 1.15 | 0.86 | 0.99 |
+
+  ms after (f16 acts / f32 acts): M = 48 0.054 / 0.057 (GGML 0.048 / 0.051), 96
+  0.068 / 0.070 (0.063 / 0.068), 128 0.068 / 0.072 (0.078 / 0.083), 256 0.108 /
+  0.114 (0.089 / 0.098), 512 0.191 / 0.204 (0.184 / 0.201). Under 0.95: 7 -> 4
+  cells on f16 acts, 9 -> 5 on f32 acts. Between the map's M (f16 acts): 160
+  0.96, 192 0.82, 224 0.81, 320 1.06, 352 0.90, 384 0.90, 448 1.22. The
+  f32-accumulator libraries and providers are as they were (their `.stmt`
+  unchanged, below).
+
+- Gate: `--check` of both `f16.acc16` CUDA libraries (checked and bench) and the
+  by-M provider on f16 and f32 acts, M in 1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 24,
+  31, 32, 33, 48, 63, 64, 65, 96, 127, 128, 129, 160, 176, 177, 192, 193, 256,
+  257, 351, 352, 384, 479, 480, 512 (each range's ends): K = 64, 128, 256, 320
+  on N = 512 (K = 256: the splits in 4 and 2; 128: in 2; 64, 320: unsplit), K =
+  256 on N = 1000 and 1001 (the rows): 1050 results, 0 failures, 0 unchecked
+  (`tol_scale` at most 0.12, 0.27, 0.66, 0.88 by K; `err_ratio` at most 0.33);
+  small N (1, 2, 3, 5, 7, 9) at K = 256 and the same M: 1050, 0 failures, 0
+  unchecked; 4096^2 at 17 M, sampled outputs: 85 results, 0 failures, 79
+  unchecked (`err_ratio` at most 0.022; the 6 checked are the by-M provider's
+  f32 libraries below M = 17). `.stmt` against e88f0a3b6's generator: the 82
+  Metal libraries' and the 146 CUDA bench libraries' byte-identical; of 23
+  sampled x86 libraries, one differed against the first baseline in a let
+  variable's number only and is identical when both generators run on the same
+  libHalide. `ctest -L ggml_cuda`: 79/79 (the new libraries' `_ptx` and
+  `_ptx_acc16`, which greps `m16n16k16.f16.f16`); `ggml_check`: 3445 results, 0
+  failures, 62 unchecked.
+
+- Where the rest is (f16 acts; f32 acts alike): M = 48 (0.90, f32 acts 0.90):
+  0.054 ms against cuBLAS's 0.048; M = 192 to 256 (0.81-0.83; f32 acts
+  0.82-0.86): 0.097-0.108 against 0.079-0.089; 352-384 (0.90); 64, 96
+  (0.93-0.94). A block stages one step of K at a time, its copies awaited before
+  its multiplies (Phase 22); with f16 accumulators the multiplies take half as
+  long and the steps' latency is more of the time: the tiles that win are those
+  with the most blocks resident (128 x 128 only from M = 480, where there are
+  128 of them), and splits of K that add blocks. cuBLAS pipelines its steps. On
+  f32 acts M = 4 to 12 are as before (the f32 library: GGML runs `mul_mat_f`,
+  f32 accumulators).
   - f16 against cuBLAS's f16 accumulators (M = 48, 96, 256, 512: 0.52-0.77): f16
     multiply-accumulate runs at twice the rate of f32 accumulation on this
     card's tensor cores; ours accumulate in f32. Against GGML's bf16 (f32

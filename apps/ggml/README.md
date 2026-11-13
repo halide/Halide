@@ -90,8 +90,10 @@ status. The worst-case bound of an f16 accumulator is of that kind at these
 sizes: cuBLAS's f16 gemm (`CUBLAS_COMPUTE_16F`, accumulation undocumented:
 modeled as one f16 chain of K, unbounded from K = 2044), GGML's CUDA `mmvf` on
 f16 weights, and the `acc16` libraries where they cannot be compared bitwise
-with GGML's f16 `vec_dot`. So is the worst case of KleidiAI's per-row
-re-quantization (`qai8dx`: a zero point, not odd) from K of a few hundred.
+with GGML's f16 `vec_dot` (the CUDA `f16.acc16` gemm's, one f16 rounding per 8
+values of K, `acc_block`, from K of about 300: at K = 256 `tol_scale` is 0.63,
+at 512 1.6). So is the worst case of KleidiAI's per-row re-quantization
+(`qai8dx`: a zero point, not odd) from K of a few hundred.
 
 Notable GGML behavior: KleidiAI's q8_0 path re-quantizes weights and activations
 per row (it does not compute q8_0 x q8_0); the CPU backend rejects f16
@@ -482,7 +484,17 @@ summed in f32 as GGML's `vaddvq`. Any format of one 16-bit float per value can
 take it. Its rows need `strict_float` (the generator throws without it; LLVM
 would otherwise reassociate the tree), and `--check` compares it bit-exact with
 GGML's f16 vec_dot where the CPU has fp16 arithmetic and K % 32 == 0 (GGML sums
-the rest in f64; ours in f16).
+the rest in f64; ours in f16). On CUDA `f16.acc16` (mul_mat; f16 and `f32:f16`
+acts) is the tensor-core gemm with f16 accumulators, as GGML's cuBLAS f16 gemm
+(`CUBLAS_COMPUTE_16F`): `gpu_gemm` applies the `Accumulate` to the gemm's dot
+(change_type's f16 reduction, its products rounded from f32's: wmma's f16
+fragments into f16 accumulators), whose tiles are widened in registers to f32
+ones as out stores them; the rows (below the gemm's M and N) and a K split's sum
+of its parts stay f32. Each output is one f16 chain of K (K / 2 or K / 4 per
+part where K is split), rounded to nearest once per 8 values of K whose products
+the tensor cores sum first in f32's precision or better (measured on the RTX
+3090), which its `Precision` declares (`acc_block` = 8, chain K). Its partial
+sums overflow to inf past 65504, as GGML's do.
 
 Weights take a compute format too, `<storage>:<compute>` (GPU mul_mat only;
 `formats.cmake`): `q4_0:f16` is q4_0's round trip approximated again by the
@@ -621,17 +633,25 @@ W itself (`f32` on f32 acts: `metal_flat`) or W rounded to f16 for the gemm
 (`f32:f16` on `f32:f16` acts, from M = 8; converted as they are staged, one warp
 a block below M = 128, a tile of N's blocks in M run together so they share its
 weights in L2). `halide-by-m-<type>_f32_cuda` (f16, bf16, f32) takes the exact
-rows below M = 3 (f32: 4), else the library on f16 (bf16) operands. `--check`
-derives each library's tolerance from its declared roundings
-(`Precision::w_quant`, `act_quant`, `act_nearest`). The gemm libraries' tests
-(`ctest -L ggml_cuda`) check that their PTX multiplies on the tensor cores
-(`mma.sync`).
+rows below M = 3 (f32: 4), else the library on f16 (bf16) operands;
+`halide-by-m-f16.acc16_f32_cuda` takes `f16.acc16` on `f32:f16` from M = 17
+(where GGML takes cuBLAS's f16 gemm). `f16.acc16`'s gemm (N >= 128) has tiles of
+its own, its f16 fragments taking half the registers: 128 x 64 blocks of 4 x 2
+warps of 32 x 32, K split in 4 from M = 33 to 64 and in 2 to 192 (128 x 80 from
+129 to 176), unsplit above, 128 x 96 from 352, 128 x 128 of 2 x 2 warps of 64 x
+64 from 480. `--check` derives each library's tolerance from its declared
+roundings (`Precision::w_quant`, `act_quant`, `act_nearest`). The gemm
+libraries' tests (`ctest -L ggml_cuda`) check that their PTX multiplies on the
+tensor cores (`mma.sync`), `f16.acc16`'s also into f16 accumulators
+(`m16n16k16.f16.f16`).
 
 On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
 64, 128, 512: f16 x f16 1.12, 1.07, 1.07, 0.99, 1.04, 1.05, 0.87, 0.90, 0.60
 (GGML's cuBLAS accumulates in f16; against its bf16 x bf16, f32 accumulators,
-1.11, 0.98, 0.98, 1.01, 1.05, 0.98, 0.88, 0.90, 0.96); on f32 acts, the by-M
-providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.89, 0.90, 0.62; bf16 1.01,
+1.11, 0.98, 0.98, 1.01, 1.05, 0.98, 0.88, 0.90, 0.96), `f16.acc16` (f16
+accumulators) 1.13, 1.10, 1.11, 1.00, 1.06, 1.07, 0.94, 1.15, 0.96; on f32 acts,
+the by-M providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.89, 0.90, 0.62;
+`f16.acc16` 1.00, 0.99, 0.89, 0.89, 0.96, 1.08, 0.97, 1.15, 0.99; bf16 1.01,
 0.99, 0.89, 0.90, 0.95, 0.99, 0.87, 0.89, 0.99; f32 0.98, 0.98, 0.97, 0.91,
 0.96, 1.04, 0.96, 0.99, 1.34; bf16 x bf16 1.11, 0.98, 0.98, 1.01, 1.06, 0.95,
 0.89, 0.90, 0.99; on f32 acts, the by-M provider, q4_0 1.01, 1.02, 1.01, 1.21,
@@ -643,15 +663,17 @@ providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.89, 0.90, 0.62; bf16 1.01,
 nvfp4 1.01, 1.09, 1.26, 1.40, 1.37, 1.31, 1.17, 1.25, 0.91 (Phase 15's map has
 every type from M = 1 to 512, Phase 16 the M between, Phase 17 M \<= 8, Phase 18
 M = 5 and 33 to 48, Phase 19 to 21 M = 1 to 512 again, Phase 22 the float
-weights). `doc/X86_CUDA_LOG.md` (Phases 3 to 22) has every type, the `full`
-preset's layers and where the rest of the time is: from M = 8 the integer gemm
-kernel (q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
-formulation, the acts' scales loaded from their planar field; not the fit of its
-tiles to the SMs, at M = 512 its time follows its work), most at M = 512 (q4_K's
-also an fma per element and block for its mins; the grid formats' 0.78-0.84, a
-weight block of several blocks as the K-quants'); below 8, iq1_s, iq1_m and q2_0
-(0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M = 40 and 48
-(0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators.
+weights, Phase 23 f16 accumulators). `doc/X86_CUDA_LOG.md` (Phases 3 to 23) has
+every type, the `full` preset's layers and where the rest of the time is: from M
+= 8 the integer gemm kernel (q4_0's at M = 512 1.07x the time of a hand-written
+kernel of GGML's formulation, the acts' scales loaded from their planar field;
+not the fit of its tiles to the SMs, at M = 512 its time follows its work), most
+at M = 512 (q4_K's also an fma per element and block for its mins; the grid
+formats' 0.78-0.84, a weight block of several blocks as the K-quants'); below 8,
+iq1_s, iq1_m and q2_0 (0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M =
+40 and 48 (0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators
+(`f16.acc16`'s: M = 48 and 192 to 256, 0.81-0.90, one step of K staged at a
+time).
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
