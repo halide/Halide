@@ -393,8 +393,6 @@ void register_halide_providers() {
     // 32, 64, 128 or 512 on 4096 x 4096 (RTX 3090), a letter each; an M
     // takes the letter of the first of those six at or above it (as the
     // integer gemm's K split rounds its tiles up in M), from 256 512's.
-    // (q2_0 the integer gemm from 65 to 255: the f16 gemm 7% faster at 128,
-    // 23% slower at 96 and 8% at 200.)
     static const std::map<std::string, std::string> by_m = {
         {"iq1_m", "riiiii"},
         {"iq1_s", "riiiii"},
