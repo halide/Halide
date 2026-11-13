@@ -3144,8 +3144,11 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     // on 2 x 1 warps of 32 x 64, 0.046 against 0.049)
     // An affine weight's offsets per 16-value sub-block (q2_K's: a weight
     // and an act factor more per sub-block, `subsums`) take those warps too,
-    // and blocks of 64 rows of M at most: 128 take more than 48 KB of
-    // shared memory (q2_K at 4096 x 4096 x 64: 0.094 -> 0.063 ms)
+    // and blocks of 64 rows of M at most, but the K split's 64 x 80 on
+    // mma.sync's, to M = 80, then two blocks of 32 x 48 to M = 96: 128 take
+    // more than 48 KB of shared memory, 96 spill (q2_K at 4096 x 4096 x 64:
+    // 0.094 -> 0.063 ms; at 80 / 96 on two blocks of 64 rows 0.109 / 0.111,
+    // these 0.075 / 0.097, 64 x 96's 0.111)
     const bool subsums = halves && affine(rs);
     if (!luts.empty() || point || subsums) {
         for (KSplit &sp : splits) {
@@ -3156,7 +3159,14 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
     }
     if (subsums) {
         auto narrow = [&](std::vector<GemmShape> &sl, bool wm) {
-            sl.erase(std::remove_if(sl.begin(), sl.end(), [&](const GemmShape &sh) { return fm_of(wm) * sh.tm * sh.wm > 64; }), sl.end());
+            sl.erase(std::remove_if(sl.begin(), sl.end(), [&](const GemmShape &sh) { return fm_of(wm) * sh.tm * sh.wm > (wm ? 64 : 80); }), sl.end());
+            for (size_t i = 0; i < sl.size(); i++) {
+                if (!wm && fm_of(wm) * sl[i].tm * sl[i].wm == 80) {
+                    sl[i].cond = sl[i].cond && M <= 80;
+                    sl.insert(sl.begin() + i + 1, ishape(N >= 64 && M > 80 && M <= 96, 2, 3, 1, false, 128, 2));
+                    break;
+                }
+            }
             for (GemmShape &sh : sl) {
                 if (!wm && sh.tm == 8 && sh.wm == 1) sh.tm = 4, sh.wm = 2;
             }
