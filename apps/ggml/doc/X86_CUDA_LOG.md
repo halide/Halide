@@ -3593,3 +3593,140 @@ the small-M stragglers.
   - M \<= 8: iq1_m (0.83-0.93) and iq1_s (0.86-0.92) on the dp4a rows: their
     decode's integer instructions (1.5-2.7x GGML's); q2_0 at M = 1, 2 (0.89,
     0.85); iq4_xs at 1, 5, 6, q8_0 at 5, 7, q6_K at 3 (0.90-0.94).
+
+## Phase 22: the float weights (f16, bf16, f32) (RTX 3090)
+
+Same machine and conventions as Phase 21 (4096^2, `--rounds 5`, one pass; GGML /
+Halide, the best Halide CUDA library in tolerance per cell). Rounds 15-21 mapped
+the quantized types; this one the float weights.
+
+- What GGML's CUDA backend runs (the harness's `path`, from the kernels it
+  launches): f16 and bf16 weights on f32 acts `mul_mat_vec_f` at M = 1,
+  `mul_mat_f` (tensor cores, f32 accumulators) at 2 to 16, cuBLAS from 24; on
+  acts of their own type cuBLAS at every M; f32 weights `mul_mat_vec_f` at 1 and
+  2, `mul_mat_f` at 4 to 16 (tf32), cuBLAS from 24 (sgemm on tf32). Precision:
+  cuBLAS on f16 weights computes in f16 with an f16 result
+  (`CUBLAS_COMPUTE_16F`), as does `mul_mat_vec_f` on f16 (half2 sums): its
+  tolerance excludes nothing at K = 4096 (`unchecked`); on bf16 it accumulates
+  in f32. Ours accumulate in f32 everywhere, so the like-for-like reference for
+  the f16 cells from M = 24 is GGML's bf16 time (cuBLAS's bf16 and f16 gemms
+  with f32 accumulators run alike). Our `f32:f16` rounds f32 weights to f16 (in
+  tolerance against cuBLAS's tf32). There is no Halide library for f16 or f32
+  weights on bf16 acts (GGML: cuBLAS).
+
+- The map, before -> after (GGML / Halide; the f16 rows against GGML's f16
+  accumulators, "(bf16's)" against its bf16 time; the new by-M providers are
+  within 0.03 of the "after" rows on f32 acts):
+
+  | w x act     | 1    | 2    | 4    | 8    | 12   | 16   | 24   | 32   | 48   | 64   | 96   | 128  | 256  | 512  |
+  | ----------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+  | f16 x f16   | 1.05 | 1.07 | 1.08 | 0.98 | 0.98 | 1.03 | 0.81 | 1.05 | 0.75 | 0.86 | 0.74 | 0.77 | 0.45 | 0.60 |
+  | after       | 1.12 | 1.07 | 1.07 | 0.99 | 0.98 | 1.04 | 0.91 | 1.05 | 0.74 | 0.87 | 0.73 | 0.90 | 0.52 | 0.60 |
+  | (bf16's)    | 1.11 | 0.98 | 0.98 | 1.01 | 1.00 | 1.05 | 0.92 | 0.98 | 1.00 | 0.88 | 0.90 | 0.90 | 0.93 | 0.96 |
+  | f16 x f32   | 0.89 | 0.89 | 0.89 | 0.89 | 0.92 | 0.95 | 0.85 | 1.08 | 0.77 | 0.90 | 0.77 | 0.80 | 0.48 | 0.63 |
+  | after       | 1.00 | 1.00 | 0.90 | 0.90 | 0.92 | 0.96 | 0.95 | 1.06 | 0.77 | 0.89 | 0.76 | 0.90 | 0.56 | 0.63 |
+  | (bf16's)    | 1.00 | 1.00 | 0.90 | 0.90 | 0.92 | 0.96 | 0.95 | 0.99 | 1.03 | 0.86 | 0.90 | 0.89 | 0.98 | 0.98 |
+  | bf16 x bf16 | 1.03 | 0.98 | 0.98 | 0.99 | 1.00 | 1.05 | 0.81 | 0.97 | 1.04 | 0.85 | 0.92 | 0.77 | 0.86 | 1.00 |
+  | after       | 1.11 | 0.98 | 0.98 | 1.01 | 1.00 | 1.06 | 0.93 | 0.95 | 1.04 | 0.89 | 0.92 | 0.90 | 0.99 | 0.99 |
+  | bf16 x f32  | 0.89 | 0.89 | 0.89 | 0.90 | 0.92 | 0.94 | 0.85 | 0.98 | 1.02 | 0.90 | 0.92 | 0.79 | 0.86 | 1.00 |
+  | after       | 1.01 | 1.00 | 0.90 | 0.90 | 0.91 | 0.95 | 0.95 | 0.99 | 1.03 | 0.87 | 0.92 | 0.89 | 0.99 | 0.99 |
+  | f32 x f32   | 0.89 | 0.91 | 0.91 | 0.81 | 0.82 | 0.96 | 0.99 | 1.01 | 0.61 | 0.94 | 0.96 | 0.93 | 1.30 | 1.34 |
+  | after       | 0.98 | 0.98 | 0.98 | 0.88 | 0.93 | 0.96 | 1.01 | 1.03 | 0.99 | 0.96 | 1.43 | 0.99 | 1.36 | 1.34 |
+
+  43 of the 70 cells under 0.95 before, 29 after (against GGML's bf16 time for
+  the f16 rows: 23). The two maps back to back, every Halide library at every
+  cell: none slower by more than 3%, 68 faster (the CSVs and per-cell lists in
+  the scratch `round22/`).
+
+- The rows (`metal_flat`, f16, bf16 and f32 weights below the gemm's M and on
+  exact f32 acts): 16 values of K a lane per step, two 16-byte loads of f16;
+  ours took 46 us at M = 1 against `mul_mat_vec_f`'s 41 (the kernel 44 against
+  40.5 by CUPTI; 1024 blocks of one warp, 4 rows each). Tried: 2, 4 or 8 warps a
+  block, 1 or 2 rows a warp, 4 or 8 values a lane. 8 values a lane, the rest as
+  was: f16 and bf16 on f32 acts at M = 1 / 2 0.047 / 0.062 -> 0.041 / 0.042 ms
+  (GGML 0.041 / 0.041), f32 0.090 / 0.092 -> 0.080 / 0.082 (0.079 / 0.080), f16
+  x f16 at 1 0.044 -> 0.042; taken. (4 warps of a row, 4 values a lane: f16 on
+  f32 acts at M = 4 0.043, but f32 at 4 0.098: not taken.)
+
+- The `f32:f16` gemm (f32 weights converted to f16 as they are staged): M = 48
+  took 0.152 ms against 0.100 at 64, 96 0.167 against 0.163 at 128: its tiles,
+  the first at or above M of 16 x 16 to 16 x 64 rows, ran two or three blocks in
+  M a tile of N, each reading the f32 weights from DRAM again (64 MB at 4096^2).
+  Its blocks in M are now innermost (`Staging::mfirst`: a tile of N's blocks in
+  M run together and its weights come from L2 after the first), with tiles by
+  range: 16 x 32 on 128-value steps from M = 33, 16 x 48 from 49 to 63 and 65 to
+  96, 16 x 64 to 127, 2 warps of 16 x 64 in M from 128, below 16 one warp's
+  guarded tile (2 warps before). ms, before -> after (GGML): M = 8 0.101 ->
+  0.093 (0.082), 12 0.101 -> 0.090 (0.083), 40 0.140 -> 0.091 (0.092), 48 0.152
+  -> 0.094 (0.093), 56 0.222 -> 0.103 (0.092), 80 0.165 -> 0.104 (0.158), 96
+  0.167 -> 0.113 (0.160), 112 0.250 -> 0.168 (0.163), 128 0.163 -> 0.153
+  (0.151), 160 0.291 -> 0.258 (0.376). The block order alone, on the old tiles:
+  M = 40 0.140 -> 0.124, 128 0.167 -> 0.175 (one block in M now); on the new,
+  112 0.159 -> 0.168, 200 0.284 -> 0.305 (GGML 0.378), the rest faster. Tried:
+  16 x 96 at 96 (0.150), guarded 16 x 64 to 16 x 128 tiles (0.14-0.37), 16 x 128
+  of one warp at 128 (0.204), 32 x 128 of 2 warps at 128 (0.162).
+
+- The f16 and bf16 gemm (copied operands; f16 x f16 shown, bf16 x bf16 and the
+  `f32:f16` / `f32:bf16` acts' libraries alike):
+
+  - M = 17 to 31: one guarded 32 x 32 tile (0.058 at every M) against M = 32's
+    two 32 x 16 blocks (0.048). Two 32 x 16 tiles, the second shifted, now:
+    0.049-0.055 (Phase 3 measured the shifted pair slower, 0.065 against 0.057).
+  - M = 64 to 256, ncu at M = 128 (64 x 64 blocks of 4 warps, 128 blocks, 18 KB
+    of shared memory, 63 registers): 103.6 us, 1.55 warps a scheduler, 0.06
+    eligible, long-scoreboard (L1TEX) 40% of the stall cycles, DRAM 39%, no
+    spills. cuBLAS's bf16 gemm
+    (`ampere_s16816gemm_bf16_128x64_ldg8_stages_32x6`, f32 accumulators) on 64
+    blocks of 128 x 64 and 6 pipeline stages, 142 registers: 79.2 us. Ours
+    stages one step at a time (copies awaited before the multiplies), so a
+    block's time is its steps' latency. Tried (4096^2, ms at M = 64 / 96 / 128 /
+    256 before: 0.059 / 0.083 / 0.096 / 0.181): blocks of 1 to 16 warps of 16 x
+    16 to 32 x 64, 64 to 128 rows of N and 16 to 128 of M, on 64- or 128-value
+    steps (17 shapes: none faster at 64 or 96; at 128 8 warps of 16 x 32 0.093;
+    at 256 2 x 2 warps of 32 x 64, 64 x 128, 0.152-0.156); the blocks in M
+    innermost (0.060 / 0.080 / 0.097 / 0.176); a K split (`gpu_gemm`'s `splits`:
+    dot's rfactor over every kz-th step, a kernel over N, M and the parts, then
+    out their sums; as the integer gemm's, on its `round_extent`): 64 x 64
+    blocks in 2 / 4 at 128 0.099 / 0.094 (the part kernel 98.3 / 82.8 us, the
+    sum 6.1 / 12.2), 64 x 128 in 2 0.084-0.086, 128 x 128 in 2 0.113, 128 x 64
+    in 4 at 64 0.057, at 96 0.097; at 144 to 224 two 64 x 128 tiles in M split
+    in 2 0.169-0.173 against 0.143-0.183. Taken: the split in 2 on 64 x 128 at M
+    = 128 (0.096 -> 0.085), 64 x 128 unsplit from 193 to 256 (256: 0.182 ->
+    0.156; in the map 0.195 -> 0.168; from 320 it is 1.1-1.3x slower).
+
+- `halide-by-m-<type>_f32_cuda` for f16, bf16 and f32 weights (there was none):
+  the exact rows below M = 3 (f32: 4), else the library on f16 or bf16 operands
+  (the gemm; `f32:f16`'s rows below 8).
+
+- Small N (Phase 18's grid, K = 1024, N in 1 to 9, 12, 15, 16, 17, 24, 31, 33,
+  40, 63, M in 1 to 5, 7, 8, 9, 12, 16, 17, 24, 32, 33, 48, 64, 65, 96, 97, 128,
+  129, 160, 256, 512; every Halide CUDA library of f16, bf16, f32 on f32 and
+  their own acts, checked and bench, and the by-M providers): 8208 results, 0
+  failures.
+
+- Gate: `--check` of the same libraries and providers at M in 1, 2, 3, 4, 7, 8,
+  9, 15, 16, 17, 24, 31, 32, 33, 48, 63, 64, 65, 80, 96, 97, 112, 127, 128, 129,
+  160, 200, 255, 256, 257, 512 on 1024 x 512 (the K split at 128), 4096 x 1001
+  and 4096 x 4099 (the rows), 1280 x 512 (split), 1088 x 512 (K not whole steps
+  of the split: unsplit), 1000 x 512 (K % 32: the rows), f32, f16 and bf16 acts:
+  3534 results, 0 failures, 0 unchecked; 4096^2 at 14 M, sampled outputs: 266, 0
+  failures. The 82 Metal libraries' `.stmt` byte-identical to a700ec633's, the
+  38 sampled x86 CPU libraries' too; of the 146 CUDA bench libraries' `.stmt`,
+  only the 8 float weights' differ. `ctest -L ggml_cuda`: 75/75.
+
+- Where the rest is:
+
+  - f16 against cuBLAS's f16 accumulators (M = 48, 96, 256, 512: 0.52-0.77): f16
+    multiply-accumulate runs at twice the rate of f32 accumulation on this
+    card's tensor cores; ours accumulate in f32. Against GGML's bf16 (f32
+    accumulators) the same cells are 0.90-1.00.
+  - M = 64 to 128 (0.86-0.90 against f32 accumulators): one stage of K in shared
+    memory a block, its copies awaited before its multiplies; cuBLAS pipelines
+    6\. Neither tile shapes nor the K split close it; a second stage (a step's
+    copies in flight while the last one's multiplies run) is not a schedule
+    `gpu_staged` can express today.
+  - M = 4 to 12 on f32 acts (0.90-0.92): the gemm's 0.046 ms (its act kernel,
+    then the guarded 16-row tile) against `mul_mat_f`'s 0.042; the exact rows
+    reach 0.041-0.042 at M = 1, 2 only (0.050 at 4).
+  - f32 at M = 8 / 12 (0.88-0.93): the guarded 16-row tile converts the f32
+    weights in the kernel (0.090-0.093 ms against `mul_mat_f`'s tf32 0.082).
