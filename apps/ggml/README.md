@@ -552,10 +552,12 @@ cuBLAS on f16 weights); f16, bf16 and f32 weights run `mmvf`, `mmf` (M \<= 16)
 and cuBLAS. The Halide counterparts of a blocked type are:
 
 - `<type>` on `f32:q8_1` acts: the acts quantized by a kernel of their own (a
-  thread per record), then `metal_rows` with integer acts: each lane's run of 8
-  codes two `dp4a`, a warp a row at M = 1 and 2, two at 3 and 4, four above.
-  Every blocked type. (On pre-quantized `q8_0`, `q8_1` or `q8_K` acts the same
-  rows, without the kernel.)
+  lane per value, blocks of 8 records), then `metal_rows` with integer acts:
+  each lane's run of 8 codes decoded in a GPR word (a grid point one load of its
+  table) and two `dp4a`, a warp a row at M = 1, two warps a block of two rows at
+  M = 2 (each on every other step of K, summed in shared memory), two rows a
+  warp at 3 and 4, four above. Every blocked type. (On pre-quantized `q8_0`,
+  `q8_1` or `q8_K` acts the same rows, without the kernel.)
 - `<type>` on `f32:q8_0.soa` acts (q4_0, q5_0, q8_0, iq4_nl, mxfp4, iq4_xs,
   nvfp4, q6_K, q3_K, q2_K, q1_0, q2_0, iq2_s, iq1_m) or, for weights with an
   offset or min per block (q4_1, q5_1, q4_K, q5_K), on `f32:q8_1.soa`:
@@ -591,7 +593,7 @@ the `f32:q8_1` rows below 8 rows, then the integer gemm where the type has one,
 else (above 16) the f16 gemm; per type, another of the three where it was
 measured more than 3% faster at M = 8, 16, 32, 64, 128 or 512, each M taking the
 first of those at or above it (`by_m` in `harness/halide_providers.cpp`: the
-rows at M = 8 on 8 types, the f16 gemm from 65 to 255 on q2_K). The integer
+rows at M = 8 on 16 types, the f16 gemm from 65 to 255 on q2_K). The integer
 gemm's K split (below M = 256) rounds its last tile in M up where M is less than
 a tile's rows, so each range of M takes one tile of its rows or more (32 x 16
 from M = 8, 32 x 24, 32 x 32, 64 x 48, 64 x 64, 64 x 80, 64 x 96, 64 x 112, 64 x
@@ -624,23 +626,22 @@ On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
 f16 on f32 acts (`f32:f16`) 0.89, 0.90, 0.90, 0.90, 0.96, 1.08, 0.92, 0.80,
 0.64; bf16 x bf16 1.08, 1.02, 1.01, 1.02, 1.07, 0.98, 0.89, 0.76, 1.00; f32
 weights (`f32:f16`) 0.89, 0.90, 0.90, 0.81, 0.96, 1.04, 0.95, 0.91, 1.34; on f32
-acts, the best library (from M = 8 the by-M provider), q4_0 0.92, 0.92, 0.91,
-1.10, 1.21, 1.19, 1.09, 1.13, 0.92; q8_0 0.96, 0.96, 0.90, 0.96, 1.17, 1.13,
-1.15, 1.18, 0.94; q4_K 0.86, 0.86, 0.89, 1.11, 1.13, 1.00, 0.97, 1.04, 0.82;
-q6_K 0.87, 0.84, 0.80, 1.23, 1.23, 1.07, 0.93, 1.02, 0.83; iq2_xs 0.56, 0.58,
-0.69, 0.85, 1.03, 0.96, 0.94, 0.90, 0.80; iq4_nl from M = 8 1.01, 1.28, 1.26,
-1.06, 1.08, 0.88; q2_K from M = 8 1.15, 0.91, 0.86, 0.94, 1.19, 1.00; nvfp4
-0.86, 0.86, 0.99, 1.25, 1.38, 1.32, 1.18, 1.25, 0.91 (Phase 15's map has every
-type from M = 1 to 512, Phase 16 the M between). `doc/X86_CUDA_LOG.md` (Phases 3
-to 16) has every type, the `full` preset's layers and where the rest of the time
+acts, the by-M provider, q4_0 1.01, 1.02, 1.01, 1.21, 1.21, 1.19, 1.09, 1.15,
+0.92; q8_0 1.02, 1.01, 0.95, 1.01, 1.16, 1.13, 1.17, 1.19, 0.94; q4_K 1.01,
+1.00, 1.13, 1.12, 1.14, 1.00, 0.96, 1.03, 0.83; q6_K 0.97, 0.99, 0.97, 1.24,
+1.22, 1.05, 0.93, 1.01, 0.83; iq2_xs 1.04, 1.06, 1.09, 1.07, 1.05, 0.97, 0.95,
+0.92, 0.80; iq4_nl 0.99, 1.00, 1.00, 1.07, 1.29, 1.27, 1.06, 1.08, 0.87; q2_K
+1.20, 1.16, 1.38, 1.29, 0.91, 0.87, 0.94, 1.15, 0.99; nvfp4 1.01, 1.09, 1.26,
+1.40, 1.37, 1.31, 1.17, 1.25, 0.91 (Phase 15's map has every type from M = 1 to
+512, Phase 16 the M between, Phase 17 M \<= 8). `doc/X86_CUDA_LOG.md` (Phases 3
+to 17) has every type, the `full` preset's layers and where the rest of the time
 is: from M = 8 the integer gemm kernel (q4_0's at M = 512 1.07x the time of a
 hand-written kernel of GGML's formulation, the acts' scales loaded from their
 planar field; not the fit of its tiles to the SMs, at M = 512 its time follows
 its work), most at M = 512 (q4_K's also an fma per element and block for its
 mins; the grid formats' 0.78-0.84, a weight block of several blocks as the
-K-quants'); below 8, the act kernel (the second launch) and the grid formats'
-and q5_K's decodes on a warp a row (GGML's gemv splits a row's K over 4 warps);
-on f16 from M = 64, cuBLAS's f16 accumulators.
+K-quants'); below 8, iq1_s, iq1_m and q2_0 (0.78-0.95) and M = 5 (four rows a
+warp); on f16 from M = 64, cuBLAS's f16 accumulators.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds

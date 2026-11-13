@@ -2946,3 +2946,142 @@ the M between the tuned powers of two, and M \<= 8.
     stream-k. 255 is slower than 256.
   - M = 512 and the per-type cells of Phases 12-15 (iq1_s 0.73-0.77 from 12 to
     32, q2_K and q2_0 from 16 to 96, iq3_s and iq2_xxs at 48, iq2_xs at 48).
+
+## Phase 17: the rows' codes in GPR words, the act kernel a lane a value (RTX 3090)
+
+Same machine and conventions as Phase 16. The target: M \<= 8, the dp4a rows
+(`metal_rows`, integer, on `f32:q8_1`) against GGML's `mul_mat_vec_q`.
+
+- Attribution (ncu at 4096^2, M = 1): Phase 16 put the gap on GGML's 4 warps a
+  row splitting K. Splitting ours alike (`kw` below, 4 warps a row) moved
+  iq2_xxs's rows kernel 26.3 -> 23.6 us against GGML's 10.4: not the lever. The
+  instructions are: GGML's gemv 3.76M warp instructions, ours 8.92M (issue
+  active 0.57 and 0.61 a cycle), of them 2.36M `PRMT` (GGML 0.15M) and 0.85M
+  `LDG` (0.31M); q3_K 6.18M / 6.79M (1.90M `PRMT`), q6_K 5.34M / 6.21M, q5_K
+  4.35M / 6.01M; q4_0 2.67M / 1.85M, at the same time. A lane's run of 8 codes
+  was decoded as an int8 vector, which PTX lowers a byte at a time: a grid
+  point's 8 bytes 8 byte loads of its table and its signs 8 16-bit multiplies,
+  repacked by `prmt`; a K-quant's bit fields shifts and masks per byte. The act
+  kernel (a thread per 32-value record, 4 blocks of 32 threads at M = 1): 625
+  dependent-ish instructions a warp, issue active 0.10; 4.6 us under ncu against
+  GGML's 2.4 (a thread a value, 256-thread blocks).
+
+- `metal_rows` (`words`, `rows_words`, default on): the weight's codes of each
+  run copied to a Func computed per run in a GPR word (SWAR), the weight's
+  decode inlined into it as `gpu_int_gemm`'s staged codes are (`inline_codes`,
+  its sign rewrite, now shared), a grid point a 64-bit load of its table, a
+  lut's codes looked up in the word (the luts not staged in shared memory). The
+  copy is indexed by the act block (x, u, row): by the weight's (x, y, row), u
+  clamped to K in the tail, bounds inference took (u % per) over all of \[0,
+  per) and computed 29 points a run. Not where a code's bits do not decode
+  lane-wise in a word (q2_0's 2-bit codes; q3_K's and q5_K's high bits and
+  iq3_xxs's signs on `q8_K` acts), nor iq1_s and iq1_m (as fast or faster
+  without: `rows_words=false`, `GGML_SCHEDULE_PARAMS`).
+
+- The act kernel (`act_lanes`, default 8): blocks of 8 records, the codes (a
+  per-value Func that reads the per-record scale) and the scale each a stage of
+  the block in shared memory, a lane a value, the scale's maximum reduced across
+  the lanes (shuffles, in registers); a thread a record packs them. 3.6 -> 2.3
+  us at M = 1 to 8 (GGML's 2.1); 4 or 16 records a block the same.
+
+- The K split across warps (`kw`, `rows_kw`, default 2): at M = 2, blocks of 2
+  warps a tile of two rows, the warps on interleaved steps of K, each warp's
+  sums reduced across its lanes in registers, stored to shared memory and summed
+  (a lane reduction into shared memory lowers to atomics). On its own stage, a
+  specialization of the dot at M = 2 (its own chain of rfactors); the other M as
+  before.
+
+- The by-M provider's M = 8 (rows against the integer gemm, after the above; us,
+  GGML / rows / integer gemm): the rows now also for iq2_s (27.5 / 26.0 / 30.7),
+  iq2_xs (26.3 / 24.5 / 27.9), iq3_s (30.1 / 29.3 / 32.2), iq3_xxs (27.7 / 27.9
+  / 34.1), iq4_nl (25.9 / 24.0 / 25.3), mxfp4 (28.2 / 26.1 / 28.2), nvfp4 (34.4
+  / 24.6 / 27.6) and q2_K (34.4 / 27.0 / 29.8); iq2_xxs, iq4_xs, q3_K, q5_K,
+  q6_K keep the gemm (q3_K 32.1 / 24.9).
+
+- Before -> after, by-M provider (ms of a call; GGML / it), 4096^2, f32 acts,
+  --rounds 5 (iq1_s, iq1_m: `rows_words=false`, a second pass); 21 of 138 cells
+  under 0.95 (116 before):
+
+  | type                                                                         | M = 1                           | M = 2                           | M = 3                           | M = 4                           | M = 5                           | M = 8                           |
+  | ---------------------------------------------------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
+  | iq1_m                                                                        | 0.0165 -> 0.0151 (0.80 -> 0.88) | 0.0196 -> 0.0168 (0.75 -> 0.86) | 0.0199 -> 0.0182 (0.86 -> 0.90) | 0.0217 -> 0.0200 (0.87 -> 0.95) | 0.0246 -> 0.0236 (0.84 -> 0.86) | 0.0295 -> 0.0301 (0.88 -> 0.89) |
+  | iq1_s                                                                        | 0.0154 -> 0.0137 (0.84 -> 0.95) | 0.0176 -> 0.0145 (0.75 -> 0.89) | 0.0184 -> 0.0162 (0.84 -> 0.96) | 0.0197 -> 0.0178 (0.87 -> 0.97) | 0.0212 -> 0.0201 (0.88 -> 0.92) | 0.0263 -> 0.0265 (0.93 -> 0.95) |
+  | iq2_s                                                                        | 0.0250 -> 0.0145 (0.56 -> 0.98) | 0.0263 -> 0.0153 (0.61 -> 1.03) | 0.0283 -> 0.0177 (0.62 -> 0.99) | 0.0295 -> 0.0195 (0.68 -> 1.02) | 0.0338 -> 0.0211 (0.63 -> 1.01) | 0.0323 -> 0.0271 (0.84 -> 1.01) |
+  | iq2_xs                                                                       | 0.0242 -> 0.0127 (0.55 -> 1.04) | 0.0251 -> 0.0137 (0.58 -> 1.06) | 0.0282 -> 0.0153 (0.58 -> 1.08) | 0.0283 -> 0.0177 (0.68 -> 1.09) | 0.0329 -> 0.0198 (0.60 -> 1.01) | 0.0276 -> 0.0245 (0.95 -> 1.07) |
+  | iq2_xxs                                                                      | 0.0286 -> 0.0125 (0.44 -> 1.00) | 0.0305 -> 0.0136 (0.44 -> 0.99) | 0.0334 -> 0.0156 (0.46 -> 1.01) | 0.0339 -> 0.0170 (0.58 -> 1.17) | 0.0385 -> 0.0192 (0.49 -> 0.98) | 0.0256 -> 0.0253 (0.98 -> 0.99) |
+  | iq3_s                                                                        | 0.0376 -> 0.0177 (0.46 -> 0.97) | 0.0382 -> 0.0186 (0.49 -> 1.02) | 0.0403 -> 0.0205 (0.54 -> 1.07) | 0.0415 -> 0.0232 (0.55 -> 1.00) | 0.0485 -> 0.0242 (0.50 -> 1.02) | 0.0321 -> 0.0293 (0.93 -> 1.03) |
+  | iq3_xxs                                                                      | 0.0326 -> 0.0157 (0.47 -> 0.96) | 0.0339 -> 0.0162 (0.48 -> 1.02) | 0.0366 -> 0.0188 (0.48 -> 0.95) | 0.0375 -> 0.0202 (0.55 -> 1.03) | 0.0435 -> 0.0224 (0.50 -> 0.98) | 0.0338 -> 0.0277 (0.81 -> 1.00) |
+  | iq4_nl                                                                       | 0.0193 -> 0.0163 (0.83 -> 0.99) | 0.0220 -> 0.0164 (0.74 -> 1.00) | 0.0220 -> 0.0169 (0.75 -> 1.00) | 0.0239 -> 0.0180 (0.74 -> 1.00) | 0.0251 -> 0.0222 (0.78 -> 0.87) | 0.0256 -> 0.0243 (1.00 -> 1.07) |
+  | iq4_xs                                                                       | 0.0188 -> 0.0162 (0.82 -> 0.95) | 0.0215 -> 0.0164 (0.73 -> 0.97) | 0.0221 -> 0.0168 (0.75 -> 1.01) | 0.0239 -> 0.0189 (0.77 -> 1.00) | 0.0247 -> 0.0218 (0.75 -> 0.87) | 0.0256 -> 0.0256 (1.00 -> 1.00) |
+  | mxfp4                                                                        | 0.0216 -> 0.0163 (0.73 -> 0.98) | 0.0244 -> 0.0166 (0.67 -> 1.00) | 0.0246 -> 0.0177 (0.72 -> 1.01) | 0.0265 -> 0.0197 (0.75 -> 1.01) | 0.0274 -> 0.0230 (0.78 -> 0.93) | 0.0285 -> 0.0266 (0.98 -> 1.08) |
+  | nvfp4                                                                        | 0.0192 -> 0.0164 (0.85 -> 1.01) | 0.0211 -> 0.0167 (0.85 -> 1.09) | 0.0208 -> 0.0168 (0.94 -> 1.18) | 0.0227 -> 0.0179 (0.99 -> 1.26) | 0.0257 -> 0.0218 (0.96 -> 1.16) | 0.0275 -> 0.0246 (1.25 -> 1.39) |
+  | q1_0                                                                         | 0.0129 -> 0.0101 (0.77 -> 0.99) | 0.0144 -> 0.0107 (0.68 -> 0.92) | 0.0145 -> 0.0116 (0.83 -> 1.05) | 0.0160 -> 0.0132 (0.93 -> 1.13) | 0.0186 -> 0.0150 (0.80 -> 1.00) | 0.0193 -> 0.0192 (1.11 -> 1.10) |
+  | q2_0                                                                         | 0.0138 -> 0.0123 (0.71 -> 0.80) | 0.0152 -> 0.0128 (0.68 -> 0.78) | 0.0155 -> 0.0142 (0.82 -> 0.90) | 0.0170 -> 0.0154 (0.92 -> 1.01) | 0.0195 -> 0.0177 (0.80 -> 0.89) | 0.0225 -> 0.0212 (0.97 -> 1.04) |
+  | q2_K                                                                         | 0.0176 -> 0.0110 (0.75 -> 1.19) | 0.0195 -> 0.0127 (0.75 -> 1.15) | 0.0214 -> 0.0142 (0.86 -> 1.29) | 0.0242 -> 0.0163 (0.93 -> 1.38) | 0.0266 -> 0.0185 (0.93 -> 1.33) | 0.0299 -> 0.0271 (1.15 -> 1.29) |
+  | q3_K                                                                         | 0.0256 -> 0.0188 (0.72 -> 0.99) | 0.0269 -> 0.0203 (0.76 -> 1.01) | 0.0297 -> 0.0223 (0.85 -> 1.15) | 0.0318 -> 0.0245 (0.88 -> 1.17) | 0.0347 -> 0.0265 (0.84 -> 1.08) | 0.0249 -> 0.0248 (1.59 -> 1.61) |
+  | q4_0                                                                         | 0.0175 -> 0.0158 (0.91 -> 1.01) | 0.0178 -> 0.0160 (0.91 -> 1.02) | 0.0181 -> 0.0165 (0.90 -> 0.99) | 0.0190 -> 0.0172 (0.92 -> 1.01) | 0.0210 -> 0.0183 (0.88 -> 1.01) | 0.0228 -> 0.0208 (1.08 -> 1.21) |
+  | q4_1                                                                         | 0.0186 -> 0.0170 (0.92 -> 1.01) | 0.0190 -> 0.0171 (0.92 -> 1.02) | 0.0191 -> 0.0179 (0.91 -> 0.98) | 0.0202 -> 0.0188 (0.88 -> 0.94) | 0.0207 -> 0.0203 (0.90 -> 0.91) | 0.0247 -> 0.0222 (0.96 -> 1.09) |
+  | q4_K                                                                         | 0.0188 -> 0.0160 (0.86 -> 1.01) | 0.0197 -> 0.0167 (0.85 -> 1.00) | 0.0210 -> 0.0175 (0.84 -> 1.04) | 0.0234 -> 0.0185 (0.89 -> 1.13) | 0.0272 -> 0.0208 (0.84 -> 1.08) | 0.0278 -> 0.0276 (1.11 -> 1.12) |
+  | q5_0                                                                         | 0.0202 -> 0.0182 (0.92 -> 1.02) | 0.0206 -> 0.0185 (0.91 -> 1.02) | 0.0217 -> 0.0196 (0.88 -> 0.98) | 0.0226 -> 0.0206 (0.88 -> 0.97) | 0.0238 -> 0.0240 (0.89 -> 0.87) | 0.0268 -> 0.0242 (1.02 -> 1.16) |
+  | q5_1                                                                         | 0.0211 -> 0.0192 (0.93 -> 1.03) | 0.0215 -> 0.0194 (0.92 -> 1.02) | 0.0226 -> 0.0202 (0.88 -> 0.99) | 0.0230 -> 0.0208 (0.88 -> 0.98) | 0.0238 -> 0.0216 (0.90 -> 1.00) | 0.0274 -> 0.0251 (0.95 -> 1.07) |
+  | q5_K                                                                         | 0.0243 -> 0.0184 (0.77 -> 1.01) | 0.0257 -> 0.0194 (0.74 -> 0.99) | 0.0294 -> 0.0204 (0.67 -> 0.98) | 0.0313 -> 0.0218 (0.73 -> 1.04) | 0.0347 -> 0.0233 (0.70 -> 1.06) | 0.0285 -> 0.0284 (1.14 -> 1.15) |
+  | q6_K                                                                         | 0.0253 -> 0.0220 (0.85 -> 0.97) | 0.0265 -> 0.0223 (0.83 -> 0.99) | 0.0294 -> 0.0259 (0.80 -> 0.91) | 0.0314 -> 0.0260 (0.82 -> 0.97) | 0.0354 -> 0.0294 (0.78 -> 0.94) | 0.0305 -> 0.0306 (1.22 -> 1.24) |
+  | q8_0                                                                         | 0.0266 -> 0.0251 (0.96 -> 1.02) | 0.0270 -> 0.0256 (0.95 -> 1.01) | 0.0279 -> 0.0263 (0.93 -> 0.99) | 0.0295 -> 0.0279 (0.90 -> 0.95) | 0.0324 -> 0.0314 (0.83 -> 0.87) | 0.0327 -> 0.0312 (0.95 -> 1.01) |
+  | Still under 0.95: iq1_m (0.86-0.95), iq1_s at M = 2, 5 (0.89-0.92), q2_0 at  |                                 |                                 |                                 |                                 |                                 |                                 |
+  | M = 1, 2, 5 (0.78-0.89; no `words`), the lut formats and q8_0, q5_0, q4_1 at |                                 |                                 |                                 |                                 |                                 |                                 |
+  | M = 5 (0.87-0.93; 4 rows a warp from M = 5), q6_K at 3 and 5 (0.91, 0.94),   |                                 |                                 |                                 |                                 |                                 |                                 |
+  | q4_1 at 4 (0.94).                                                            |                                 |                                 |                                 |                                 |                                 |                                 |
+
+- Tried, one at a time (us of a call, 4096^2):
+
+  | change                                                           | effect                                                                                                |
+  | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+  | the K split over 4 warps a row (M = 1) or two, at every M        | iq2_xxs at M = 1 28.6 -> 28.0, q3_K 25.6 -> 24.1, q4_0 at 3 / 5 18.1 / 21.0 -> 19.7 / 24.0: not taken |
+  | that, its lanes' sums reduced into shared memory                 | lowered to `atom.shared.add.f32`: slower, and its order unfixed: not taken                            |
+  | with words and the act kernel, the split over 2 warps at every M | M = 2 better (iq2_xxs 15.2 -> 13.4), M = 5 to 8 slower (q4_0 at 8 20.7 -> 26.4): at M = 2 only        |
+  | at M = 1 and 2, a row a block                                    | M = 1 the same, M = 2 slower than two rows a block (iq2_xxs 15.8 against 13.6): two rows, M = 2 only  |
+  | 4 warps at M = 2                                                 | slower than 2 (iq2_xxs 15.9 / 13.6, q1_0 11.8 / 10.6)                                                 |
+  | words on iq1_s, iq1_m                                            | iq1_s at M = 8 26.5 -> 27.7, iq1_m at 1 15.1 -> 15.6: not taken                                       |
+  | words: the copy per run indexed as the weight (x, y, row)        | 29 points computed per run (above): rewritten by the act's block                                      |
+
+- Scorecard, by-M provider (ms; GGML / it), 4096^2, f32 acts, --rounds 5. Only
+  the 46 CUDA rows libraries (`f32:q8_1` and the pre-quantized acts' rows)
+  changed (`.stmt`); the 82 Metal libraries' `.stmt` are byte-identical. Cells
+  more than 3% slower than Phase 16's: iq2_s at M = 12, 16, 32 (+6-12%) and
+  iq1_s at 32 (+4%), their integer gemm library unchanged: retimed 0.0319 /
+  0.0323 / 0.0423 and 0.0408, within 3%; iq1_s at M = 8 (rows, +5%) is 0.0265
+  without `words`, taken. 59 of the 230 cells (M = 1, 2, 4, 8 to 512) under
+  0.95; from M = 12:
+
+  | type    | M = 12        | M = 16        | M = 32        | M = 64        | M = 128       | M = 512       |
+  | ------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | q4_0    | 0.0239 (1.21) | 0.0242 (1.21) | 0.0300 (1.19) | 0.0421 (1.09) | 0.0635 (1.15) | 0.2080 (0.92) |
+  | q8_0    | 0.0342 (1.16) | 0.0347 (1.16) | 0.0380 (1.13) | 0.0467 (1.17) | 0.0673 (1.19) | 0.2213 (0.94) |
+  | q5_0    | 0.0283 (1.17) | 0.0287 (1.17) | 0.0335 (1.16) | 0.0460 (1.09) | 0.0660 (1.16) | 0.2208 (0.91) |
+  | q4_1    | 0.0293 (1.05) | 0.0297 (1.05) | 0.0364 (0.95) | 0.0503 (0.97) | 0.0750 (1.03) | 0.2457 (0.86) |
+  | q5_1    | 0.0306 (1.15) | 0.0309 (1.16) | 0.0373 (1.00) | 0.0518 (1.01) | 0.0743 (1.12) | 0.2509 (0.89) |
+  | q4_K    | 0.0265 (1.13) | 0.0266 (1.14) | 0.0354 (1.00) | 0.0510 (0.96) | 0.0748 (1.03) | 0.2511 (0.83) |
+  | q5_K    | 0.0274 (1.18) | 0.0279 (1.18) | 0.0396 (0.97) | 0.0528 (0.98) | 0.0759 (1.05) | 0.2597 (0.83) |
+  | q6_K    | 0.0297 (1.23) | 0.0300 (1.22) | 0.0420 (1.05) | 0.0609 (0.93) | 0.0843 (1.01) | 0.2879 (0.83) |
+  | q3_K    | 0.0245 (1.19) | 0.0249 (1.19) | 0.0376 (0.99) | 0.0550 (0.95) | 0.0804 (1.05) | 0.2774 (0.85) |
+  | iq4_nl  | 0.0251 (1.28) | 0.0254 (1.29) | 0.0310 (1.27) | 0.0447 (1.06) | 0.0674 (1.08) | 0.2216 (0.87) |
+  | iq2_xxs | 0.0260 (1.00) | 0.0257 (1.02) | 0.0347 (0.99) | 0.0469 (0.99) | 0.0706 (1.03) | 0.2389 (0.82) |
+  | iq3_s   | 0.0321 (1.06) | 0.0324 (1.06) | 0.0405 (1.01) | 0.0508 (1.01) | 0.0737 (1.05) | 0.2453 (0.84) |
+  | q2_K    | 0.0299 (0.90) | 0.0304 (0.91) | 0.0442 (0.87) | 0.0610 (0.94) | 0.1085 (1.15) | 0.3683 (0.99) |
+  | nvfp4   | 0.0274 (1.37) | 0.0278 (1.37) | 0.0348 (1.31) | 0.0510 (1.17) | 0.0792 (1.25) | 0.2936 (0.91) |
+  | mxfp4   | 0.0281 (1.11) | 0.0284 (1.11) | 0.0337 (1.11) | 0.0471 (1.03) | 0.0690 (1.08) | 0.2227 (0.89) |
+
+- Gate: `--check` of the dp4a rows and by-M providers of all 23 types on Phase
+  16's shapes and 4096^2 x 7, 8, 9, 16, 64, 512, 4096 x 1001 x 9, 1280 x 512 x
+  7, 9, 1088 x 512 x 8, 4096 x 40 x 7, 9, 4096 x 8 x 1, 2, 5, 4096 x 3 x 2, 4096
+  x 1 x 1, 2, 1088 x 200 x 2, 1280 x 60 x 2 (K of 1280 and 1088 are not
+  multiples of the split's 1024 or 2048 values a step pair; 3033 results), and
+  of the rows on pre-quantized acts (`q8_0`, `q8_1`, `q8_K`; 708): 0 failures, 0
+  unchecked.
+
+- Where the rest is:
+
+  - M \<= 8: iq1_m and iq1_s (their codes from a grid with a delta, not in
+    words), q2_0 (no words), M = 5 (4 rows a warp; GGML 2 rows a block of 2
+    warps), and the act kernel (2.3 us against 2.1).
+  - M = 33 to 48, 129 to 255, 512: as Phase 16.
