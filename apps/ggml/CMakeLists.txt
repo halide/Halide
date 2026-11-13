@@ -112,6 +112,16 @@ if (GGML_CUDA)
             --shapes 1024x2x7,1024x3x3,1024x4x2,1024x5x3,1024x6x5,1024x7x8,1024x6x17,1024x7x64
     )
     set_tests_properties(ggml_cuda_small_n PROPERTIES LABELS ggml_cuda)
+    # The float gemms where M is less than a K split's tile (the tile's rows
+    # outside M computed on the act's clamped rows, never stored)
+    add_test(
+        NAME ggml_cuda_partial_m_tiles
+        COMMAND
+            ggml-quant-bench --op mul_mat --types f16,bf16,f32 --acts f16,bf16,f32
+            --providers cuda,!ggml-cuda --check
+            --shapes 256x512x33,256x512x97,256x512x127,256x512x161,256x512x191,256x512x223
+    )
+    set_tests_properties(ggml_cuda_partial_m_tiles PROPERTIES LABELS ggml_cuda)
 endif ()
 
 # Properties of the schemes, checked by JIT (Halide's approximation testing).

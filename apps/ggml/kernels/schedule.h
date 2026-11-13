@@ -2530,7 +2530,7 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 // 64-value 0.073), below 2 warps of 16 x 16 (M = 16 0.045 on 256-value
 // steps, 0.052 on 128; M = 32 0.048 on 128), from 17 to 31 two of them, the
 // second shifted (M = 20 / 28 0.058 -> 0.049; one guarded tile of 32 rows
-// 0.058); from 33 to 127 cuda_splits()'s. A block's time is its steps' (a
+// 0.058); from 33 to 192 cuda_splits()'s. A block's time is its steps' (a
 // step's loads take ~1-2 us to arrive, whatever their size), so few rows of
 // M take long steps; its
 // shared memory (48 KB) bounds them. Below 16 rows one 16-row tile, guarded
@@ -2823,17 +2823,24 @@ struct GemmSplit {
     bool mfirst = false;
 };
 
-// CUDA's K splits of the gemm on copied operands (cuda_shapes()): in 2 at
-// M = 128, 64 x 128 blocks of 2 x 2 warps of 32 x 64 (f16 x f16 at 4096 x
-// 4096 x 128: 0.097 -> 0.086 ms, bf16 x bf16 0.098 -> 0.084; 64 x 64 blocks
-// in 2 0.099, in 4 0.094; 128 x 128 in 2 0.113; from 129 two such tiles in
-// M, the second shifted, or 64 x 64 in 2, are slower than unsplit tiles:
-// 0.143 -> 0.166 at 160). From M = 33 to 127 (N >= 64) unsplit kernels of
+// CUDA's K splits of the gemm on copied operands (cuda_shapes()): in 2 from
+// M = 97 to 128, 64 x 128 blocks of 2 x 2 warps of 32 x 64 (f16 x f16 at 4096
+// x 4096 x 128: 0.097 -> 0.086 ms, bf16 x bf16 0.098 -> 0.084; 64 x 64 blocks
+// in 2 0.099, in 4 0.094; 128 x 128 in 2 0.113); below 128 rows the parts'
+// one tile in M shifted below row 0 (its rows there read the act's first
+// row; bf16 x bf16 at 112: four unsplit blocks of 32 rows 0.120 -> 0.084; in
+// 4 0.096, 64 x 112 0.093, 64 x 96 0.132, 64 x 128 of 8 warps 0.104, 128 x
+// 128 in 4 0.105, 32-value steps 0.112). From 129 to 192 in 2 on 64 x 192
+// blocks of 2 x 2 warps of 32 x 96 (bf16 x bf16, ms: M = 136 0.144 -> 0.119,
+// 160 0.144 -> 0.120, 192 0.145 -> 0.123; 64 x 160 0.124 at 160, 64 x 64 in
+// 2 0.128, 64 x 96 in 2 0.135, two 64 x 128 tiles in 2 0.167, 64 x 192 of 8
+// warps 0.146, in 4 0.138, staged together 0.130; from 193, in 2 0.170-0.25
+// against 0.155 unsplit). From M = 33 to 96 (N >= 64) unsplit kernels of
 // their own (kz = 1) on 4 warps of 16 x 32, 128-value steps (to 63 2 warps of
 // 16 x 16 before), their blocks in M innermost, to M = 64 their operands
 // staged together (bf16 x bf16, ms: M = 33 0.064 -> 0.057, 48 0.065 -> 0.057,
-// 63 0.088 -> 0.057, 64 0.060 -> 0.057, 96 0.084 -> 0.078, 127 0.129 ->
-// 0.121; together at 96 0.085; 64 x 64 blocks at 65 to 96 0.096-0.110).
+// 63 0.088 -> 0.057, 64 0.060 -> 0.057, 96 0.084 -> 0.078; together at 96
+// 0.085; 64 x 64 blocks at 65 to 96 0.096-0.110).
 // `narrow` (f16 accumulators; N >= 128): 128 x 64
 // blocks of 4 x 2 warps of 32 x 32, K in 4 from M = 33 to 64 (M = 48 0.063 ->
 // 0.054 ms; 64 x 64 of 2 x 2 warps in 4 0.054, unsplit 0.096), in 2 from 65
@@ -2853,12 +2860,12 @@ inline std::vector<GemmSplit> cuda_splits(Func out, bool copied, bool narrow = f
         tog.together = tog80.together = true;
         return {{4, M > 32 && M <= 64 && N >= 128, tog}, {2, M > 128 && M <= 160 && N >= 128, tog80}, {2, M > 64 && M <= 128 && N >= 128, tog}, {2, M > 64 && M <= 192 && N >= 128, sh}};
     }
-    GemmShape sh{Expr(), 2, 4, 2, false, 2}, g{Expr(), 1, 2, 4};
-    sh.kstep = 64;
+    GemmShape sh{Expr(), 2, 4, 2, false, 2}, sh192{Expr(), 2, 6, 2, false, 2}, g{Expr(), 1, 2, 4};
+    sh.kstep = sh192.kstep = 64;
     g.kstep = 128;
     GemmShape gt = g;
     gt.together = true;
-    return {{2, M == 128 && N >= 64, sh}, {1, M > 32 && M <= 64 && N >= 64, gt, true}, {1, M > 64 && M < 128 && N >= 64, g, true}};
+    return {{2, M > 96 && M <= 128 && N >= 64, sh}, {2, M > 128 && M <= 192 && N >= 64, sh192}, {1, M > 32 && M <= 64 && N >= 64, gt, true}, {1, M > 64 && M <= 96 && N >= 64, g, true}};
 }
 
 // GPU on f16 or f32 operands: gpu_staged() on `shapes` of frag x frag
