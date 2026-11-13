@@ -456,6 +456,30 @@ void register_halide_providers() {
                                    return k;
                                }});
     }
+    // halide-by-m-<type>_f32_cuda for float weights on f32 acts, as GGML's
+    // CUDA backend picks mul_mat_vec_f, mul_mat_f or cuBLAS by M: the exact
+    // rows (<type> on f32) below the M given, else the library on f16 (or
+    // bf16) operands (<type> on f32:f16, or f32:f16 on f32:f16: the
+    // tensor-core gemm, f32:f16's rows below M = 8), the faster at 4096 x
+    // 4096 (f16 at M = 2: 0.042 ms against 0.046, at 4 0.050 against 0.046;
+    // f32 at 2 0.082 against 0.083, at 4 0.086 against 0.084; RTX 3090).
+    static const std::map<std::string, std::pair<std::string, int>> float_gemm = {
+        {"f16", {"f16_f32_to_f16_mul_mat_cuda", 3}},
+        {"bf16", {"bf16_f32_to_bf16_mul_mat_cuda", 3}},
+        {"f32", {"f32_to_f16_f32_to_f16_mul_mat_cuda", 4}},
+    };
+    for (const auto &[type, gemm] : float_gemm) {
+        const std::string exact = type + "_f32_mul_mat_cuda";
+        auto mx = make(exact), mh = make(gemm.first);
+        if (!mx || !mh) continue;
+        providers().push_back({"halide-by-m-" + type + "_f32_cuda", GQ_mul_mat, true,
+                               [mx, mh, exact, gemm](const Inputs &in) {
+                                   const bool rows = in.s.M < gemm.second;
+                                   auto k = (rows ? mx : mh)(in);
+                                   if (k) k->path = "halide:cuda:" + (rows ? exact : gemm.first);
+                                   return k;
+                               }});
+    }
 }
 
 }  // namespace gq
