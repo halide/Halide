@@ -423,9 +423,12 @@ endif ()
 # scales per 16-value sub-block scale its sub-blocks' tiles as q6_K's
 # integer ones do. code_words=true (GGML_SCHEDULE_PARAMS): its weight
 # codes decoded 4 a word in a GPR (the formats decoded by shifts and masks
-# of bytes). Each f16-, bf16- or .soa-act
-# bench library's test checks that its PTX multiplies on the tensor cores
-# (the other acts take dp4a or f32 rows).
+# of bytes). f16.acc16 (a separate library, declared lossy; GGML's cuBLAS
+# f16 gemm accumulates in f16 too): the gemm's accumulators are wmma's f16
+# fragments, widened to f32 ones to be stored; its rows f32 as f16's. Each
+# f16-, bf16- or .soa-act bench library's test checks that its PTX
+# multiplies on the tensor cores (the other acts take dp4a or f32 rows),
+# f16.acc16's also that it accumulates in f16.
 set(GGML_HALIDE_CUDA_FORMATS
     "q4_0 mul_mat f32,q8_0,f32:q8_1"
     "q8_0 mul_mat f32,q8_0,f32:q8_1"
@@ -474,6 +477,7 @@ set(GGML_HALIDE_CUDA_FORMATS
     "q4_K mul_mat f32:q8_1.soa"
     "q5_K mul_mat f32:q8_1.soa"
     "f16 mul_mat f16,f32,f32:f16"
+    "f16.acc16 mul_mat f16,f32:f16"
     "bf16 mul_mat bf16,f32,f32:bf16"
     "f32 mul_mat f32"
     "f32:f16 mul_mat f32:f16"
@@ -636,6 +640,14 @@ foreach (row IN LISTS GGML_FORMATS)
             if ("cuda" IN_LIST features_list AND act MATCHES "(f16|\\.soa)$")
                 add_test(NAME ${name}_ptx COMMAND grep -q "mma.sync" $<TARGET_FILE:${name}_bench>)
                 set_tests_properties(${name}_ptx PROPERTIES LABELS ggml_cuda)
+                # (an Accumulate's gemm: wmma's f16 accumulators)
+                if (type MATCHES "\\.acc16")
+                    add_test(
+                        NAME ${name}_ptx_acc16
+                        COMMAND grep -q "m16n16k16.f16.f16" $<TARGET_FILE:${name}_bench>
+                    )
+                    set_tests_properties(${name}_ptx_acc16 PROPERTIES LABELS ggml_cuda)
+                endif ()
             endif ()
         endforeach ()
     endforeach ()

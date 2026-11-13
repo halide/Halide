@@ -247,10 +247,21 @@ void register_halide_providers() {
         // f16 accumulation (acc16): 32 f16 lanes, then 3 f16 tree levels, as
         // GGML's f16 vec_dot, whose results it then equals where GGML has
         // fp16 arithmetic (else it accumulates in f32) and K % 32 == 0 (GGML
-        // sums the tail apart, in f64; ours joins the lanes' last step)
-        auto narrow = [acc16 = fs.acc16](Kernel &k, const Inputs &in) {
+        // sums the tail apart, in f64; ours joins the lanes' last step). On
+        // CUDA, the gemm's f16 wmma accumulators: per output one f16 chain
+        // of K (of K / 2 or K / 4 per part where K is split, the parts summed
+        // in f32: within it), rounded to nearest once per 8 values of K,
+        // their products first summed in f32's precision or better (an RTX
+        // 3090's tensor cores, as measured), from 0 (the rows, otherwise,
+        // accumulate in f32: within it too).
+        auto narrow = [acc16 = fs.acc16, cuda = strstr(row.features, "cuda") != nullptr](Kernel &k, const Inputs &in) {
             if (!acc16) return;
             k.prec.acc_bits = 11;
+            if (cuda) {
+                k.prec.chain = in.s.K;
+                k.prec.acc_block = 8;
+                return;
+            }
             k.prec.chain = (in.s.K + 31) / 32 + 3;
             k.prec.ggml_dot = ggml_cpu_has_fp16_va() && in.s.K % 32 == 0;
         };

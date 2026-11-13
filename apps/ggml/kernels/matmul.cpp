@@ -268,8 +268,9 @@ public:
         fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub, wblock / block, wc != wn, row_bytes, wplain};
         acc = fw.acc;
         // The accumulation's order is part of its numerics: without
-        // strict_float, LLVM may reassociate the partial sums' tree
-        if (acc.defined() && !get_target().has_feature(Target::StrictFloat)) {
+        // strict_float, LLVM may reassociate the partial sums' tree (on
+        // CUDA they are the tensor cores' wmma.mma, in the order of K)
+        if (acc.defined() && !get_target().has_feature(Target::StrictFloat) && !get_target().has_feature(Target::CUDA)) {
             throw std::invalid_argument("matmul: weight " + std::string(weight) + " (an accumulation order) needs the strict_float target feature");
         }
     }
