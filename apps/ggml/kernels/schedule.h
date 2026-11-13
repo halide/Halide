@@ -2413,8 +2413,11 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
 // values of every 32 * c (coalesced; merged into half4/float4 loads), each
 // output a scalar accumulator (float4 ones spill for M > 1). Staged acts get
 // a kernel of their own (inlined, every tile would encode its columns).
-inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged, int sg = 2) {
-    const int nr = 4 / sg, c = 16;
+// CUDA: c = 8, a 16-byte load of f16 weights (f16 on f32 acts at 4096 x
+// 4096 x 1 / 2: 0.046 / 0.061 -> 0.041 / 0.042 ms, f32 on f32 0.090 / 0.092
+// -> 0.080 / 0.082; GGML 0.041 / 0.041, 0.079 / 0.080; RTX 3090).
+inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged, int sg = 2, int c = 16) {
+    const int nr = 4 / sg;
     Var n = out.args()[0], m = out.args()[1], ns("ns"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), rl("rl"), ryi("ryi");
     metal_tiles(out, dot, nr, sg, [](int) { return 4; });
@@ -2746,10 +2749,11 @@ inline void fragments(const Staged &st, Func dot, int frag) {
 // tiles at multiples of frag or shifted in from N: CUDA's wmma.store wants
 // each fragment's rows 32 bytes aligned (an RTX 3090 faults on rows not 8
 // bytes aligned: CUDA_ERROR_MISALIGNED_ADDRESS), i.e. N % 8 == 0. `sg`: the
-// rows' warps per block (metal_rows(), metal_flat()); `staging`: gpu_staged()'s.
+// rows' warps per block (metal_rows(), metal_flat()); `staging`: gpu_staged()'s;
+// `flat_c`: metal_flat()'s c.
 inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, int min_m,
                      const std::vector<GemmShape> &shapes, int frag, const std::vector<Func> &staged = {}, int n_align = 1, int sg = 2, const Staging &staging = Staging(),
-                     Expr large = Expr()) {
+                     Expr large = Expr(), int flat_c = 16) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     // out reads dot through a wrapper (via): the gemm's branch inlines it at
     // once, reading edge (dot's copy, inlined unless guarded); then via reads
@@ -2786,7 +2790,7 @@ inline void gpu_gemm(Func out, Func dot, Func wh, Func xh, const RDom &r, const 
     for (const Func &e : staged) {
         names.insert(e.name());
     }
-    metal_flat(out, rows, r, clone_paths(rows, [&](const Func &f) { return names.count(f.name()) > 0; }), sg);
+    metal_flat(out, rows, r, clone_paths(rows, [&](const Func &f) { return names.count(f.name()) > 0; }), sg, flat_c);
     root_acts();
 }
 
@@ -3907,7 +3911,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (t.has_feature(Target::Metal) || t.has_feature(Target::CUDA)) {
         const bool metal = t.has_feature(Target::Metal);
         const std::string gpu = metal ? "metal: " : "cuda: ";
-        const int sg = metal ? 2 : 1;
+        const int sg = metal ? 2 : 1, flat_c = metal ? 16 : 8;
         if (acc.defined()) throw std::invalid_argument(gpu + "dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument(gpu + "weights and acts one row per record");
         Func wh, xh;
@@ -3926,7 +3930,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             // 8 0.058, 0.046; 2048 x 512 x 16 0.017, 0.024). (RTX 3090)
             Expr M = out.output_buffer().dim(1).extent(), MN = cast<int64_t>(M) * out.output_buffer().dim(0).extent();
             Expr large = cs.wcopy ? MN >= (1 << 13) : (M >= 16 && MN >= (1 << 13)) || (M >= 8 && MN >= (1 << 15));
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp), 16, staged, 8, sg, cs, large);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp), 16, staged, 8, sg, cs, large, flat_c);
             return;
         }
         if (metal && (f16_operands(rs, staged, fmt, wh, xh) || f32_operands(dots[0], x, rs, staged, fmt, wh, xh))) {
@@ -3934,7 +3938,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             return;
         }
         if (fmt.block == 1) {
-            metal_flat(out, dots[0], r, staged, sg);
+            metal_flat(out, dots[0], r, staged, sg, flat_c);
             return;
         }
         const bool integer = !metal && fmt.act_block == fmt.block;
