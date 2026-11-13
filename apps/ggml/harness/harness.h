@@ -34,6 +34,7 @@ struct Shape {
 struct Precision {
     int acc_bits = 24;                      // accumulator significand bits (24: f32, 11: f16)
     int64_t chain = 0;                      // terms per accumulator before an f32 tree reduction; 0 = K
+    int64_t acc_block = 1;                  // terms summed (in acc_bits or better) per rounding of the accumulator
     int operand_bits = 0;                   // operands rounded to this many bits before multiplying; 0 = exact
     ggml_type act_quant = GGML_TYPE_COUNT;  // activations re-quantized internally to this type
     int64_t act_block = 0;                  // ... with 8-bit absmax blocks of this size (0: act_quant's)

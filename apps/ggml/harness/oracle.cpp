@@ -290,9 +290,11 @@ Reference reference(const Inputs &in, const std::vector<float> &a_f32, bool all)
 // (the last term covers decoding formats whose to_float subtracts a min or
 // offset, so the provider's partial terms may exceed |W A|):
 //   |got - sum_k W A| <= E + g S, with
-//   g = gamma_{chain+4}(u_acc) + gamma_{levels+1}(2^-24) + 2 u_op + u_op^2,
-// i.e. chain accumulations plus <= 4 ops per term (decode, scales) in the
-// accumulator precision, an f32 tree over K/chain partials, and operand rounding.
+//   g = gamma_{chain/acc_block+4}(u_acc) + gamma_{levels+1}(2^-24) + 2 u_op + u_op^2,
+// i.e. chain accumulations (one rounding per acc_block terms, which are
+// summed in the accumulator's precision or better) plus <= 4 ops per term
+// (decode, scales) in the accumulator precision, an f32 tree over K/chain
+// partials, and operand rounding.
 // E's worst case has every term's error on one side. The activations are the
 // harness's own draws: their signs are independent and even, whatever their
 // magnitudes and W. Where A' (and in.at's A) is odd in each activation, as
@@ -320,7 +322,7 @@ Check check(const Inputs &in, Reference &ref, const Precision &p, const float *g
     int64_t K = ref.K, chain = p.chain > 0 ? std::min(p.chain, K) : K;
     double levels = std::ceil(std::log2((double)K / chain));
     double uo = p.operand_bits ? std::ldexp(1.0, -p.operand_bits) : 0;
-    double g = gamma(chain + 4, p.acc_bits) + gamma(levels + 1, 24) + 2 * uo + uo * uo;
+    double g = gamma((chain + p.acc_block - 1) / p.acc_block + 4, p.acc_bits) + gamma(levels + 1, 24) + 2 * uo + uo * uo;
     auto cached = ref.requant.find(requant_key(p));
     if (cached == ref.requant.end()) cached = ref.requant.emplace(requant_key(p), requant_sums(ref, p)).first;
     const Reference::Requant &requant = cached->second;
