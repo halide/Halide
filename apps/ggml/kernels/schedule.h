@@ -2819,15 +2819,16 @@ struct GemmSplit {
 // blocks of 4 x 2 warps of 32 x 32, K in 4 from M = 33 to 64 (M = 48 0.063 ->
 // 0.054 ms; 64 x 64 of 2 x 2 warps in 4 0.054, unsplit 0.096), in 2 from 65
 // to 192 (M = 96 0.078 -> 0.067, 128 0.080 -> 0.068; 128 x 64 unsplit at 128
-// 0.098), but 128 x 80 of 4 warps of 32 x 80 in 2 from 129 to 176 (M = 160
-// 0.095 -> 0.081). (RTX 3090)
+// 0.098), but 128 x 80 of 4 warps of 32 x 80 in 2 from 129 to 160 (M = 160
+// 0.095 -> 0.081; from 161 three tiles of 80 in M against three of 64: 0.111
+// -> 0.094). (RTX 3090)
 inline std::vector<GemmSplit> cuda_splits(Func out, bool copied, bool narrow = false) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     if (!copied) return {};
     if (narrow) {
         GemmShape sh{Expr(), 2, 2, 4, false, 2}, sh80{Expr(), 2, 5, 4};
         sh.kstep = sh80.kstep = 64;
-        return {{4, M > 32 && M <= 64 && N >= 128, sh}, {2, M > 128 && M <= 176 && N >= 128, sh80}, {2, M > 64 && M <= 192 && N >= 128, sh}};
+        return {{4, M > 32 && M <= 64 && N >= 128, sh}, {2, M > 128 && M <= 160 && N >= 128, sh80}, {2, M > 64 && M <= 192 && N >= 128, sh}};
     }
     GemmShape sh{Expr(), 2, 4, 2, false, 2};
     sh.kstep = 64;
