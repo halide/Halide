@@ -2547,14 +2547,24 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 // against 0.067, 0.073, 0.093, 0.152, 0.45; q6_K:f16 0.078, 0.064, 0.083,
 // 0.131, 0.44 against 0.082, 0.091, 0.114, 0.158, 0.62.) `one_warp`: one warp
 // of 16 x 16 to M = 63 and of 16 x 32 to 127 (q8_0:f16 M = 32 0.084 -> 0.067,
-// 64 0.117 -> 0.091; q5_0:f16 alike). (RTX 3090)
-inline std::vector<GemmShape> cuda_shapes(Func out, bool copied, int block, bool one_warp = false) {
+// 64 0.117 -> 0.091; q5_0:f16 alike). `narrow` (copied weights on f16
+// accumulators, whose fragments take half the registers): for N >= 128, from
+// M = 480 128 x 128 of 2 x 2 warps of 64 x 64 (M = 512 0.265 -> 0.189 ms;
+// 128 x 128 of 8 warps of 32 x 64 0.208; at 384 0.192), from 352 128 x 96 of
+// 4 warps of 32 x 96 (M = 384 0.144, 448 0.157; at 320 0.143), above 192
+// 128 x 64 of 4 x 2 warps of 32 x 32 (M = 256 0.127 -> 0.108; at 512 0.252);
+// below, as on f32 accumulators, and cuda_splits(). (RTX 3090)
+inline std::vector<GemmShape> cuda_shapes(Func out, bool copied, int block, bool one_warp = false, bool narrow = false) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     auto shape = [](Expr cond, int tn, int tm, int wn, bool guard = false, int kstep = 64, int wm = 1) {
         GemmShape sh{cond, tn, tm, wn, guard, wm};
         sh.kstep = kstep;
         return sh;
     };
+    if (copied && narrow) {
+        return {shape(M >= 480 && N >= 128, 4, 4, 2, false, 64, 2), shape(M >= 352 && N >= 128, 2, 6, 4), shape(M > 192 && N >= 128, 2, 2, 4, false, 64, 2), shape(M > 192 && M <= 256 && N >= 64, 2, 4, 2, false, 64, 2), shape(M >= 128 && N >= 64, 1, 4, 4),
+                shape(M >= 64 && N >= 64, 1, 2, 4, false, 128), shape(M > 16, 1, 1, 2, false, 128), shape(M >= 16, 1, 1, 2, false, 256), shape(Expr(), 1, 1, 2, true, 256)};
+    }
     if (copied) {
         return {shape(M > 192 && M <= 256 && N >= 64, 2, 4, 2, false, 64, 2), shape(M >= 128 && N >= 64, 1, 4, 4), shape(M >= 64 && N >= 64, 1, 2, 4, false, 128),
                 shape(M > 16, 1, 1, 2, false, 128), shape(M >= 16, 1, 1, 2, false, 256), shape(Expr(), 1, 1, 2, true, 256)};
@@ -2805,10 +2815,20 @@ struct GemmSplit {
 // 4096 x 128: 0.097 -> 0.086 ms, bf16 x bf16 0.098 -> 0.084; 64 x 64 blocks
 // in 2 0.099, in 4 0.094; 128 x 128 in 2 0.113; from 129 two such tiles in
 // M, the second shifted, or 64 x 64 in 2, are slower than unsplit tiles:
-// 0.143 -> 0.166 at 160). (RTX 3090)
-inline std::vector<GemmSplit> cuda_splits(Func out, bool copied) {
+// 0.143 -> 0.166 at 160). `narrow` (f16 accumulators; N >= 128): 128 x 64
+// blocks of 4 x 2 warps of 32 x 32, K in 4 from M = 33 to 64 (M = 48 0.063 ->
+// 0.054 ms; 64 x 64 of 2 x 2 warps in 4 0.054, unsplit 0.096), in 2 from 65
+// to 192 (M = 96 0.078 -> 0.067, 128 0.080 -> 0.068; 128 x 64 unsplit at 128
+// 0.098), but 128 x 80 of 4 warps of 32 x 80 in 2 from 129 to 176 (M = 160
+// 0.095 -> 0.081). (RTX 3090)
+inline std::vector<GemmSplit> cuda_splits(Func out, bool copied, bool narrow = false) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     if (!copied) return {};
+    if (narrow) {
+        GemmShape sh{Expr(), 2, 2, 4, false, 2}, sh80{Expr(), 2, 5, 4};
+        sh.kstep = sh80.kstep = 64;
+        return {{4, M > 32 && M <= 64 && N >= 128, sh}, {2, M > 128 && M <= 176 && N >= 128, sh80}, {2, M > 64 && M <= 192 && N >= 128, sh}};
+    }
     GemmShape sh{Expr(), 2, 4, 2, false, 2};
     sh.kstep = 64;
     return {{2, M == 128 && N >= 64, sh}};
@@ -4054,7 +4074,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             // 8 0.058, 0.046; 2048 x 512 x 16 0.017, 0.024). (RTX 3090)
             Expr M = out.output_buffer().dim(1).extent(), MN = cast<int64_t>(M) * out.output_buffer().dim(0).extent();
             Expr large = cs.wcopy ? MN >= (1 << 13) : (M >= 16 && MN >= (1 << 13)) || (M >= 8 && MN >= (1 << 15));
-            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp), 16, staged, 8, sg, cs, large, cuda_splits(out, cs.wcopy), flat_c, acc);
+            gpu_gemm(out, dots[0], wh, xh, r, fmt, rs, fmt.block == 1 ? 2 : 16, cuda_shapes(out, cs.wcopy, fmt.block, k.cuda_one_warp, acc.defined()), 16, staged, 8, sg, cs, large, cuda_splits(out, cs.wcopy, acc.defined()), flat_c, acc);
             return;
         }
         if (acc.defined()) throw std::invalid_argument(gpu + "an Accumulate on the tensor-core gemm's f16 operands only");
