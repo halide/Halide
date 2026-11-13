@@ -3410,3 +3410,186 @@ Same machine and conventions as Phase 19. The targets: iq1_s from M = 12 to 48
     0.90, iq1_s, q4_1 0.92 (a 40-row tile: above); iq2_s from 12 to 128
     (0.79-0.94); q2_K from 12 to 48 (0.80-0.92) and at 96 (0.85: two blocks of
     48 rows, a weight tile decoded twice).
+
+## Phase 21: M = 33 to 40 on one warp's 32 x 40; iq2_xs on mma.sync from M = 17; the rows to M = 7 (RTX 3090)
+
+Same machine and conventions as Phase 20. The targets: M = 33 to 40 (q1_0 0.81,
+q2_K 0.80, iq2_s 0.82, iq3_xxs 0.88, iq2_xxs 0.89, q4_K 0.90, iq1_s, q4_1, q3_K
+0.92, q5_K 0.93 at 40), iq2_s and iq2_xs from M = 12 to 128, q2_K from 12 to 48,
+the small-M stragglers.
+
+- M = 40 (ncu at 4096^2 x 40, the gemm kernel; ours: the K split in 2's 32 x 48
+  of 2 warps of 32 x 24, 256 blocks of 64 threads; GGML's: 82 blocks of 8 warps,
+  stream-k, 40-row tiles):
+
+  | kernel  | ours: us | instructions | registers | shared KB | GGML: us | instructions |
+  | ------- | -------- | ------------ | --------- | --------- | -------- | ------------ |
+  | q4_0    | 31.5     | 5.03M        | 117       | 17.4      | 30.9     | 4.40M        |
+  | q1_0    | 31.8     | 5.68M        | 115       | 15.5      | 24.0     | 4.25M        |
+  | q2_K    | 49.9     | 10.57M       | 168       | 23.2      | 36.9     | 8.19M        |
+  | iq2_s   | 47.8     | 9.27M        | 163       | 20.6      | 39.2     | 6.68M        |
+  | iq3_xxs | 44.1     | 8.19M        | 188       | 19.6      |          |              |
+  | q4_K    | 39.1     | 5.93M        | 128       | 20.9      |          |              |
+
+  No spills; 0.5-0.8 waves, about 6 warps an SM (achieved occupancy 12%, GGML's
+  17%), latency-bound (long-scoreboard 29-36% of stall samples, ours; GGML's
+  lg_throttle and mio). By opcode (thousands of warp instructions, q4_0 ours /
+  GGML's): the scale of each element's int32 tile per 32-value block, `I2FP`,
+  `FMUL`, `FFMA`, 786 each against 655 (40 / 48: the 8 rows past M = 40), 47% of
+  ours; `LDS` 713 against 434 and 33 `LDSM` (GGML's fragments by ldmatrix);
+  `IADD3` + `LEA` 683 against 271. q1_0's decode, a bit to a byte: `SEL` 524,
+  `LOP3` 526, `PRMT` 459 (GGML's `LOP3` 208, `PRMT` 360), 4 instructions a value
+  (and, setp, selp and a byte permute; with `code_words` the same, a select per
+  lane of the word).
+
+- `int_m40` (`cuda_int_splits`' `m40`; 2 or 4, default 0): from M = 33 to 40 one
+  warp's 32 x 40 in a K split of its own in 2 or 4 (in 4 its weights staged per
+  step, unpadded), not 32 x 48's 8 rows past 40. By format (ms of a call at
+  4096^2, before -> in 4 / in 2):
+
+  | type    | M = 33                    | M = 40                    |
+  | ------- | ------------------------- | ------------------------- |
+  | q1_0    | 0.0329 -> 0.0310 / 0.0346 | 0.0337 -> 0.0299 / 0.0327 |
+  | iq3_xxs | 0.0460 -> 0.0437 / 0.0536 | 0.0469 -> 0.0445 / 0.0511 |
+  | iq2_xxs | 0.0406 -> 0.0394 / 0.0443 | 0.0415 -> 0.0403 / 0.0430 |
+  | q2_K    | 0.0528 -> 0.0558 / 0.0485 | 0.0534 -> 0.0534 / 0.0490 |
+  | q4_1    | 0.0408 -> 0.0449 / 0.0388 | 0.0413 -> 0.0431 / 0.0395 |
+  | q4_0    | 0.0369 -> 0.0368 / 0.0355 | 0.0355 -> 0.0376 / 0.0342 |
+  | iq2_s   | 0.0544 -> 0.0552 / 0.0507 | 0.0520 -> 0.0558 / 0.0479 |
+  | q4_K    | 0.0419 -> 0.0472 / 0.0454 | 0.0429 -> 0.0454 / 0.0409 |
+  | q5_K    | 0.0441 -> 0.0510 / 0.0486 | 0.0450 -> 0.0494 / 0.0428 |
+  | iq1_s   | 0.0399 -> 0.0378 / 0.0376 | 0.0385 -> 0.0397 / 0.0392 |
+
+  Taken: in 4 for q1_0, iq3_xxs, iq2_xxs; in 2 for q2_K, q4_1, q4_0. The rest
+  (iq1_m, iq2_xs, iq3_s, iq4_nl, iq4_xs, mxfp4, nvfp4, q2_0, q3_K, q5_0, q5_1,
+  q6_K, q8_0 too) as fast or slower either way, or slower at 33 (q4_K, q5_K,
+  iq1_s). iq2_s in 2 is faster at 33 and 40 but its library's M = 96 kernel (64
+  x 96 on 255 registers, which spills) spills more (0.0725 -> 0.0753 ms, 0.95 ->
+  0.92 of GGML): not taken. In 2 the 32 x 40 runs faster at M = 40 than at 33 to
+  39 (q6_K 0.0484 against 0.0534): at 40 its tiles shift in, below they round up
+  past M. Also tried: the split in 4 on 32 x 48 of 1 x 2 warps (iq2_xxs at 40
+  0.0415 -> 0.0447, q4_0 0.0367) or of one warp (0.0497, 0.0416), in 8 on 32 x
+  40 (0.0437, 0.0383).
+
+- iq2_s and iq2_xs (wmma's to M = 32 and from 65): on mma.sync's tiles at every
+  M (`int_tiles=mmmmm`), ptxas spills only in the K split's 64 x 80 to 64 x 128
+  (M = 65 to 255; iq2_s's and iq2_xs's 320-344 bytes of stack, 836-856 bytes
+  stored, against none for iq2_xxs) and below them none (128 to 234 registers).
+  iq2_s on them is slower without spills, at M = 12 / 16 / 24 / 32 0.0469 /
+  0.0459 / 0.0474 / 0.0501 against wmma's 0.0347 / 0.0355 / 0.0451 / 0.0459, at
+  128 0.184 (spilled) against 0.105; iq2_xs at 24 0.0339 against 0.0389.
+  iq2_xs's `int_tiles` wmmww (mma.sync's 32 x 24 and 32 x 32 in the K split in 4
+  from M = 17 to 32): at 17 / 20 / 24 / 28 / 32 0.0379 / 0.0383 / 0.0388 /
+  0.0390 / 0.0393 -> 0.0350 / 0.0333 / 0.0340 / 0.0384 / 0.0386 (`int_m24` alone
+  0.0352 / 0.0334 / 0.0343 / 0.0397 / 0.0397); on iq2_s 0.0516 / 0.0481 / 0.0487
+  / 0.0511 / 0.0517 against 0.0407-0.0420: not taken.
+
+- iq2_s against iq2_xs at M = 16 (both wmma's 16 x 16, one warp, 1024 blocks;
+  ncu): 32.9 against 26.8 us at about the same instructions (4.89M, 4.78M), 5.45
+  cycles an issue against 4.40: iq2_s has 299K `LDG` against 168K (its high
+  index bits and its signs bytes of their own, a load each per point; iq2_xs's
+  16-bit words carry both), long-scoreboard 40% of stall samples against 36%.
+  Against GGML's iq2_s kernel at 16 (31.3 us, 4.17M): `FMUL` 590K against 311K
+  (each 16-value sub-block's scale times the act's per element; GGML's the act's
+  scale once per 32 values, two `FFMA` a pair), `IADD3` + `LEA` 522K against
+  225K, `LDG` 299K against 205K.
+
+- q2_K against q4_K at M = 16 (mma.sync's 32 x 16, K split in 4; ncu): q2_K 26.4
+  us, 4.34M instructions (GGML's 23.8 us, 4.16M); q4_K 23.0, 2.84M (GGML's 25.1,
+  2.75M). q2_K's 16-value sub-blocks double the int32 tiles' scaling: `FFMA`
+  983K, `FMUL` 639K, `I2FP` 573K (2.2M, half its instructions; GGML's `FFMA`
+  983K, `FMUL` 328K, `I2FP` 655K and 524K `HADD2`, its sub-block scales and mins
+  in half2), `LDS` 635K against 200K and 33K `LDSM`, `LEA` 182K against 46K.
+
+- q1_0's decode in arithmetic form (the codes as `2 u - 1`, Pointwise's Sum
+  form, not a select; a scheme change, measured on the integer gemm library
+  only): selects 3410 -> 706 in its PTX, but at 4096^2 x 12 to 512 the same or
+  slower (M = 40 0.0292 -> 0.0295 with `code_words`, 0.0358 without; at 12
+  0.0194 -> 0.0209): not taken.
+
+- iq2_s and iq2_xs from M = 81 to 96 (64 x 96 on 2 x 2 warps, 255 registers,
+  spilled): two blocks of 32 x 48 in M, as q2_K's (a weight tile decoded twice),
+  at 96 iq2_s 0.0725 -> 0.0983 ms, iq2_xs 0.0714 -> 0.0894; in the K split in 4,
+  0.1132 and 0.0952: not taken.
+
+- M = 1 to 8, the dp4a rows (ncu at 4096^2 x 2, the rows kernel; GGML's
+  mul_mat_vec_q): iq1_s 14.3 us, 3.37M instructions (GGML's 12.7, 2.27M), iq1_m
+  16.6, 4.53M (14.8, 3.27M); q4_0 15.8, 2.21M, iq2_xxs 13.3, 3.77M. L1 hits 97%
+  of iq1's loads (GGML's 98%): not the table (Phase 20). The difference is the
+  decode's integer work: iq1_s `IMAD` 676K, `LOP3` 602K, `IADD3` 365K, `PRMT`
+  98K against GGML's 326K, 270K, 207K and none; iq1_m `IMAD` 1100K, `LOP3` 852K
+  against 401K, 410K (a point's index from its low byte and 3 high bits, its
+  delta and the sub-block scales' fields, each a shift, a mask and a
+  multiply-add a lane; GGML's per 32 values a thread).
+
+- `rows_narrow` (`metal_rows`' `narrow`, now the last M of two rows a warp;
+  default 5, Phase 18's): ms at 4096^2 x 5 / 6 / 7, 5 -> 7 (the CUDA dp4a rows
+  on f32:q8_1):
+
+  | type   | M = 5           | M = 6           | M = 7           |
+  | ------ | --------------- | --------------- | --------------- |
+  | q4_1   | 0.0190 / 0.0190 | 0.0212 / 0.0207 | 0.0231 / 0.0221 |
+  | iq4_xs | 0.0205 / 0.0207 | 0.0233 / 0.0223 | 0.0238 / 0.0248 |
+  | iq1_m  | 0.0222 / 0.0221 | 0.0251 / 0.0243 | 0.0253 / 0.0263 |
+  | q5_0   | 0.0210 / 0.0210 | 0.0222 / 0.0221 | 0.0255 / 0.0246 |
+  | q4_0   | 0.0181 / 0.0180 | 0.0190 / 0.0205 | 0.0200 / 0.0227 |
+
+  Taken: q4_1 to 7, iq4_xs and iq1_m to 6. The others the same or slower at 6 or
+  7 (q5_1 0.0223 / 0.0232 -> 0.0231 / 0.0260, q8_0, q2_0, q6_K, mxfp4, nvfp4,
+  iq2_xxs, iq1_s; iq4_nl, q5_0 within 3%, at 7 or 6 only).
+
+- Gate: `--check` of the integer gemm and by-M providers of q1_0, iq3_xxs,
+  iq2_xxs, q2_K, q4_1, q4_0 and iq2_s at M = 31, 32, 33, 36, 39, 40, 41, 48 on
+  4096 x 1001, 4096 x 4099, 1280 x 512, 1088 x 512 (552 results), of iq2_xs's at
+  M = 15, 16, 17, 20, 24, 25, 31, 32, 33 (81), of the dp4a rows (f32:q8_1) and
+  by-M providers of q4_1, iq4_xs and iq1_m at M = 4 to 8 (150), and the small-N
+  grid at K = 1024, N in {1 to 9, 12, 15, 16, 17, 24, 31, 33, 40, 63}, of every
+  Halide CUDA provider of those types at M = 32, 33, 40, 41 (4536), 16, 17, 24,
+  25, 32, 33 (iq2_xs, 972) and 4 to 8 (2430): 0 failures, 0 unchecked. The 82
+  Metal libraries' `.stmt` byte-identical, the 371 x86 ones identical after
+  renumbering temporaries, after each generator change; of the 146 CUDA bench
+  libraries' `.stmt`, only the changed formats' (the integer gemm of the six
+  `int_m40` formats and iq2_xs, the f32:q8_1 rows of q4_1, iq4_xs and iq1_m)
+  differ. `ctest -L ggml_cuda` 75/75.
+
+- Scorecard, by-M provider, 4096^2, f32 acts, --rounds 5, back to back with
+  Phase 20's build: all 23 types at M = 1, 2, 4, 5, 8, 12, 16, 24, 32, 40, 48,
+  64, 96, 128, 512 with `int_m40` (iq2_s's then too): no cell more than 3%
+  slower but iq2_s at 96 (0.0725 -> 0.0753, retimed alike: its 64 x 96 kernel,
+  255 registers, spills more; iq2_s then dropped, its library Phase 20's);
+  iq2_xs's row with its tiles: at 24 0.0384 -> 0.0332 (0.88 -> 1.03), at 96
+  0.0698 -> 0.0722 (0.98 -> 0.95; the same kernel's local memory requests 25K ->
+  42K), taken; q4_1, iq4_xs, iq1_m at M = 1 to 7 with `rows_narrow`: none more
+  than 1.5% slower. Changed (ms; GGML / it, before -> after):
+
+  | type    | M = 24                | M = 40                |
+  | ------- | --------------------- | --------------------- |
+  | q1_0    |                       | 0.0300 (0.81 -> 0.93) |
+  | iq3_xxs |                       | 0.0433 (0.88 -> 0.96) |
+  | iq2_xxs |                       | 0.0389 (0.90 -> 0.95) |
+  | q2_K    |                       | 0.0491 (0.80 -> 0.88) |
+  | q4_1    |                       | 0.0399 (0.92 -> 0.96) |
+  | q4_0    |                       | 0.0344 (1.10 -> 1.15) |
+  | iq2_xs  | 0.0332 (0.88 -> 1.03) |                       |
+
+  q4_1 at 6 / 7 0.0207 / 0.0221 (0.95 / 0.93 -> 0.98 / 0.97), iq4_xs at 6 0.0222
+  (0.90 -> 0.94), iq1_m at 6 0.0244 (0.88 -> 0.90). 84 of the map's 414 cells (M
+  = 3, 6, 7 Phase 20's but those) under 0.95 (Phase 20: 89).
+
+- Where the rest is (below M = 129):
+
+  - M = 33 to 48: the tiles' scaling per block and element (`I2FP`, `FMUL`,
+    `FFMA`; GGML's as many per row), their fragments' loads (`LDS`, not
+    ldmatrix) and address arithmetic; few blocks an SM (6 warps; GGML's
+    stream-k). q1_0's decode, a select per value (its SWAR lowering tests each
+    lane's bit). q2_K, iq2_s, q4_K, q3_K, q5_K, iq2_xs at 40 (0.87-0.94), q1_0,
+    iq2_s, iq2_xxs, iq3_xxs, q2_K at 48 (0.88-0.93).
+  - iq2_s from 24 to 128 (0.83-0.95): its separate high-bit and sign bytes (a
+    load each a point), its 16-value sub-blocks' scaling (a multiply an element
+    more than GGML's), 64 x 80 to 128 spilled from 65.
+  - q2_K from 12 to 48 and at 96 (0.85-0.94): its sub-blocks' scales and mins,
+    the int32 tiles' scaling twice a block (2.2M of 4.3M instructions at M =
+    16), `LDS` 3x GGML's.
+  - M \<= 8: iq1_m (0.83-0.93) and iq1_s (0.86-0.92) on the dp4a rows: their
+    decode's integer instructions (1.5-2.7x GGML's); q2_0 at M = 1, 2 (0.89,
+    0.85); iq4_xs at 1, 5, 6, q8_0 at 5, 7, q6_K at 3 (0.90-0.94).
