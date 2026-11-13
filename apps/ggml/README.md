@@ -622,31 +622,35 @@ blocks of 2 warps of 16 x 16 in steps of 256 values of K (M < 32) or 128, of 4
 warps of 16 x 32 (M > 32, N >= 64; their blocks in M innermost) or 16 x 64 (M >=
 128, 64-value steps), 2 x 2 of 32 x 64 from 193 to 256: a step's loads take 1-2
 us to arrive whatever their size, so few rows of M take long steps and many
-blocks. At M = 128, K is split in 2 (each part every other step, on the 64 x 128
-blocks, then a kernel summing them). Where a kernel has one tile shape (the K
-splits', and M = 33 to 64), a step's copies of both operands are issued before
-either is awaited (`GemmShape::together`: the staged Funcs `compute_with` each
-other). Below 16 rows one guarded tile of 16 rows. Acts encoded in the pipeline
-(`f32:f16`) are encoded by a kernel of their own and copied likewise. Blocked
-weights, decoded in the kernel, take tiles of 16 x 16 (one warp, 128-value
-steps) below M = 32, then 16 x 32, 32 x 64, 128 x 64 and 64 x 128 (M >= 256) of
-2 to 4 warps (`cuda_shapes`). `metal_flat`'s rows run otherwise and on exact f32
-acts (wmma has no f32 operand fragments), 8 values of K a lane. f32 weights are
-W itself (`f32` on f32 acts: `metal_flat`) or W rounded to f16 for the gemm
-(`f32:f16` on `f32:f16` acts, from M = 8; converted as they are staged, one warp
-a block below M = 128, a tile of N's blocks in M run together so they share its
-weights in L2). `halide-by-m-<type>_f32_cuda` (f16, bf16, f32) takes the exact
-rows below M = 3 (f32: 4), else the library on f16 (bf16) operands;
+blocks. From M = 97 to 128, K is split in 2 (each part every other step, on the
+64 x 128 blocks, then a kernel summing them; below 128 rows the parts' tile in M
+is shifted below row 0, onto the act's clamped rows), from 129 to 192 on 64 x
+192 blocks. Where a kernel has one tile shape (the K splits', and M = 33 to 64),
+a step's copies of both operands are issued before either is awaited
+(`GemmShape::together`: the staged Funcs `compute_with` each other). Below 16
+rows one guarded tile of 16 rows. Acts encoded in the pipeline (`f32:f16`) are
+encoded by a kernel of their own and copied likewise. Blocked weights, decoded
+in the kernel, take tiles of 16 x 16 (one warp, 128-value steps) below M = 32,
+then 16 x 32, 32 x 64, 128 x 64 and 64 x 128 (M >= 256) of 2 to 4 warps
+(`cuda_shapes`). `metal_flat`'s rows run otherwise and on exact f32 acts (wmma
+has no f32 operand fragments), 8 values of K a lane. f32 weights are W itself
+(`f32` on f32 acts: `metal_flat`) or W rounded to f16 for the gemm (`f32:f16` on
+`f32:f16` acts, from M = 8; converted as they are staged, one warp a block below
+M = 128, two of 16 x 128 above, a tile of N's blocks in M run together so they
+share its weights in L2). `halide-by-m-<type>_f32_cuda` (f16, bf16, f32) takes
+the exact rows below M = 3 (f32: 4), else the library on f16 (bf16) operands;
 `halide-by-m-f16.acc16_f32_cuda` takes `f16.acc16` on `f32:f16` from M = 17
 (where GGML takes cuBLAS's f16 gemm). `f16.acc16`'s gemm (N >= 128) has tiles of
 its own, its f16 fragments taking half the registers: 128 x 64 blocks of 4 x 2
-warps of 32 x 32, K split in 4 from M = 33 to 64 and in 2 to 192 (128 x 80 from
-129 to 160; both operands staged together to 160), unsplit above, 128 x 96 from
-352, 128 x 128 of 2 x 2 warps of 64 x 64 from 480. `--check` derives each
-library's tolerance from its declared roundings (`Precision::w_quant`,
-`act_quant`, `act_nearest`). The gemm libraries' tests (`ctest -L ggml_cuda`)
-check that their PTX multiplies on the tensor cores (`mma.sync`), `f16.acc16`'s
-also into f16 accumulators (`m16n16k16.f16.f16`).
+warps of 32 x 32, K split in 4 from M = 33 to 64 and in 2 to 128 (128 x 80 from
+129 to 160, 128 x 112 from 161 to 224; both operands staged together to 160),
+unsplit above, 128 x 96 from 352, 128 x 128 of 2 x 2 warps of 64 x 64 from 480.
+`--check` derives each library's tolerance from its declared roundings
+(`Precision::w_quant`, `act_quant`, `act_nearest`). The gemm libraries' tests
+(`ctest -L ggml_cuda`) check that their PTX multiplies on the tensor cores
+(`mma.sync`), `f16.acc16`'s also into f16 accumulators (`m16n16k16.f16.f16`);
+`ggml_cuda_partial_m_tiles` checks the float gemms where M is less than a K
+split's tile.
 
 On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
 64, 128, 512: f16 x f16 1.12, 1.07, 1.07, 0.99, 1.04, 1.05, 0.90, 0.90, 0.60
@@ -666,8 +670,9 @@ the by-M providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.92, 0.90, 0.62;
 nvfp4 1.01, 1.09, 1.26, 1.40, 1.37, 1.31, 1.17, 1.25, 0.91 (Phase 15's map has
 every type from M = 1 to 512, Phase 16 the M between, Phase 17 M \<= 8, Phase 18
 M = 5 and 33 to 48, Phase 19 to 21 M = 1 to 512 again, Phase 22 the float
-weights, Phase 23 f16 accumulators, Phase 24 the float gemm's M = 33 to 160).
-`doc/X86_CUDA_LOG.md` (Phases 3 to 24) has every type, the `full` preset's
+weights, Phase 23 f16 accumulators, Phase 24 the float gemm's M = 33 to 160,
+Phase 25 the float weights at every 8 rows of M from 24 to 288).
+`doc/X86_CUDA_LOG.md` (Phases 3 to 25) has every type, the `full` preset's
 layers and where the rest of the time is: from M = 8 the integer gemm kernel
 (q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
 formulation, the acts' scales loaded from their planar field; not the fit of its
@@ -676,9 +681,9 @@ also an fma per element and block for its mins; the grid formats' 0.78-0.84, a
 weight block of several blocks as the K-quants'); below 8, iq1_s, iq1_m and q2_0
 (0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M = 40 and 48
 (0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators (`f16.acc16`'s: M =
-48 and 161 to 256, 0.81-0.91, one step of K staged at a time); the f16 and bf16
-gemm on f32 accumulators from M = 97 to 127 (0.57-0.64, four blocks of 32 rows
-in M).
+48, 56, 161 to 256 and 352 to 384, 0.80-0.94, one step of K staged at a time);
+the f16 and bf16 gemm on f32 accumulators from M = 97 to 192 (bf16 x bf16
+0.84-0.94, likewise one step of K at a time).
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds

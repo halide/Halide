@@ -3976,3 +3976,142 @@ what pipelining the steps would buy before any schedule for it.
   d1a0c7aee's generator: the 82 Metal libraries' and 23 sampled x86 libraries'
   byte-identical; of the 148 CUDA bench libraries' only the six touched differ.
   No core change.
+
+## Phase 25: the float gemm between the sampled M (RTX 3090)
+
+Same machine and conventions (4096^2, `--rounds 7`; GGML / Halide). Phase 24's
+maps sampled M at 14 to 17 points; the map is now every 8 rows of M from 24 to
+288 and 320, 352, 384, 448, 512, one harness invocation per weight and act type
+with GGML alongside.
+
+- The map, before -> after (one cell where the two are within 0.025; `f16` on
+  f32 accumulators against GGML's bf16 time, the like-for-like; `acc16` is
+  `f16.acc16`, against GGML's f16; on f32 acts the by-M providers; f32 is
+  `halide-by-m-f32_f32_cuda`, `f32:f16` from M = 4):
+
+  | M   | bf16 x bf16  | bf16 x f32   | f16 x f16    | f16 x f32    | acc16 x f16  | acc16 x f32  | f32 x f32    |
+  | --- | ------------ | ------------ | ------------ | ------------ | ------------ | ------------ | ------------ |
+  | 24  | 0.88 -> 0.91 | 0.96         | 0.91         | 0.96         | 0.92         | 0.98         | 1.03         |
+  | 32  | 0.95         | 0.98         | 0.97         | 0.97 -> 1.00 | 1.07         | 1.07         | 1.05         |
+  | 40  | 1.14         | 1.13         | 1.12         | 1.14         | 0.97         | 0.97         | 1.04         |
+  | 48  | 1.16         | 1.16         | 1.11         | 1.13         | 0.92         | 0.92         | 1.03         |
+  | 56  | 1.17         | 1.16         | 1.13         | 1.15         | 0.91         | 0.91         | 0.91         |
+  | 64  | 0.91         | 0.91         | 0.89         | 0.90         | 0.98         | 0.98         | 0.97         |
+  | 72  | 1.05         | 1.04         | 0.99         | 1.00         | 0.98         | 1.00         | 1.52         |
+  | 80  | 1.04         | 1.05         | 0.98         | 1.00         | 1.06         | 1.06         | 1.52         |
+  | 88  | 0.98         | 0.98         | 0.92         | 0.93         | 1.00         | 1.01         | 1.51         |
+  | 96  | 0.98         | 0.98         | 0.93         | 0.95         | 0.99         | 1.00         | 1.44 -> 1.36 |
+  | 104 | 0.63 -> 0.88 | 0.64 -> 0.89 | 0.60 -> 0.85 | 0.61 -> 0.88 | 1.10         | 1.09         | 1.03         |
+  | 112 | 0.62 -> 0.89 | 0.63 -> 0.89 | 0.60 -> 0.87 | 0.61 -> 0.87 | 1.11         | 1.09         | 0.97         |
+  | 120 | 0.62 -> 0.89 | 0.63 -> 0.89 | 0.60 -> 0.89 | 0.62 -> 0.88 | 1.23         | 1.19         | 0.95 -> 0.92 |
+  | 128 | 0.89         | 0.89         | 0.86         | 0.87         | 1.21         | 1.19         | 0.98         |
+  | 136 | 1.01 -> 1.09 | 1.01 -> 1.18 | 0.93 -> 1.02 | 0.94 -> 1.09 | 1.06         | 1.06         | 1.48 -> 1.85 |
+  | 144 | 0.76 -> 0.84 | 0.78 -> 0.92 | 0.71 -> 0.80 | 0.73 -> 0.86 | 1.05         | 1.08         | 1.48 -> 1.86 |
+  | 152 | 0.76 -> 0.86 | 0.79 -> 0.93 | 0.71 -> 0.82 | 0.74 -> 0.86 | 1.06         | 1.06         | 1.47 -> 1.86 |
+  | 160 | 0.77 -> 0.89 | 0.79 -> 0.92 | 0.71 -> 0.85 | 0.74 -> 0.86 | 1.06         | 1.08         | 1.46 -> 1.86 |
+  | 168 | 0.78 -> 0.92 | 0.80 -> 0.93 | 0.72 -> 0.87 | 0.75 -> 0.86 | 0.81 -> 0.87 | 0.83 -> 0.88 | 1.45 -> 1.87 |
+  | 176 | 0.79 -> 0.94 | 0.81 -> 0.94 | 0.73 -> 0.87 | 0.76 -> 0.87 | 0.81 -> 0.86 | 0.83 -> 0.89 | 1.42 -> 1.86 |
+  | 184 | 0.80 -> 0.94 | 0.82 -> 0.94 | 0.74 -> 0.87 | 0.76 -> 0.87 | 0.80 -> 0.86 | 0.82 -> 0.88 | 1.38 -> 1.91 |
+  | 192 | 0.80 -> 0.93 | 0.82 -> 0.94 | 0.74 -> 0.87 | 0.77 -> 0.87 | 0.81 -> 0.86 | 0.83 -> 0.89 | 1.29 -> 1.89 |
+  | 200 | 0.96         | 0.96         | 0.91         | 0.90         | 0.80 -> 0.94 | 0.82 -> 0.94 | 1.23 -> 1.90 |
+  | 208 | 0.96         | 0.96         | 0.91         | 0.90         | 0.81 -> 0.94 | 0.82 -> 0.94 | 1.24 -> 1.89 |
+  | 216 | 0.97         | 0.96         | 0.92         | 0.91         | 0.80 -> 0.92 | 0.83 -> 0.94 | 1.24 -> 1.89 |
+  | 224 | 0.97         | 0.97         | 0.91         | 0.91         | 0.82 -> 0.92 | 0.84 -> 0.93 | 1.24 -> 1.91 |
+  | 232 | 0.98         | 0.98         | 0.92         | 0.92         | 0.80         | 0.81         | 1.22 -> 1.89 |
+  | 240 | 0.98         | 0.98         | 0.92         | 0.92         | 0.81         | 0.83         | 0.89 -> 1.41 |
+  | 248 | 1.00         | 0.98         | 0.92         | 0.93         | 0.82         | 0.84         | 0.88 -> 1.38 |
+  | 256 | 1.00         | 0.98         | 0.93         | 0.92         | 0.84         | 0.85         | 1.38         |
+  | 264 | 1.58         | 1.56         | 1.52         | 1.47         | 1.05         | 1.03         | 1.51 -> 1.48 |
+  | 272 | 1.58         | 1.56         | 1.51         | 1.46         | 1.05         | 1.04         | 1.52         |
+  | 280 | 1.57         | 1.56         | 1.50         | 1.47         | 1.04         | 1.03         | 1.50         |
+  | 288 | 1.56 -> 1.59 | 1.55         | 1.49         | 1.46         | 1.05         | 1.04         | 1.51         |
+  | 320 | 1.58         | 1.55         | 1.50         | 1.47         | 1.05         | 1.07         | 1.55         |
+  | 352 | 1.32         | 1.31         | 1.27         | 1.27         | 0.89         | 0.91         | 1.47         |
+  | 384 | 1.33         | 1.31         | 1.28         | 1.25         | 0.90         | 0.94         | 1.46 -> 1.41 |
+  | 448 | 1.11         | 1.10         | 1.04         | 1.05         | 1.20         | 1.21 -> 1.17 | 1.37         |
+  | 512 | 1.00         | 1.00         | 0.96         | 0.98         | 0.96         | 0.96         | 1.34         |
+
+  Under 0.95: bf16 x bf16 14 -> 14 cells (11 of them now 0.84-0.94), bf16 on f32
+  acts 12 -> 12, f16 x f16 24 -> 22, f16 on f32 acts 23 -> 22, f16.acc16 17 ->
+  17 and 16 -> 16 (8 of each 0.80-0.84 -> 0.86-0.94), f32 3 -> 2. The maps'
+  cells that move by less than 0.03 are noise between runs: the after map and
+  the before binary's map again right after it, every library at every cell,
+  differ by more than 2% at 7 of 273, all f32 at M = 120 and 264 to 384, which
+  back to back (3 passes each) are within 0.7%.
+
+- f32 accumulators, M = 97 to 127 (four blocks of 32 rows in M, 0.120 ms against
+  cuBLAS's 0.076): M = 128's K split in 2 on 64 x 128 tiles, which Phase 24 took
+  to need M >= 128, runs on any M: the parts are a Func of their own (the out
+  kernel sums them over M's rows only), so their one tile in M shifts below row
+  0 and those rows read the act's first row (the act's rows are clamped; a
+  rounded-up tile, RoundUp past M, measured the same). ms at M = 97 / 112 / 127
+  (bf16 x bf16): 0.118 / 0.120 / 0.121 -> 0.085 / 0.084 / 0.085, M = 128's own
+  time; slower: in 4 (0.093-0.098), 64 x 112 (0.089-0.166), 64 x 96 in 2
+  (0.131-0.133), 64 x 128 of 8 warps of 32 x 32 (0.102-0.106, in 4 0.100-0.104),
+  128 x 128 of 8 warps in 4 or 4 warps in 4 (0.103-0.107), in 2 (0.111-0.114),
+  32-value steps (0.112-0.113), operands staged together (0.086-0.089); the
+  blocks in M innermost the same. M = 128 itself (0.084 against 0.075) is the
+  limit: a part kernel of one stage of K a block, then the sum's ~6 us.
+
+- f32 accumulators, M = 129 to 192 (64 x 64 blocks of 4 warps of 16 x 64, three
+  in M, 0.144-0.146 ms against cuBLAS's 0.111-0.118): K split in 2 on 64 x 192
+  blocks of 2 x 2 warps of 32 x 96 (one tile in M), bf16 x bf16, ms at 136 / 160
+  / 192: 0.144 / 0.144 / 0.145 -> 0.119 / 0.120 / 0.123 (back to back); 64 x 160
+  in 2 0.121 / 0.124 / 0.225; 64 x 64 in 2 0.126 / 0.128 / 0.130; 64 x 96 in 2
+  0.132 / 0.135 / 0.137; two 64 x 128 tiles in 2 0.166 / 0.167 / 0.170; 64 x 192
+  in 4 0.137-0.138; of 8 warps 0.146-0.153; staged together 0.130-0.143. From
+  193 (64 x 128 unsplit, 0.155-0.157 against 0.151-0.157: 0.96-1.00 on bf16) a
+  split was slower: 64 x 192 in 2 0.244-0.25, 64 x 128 in 2 0.169-0.175, 64 x
+  256 in 2 (4 or 8 warps) 0.191-0.197.
+
+- f16.acc16, M = 161 to 256 (128 x 64 split in 2 to 192, unsplit above;
+  0.80-0.84): from 161 to 224 128 x 112 blocks of 4 warps of 32 x 112, K in 2,
+  their blocks in M innermost; ms at 168 / 192 / 208 / 224 (f16 x f16, back to
+  back): 0.095 / 0.096 / 0.110 / 0.110 -> 0.089 / 0.091 / 0.093 / 0.094; in M
+  outermost 0.095 / 0.097 / 0.098 / 0.100. Slower (161 to 256): 128 x 96 in 2
+  (to 192: 0.095-0.096), 128 x 128 of 2 x 2 warps in 2 (0.112-0.120, operands
+  together +1%), 256 x 64 of 4 warps of 64 x 64 in 2 (0.118-0.128), 128 x 64
+  unsplit or 128 x 96 unsplit with the blocks in M innermost (0.104-0.121). From
+  225 to 256 nothing beat 128 x 64 unsplit (0.109-0.110): 128 x 112 in 2 0.161,
+  128 x 80 in 2 0.113-0.158, 128 x 128 in 2 0.115-0.118, 128 x 96 in 2
+  0.130-0.135, 128 x 64 in 2 0.137-0.140. At 352 to 448 (128 x 96 unsplit,
+  0.143-0.157): 128 x 96 or 128 x 128 in 2 0.183-0.219.
+
+- f32 (`f32:f16` on `f32:f16` acts, weights converted as they are staged), M =
+  240 and 248 (0.88-0.89): the two-warp 16 x 64-in-M tiles of M = 128 ran to
+  255, two tiles in M, 0.257 ms at 136 to 0.325 at 248, where M = 256's 2 warps
+  of 16 x 128 in N take 0.208. Those from 129: 0.203-0.207 at every M from 136
+  to 248 (ratios 1.38-1.91). Written as M > 128 they made M = 128's kernel a
+  specialization on M = 128 alone (M's constant folded into its PTX), which took
+  0.151 -> 0.160 ms; the condition below 256 is M % 128 != 0 instead (M = 128
+  0.151). 16 x 32 tiles to M = 56 or 63: 49 0.103 -> 0.093, but 56 0.103 ->
+  0.107-0.109, 63 0.103 -> 0.120: not taken.
+
+- Not closed (under 0.95 after; a block stages one step of K at a time, its
+  copies awaited before its multiplies, Phases 22-24):
+
+  - f32 accumulators, bf16 x bf16 at M = 97 to 128 (0.88-0.90) and 144 to 192
+    (0.84-0.94), f16 x f16 the same M and 193 to 256 (0.91-0.93, against GGML's
+    bf16 time: the same tiles run 5-7% slower on f16 than on bf16), 24 and 64
+    (0.88-0.91: no split or tile tried was faster: at 64 64 x 64 in 2
+    0.061-0.063 against 0.057, 32 x 64 of 4 warps or 64 x 32 of 8 0.056-0.058,
+    64-value steps 0.064; at 24 64 x 32 in 2 0.050 against 0.051, but at 32
+    0.051 against 0.048).
+  - f16.acc16 at 48 to 56 (0.91-0.92), 168 to 224 (0.86-0.94), 232 to 256
+    (0.80-0.85), 352 to 384 (0.89-0.94): half the multiplies' time of f32
+    accumulators, so the steps' latency is more of it (Phase 24's ncu at 256:
+    long-scoreboard 15 stalls per issue, the tensor pipe 56% busy).
+  - f32 at M = 56 (0.91; above) and 120 (0.92-0.95: ours 0.165-0.175 between the
+    maps, the old and new binaries alike back to back).
+
+- Gate: `--check` of the seven touched CUDA libraries (f16, bf16 and f16.acc16
+  on their own and `f32:...` acts, `f32:f16`; checked and bench) and the by-M
+  providers of f16, f16.acc16, bf16 and f32 on f32 acts, K = 128, 256, 320 and
+  4096 on N = 512 and N = 1, 2, 3, 5, 7, 9, M at 47 points (every tile and split
+  boundary from 1 to 512, b - 1, b, b + 1): 23688 results, 0 failures, 1582
+  unchecked (f16.acc16 at K = 4096, as Phase 23). A new ctest,
+  `ggml_cuda_partial_m_tiles` (every CUDA float library at K = 256, N = 512, M =
+  33, 97, 127, 161, 191, 223: K splits' tiles taller than M);
+  `ctest -L ggml_cuda`: 80/80. `.stmt` against f851b0f26's generator: the 82
+  Metal libraries' and 23 sampled x86 libraries' byte-identical; of the 148 CUDA
+  bench libraries' only the seven touched differ. No core change.
