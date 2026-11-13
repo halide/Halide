@@ -77,6 +77,9 @@ public:
     // CUDA's integer gemm and dp4a rows: a grid's table of values in a
     // range of 2^k read as k-bit fields (see ggml::field_table)
     GeneratorParam<bool> packed_tables{"packed_tables", true};
+    // CUDA's dp4a rows with rows_words: the codes per word (see
+    // ggml::metal_rows)
+    GeneratorParam<int> rows_lanes{"rows_lanes", 8};
 
     void configure() {
         // GGML_HALIDE_METALLIB (CMakeLists.txt): embed a metallib compiled by
@@ -265,7 +268,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, int_m24, rows_kw, rows_words, act_lanes, packed_tables};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, int_m24, rows_kw, rows_words, act_lanes, packed_tables, rows_lanes};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {

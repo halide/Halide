@@ -226,6 +226,7 @@ struct Knobs {
     bool rows_words = true;
     int act_lanes = 8;
     bool packed_tables = true;
+    int rows_lanes = 8;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -2105,10 +2106,11 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // of each run decoded in a GPR word (SWAR), as gpu_int_gemm()'s staged
 // codes, a grid point's a load of its table each (not 8 byte loads), a
 // lut's a lookup in the word (iq2_xxs at 4096 x 4096 x 1 0.0286 -> 0.0142
-// ms, q3_K 0.0256 -> 0.0200, q4_0 the same); `per`: the act blocks of a
-// weight block. With `packed_tables`, inline_codes()'s fields.
+// ms, q3_K 0.0256 -> 0.0200, q4_0 the same), `lanes` codes a word (a
+// grid's: a point's); `per`: the act blocks of a weight block. With
+// `packed_tables`, inline_codes()'s fields.
 inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
-                       bool integer = false, int sg = 2, bool narrow = false, int kw = 1, bool words = false, int per = 1, bool packed_tables = false) {
+                       bool integer = false, int sg = 2, bool narrow = false, int kw = 1, bool words = false, int per = 1, bool packed_tables = false, int lanes = 8) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -2343,7 +2345,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         // (words: the weight's codes of each run copied to a GPR word (SWAR),
         // decoded there, a grid point's a load of its table each)
         if (!wc.empty()) {
-            int point = 8;
+            int point = lanes;
             for (Func f : decoders(rs, all_but({}), 0, 1, true)) {
                 const Tabulate *t = tabulate(rs[0], f, false, true);
                 if (t && t->data) point = t->per;
@@ -3978,7 +3980,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (rows_words: the luts inlined into the codes' words, a lookup in
         // each, not a shared copy)
         if (!(integer && k.rows_words)) metal_luts(out, rs);
-        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer, integer ? k.rows_kw : 1, integer && k.rows_words, fmt.per, k.packed_tables);
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer, integer ? k.rows_kw : 1, integer && k.rows_words, fmt.per, k.packed_tables, k.rows_lanes);
         return;
     }
     if (fmt.rowwise) {

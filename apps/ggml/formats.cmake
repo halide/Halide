@@ -231,12 +231,14 @@ set(GGML_SCHEDULE_PARAMS
     "mxfp4 mul_mat f32:q8_0.soa code_words=true"
     "iq4_xs mul_mat f32:q8_0.soa code_words=true"
     "nvfp4 mul_mat f32:q8_0.soa code_words=true"
-    # (the dp4a rows' codes a run a GPR word, rows_words, but q2_0's: its
-    # 2-bit codes, 4 a byte, and on q8_K acts q3_K's and q5_K's high bits
-    # and iq3_xxs's signs, a bit of a byte per value, do not decode
-    # lane-wise in a word; iq1_s's and iq1_m's as fast or faster without:
-    # at 4096^2 x 8 iq1_s 0.0277 -> 0.0265 ms; RTX 3090)
-    "q2_0 mul_mat * rows_words=false"
+    # (the dp4a rows' codes a run a GPR word, rows_words, but on q8_K acts
+    # q3_K's and q5_K's high bits and iq3_xxs's signs, a bit of a byte per
+    # value, do not decode lane-wise in a word; iq1_s's and iq1_m's as fast
+    # or faster without: at 4096^2 x 8 iq1_s 0.0277 -> 0.0265 ms. q2_0's
+    # 2-bit codes, 4 a byte, a word of 4 (rows_lanes=4; 8 do not lower, a
+    # word's two bytes each in 4 lanes): at 4096^2 x 1 / 2 / 8 0.0122 /
+    # 0.0127 / 0.0211 -> 0.0110 / 0.0118 / 0.0201 ms; RTX 3090)
+    "q2_0 mul_mat * rows_lanes=4"
     "iq1_s mul_mat * rows_words=false"
     "iq1_m mul_mat * rows_words=false"
     "q3_K mul_mat q8_K rows_words=false"
