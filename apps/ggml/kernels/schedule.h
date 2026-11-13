@@ -221,6 +221,7 @@ struct Knobs {
     Fold fold = Fold::All;
     bool row_pairs = true, index_words = false, plain_index_words = true, cuda_one_warp = false, code_words = false;
     std::string int_tiles = "mmm";
+    bool int_narrow48 = true;
     int rows_kw = 2;
     bool rows_words = true;
     int act_lanes = 8;
@@ -2770,7 +2771,9 @@ struct KSplit {
 // 128 blocks of 2 x 2 warps above 112 (q4_0 at 4096 x 4096 x 128: 0.070
 // ms; in 4 0.078; unsplit 64 x 64 0.076), 64 x 112, 96 and 80 above 96, 80
 // and 64, 64 x 64 of 2 x 1 above 48 (M = 64: 0.046; in 4, 64 x 64 of 2 x 2
-// 0.049), 64 x 48 below (gpu_int_gemm() keeps it for some formats), above
+// 0.049), 32 x 48 of 1 x 2 warps below (q4_0 at 4096 x 4096 x 40 0.041 ->
+// 0.035 ms, iq2_xxs 0.046 -> 0.041; `narrow48`, else 64 x 48 of 2 x 1, which
+// gpu_int_gemm() keeps for some formats: iq1_s 0.047 against 0.049), above
 // 128 two blocks in M of the first of those at or above half of it (q4_0
 // at 129 / 160 0.109 / 0.112 -> 0.082 / 0.084, two of 64 x 128 before), 32
 // x 32 where N < 64; in 4 to 32, one warp of 32 x 32 above 24 (0.032; 2
@@ -2787,7 +2790,7 @@ struct KSplit {
 // M = 16 alone (iq2_xxs at 16 0.0259 -> 0.0266) and wmma's below 128 (q2_0
 // at 96 0.079 -> 0.082).
 // (RTX 3090)
-inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_small, bool wmma_mid, bool wmma_big) {
+inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_small, bool wmma_mid, bool wmma_big, bool narrow48 = true) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     std::vector<KSplit> splits;
     // (to 16 and above: each shape where it holds, each its own split but
@@ -2809,6 +2812,7 @@ inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_s
             splits.push_back({4, cond, shapes, false, true, tiny ? 0 : 255});
         }
     };
+    const GemmShape m48 = narrow48 ? ishape(M <= 48 && N >= 64, 2, 3, 1, false, 128, 2) : ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128);
     if (wmma_tiny && wmma_small) {
         small(wmma_small, M <= 32, true, true);
     } else {
@@ -2820,13 +2824,13 @@ inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_s
         // 64 x 64 of 4 warps, 0.080)
         splits.push_back({4, M < 128, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
     } else if (!wmma_mid && !wmma_big) {
-        splits.push_back({2, M < 256, {ishape(N >= 64 && ((M > 112 && M <= 128) || M > 224), 2, 8, 2, false, 128, 2), ishape(N >= 64 && ((M > 96 && M <= 112) || M > 192), 2, 7, 2, false, 128, 2), ishape(N >= 64 && ((M > 80 && M <= 96) || M > 160), 2, 6, 2, false, 128, 2), ishape(N >= 64 && M > 64, 2, 5, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
+        splits.push_back({2, M < 256, {ishape(N >= 64 && ((M > 112 && M <= 128) || M > 224), 2, 8, 2, false, 128, 2), ishape(N >= 64 && ((M > 96 && M <= 112) || M > 192), 2, 7, 2, false, 128, 2), ishape(N >= 64 && ((M > 80 && M <= 96) || M > 160), 2, 6, 2, false, 128, 2), ishape(N >= 64 && M > 64, 2, 5, 2, false, 128, 2), m48, ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
     } else if (wmma_mid) {
         splits.push_back({4, M <= 64, {ishape(Expr(), 1, 4, 2, false, 128)}, true});
         splits.push_back({2, M < 256, {ishape(N >= 64, 2, 8, 2, false, 128, 2), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
     } else {
         // (wmma's from M = 97: unsplit, the gemm on all of K's)
-        splits.push_back({2, M <= 96, {ishape(M > 80 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M > 64 && N >= 64, 2, 5, 2, false, 128, 2), ishape(M <= 48 && N >= 64, 2, 6, 2, false, 128), ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
+        splits.push_back({2, M <= 96, {ishape(M > 80 && N >= 64, 2, 6, 2, false, 128, 2), ishape(M > 64 && N >= 64, 2, 5, 2, false, 128, 2), m48, ishape(N >= 64, 2, 8, 2, false, 128), ishape(Expr(), 2, 4, 1, false, 128)}, false, false, 255});
     }
     return splits;
 }
@@ -3094,13 +3098,14 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
         }
         narrow(shapes, wmma);
     }
-    // (the K split's 48-row tiles where a weight block is several blocks,
+    // (the K split's 64 x 48 tiles where a weight block is several blocks,
     // affine or a grid's: at 4096 x 4096 x 48 q4_K 0.050 -> 0.044 ms, q6_K
     // 0.061 -> 0.050, q4_1 0.050 -> 0.043, iq1_s 0.049 -> 0.046 against 64
-    // rows; q4_0 0.042 -> 0.046, iq4_nl 0.047 -> 0.081, q2_K 0.060 -> 0.062)
+    // rows; q4_0 0.042 -> 0.046, iq4_nl 0.047 -> 0.081, q2_K 0.060 -> 0.062;
+    // the 32 x 48 of 2 warps everywhere)
     if (!(fmt.per > 1 || affine(rs) || point) || !luts.empty() || subsums) {
         for (KSplit &sp : splits) {
-            sp.shapes.erase(std::remove_if(sp.shapes.begin(), sp.shapes.end(), [&](const GemmShape &sh) { return fm_of(sp.wmma) * sh.tm * sh.wm == 48; }), sp.shapes.end());
+            sp.shapes.erase(std::remove_if(sp.shapes.begin(), sp.shapes.end(), [&](const GemmShape &sh) { return fm_of(sp.wmma) * sh.tm * sh.wm == 48 && sh.wn > 1; }), sp.shapes.end());
         }
     }
     // (the act's codes' sums per 16-value sub-block, where a weight's
@@ -3854,7 +3859,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             if (it.size() == 3) t = {it[0], it[0], it[1], it[1], it[2]};
             if (it.size() == 4) t = {it[0], it[1], it[2], it[2], it[3]};
             if (t.size() != 5 || t.find_first_not_of("mw") != std::string::npos) throw std::invalid_argument("int_tiles: 3 to 5 of w and m, not " + it);
-            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, t[4] == 'w'), 2, k.code_words, cuda_int_splits(out, t[0] == 'w', t[1] == 'w', t[2] == 'w', t[3] == 'w'), t[4] == 'w');
+            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, t[4] == 'w'), 2, k.code_words, cuda_int_splits(out, t[0] == 'w', t[1] == 'w', t[2] == 'w', t[3] == 'w', k.int_narrow48), t[4] == 'w');
             return;
         }
         // CUDA: acts quantized here (f32:q8_1, as GGML's mmvq quantizes its

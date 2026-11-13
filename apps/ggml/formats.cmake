@@ -321,7 +321,8 @@ set(GGML_SCHEDULE_PARAMS
     # 0.079 -> 0.062; at 128, 0.10 either way); iq1_s below M = 64 (M = 32
     # 0.050 -> 0.044). q2_K: mma.sync's below M = 32 and from 64, wmma's
     # from 32 to 63 (M = 16 / 32: wmma's 0.0339 / 0.0472 ms, mma.sync's
-    # 0.0326 / 0.0473, these 0.0326 / 0.0452).
+    # 0.0326 / 0.0473, these 0.0326 / 0.0452). iq1_s: the K split's 64 x 48
+    # (int_narrow48=false; M = 40 0.047, 32 x 48 0.049).
     "q4_1 mul_mat f32:q8_1.soa int_tiles=mwmm"
     "q4_K mul_mat f32:q8_1.soa int_tiles=wmmm"
     "iq3_s mul_mat f32:q8_0.soa int_tiles=wmmm"
@@ -337,6 +338,7 @@ set(GGML_SCHEDULE_PARAMS
     "iq1_m mul_mat f32:q8_0.soa int_tiles=wwmww"
     "iq2_xs mul_mat f32:q8_0.soa int_tiles=wwmww"
     "iq1_s mul_mat f32:q8_0.soa int_tiles=wmm"
+    "iq1_s mul_mat f32:q8_0.soa int_narrow48=false"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the

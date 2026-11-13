@@ -58,6 +58,10 @@ public:
     // of 4 letters, below 32, below 64, below 256, from 256; of 5, below 32,
     // 64, 128, 256, from 256
     GeneratorParam<std::string> int_tiles{"int_tiles", "mmm"};
+    // CUDA's integer gemm: its K split in 2's tiles to M = 48 of 32 x 48 on
+    // 2 warps of 32 x 24 (else 64 x 48 on 2 of 32 x 48; see
+    // ggml::cuda_int_splits)
+    GeneratorParam<bool> int_narrow48{"int_narrow48", true};
     // CUDA's dp4a rows: the warps splitting K at M = 2 (see
     // ggml::metal_rows)
     GeneratorParam<int> rows_kw{"rows_kw", 2};
@@ -255,7 +259,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, rows_kw, rows_words, act_lanes};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, rows_kw, rows_words, act_lanes};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {
