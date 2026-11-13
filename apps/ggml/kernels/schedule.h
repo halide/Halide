@@ -2036,7 +2036,7 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // vector reduction (CUDA: two dp4a), as is an affine weight's sum of the act's
 // codes (its min's term; CUDA: dp4a by ones, reusing the codes' loads: q4_1,
 // q5_1, q4_K, q5_K at M = 8 1.6-2.4x). `narrow` (integer): a row a warp
-// at M = 1 and 2, two at 3 and 4, so that more warps hide the decodes'
+// at M = 1 and 2, two at 3 to 5, so that more warps hide the decodes'
 // latency (CUDA at 4096 x 4096 x 1: iq2_xxs 0.036 -> 0.029 ms, q3_K 0.035
 // -> 0.025, q4_0 0.017 either way; RTX 3090). `kw` (integer): at M = 2,
 // blocks of kw warps a tile of two rows, the warps taking interleaved steps
@@ -2081,13 +2081,15 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         kind[order[i]] = Shared;
     }
     // (integer: 4 rows at every M but `narrow`'s; at M = 8 2 rows
-    // 0.72-0.89x, 8 rows 0.74-1.07x; RTX A4500)
+    // 0.72-0.89x, 8 rows 0.74-1.07x; RTX A4500; `narrow`'s 2 at M = 5: at
+    // 4096 x 4096 x 5 q8_0 0.0317 -> 0.0287 ms, iq4_nl 0.0220 -> 0.0197, at
+    // 6 and 7 q4_0 0.0191 / 0.0203 -> 0.0205 / 0.0230; RTX 3090)
     // (8 columns: 2 warps a block also where the gemv takes one; CUDA, q4_K
     // on f32 acts at 4096^2 x 64..512 1.05-1.08x)
     // (integer: each tile where N has its rows, metal_tiles()'s `fit`)
     auto tile_rows = [=](int cols) {
         if (kw > 1 && cols == 2) return 2;
-        if (narrow && cols <= 4) return cols > 2 ? 2 : 1;
+        if (narrow && cols <= 5) return cols > 2 ? 2 : 1;
         return cols > 4 && !integer ? 2 : 4;
     };
     if (kw > 1) {
