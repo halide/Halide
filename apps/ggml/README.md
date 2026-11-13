@@ -633,16 +633,17 @@ acts, the by-M provider, q4_0 1.01, 1.02, 1.01, 1.21, 1.21, 1.19, 1.09, 1.15,
 0.92, 0.80; iq4_nl 0.99, 1.00, 1.00, 1.07, 1.29, 1.27, 1.06, 1.08, 0.87; q2_K
 1.20, 1.16, 1.38, 1.29, 0.91, 0.87, 0.94, 1.15, 0.99; nvfp4 1.01, 1.09, 1.26,
 1.40, 1.37, 1.31, 1.17, 1.25, 0.91 (Phase 15's map has every type from M = 1 to
-512, Phase 16 the M between, Phase 17 M \<= 8, Phase 18 M = 5 and 33 to 48).
-`doc/X86_CUDA_LOG.md` (Phases 3 to 18) has every type, the `full` preset's
-layers and where the rest of the time is: from M = 8 the integer gemm kernel
-(q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
-formulation, the acts' scales loaded from their planar field; not the fit of its
-tiles to the SMs, at M = 512 its time follows its work), most at M = 512 (q4_K's
-also an fma per element and block for its mins; the grid formats' 0.78-0.84, a
-weight block of several blocks as the K-quants'); below 8, iq1_s, iq1_m and q2_0
-(0.79-0.93); from 12 to 48 iq1_s, q2_0, q2_K and iq2_s (0.72-0.93); on f16 from
-M = 64, cuBLAS's f16 accumulators.
+512, Phase 16 the M between, Phase 17 M \<= 8, Phase 18 M = 5 and 33 to 48,
+Phase 19 M = 1 to 512 again). `doc/X86_CUDA_LOG.md` (Phases 3 to 19) has every
+type, the `full` preset's layers and where the rest of the time is: from M = 8
+the integer gemm kernel (q4_0's at M = 512 1.07x the time of a hand-written
+kernel of GGML's formulation, the acts' scales loaded from their planar field;
+not the fit of its tiles to the SMs, at M = 512 its time follows its work), most
+at M = 512 (q4_K's also an fma per element and block for its mins; the grid
+formats' 0.78-0.84, a weight block of several blocks as the K-quants'); below 8,
+iq1_s, iq1_m and q2_0 (0.79-0.93); from 12 to 48 iq1_s (0.70-0.84: its grid
+table's 16 KB in L1), q2_K and iq2_s (0.80-0.94); on f16 from M = 64, cuBLAS's
+f16 accumulators.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds

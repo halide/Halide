@@ -3204,3 +3204,90 @@ Same machine and conventions as Phase 17.
   - M = 12 to 48: iq1_s (0.72-0.84), q2_0 (0.81-0.93), q2_K (0.80-0.92), iq2_s
     (0.81-0.91), the grid formats and q1_0 at 40 (0.81-0.92).
   - M = 129 to 255 and 512: as Phase 16.
+
+## Phase 19: q2_0's codes in GPR words; mma.sync's 32 x 24 tiles to M = 24 (RTX 3090)
+
+Same machine and conventions as Phase 18. The targets: the by-M provider's cells
+below M = 129 under 0.95 of GGML in Phase 18's map, worst first: iq1_s at M = 12
+to 40 (0.72-0.76), q2_K at 24 and 96 (0.76, 0.77), iq2_s at 24 (0.78), q2_0 at 2
+and 1 (0.79, 0.80), q2_K, iq2_s and q1_0 at 40 (0.80-0.81), q2_0 at 12 and 16
+(0.81, 0.82), iq2_s at 48 and 128, q2_0 at 40, iq1_s at 48 and iq1_m at 1, 2 and
+8 (0.82-0.86).
+
+- iq1_s from M = 12 to 48 (us of GPU time per kernel, CUPTI, at 4096^2): its
+  gemm kernel 34.4 at M = 16 (wmma's 16 x 16, 1024 one-warp blocks, 12.3 KB of
+  shared memory, 142 registers) against iq2_xxs's 22.3 and GGML's 19.2 + 3.1; at
+  40 42.5 against 26.4 + 4.4. By ncu at M = 16, about the instructions of
+  iq2_xxs's kernel (4.24M against 4.05M), at 6.8 cycles an issue against 5.0, L1
+  hits 61% of loads against 80%. Ablations (wrong results): without the delta's
+  add (8 g, not 8 g +- 1) 34.4 -> 33.9 us; the grid index masked to 8 bits (a 2
+  KB table) 20.1, to 10 bits (8 KB) 28.2. So the cost is the table: 2048 points
+  of 8 bytes, 16 KB, read a point a lane, in what L1 has left beside 7 blocks'
+  shared memory an SM; GGML's table is 8 KB (a point's 8 values in nibbles). Not
+  changed: a smaller table is a decode the format does not have (nibbles to
+  bytes in the word), and the gemm's own copy of it per block would cost more
+  than the weights it decodes.
+
+- M = 17 to 32: q2_K, q4_1, iq2_s, iq2_xs and q1_0 take wmma's 16 x 32 of 2
+  warps (`int_tiles` w for M = 17 to 32), the others mma.sync's, with 32 x 24 of
+  one warp to M = 24 (Phase 16). On mma.sync's (ms of a call of the integer gemm
+  library, 4096^2): q2_K at 17 / 24 / 28 / 32 0.0338 / 0.0339 / 0.0455 / 0.0456
+  against wmma's 0.0450 / 0.0428 / - / 0.0434; q4_1 0.0311 / 0.0320 / 0.0388 /
+  0.0389 against 0.0361 / 0.0357 / - / 0.0365; iq2_s at 24 0.0492 against
+  0.0416, iq2_xs 0.0405 against 0.0384. `int_m24` (`cuda_int_splits`): where
+  wmma's take 17 to 32, mma.sync's 32 x 24 in its own split to M = 24; for q2_K,
+  q4_1 and q1_0 (q1_0 at 24 0.0249 -> 0.0226).
+
+- q2_0's integer gemm had no `code_words` (its 2-bit codes decoded a byte at a
+  time, as q2_K's before Phase 14); with it, M = 12 / 24 / 40 / 64 / 128 0.0283
+  / 0.0304 / 0.0411 / 0.0477 / 0.0687 -> 0.0202 / 0.0244 / 0.0341 / 0.0438 /
+  0.0624 ms. q1_0's slower with it (0.0194 / 0.0253 / 0.0342 / 0.0430 / 0.0620
+  -> 0.0230 / 0.0278 / 0.0359 / 0.0456 / 0.0651): not taken. At M = 8 the
+  integer gemm 0.0201 against the rows' 0.0207, within the by-M table's 3%: the
+  rows kept.
+
+- Tried, not taken (ms of a call of the integer gemm library, 4096^2):
+
+  | change                                                                                                          | effect                                                                                                                                                                                                                                                                                                  |
+  | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | q2_K's K split in 2 on 64 x 80 / 64 x 96 tiles (`subsums` keeps at most 64 rows of M; 128 take more than 48 KB) | M = 80 0.108 -> 0.072 (42 KB, 255 registers, 16-24 bytes spilled), 96 0.107 -> 0.111 (46 KB, 368 bytes spilled), 112 fails to launch; 64 x 96 on 6 warps of 32 x 32 0.121 (one block an SM); 88 to 127 on shifted 64 x 80 tiles 0.132-0.137. The by-M provider takes the f16 gemm from 65 (0.105-0.108) |
+  | wmma's from M = 33 to 64 (q2_K `mwwmm`, iq2_s and iq2_xs `wwwww`)                                               | at 40 / 48 / 64 q2_K 0.074 / 0.073 / 0.075, iq2_s 0.070 / 0.070 / 0.070, iq2_xs 0.068 / 0.064 / 0.065 against 0.054-0.061                                                                                                                                                                               |
+  | wmma's whole weight blocks per step for iq1_s (wstep)                                                           | `wsteps_of()` takes none on wmma's: unchanged                                                                                                                                                                                                                                                           |
+  | q2_0's dp4a rows on its codes in words (`rows_words`)                                                           | fails to lower: a shuffle between lanes in the SWAR loop                                                                                                                                                                                                                                                |
+
+- Gate: `--check` of the integer gemm and by-M providers of q2_0, q2_K, q4_1 and
+  q1_0 on 4096 x 1001, 4096 x 4099, 1280 x 512 and 1088 x 512 x 8, 9, 12, 16,
+  17, 20, 24, 25, 31, 32, 33, 40, 48, 49, 63, 64, 65, 96, 128, 129, 200, 255,
+  256, 257, 512 (1050 results) and 4096^2 x 16, 17, 24, 25, 32, 33, 512
+  (`--outputs sampled`; 84), and the small-N grid at K = 1024, N in {1 to 9, 12,
+  15, 16, 17, 24, 31, 33, 40, 63}, of every Halide CUDA provider of q2_K, q4_1,
+  q1_0 at M = 16, 17, 20, 24, 25, 32, 33 (3402) and of q2_0 at M = 8, 9, 12, 16,
+  17, 24, 25, 32, 33, 40, 48, 64, 65, 128, 129, 256 (2592), f32 acts: 0
+  failures, 0 unchecked. `ctest -L ggml_cuda` 75/75. The 82 Metal libraries'
+  `.stmt` byte-identical; of the 48 CUDA integer gemm and `f32:q8_1` rows
+  libraries, 45 byte-identical across the generator change (the other 3 the
+  `int_m24` ones).
+
+- Scorecard, by-M provider, 4096^2, f32 acts, --rounds 5, all 23 types at M = 1,
+  2, 4, 5, 8, 12, 16, 24, 32, 40, 48, 64, 96, 128, 512: no cell more than 3%
+  slower than Phase 18's map but iq2_xxs at 24 (30.1 -> 31.1 us, its library
+  unchanged; retimed 30.2, 30.3). 80 of its 345 cells under 0.95 (93); with
+  Phase 18's M = 3, 6, 7, 92 of the map's 414 (105). Changed (ms; GGML / it,
+  before -> after):
+
+  | type | M = 12                | M = 16                | M = 24                | M = 32                | M = 40                | M = 48                | M = 64                | M = 96                | M = 128               | M = 512               |
+  | ---- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- |
+  | q2_0 | 0.0208 (0.81 -> 1.05) | 0.0211 (0.82 -> 1.05) | 0.0240 (0.89 -> 1.11) | 0.0281 (0.93 -> 1.11) | 0.0344 (0.83 -> 0.99) | 0.0346 (0.89 -> 1.08) | 0.0440 (0.91 -> 1.00) | 0.0506 (0.96 -> 1.12) | 0.0625 (1.00 -> 1.10) | 0.2294 (0.75 -> 0.79) |
+  | q2_K |                       |                       | 0.0345 (0.76 -> 0.96) |                       |                       |                       |                       |                       |                       |                       |
+  | q4_1 |                       |                       | 0.0318 (0.86 -> 0.96) |                       |                       |                       |                       |                       |                       |                       |
+  | q1_0 |                       |                       | 0.0229 (0.92 -> 0.99) |                       |                       |                       |                       |                       |                       |                       |
+
+- Where the rest is (below M = 129):
+
+  - iq1_s from M = 12 to 48 (0.70-0.84): its grid table's L1 footprint (above);
+    at M \<= 8 iq1_s and iq1_m (0.84-0.93) on the dp4a rows, the same table.
+  - q2_K at 96 (0.77): the f16 gemm from 65; its integer gemm's tiles of at most
+    64 rows (above); at 32 to 48 (0.80-0.87) its min term (Phase 14).
+  - q2_0 at M = 1 and 2 (0.79, 0.80): the rows' codes not in words.
+  - M = 40 (q1_0 0.81, iq2_s, iq3_xxs, iq2_xxs, q4_K, q4_1 0.87-0.91) and iq2_s
+    at 24 to 48 and 128 (0.83-0.89): as Phase 18.
