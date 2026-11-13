@@ -2048,6 +2048,12 @@ private:
     HALIDE_ALWAYS_INLINE
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
+        if (d >= this->dimensions()) {
+#if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+            assert(false && "More coordinates passed to Buffer::operator() than buffer dimensions");
+#endif
+            return 0;
+        }
 #if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
         assert(first >= this->buf.dim[d].min);
         assert(first < this->buf.dim[d].min + this->buf.dim[d].extent);
