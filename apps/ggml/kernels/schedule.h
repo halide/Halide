@@ -2464,12 +2464,16 @@ inline bool f32_operands(Func dot, Func x, const std::vector<ApproximationResult
 // A GPU gemm's tile shape under `cond` (Expr(): the rest): a block of wn x wm
 // warps (Metal: simdgroups), each tn x tm fragments; `guard`: one tile, its
 // stores guarded (gpu_staged()); `kstep`: the values of K staged per step;
-// `pad_rows`: rows past a block's in its staged operands (gpu_int_gemm()).
+// `pad_rows`: rows past a block's in its staged operands (gpu_int_gemm());
+// `together`: a step's copies of both operands issued in one loop over the
+// threads (compute_with), awaited together, not the acts' before the
+// weights' are issued (gpu_staged(); one shape, unconditional).
 struct GemmShape {
     Expr cond;
     int tn, tm, wn;
     bool guard = false;
     int wm = 1, kstep = 64, pad_rows = 2;
+    bool together = false;
 };
 
 // How gpu_staged() stages a step's operands in shared memory: each lane
@@ -2753,6 +2757,10 @@ inline Staged gpu_staged(Stage o, Func out, Func dot, Func edge, Func wh, Func x
             s.gpu_lanes(ln).gpu_threads(sw, sm).vectorize(jv);
             s.unroll(lt);
         }
+        if (sh.together) {
+            if (shapes.size() != 1 || sh.cond.defined()) throw std::invalid_argument("gpu_staged: operands staged together on one unconditional shape");
+            ws.compute_with(xs, Var("ln"));
+        }
     }
     for (auto &e : edged) {
         e();
@@ -2821,14 +2829,18 @@ struct GemmSplit {
 // to 192 (M = 96 0.078 -> 0.067, 128 0.080 -> 0.068; 128 x 64 unsplit at 128
 // 0.098), but 128 x 80 of 4 warps of 32 x 80 in 2 from 129 to 160 (M = 160
 // 0.095 -> 0.081; from 161 three tiles of 80 in M against three of 64: 0.111
-// -> 0.094). (RTX 3090)
+// -> 0.094). Their operands staged together (GemmShape::together) to M =
+// 160 (M = 48 0.054 -> 0.052 ms, 96 0.068 -> 0.065, 128 0.069 -> 0.066, 160
+// 0.078 -> 0.073; at 192 0.096 -> 0.102). (RTX 3090)
 inline std::vector<GemmSplit> cuda_splits(Func out, bool copied, bool narrow = false) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     if (!copied) return {};
     if (narrow) {
         GemmShape sh{Expr(), 2, 2, 4, false, 2}, sh80{Expr(), 2, 5, 4};
         sh.kstep = sh80.kstep = 64;
-        return {{4, M > 32 && M <= 64 && N >= 128, sh}, {2, M > 128 && M <= 160 && N >= 128, sh80}, {2, M > 64 && M <= 192 && N >= 128, sh}};
+        GemmShape tog = sh, tog80 = sh80;
+        tog.together = tog80.together = true;
+        return {{4, M > 32 && M <= 64 && N >= 128, tog}, {2, M > 128 && M <= 160 && N >= 128, tog80}, {2, M > 64 && M <= 128 && N >= 128, tog}, {2, M > 64 && M <= 192 && N >= 128, sh}};
     }
     GemmShape sh{Expr(), 2, 4, 2, false, 2};
     sh.kstep = 64;
