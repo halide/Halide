@@ -491,6 +491,21 @@ void register_halide_providers() {
                                    return k;
                                }});
     }
+    // halide-by-m-f16.acc16_f32_cuda: as halide-by-m-f16_f32_cuda, but
+    // above M = 16, where GGML's CUDA backend takes cuBLAS's f16 gemm (f16
+    // accumulators), f16.acc16's (the tensor-core gemm on f16 accumulators;
+    // its own Precision).
+    if (auto mx = make("f16_f32_mul_mat_cuda"), mh = make("f16_f32_to_f16_mul_mat_cuda"), ma = make("f16_acc16_f32_to_f16_mul_mat_cuda"); mx && mh && ma) {
+        providers().push_back({"halide-by-m-f16.acc16_f32_cuda", GQ_mul_mat, true, [mx, mh, ma](const Inputs &in) {
+                                   const int M = in.s.M;
+                                   const char *name = M < 3 ? "f16_f32_mul_mat_cuda" : M <= 16 ? "f16_f32_to_f16_mul_mat_cuda" :
+                                                                                                 "f16_acc16_f32_to_f16_mul_mat_cuda";
+                                   auto k = (M < 3 ? mx : M <= 16 ? mh :
+                                                                    ma)(in);
+                                   if (k) k->path = std::string("halide:cuda:") + name;
+                                   return k;
+                               }});
+    }
 }
 
 }  // namespace gq
