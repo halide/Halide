@@ -221,6 +221,8 @@ struct Knobs {
     Fold fold = Fold::All;
     bool row_pairs = true, index_words = false, plain_index_words = true, cuda_one_warp = false, code_words = false;
     std::string int_tiles = "mmm";
+    int rows_kw = 2;
+    bool rows_words = true;
     int act_lanes = 8;
 };
 
@@ -591,7 +593,7 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
         codes = parts[0];
         rest = parts[1];
         for (Func f : {codes, rest}) {
-            f.update().eager_inline(decoders(rs, only({tag::codes})));
+            f.update().eager_inline(without(decoders(rs, only({tag::codes})), kept));
         }
         if (integer) rest = rest.change_type(Int(32));
     }
@@ -1907,11 +1909,40 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true, wper);
 }
 
+// ws (a copy of the weight's codes wcodes) computing them itself: the
+// weight's decode inlined into it, a sign's multiply x * (1 - y * 2), y in
+// [0, 1], as (x ^ -y) + y, so that a grid point's codes decode in a GPR
+// (SWAR)
+inline void inline_codes(Func ws, const std::vector<ApproximationResult> &rs, Func wcodes) {
+    using namespace Internal;
+    Expr &v = ws.function().definition().values()[0];
+    for (;;) {
+        FunctionPtr fp;
+        visit_with(v, [&](auto *self, const Call *c) {
+            if (c->call_type == Call::Halide && c->func.defined() && !fp.defined() && (has(rs[0].decode_funcs(), c->name) || c->name == wcodes.name())) fp = c->func;
+            self->visit_base(c);
+        });
+        if (!fp.defined()) break;
+        v = inline_function(v, Function(fp));
+    }
+    v = mutate_with(simplify(substitute_in_all_lets(v)), [&](auto *self, const Mul *op) -> Expr {
+        const Sub *s = op->b.as<Sub>();
+        const Mul *m = s ? s->b.as<Mul>() : nullptr;
+        if (s && m && is_const_one(s->a) && is_const(m->b, 2)) {
+            Expr y = m->a;
+            Interval b = bounds_of_expr_in_scope(y, Scope<Interval>::empty_scope());
+            if (b.is_bounded() && can_prove(b.min >= 0 && b.max <= 1)) return (self->mutate(op->a) ^ (make_zero(y.type()) - y)) + y;
+        }
+        return self->visit_base(op);
+    });
+}
+
 // The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
 // rows of `cols` columns, the widest cols <= 8 that M allows (gemv: nr rows
-// of one column); N < nr * sg, a row per threadgroup. Edge tiles shift in.
-// `sg8`: the simdgroups of the 8-column tiles' threadgroups, if not sg.
-inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows, int sg8 = 0) {
+// of one column); N < max(nr * sg, nmin), a row per threadgroup. Edge tiles
+// shift in. `sg8`: the simdgroups of the 8-column tiles' threadgroups, if not
+// sg; `groups(cols)`, if given, those of every tile's.
+inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows, int sg8 = 0, int nmin = 0, const std::function<int(int)> &groups = {}) {
     Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi");
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     auto tile = [&](Stage o, int rows, int groups, int cols) {
@@ -1923,11 +1954,13 @@ inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<
         }
         o.unroll(ni).gpu_threads(ns);
     };
-    Stage big = Stage(out).specialize(N >= nr * sg);
+    Stage big = Stage(out).specialize(N >= std::max(nr * sg, nmin));
     for (int cols = 8; cols > 1; cols--) {
-        tile(big.specialize(M >= cols), rows(cols), cols == 8 && sg8 ? sg8 : sg, cols);
+        tile(big.specialize(M >= cols), rows(cols), groups ? groups(cols) : cols == 8 && sg8 ? sg8 :
+                                                                                               sg,
+             cols);
     }
-    tile(big, nr, sg, 1);
+    tile(big, nr, groups ? groups(1) : sg, 1);
     tile(Stage(out), 1, 1, 1);
     dot.compute_at(out, ni);
 }
@@ -1994,9 +2027,18 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // q5_1, q4_K, q5_K at M = 8 1.6-2.4x). `narrow` (integer): a row a warp
 // at M = 1 and 2, two at 3 and 4, so that more warps hide the decodes'
 // latency (CUDA at 4096 x 4096 x 1: iq2_xxs 0.036 -> 0.029 ms, q3_K 0.035
-// -> 0.025, q4_0 0.017 either way; RTX 3090).
+// -> 0.025, q4_0 0.017 either way; RTX 3090). `kw` (integer): at M = 2,
+// blocks of kw warps a tile of two rows, the warps taking interleaved steps
+// of K, their sums combined through shared memory (2 warps: iq2_xxs at
+// 4096 x 4096 x 2 0.0152 -> 0.0136 ms, q1_0 0.0117 -> 0.0106; at M = 1 no
+// faster, at 3 to 8 slower; RTX 3090). `words` (integer): the weight's codes
+// of each run decoded in a GPR word (SWAR), as gpu_int_gemm()'s staged
+// codes, a grid point's a load of its table each (not 8 byte loads), a
+// lut's a lookup in the word (iq2_xxs at 4096 x 4096 x 1 0.0286 -> 0.0142
+// ms, q3_K 0.0256 -> 0.0200, q4_0 the same); `per`: the act blocks of a
+// weight block.
 inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
-                       bool integer = false, int sg = 2, bool narrow = false) {
+                       bool integer = false, int sg = 2, bool narrow = false, int kw = 1, bool words = false, int per = 1) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -2005,6 +2047,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     while ((1 << bits) < block)
         bits++;
     if (block != 1 << bits || bits < 5) throw std::invalid_argument("metal_rows: blocks of 2^k >= 32 values");
+    if (kw > 1 && !integer) throw std::invalid_argument("metal_rows: K split over warps of integer rows only");
     const int run = 3, vals = std::min(5, bits - 1);
     const int nr = narrow ? 1 : std::max(1, (8 >> (vals - 4)) / sg);
     // the bits each kind: run, shared, the lane's
@@ -2031,10 +2074,16 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     // (8 columns: 2 warps a block also where the gemv takes one; CUDA, q4_K
     // on f32 acts at 4096^2 x 64..512 1.05-1.08x)
     auto tile_rows = [=](int cols) {
+        if (kw > 1 && cols == 2) return 2;
         if (narrow && cols <= 4) return cols > 2 ? 2 : 1;
         return cols > 4 && !integer ? 2 : 4;
     };
-    metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2));
+    if (kw > 1) {
+        metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2), 0, [=](int cols) { return cols == 2 ? 1 : cols == 8 ? std::max(sg, 2) :
+                                                                                                                        sg; });
+    } else {
+        metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2));
+    }
     // (integer: the gemv's lanes at every M, their runs the dp4a's)
     if (!integer) {
         Var lx("lx");
@@ -2052,154 +2101,234 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
         }
         ls.gpu_lanes(lx).unroll(n).unroll(m).unroll(ryu);
     }
-    Stage s = dot.update();
-    // r.x in segments of one kind, from the lowest
-    struct Seg {
-        RVar r;
-        Kind kind;
-        int lo;  // (its lowest bit)
-    };
-    std::vector<Seg> segs;
-    RVar rest_x = rx;
-    for (int b = 0; b < bits;) {
-        int e = b + 1;
-        while (e < bits && kind[e] == kind[b])
-            e++;
-        std::string name = std::string(kind[b] == Run ? "rxi" : kind[b] == Shared ? "rxn" :
-                                                                                    "rxh") +
-                           std::to_string(segs.size());
-        if (e < bits) {
-            RVar in(name), o("rx" + std::to_string(segs.size()) + "o");
-            s.split(rest_x, o, in, 1 << (e - b));
-            segs.push_back({in, kind[b], b});
-            rest_x = o;
-        } else {
-            segs.push_back({rest_x, kind[b], b});
-        }
-        b = e;
-    }
-    std::vector<std::pair<RVar, Var>> lane_vars, acc_vars, sub_vars;
-    std::vector<RVar> lane_rs, inner_rs, sub_rs;
-    // (integer, float sub-block scales: nvfp4's, whose nibbles share bytes
-    // within a sub-block; its scale hoists out of the int32 dot where its
-    // bits are the lane's, so a shared bit below them is of the dot)
-    const bool fsub = integer && float_sub_scales(rs);
-    // (runs first: innermost)
-    std::stable_partition(segs.begin(), segs.end(), [](const Seg &g) { return g.kind == Run; });
-    for (const Seg &g : segs) {
-        if (g.kind == Lane) {
-            lane_vars.emplace_back(g.r, Var("uh" + std::to_string(lane_vars.size())));
-            acc_vars.emplace_back(g.r, Var("ua" + std::to_string(acc_vars.size())));
-            lane_rs.push_back(g.r);
-        } else if (sub && g.kind == Shared && (!fsub || (1 << g.lo) >= sub)) {
-            sub_vars.emplace_back(g.r, Var("v" + std::to_string(sub_vars.size())));
-            sub_rs.push_back(g.r);
-        } else {
-            inner_rs.push_back(g.r);
-        }
-    }
-    lane_vars.emplace_back(ry, u);
-    Func blk = s.rfactor(lane_vars), rest, mid;
-    Func codes = block_dot(blk, rs, integer, rest, mid, on_codes && affine(rs));
-    // the runs (int32 dots, and an affine weight's act code sums) reduced as
-    // vectors, else unrolled
-    auto inner_loops = [&](Stage fs) {
-        for (const RVar &v : inner_rs) {
-            if (integer && v.name() == inner_rs[0].name() && segs[0].kind == Run) {
-                fs.atomic().vectorize(v);
+    // the dot's chain of partial sums on its stage s0 (kw: the warps' K
+    // split)
+    auto chain = [&](Stage s0, int kw) {
+        Stage s = s0;
+        // r.x in segments of one kind, from the lowest
+        struct Seg {
+            RVar r;
+            Kind kind;
+            int lo;  // (its lowest bit)
+        };
+        std::vector<Seg> segs;
+        RVar rest_x = rx;
+        for (int b = 0; b < bits;) {
+            int e = b + 1;
+            while (e < bits && kind[e] == kind[b])
+                e++;
+            std::string name = std::string(kind[b] == Run ? "rxi" : kind[b] == Shared ? "rxn" :
+                                                                                        "rxh") +
+                               std::to_string(segs.size());
+            if (e < bits) {
+                RVar in(name), o("rx" + std::to_string(segs.size()) + "o");
+                s.split(rest_x, o, in, 1 << (e - b));
+                segs.push_back({in, kind[b], b});
+                rest_x = o;
             } else {
-                fs.unroll(v);
+                segs.push_back({rest_x, kind[b], b});
+            }
+            b = e;
+        }
+        std::vector<std::pair<RVar, Var>> lane_vars, acc_vars, sub_vars;
+        std::vector<RVar> lane_rs, inner_rs, sub_rs;
+        // (integer, float sub-block scales: nvfp4's, whose nibbles share bytes
+        // within a sub-block; its scale hoists out of the int32 dot where its
+        // bits are the lane's, so a shared bit below them is of the dot)
+        const bool fsub = integer && float_sub_scales(rs);
+        // (runs first: innermost)
+        std::stable_partition(segs.begin(), segs.end(), [](const Seg &g) { return g.kind == Run; });
+        for (const Seg &g : segs) {
+            if (g.kind == Lane) {
+                lane_vars.emplace_back(g.r, Var("uh" + std::to_string(lane_vars.size())));
+                acc_vars.emplace_back(g.r, Var("ua" + std::to_string(acc_vars.size())));
+                lane_rs.push_back(g.r);
+            } else if (sub && g.kind == Shared && (!fsub || (1 << g.lo) >= sub)) {
+                sub_vars.emplace_back(g.r, Var("v" + std::to_string(sub_vars.size())));
+                sub_rs.push_back(g.r);
+            } else {
+                inner_rs.push_back(g.r);
+            }
+        }
+        lane_vars.emplace_back(ry, u);
+        Func blk = s.rfactor(lane_vars), rest, mid;
+        std::vector<Func> wc = words ? rs[0].decoded_components(tag::codes) : std::vector<Func>{};
+        if (wc.size() > 1) wc.clear();
+        Func codes = block_dot(blk, rs, integer, rest, mid, on_codes && affine(rs), wc);
+        // the runs (int32 dots, and an affine weight's act code sums) reduced as
+        // vectors, else unrolled
+        auto inner_loops = [&](Stage fs) {
+            for (const RVar &v : inner_rs) {
+                if (integer && v.name() == inner_rs[0].name() && segs[0].kind == Run) {
+                    fs.atomic().vectorize(v);
+                } else {
+                    fs.unroll(v);
+                }
+            }
+        };
+        // per sub-block (v): its scale times its codes' dot (inner)
+        std::vector<std::tuple<Func, Func, Func>> subs;
+        for (Func f : {codes, rest}) {
+            if (sub_vars.empty() || !f.defined()) continue;
+            Func part = f.update().rfactor(sub_vars);
+            subs.emplace_back(f, part, part.update().hoist_invariants()[0]);
+        }
+        // (kw: each warp's sums (part; ps, per block in shared memory), then
+        // their sum)
+        const int step = 1 << (5 + vals - bits);
+        Func part, ps;
+        Var w("w");
+        RVar ryw("ryw"), ryj("ryj");
+        if (kw > 1) {
+            s.split(ry, ryo, ryj, step * kw, TailStrategy::GuardWithIf).split(ryj, ryw, ryi, step);
+        } else {
+            s.split(ry, ryo, ryi, step, TailStrategy::GuardWithIf);
+        }
+        acc_vars.emplace_back(ryi, ub);
+        if (kw > 1) acc_vars.emplace_back(ryw, w);
+        Func acc = s.rfactor(acc_vars);
+        if (kw > 1) {
+            part = s.rfactor(ryw, w);
+            ps = part.in(dot);
+            s0.unroll(ryw);
+            s = part.update();
+        }
+        // the lane: its segments, then its block (lowest first)
+        RVar fr = lane_rs[0];
+        Var fv = acc_vars[0].second;
+        std::vector<Var> storage;
+        for (size_t i = 0; i < acc_vars.size(); i++) {
+            storage.push_back(acc_vars[i].second);
+        }
+        storage.insert(storage.end(), {n, m});
+        acc.reorder_storage(storage);
+        if (kw > 1) {
+            acc.compute_at(ps, w);
+        } else {
+            acc.compute_at(out, ns);
+        }
+        std::vector<RVar> lrs = lane_rs;
+        lrs.push_back(ryi);
+        Stage au = acc.update();
+        for (size_t i = 1; i < lrs.size(); i++) {
+            RVar f(i + 1 < lrs.size() ? "rl" + std::to_string(i) : "rl");
+            s.fuse(fr, lrs[i], f);
+            fr = f;
+            Var g(i + 1 < lrs.size() ? "l" + std::to_string(i) : "l");
+            acc.fuse(fv, acc_vars[i].second, g);
+            au.fuse(fv, acc_vars[i].second, g);
+            fv = g;
+        }
+        s.atomic().gpu_lanes(rl);
+        if (kw > 1) {
+            // (each warp's sums reduced across its lanes in registers, then
+            // stored to shared memory: a reduction into shared memory would take
+            // atomics)
+            ps.compute_at(out, Var("no")).store_in(MemoryType::GPUShared).reorder(n, m, w).gpu_threads(w).unroll(n).unroll(m);
+            part.compute_at(ps, n);
+        }
+        acc.reorder(n, m, l).gpu_lanes(l).unroll(n);
+        au.reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
+        // bound_storage: also in the K tail: registers
+        for (Func f : {blk, mid, codes, rest}) {
+            if (f.defined()) f.compute_at(acc, ryo).bound_storage(u, 1).unroll(f.args()[0]);
+        }
+        blk.update().unroll(blk.args()[0]);
+        for (Func f : {codes, rest}) {
+            if (!f.defined()) continue;
+            Stage fs = f.update();
+            if (!sub_vars.empty()) {
+                // per sub-block, its dot (inner), then times its scale (part)
+                std::vector<VarOrRVar> o{f.args()[0]};
+                o.insert(o.end(), sub_rs.begin(), sub_rs.end());
+                fs.reorder(o).unroll(f.args()[0]);
+                for (const RVar &v : sub_rs) {
+                    fs.unroll(v);
+                }
+                continue;
+            }
+            std::vector<VarOrRVar> o{f.args()[0]};
+            o.insert(o.end(), inner_rs.begin(), inner_rs.end());
+            fs.reorder(o).unroll(f.args()[0]);
+            inner_loops(fs);
+        }
+        for (auto [f, part, inner] : subs) {
+            for (Func g : {part, inner}) {
+                g.compute_at(f, sub_rs[0]).bound_storage(u, 1);
+                for (int i = 0; i <= g.num_update_definitions(); i++) {
+                    Stage gs = i ? g.update(i - 1) : Stage(g);
+                    for (const Var &v : g.args()) {
+                        gs.unroll(v);
+                    }
+                }
+            }
+            std::vector<VarOrRVar> o{inner.args()[0]};
+            o.insert(o.end(), inner_rs.begin(), inner_rs.end());
+            inner.update().reorder(o);
+            inner_loops(inner.update());
+        }
+        // (words: the weight's codes of each run copied to a GPR word (SWAR),
+        // decoded there, a grid point's a load of its table each)
+        if (!wc.empty()) {
+            int point = 8;
+            for (Func f : decoders(rs, all_but({}), 0, 1, true)) {
+                const Tabulate *t = tabulate(rs[0], f, false, true);
+                if (t && t->data) point = t->per;
+            }
+            std::vector<Func> readers;
+            for (auto [f, part, inner] : subs) {
+                readers.push_back(inner);
+            }
+            for (Func f : {codes, rest}) {
+                if (f.defined() && std::none_of(subs.begin(), subs.end(), [&](const auto &x) { return std::get<0>(x).name() == f.name(); })) readers.push_back(f);
+            }
+            // (ws: the codes by the act's block u, (x, u, row) the weight's
+            // (x + (u % per) * block, u / per, row), so that a run's region is
+            // its values alone where u's is clamped to K)
+            for (Func f : readers) {
+                using namespace Internal;
+                if (!find_direct_calls(f.function()).count(wc[0].name())) continue;
+                Var wx("wx"), wn("wn");
+                Func ws(wc[0].name() + "_words");
+                ws(wx, u, wn) = wc[0](wx + (u % per) * block, u / per, wn);
+                inline_codes(ws, rs, wc[0]);
+                Expr uv = Variable::make(Int(32), u.name());
+                Expr &v = f.function().update(0).values()[0];
+                v = mutate_with(substitute_in_all_lets(v), [&](auto *self, const Call *c) -> Expr {
+                    if (c->call_type != Call::Halide || c->name != wc[0].name()) return self->visit_base(c);
+                    auto bare = [](const Expr &e) {
+                        return simplify(mutate_with(e, [](auto *self, const Call *p) -> Expr {
+                            return p->is_intrinsic(Call::promise_clamped) || p->is_intrinsic(Call::likely) ? self->mutate(p->args[0]) : self->visit_base(p);
+                        }));
+                    };
+                    Expr x = simplify(bare(c->args[0]) - (uv % per) * block), y = bare(c->args[1]);
+                    if (expr_uses_var(x, u.name()) || !equal(y, simplify(uv / per))) throw std::invalid_argument("metal_rows: the weight's codes not at the act's block");
+                    return ws(x, u, c->args[2]);
+                });
+                Var wo("wo"), wv("wv");
+                ws.compute_at(f, Var::outermost()).split(wx, wo, wv, point).vectorize(wv, point, VectorizeIn::SWAR).unroll(wo);
+                ws.bound_storage(u, 1).unroll(wn);
+            }
+        }
+        // (integer: every column of the tile, registers)
+        if (integer) {
+            std::vector<Func> fs{acc, blk, mid, codes, rest};
+            for (auto [f, part, inner] : subs) {
+                fs.insert(fs.end(), {part, inner});
+            }
+            for (Func f : fs) {
+                if (!f.defined()) continue;
+                for (int i = 0; i <= f.num_update_definitions(); i++) {
+                    Stage fs = i ? f.update(i - 1) : Stage(f);
+                    for (const Var &v : f.args()) {
+                        if (v.same_as(n) || v.same_as(m)) fs.unroll(v);
+                    }
+                }
             }
         }
     };
-    // per sub-block (v): its scale times its codes' dot (inner)
-    std::vector<std::tuple<Func, Func, Func>> subs;
-    for (Func f : {codes, rest}) {
-        if (sub_vars.empty() || !f.defined()) continue;
-        Func part = f.update().rfactor(sub_vars);
-        subs.emplace_back(f, part, part.update().hoist_invariants()[0]);
-    }
-    s.split(ry, ryo, ryi, 1 << (5 + vals - bits), TailStrategy::GuardWithIf);
-    acc_vars.emplace_back(ryi, ub);
-    Func acc = s.rfactor(acc_vars);
-    // the lane: its segments, then its block (lowest first)
-    RVar fr = lane_rs[0];
-    Var fv = acc_vars[0].second;
-    std::vector<Var> storage;
-    for (size_t i = 0; i < acc_vars.size(); i++) {
-        storage.push_back(acc_vars[i].second);
-    }
-    storage.insert(storage.end(), {n, m});
-    acc.reorder_storage(storage).compute_at(out, ns);
-    std::vector<RVar> lrs = lane_rs;
-    lrs.push_back(ryi);
-    Stage au = acc.update();
-    for (size_t i = 1; i < lrs.size(); i++) {
-        RVar f(i + 1 < lrs.size() ? "rl" + std::to_string(i) : "rl");
-        s.fuse(fr, lrs[i], f);
-        fr = f;
-        Var g(i + 1 < lrs.size() ? "l" + std::to_string(i) : "l");
-        acc.fuse(fv, acc_vars[i].second, g);
-        au.fuse(fv, acc_vars[i].second, g);
-        fv = g;
-    }
-    s.atomic().gpu_lanes(rl);
-    acc.reorder(n, m, l).gpu_lanes(l).unroll(n);
-    au.reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
-    // bound_storage: also in the K tail: registers
-    for (Func f : {blk, mid, codes, rest}) {
-        if (f.defined()) f.compute_at(acc, ryo).bound_storage(u, 1).unroll(f.args()[0]);
-    }
-    blk.update().unroll(blk.args()[0]);
-    for (Func f : {codes, rest}) {
-        if (!f.defined()) continue;
-        Stage fs = f.update();
-        if (!sub_vars.empty()) {
-            // per sub-block, its dot (inner), then times its scale (part)
-            std::vector<VarOrRVar> o{f.args()[0]};
-            o.insert(o.end(), sub_rs.begin(), sub_rs.end());
-            fs.reorder(o).unroll(f.args()[0]);
-            for (const RVar &v : sub_rs) {
-                fs.unroll(v);
-            }
-            continue;
-        }
-        std::vector<VarOrRVar> o{f.args()[0]};
-        o.insert(o.end(), inner_rs.begin(), inner_rs.end());
-        fs.reorder(o).unroll(f.args()[0]);
-        inner_loops(fs);
-    }
-    for (auto [f, part, inner] : subs) {
-        for (Func g : {part, inner}) {
-            g.compute_at(f, sub_rs[0]).bound_storage(u, 1);
-            for (int i = 0; i <= g.num_update_definitions(); i++) {
-                Stage gs = i ? g.update(i - 1) : Stage(g);
-                for (const Var &v : g.args()) {
-                    gs.unroll(v);
-                }
-            }
-        }
-        std::vector<VarOrRVar> o{inner.args()[0]};
-        o.insert(o.end(), inner_rs.begin(), inner_rs.end());
-        inner.update().reorder(o);
-        inner_loops(inner.update());
-    }
-    // (integer: every column of the tile, registers)
-    if (integer) {
-        std::vector<Func> fs{acc, blk, mid, codes, rest};
-        for (auto [f, part, inner] : subs) {
-            fs.insert(fs.end(), {part, inner});
-        }
-        for (Func f : fs) {
-            if (!f.defined()) continue;
-            for (int i = 0; i <= f.num_update_definitions(); i++) {
-                Stage fs = i ? f.update(i - 1) : Stage(f);
-                for (const Var &v : f.args()) {
-                    if (v.same_as(n) || v.same_as(m)) fs.unroll(v);
-                }
-            }
-        }
-    }
+    if (kw > 1) chain(dot.update().specialize(M == 2), kw);
+    chain(dot.update(), 1);
 }
 
 // Metal on float weights, as GGML's kernel_mul_mv_f16_f32_4: metal_tiles of
@@ -3165,32 +3294,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
             g.wstep = wstep;
         }
         g.ws = wcodes.in(g.codes), g.xs = ac[0].in(g.codes);
-        if (point) {
-            // (a grid's codes: the weight's codes inlined into their staged
-            // copy, a sign's multiply x * (1 - y * 2), y in [0, 1], as (x ^
-            // -y) + y, so that a point's codes decode in a GPR: staging()'s)
-            using namespace Internal;
-            Expr &v = g.ws.function().definition().values()[0];
-            for (;;) {
-                FunctionPtr fp;
-                visit_with(v, [&](auto *self, const Call *c) {
-                    if (c->call_type == Call::Halide && c->func.defined() && !fp.defined() && (has(rs[0].decode_funcs(), c->name) || c->name == wcodes.name())) fp = c->func;
-                    self->visit_base(c);
-                });
-                if (!fp.defined()) break;
-                v = inline_function(v, Function(fp));
-            }
-            v = mutate_with(simplify(substitute_in_all_lets(v)), [&](auto *self, const Mul *op) -> Expr {
-                const Sub *s = op->b.as<Sub>();
-                const Mul *m = s ? s->b.as<Mul>() : nullptr;
-                if (s && m && is_const_one(s->a) && is_const(m->b, 2)) {
-                    Expr y = m->a;
-                    Interval b = bounds_of_expr_in_scope(y, Scope<Interval>::empty_scope());
-                    if (b.is_bounded() && can_prove(b.min >= 0 && b.max <= 1)) return (self->mutate(op->a) ^ (make_zero(y.type()) - y)) + y;
-                }
-                return self->visit_base(op);
-            });
-        }
+        if (point) inline_codes(g.ws, rs, wcodes);
         // the weights' luts the gemm's own, per block (as gpu_staged()'s),
         // or with code_words inlined: a lookup of a word's 4 codes in a GPR,
         // byte permutes of the lut's words (iq4_nl at 4096 x 4096 x 16 /
@@ -3789,8 +3893,10 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
                 if (f.update().is_order_independent()) f.update().atomic(true).vectorize(f.rvars()[0]);
             }
         }
-        metal_luts(out, rs);
-        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer);
+        // (rows_words: the luts inlined into the codes' words, a lookup in
+        // each, not a shared copy)
+        if (!(integer && k.rows_words)) metal_luts(out, rs);
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer, integer ? k.rows_kw : 1, integer && k.rows_words, fmt.per);
         return;
     }
     if (fmt.rowwise) {
