@@ -3085,3 +3085,122 @@ Same machine and conventions as Phase 16. The target: M \<= 8, the dp4a rows
     words), q2_0 (no words), M = 5 (4 rows a warp; GGML 2 rows a block of 2
     warps), and the act kernel (2.3 us against 2.1).
   - M = 33 to 48, 129 to 255, 512: as Phase 16.
+
+## Phase 18: rows that fit small N; the K split's 32 x 48 tiles to M = 48 (RTX 3090)
+
+Same machine and conventions as Phase 17.
+
+- The dp4a rows (`metal_rows`, integer: the f32:q8_1 libraries and those on
+  pre-quantized acts) wrote before their output where N had fewer rows than a
+  tile: its tiles shift in (`ShiftInwards`) from N - rows, under a bound on N
+  (`metal_tiles`, N >= nr x warps) that the integer tiles exceed. With `narrow`
+  (Phase 16: 1 row a warp to M = 2, 2 to M = 4, 4 from 5; 2 warps a block): N =
+  2 or 3 at M >= 3 and N = 4 to 7 at M >= 5 (blocks of 4 and 8 rows over a bound
+  of 2). The checked libraries assert ("Output buffer out is accessed at -2"),
+  the bench ones wrote that many rows before the output buffer (`--check` of the
+  bench and by-M providers: wrong). Before `narrow` (`bd3cde08e`'s parent: 0
+  failures at those shapes for q4_0), the 256-value blocks' integer rows (bound
+  4, tiles of 8) at N = 4 to 7, M >= 2, from the base (`0e020b108`, q4_K on
+  `q8_K` acts: N x M = 4 x 2, 5 x 3, 6 x 8 assert), and there the CUDA float
+  rows too at M = 2 to 4 (q4_K on f32: 4 x 2, 5 x 3), the recipe Metal's, which
+  CUDA's one warp a block (`bba84ef55`) left. The Metal rows' `.stmt` still take
+  blocks of 8 rows of the 256-value types over N >= 4 at M = 2 to 4
+  (q4_K_f32_mul_mat: (N - 1) / 8 + 1 blocks): unchanged here. Every timing shape
+  (N >= 1001, and 512, 4096) and every earlier gate's N (1, 2, 3 at M = 2, 8,
+  40, 60, 200, 512, ...) had whole tiles.
+
+- `metal_tiles`' `fit` (the integer rows'): a tile of more rows than the bound
+  only where N has them, else a row a block of its columns. The tiles at N above
+  them: the same PTX but operand order and a multiply in 5 kernels of the `q8_K`
+  rows (pre-quantized acts); the Metal libraries' `.stmt` byte-identical.
+
+- Gate: `--check` of every Halide CUDA provider of q4_0, q4_K, iq2_xxs, q8_0,
+  f16, nvfp4, q2_0, iq1_s, q6_K, q4_1 at K = 1024, N in {1 to 9, 12, 15, 16, 17,
+  24, 31, 33, 40, 63} x M in {1 to 5, 7, 8, 9, 12, 16, 17, 32, 33, 64, 65, 128,
+  129, 256, 512}, f32 and pre-quantized acts (a process a shape; 35910 results:
+  16416 checked, 19494 bench and by-M; before, q4_0 398 and q4_K 392 of 3762
+  failed), and of the dp4a rows and by-M providers of all 23 types at 1280 x
+  512, 1088 x 512, 4096 x 1001 x 1 to 8, 4096 x 4099 x 1, 3, 5, 8 (2660): 0
+  failures, 0 unchecked. `ctest -L ggml_cuda` now runs `ggml_cuda_small_n` (the
+  CUDA providers at 1024 x 2 x 7, 3 x 3, 4 x 2, 5 x 3, 6 x 5, 7 x 8, 6 x 17, 7 x
+  64, f32 and pre-quantized acts: 2152 results, 16 s; the libraries before the
+  fix abort it).
+
+- A map, by-M provider, 4096^2, M = 1 to 8, 12, 16, 24, 32, 40, 48, 64, 96, 128,
+  512 (127 of 414 cells under 0.95): every type at M = 40 and 48 (0.65-0.96, but
+  nvfp4, q8_0, iq1_m), q2_0 at 96 and 128 (0.74, 0.63), q1_0 at 96 (0.84), M = 5
+  (iq4_nl, iq4_xs, q8_0, q5_0, q4_1: 0.86-0.91), iq1_s from 12 to 40
+  (0.79-0.83).
+
+- M = 33 to 48: the K split in 2 took 64 x 48 blocks of 2 x 1 warps where a
+  weight block is several blocks, affine or a grid's, else 64 x 64 (a 64 x 48
+  there slower: iq4_nl 0.047 -> 0.081 ms in Phase 15). Phase 16's 32 x 48 in the
+  split in 4 now compiles (whatever failed then no longer does), but one warp of
+  it is slower (q4_0 at M = 40 0.041 -> 0.050), and 2 warps of 32 x 24 in the
+  split in 4 too (0.050). In the split in 2, 32 x 48 of 1 x 2 warps of 32 x 24:
+  faster for every format but iq1_s (`int_narrow48`, default on; iq1_s 0.047 ->
+  0.049, keeps 64 x 48).
+
+- q1_0 and q2_0 took wmma's fragments above M = 32 (`int_tiles` www, mwm);
+  mma.sync's now: q1_0 at 40 / 96 / 128 0.044 / 0.066 / 0.070 -> 0.035 / 0.051 /
+  0.062 ms (on 64 x 64), wmma's kept to 32 (3% faster) and from 256 (`wwmmw`);
+  q2_0 at 96 / 128 0.078 / 0.109 -> 0.059 / 0.069 (the default). iq1_s on
+  mma.sync's below 64: slower (M = 16 0.037 -> 0.041).
+
+- M = 5: the dp4a rows took 4 rows a warp (2 warps, blocks of 8 rows); 2 rows a
+  warp at M = 5 too (`narrow`): q8_0 0.0317 -> 0.0287, iq4_nl 0.0220 -> 0.0197,
+  q5_0 0.0240 -> 0.0213; at 6 and 7 mixed (q4_0 0.0191 / 0.0203 -> 0.0205 /
+  0.0230, iq4_nl 0.0230 / 0.0244 -> 0.0215 / 0.0241; one row a warp at 5 to 7
+  0.80-0.85x): M = 5 only.
+
+- Gate: `--check` of the integer gemm and by-M providers of all 23 types on 4096
+  x 1001, 4096 x 4099, 1280 x 512, 1088 x 512 x 32, 33, 40, 47, 48, 49, 64, 4096
+  x 40 x 40, 4096 x 64 x 48, 4096 x 63 x 40, 4096 x 1001 x 96, 128, 200, 1280 x
+  512 x 128, 4096 x 512 x 5, 6, 4096 x 1001 x 5, 1280 x 512 x 5, 1088 x 512 x 5
+  (2424 results), 4096^2 x 5, 33, 40, 48, 96, 128, 200, 512
+  (`--outputs sampled`; 552), and the small-N grid at K = 1024, N in {1 to 9,
+  12, 17, 33, 40, 63} x M in {1 to 9, 12, 16, 33, 40, 48, 64} of q4_0, q4_K,
+  iq2_xxs, q1_0, q2_0, iq1_s, iq4_nl, q8_0 (18480): 0 failures, 0 unchecked. The
+  82 Metal libraries' `.stmt` byte-identical after each change.
+
+- Scorecard, by-M provider (ms; GGML / it), 4096^2, f32 acts, --rounds 5; cells
+  more than 3% slower than Phase 17's: iq1_m at M = 12, 16, 32 (+5-7%) and
+  iq2_xxs at 8, 16 (+4-5%), the same in this phase's first map, on integer gemm
+  kernels unchanged there (the fix's: only the rows changed), and q2_K, q5_K,
+  iq3_s at M = 5 (+3-5%, the rows' 2 rows a warp; 1.26, 1.03, 1.01 of GGML). 59
+  of the 230 cells at M = 1, 2, 4, 8 to 512 under 0.95 (59), 105 of the map's
+  414 (127 at this phase's start); M = 5 and 32 to 128:
+
+  | type    | M = 5         | M = 32        | M = 40        | M = 48        | M = 64        | M = 96        | M = 128       |
+  | ------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | iq1_m   | 0.0223 (0.90) | 0.0460 (2.36) | 0.0548 (1.99) | 0.0554 (1.91) | 0.0609 (1.83) | 0.0765 (1.57) | 0.1114 (1.21) |
+  | iq1_s   | 0.0202 (0.91) | 0.0409 (0.76) | 0.0456 (0.76) | 0.0457 (0.84) | 0.0487 (0.99) | 0.0604 (1.03) | 0.0713 (1.09) |
+  | iq2_s   | 0.0212 (1.01) | 0.0459 (0.87) | 0.0542 (0.81) | 0.0548 (0.82) | 0.0599 (0.90) | 0.0741 (0.93) | 0.1048 (0.82) |
+  | iq2_xs  | 0.0196 (1.03) | 0.0394 (0.98) | 0.0462 (0.92) | 0.0469 (0.95) | 0.0547 (0.96) | 0.0704 (0.97) | 0.0940 (0.91) |
+  | iq2_xxs | 0.0197 (0.96) | 0.0345 (1.00) | 0.0416 (0.89) | 0.0419 (0.93) | 0.0476 (0.96) | 0.0586 (1.02) | 0.0708 (1.03) |
+  | iq3_s   | 0.0250 (1.01) | 0.0405 (1.01) | 0.0440 (0.99) | 0.0445 (1.02) | 0.0521 (0.98) | 0.0601 (1.07) | 0.0728 (1.05) |
+  | iq3_xxs | 0.0223 (1.00) | 0.0392 (1.01) | 0.0469 (0.89) | 0.0471 (0.91) | 0.0537 (0.92) | 0.0648 (0.96) | 0.0760 (0.99) |
+  | iq4_nl  | 0.0198 (1.00) | 0.0308 (1.27) | 0.0379 (1.07) | 0.0381 (1.07) | 0.0461 (1.02) | 0.0557 (1.07) | 0.0678 (1.08) |
+  | iq4_xs  | 0.0204 (0.93) | 0.0355 (1.00) | 0.0394 (0.97) | 0.0397 (0.98) | 0.0464 (0.97) | 0.0552 (1.04) | 0.0680 (1.05) |
+  | mxfp4   | 0.0217 (1.00) | 0.0334 (1.12) | 0.0398 (1.02) | 0.0403 (1.05) | 0.0469 (1.04) | 0.0577 (1.06) | 0.0677 (1.10) |
+  | nvfp4   | 0.0198 (1.26) | 0.0348 (1.32) | 0.0423 (1.17) | 0.0428 (1.21) | 0.0506 (1.18) | 0.0650 (1.14) | 0.0780 (1.24) |
+  | q1_0    | 0.0151 (1.00) | 0.0254 (1.00) | 0.0341 (0.81) | 0.0344 (0.89) | 0.0429 (0.90) | 0.0504 (1.07) | 0.0617 (1.08) |
+  | q2_0    | 0.0168 (0.93) | 0.0332 (0.93) | 0.0410 (0.83) | 0.0416 (0.89) | 0.0480 (0.91) | 0.0587 (0.96) | 0.0687 (1.00) |
+  | q2_K    | 0.0195 (1.26) | 0.0442 (0.87) | 0.0543 (0.80) | 0.0545 (0.86) | 0.0613 (0.94) | 0.1070 (0.77) | 0.1083 (1.18) |
+  | q3_K    | 0.0264 (1.11) | 0.0376 (0.99) | 0.0439 (0.92) | 0.0445 (0.97) | 0.0540 (0.96) | 0.0656 (1.01) | 0.0797 (1.04) |
+  | q4_0    | 0.0181 (1.03) | 0.0298 (1.20) | 0.0361 (1.11) | 0.0363 (1.10) | 0.0420 (1.10) | 0.0509 (1.17) | 0.0633 (1.14) |
+  | q4_1    | 0.0191 (0.98) | 0.0363 (0.94) | 0.0418 (0.92) | 0.0420 (0.98) | 0.0505 (0.96) | 0.0616 (1.00) | 0.0740 (1.04) |
+  | q4_K    | 0.0209 (1.10) | 0.0353 (1.00) | 0.0432 (0.90) | 0.0436 (0.96) | 0.0509 (0.96) | 0.0614 (1.02) | 0.0744 (1.03) |
+  | q5_0    | 0.0211 (1.01) | 0.0334 (1.15) | 0.0384 (1.09) | 0.0386 (1.15) | 0.0460 (1.09) | 0.0544 (1.18) | 0.0661 (1.15) |
+  | q5_1    | 0.0216 (0.99) | 0.0370 (1.00) | 0.0434 (0.97) | 0.0438 (1.04) | 0.0518 (1.02) | 0.0614 (1.09) | 0.0740 (1.09) |
+  | q5_K    | 0.0242 (1.03) | 0.0394 (0.97) | 0.0454 (0.93) | 0.0454 (0.99) | 0.0529 (0.97) | 0.0632 (1.03) | 0.0759 (1.04) |
+  | q6_K    | 0.0284 (0.96) | 0.0417 (1.07) | 0.0475 (0.97) | 0.0475 (1.06) | 0.0607 (0.94) | 0.0697 (1.01) | 0.0836 (1.01) |
+  | q8_0    | 0.0286 (0.94) | 0.0379 (1.13) | 0.0409 (1.13) | 0.0412 (1.20) | 0.0469 (1.16) | 0.0555 (1.21) | 0.0667 (1.20) |
+
+- Where the rest is:
+
+  - M \<= 8: iq1_m and iq1_s (0.84-0.93), q2_0 at M = 1, 2 (0.79-0.80; no
+    `words`), the act kernel.
+  - M = 12 to 48: iq1_s (0.72-0.84), q2_0 (0.81-0.93), q2_K (0.80-0.92), iq2_s
+    (0.81-0.91), the grid formats and q1_0 at 40 (0.81-0.92).
+  - M = 129 to 255 and 512: as Phase 16.
