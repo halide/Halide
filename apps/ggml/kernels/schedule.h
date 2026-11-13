@@ -2538,8 +2538,11 @@ inline std::vector<GemmShape> metal_shapes(Func out, Func wh, const Formats &fmt
 // 8). Flat weights converted in the kernel (f32:f16), their blocks in M
 // innermost (Staging::mfirst): one warp per block of 16 x 16 to 16 x 64
 // rows of M, a tile of 16 x 48 from 49 to 63 and from 65 to 96 (M = 80 0.165
-// -> 0.104 ms, 96 0.169 -> 0.124), 2 warps of 16 x 64 in M from 128 (0.164
-// -> 0.150), 2 of 16 x 128 in N from 256; to M = 16 on 256-value steps, to
+// -> 0.104 ms, 96 0.169 -> 0.124), 2 warps of 16 x 64 in M at 128 (0.164
+// -> 0.150), 2 of 16 x 128 in N above (M = 136 0.256 -> 0.205 ms, 192 0.296
+// -> 0.210, 240 0.324 -> 0.215; written M % 128 != 0 below 256: as M > 128,
+// the M = 128 tiles' kernel specialized to M = 128 alone takes 0.151 ->
+// 0.160); to M = 16 on 256-value steps, to
 // 48 on 128 (M = 40 0.140 -> 0.091 ms); below 16 rows one warp's guarded
 // tile (M = 8 / 12 0.101 -> 0.090; 2 warps of 16 x 16 before).
 // Blocked weights (`block` > 1), decoded in the kernel: 64 x 128
@@ -2584,7 +2587,7 @@ inline std::vector<GemmShape> cuda_shapes(Func out, bool copied, int block, bool
         shapes.push_back(shape(Expr(), 1, 1, 1, false, 128));
         return shapes;
     }
-    return {shape(M >= 256, 1, 8, 2),
+    return {shape(M >= 256 || (M > 128 && M % 128 != 0), 1, 8, 2),
             shape(M >= 128, 1, 4, 1, false, 64, 2),
             shape(M > 96, 1, 4, 1),
             shape(M > 64, 1, 3, 1),
