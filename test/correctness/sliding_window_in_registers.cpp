@@ -40,7 +40,20 @@ class CheckConstantRegisterIndices : public IRMutator {
             }
             sizes[op->name] = (int)total;
         }
-        return IRMutator::visit(op);
+        int outer_ifs = ifs;
+        ifs = 0;
+        Stmt s = IRMutator::visit(op);
+        ifs = outer_ifs;
+        return s;
+    }
+
+    int ifs = 0;
+
+    Stmt visit(const IfThenElse *op) override {
+        ifs++;
+        Stmt s = IRMutator::visit(op);
+        ifs--;
+        return s;
     }
 
     Expr visit(const Load *op) override {
@@ -49,6 +62,9 @@ class CheckConstantRegisterIndices : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
+        if (ifs > 0) {
+            conditional_stores[op->name]++;
+        }
         check(op->name, op->index);
         return IRMutator::visit(op);
     }
@@ -56,10 +72,13 @@ class CheckConstantRegisterIndices : public IRMutator {
 public:
     bool failed = false;
     std::map<std::string, int> sizes;
+    // The number of stores to each allocation inside an if within it, which
+    // is how a rotation by a symbolic amount is undone.
+    std::map<std::string, int> conditional_stores;
 };
 
 int check_registers(Func out, const std::string &producer, int expected_size, Buffer<int> &result,
-                    const std::vector<int> &sizes) {
+                    const std::vector<int> &sizes, int *conditional_stores = nullptr) {
     CheckConstantRegisterIndices checker;
     out.add_custom_lowering_pass(&checker, nullptr);
     result = out.realize(sizes);
@@ -74,6 +93,9 @@ int check_registers(Func out, const std::string &producer, int expected_size, Bu
     if (it->second != expected_size) {
         printf("%s was stored in %d registers instead of %d\n", producer.c_str(), it->second, expected_size);
         return 1;
+    }
+    if (conditional_stores) {
+        *conditional_stores = checker.conditional_stores[producer];
     }
     return 0;
 }
@@ -237,6 +259,39 @@ int main(int argc, char **argv) {
             if (out(j) != correct) {
                 printf("Let chain: out(%d) = %d instead of %d\n", j, out(j), correct);
                 return 1;
+            }
+        }
+    }
+
+    for (bool store_root : {true, false}) {
+        // Sliding over x inside a loop over y, with a window that every
+        // iteration of y fills before reading. The rotation left at the end
+        // of the loop over x is harmless, so it isn't undone.
+        Func f("f"), g("g");
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x - 1, y) + f(x, y) + f(x + 1, y);
+        if (store_root) {
+            f.store_root();
+        } else {
+            f.store_at(g, y);
+        }
+        f.compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out;
+        int conditional_stores = 0;
+        if (check_registers(g, f.name(), 3, out, {12, 12}, &conditional_stores)) {
+            return 1;
+        }
+        if (conditional_stores != 0) {
+            printf("Dead restore: f has %d conditional stores\n", conditional_stores);
+            return 1;
+        }
+        for (int j = 0; j < 12; j++) {
+            for (int i = 0; i < 12; i++) {
+                int correct = (i * 3 + j) * 3;
+                if (out(i, j) != correct) {
+                    printf("Dead restore: out(%d, %d) = %d instead of %d\n", i, j, out(i, j), correct);
+                    return 1;
+                }
             }
         }
     }
