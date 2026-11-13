@@ -227,6 +227,7 @@ struct Knobs {
     int act_lanes = 8;
     bool packed_tables = true;
     int rows_lanes = 8;
+    int int_m40 = 0;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -2854,8 +2855,12 @@ struct KSplit {
 // at 96 0.079 -> 0.082). `m24`: where wmma_small, mma.sync's 32 x 24 to M =
 // 24 (q2_K at 4096 x 4096 x 24 0.0428 -> 0.0344 ms, q4_1 0.0357 -> 0.0323;
 // at 32 0.0434 -> 0.0456, 0.0365 -> 0.0389; iq2_s at 24 0.0416 -> 0.0492).
+// `m40` (2 or 4): from M = 33 to 40 one warp's 32 x 40 in a split of its own
+// in m40, not 32 x 48's 8 rows past 40 (q1_0 at 4096 x 4096 x 40 in 4
+// 0.0337 -> 0.0299 ms, q2_K in 2 0.0534 -> 0.0490; by format: q4_K at 33
+// in 2 0.0419 -> 0.0454, iq1_m at 40 in 4 0.0479 -> 0.0582).
 // (RTX 3090)
-inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_small, bool wmma_mid, bool wmma_big, bool narrow48 = true, bool m24 = false) {
+inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_small, bool wmma_mid, bool wmma_big, bool narrow48 = true, bool m24 = false, int m40 = 0) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     std::vector<KSplit> splits;
     // (to 16 and above: each shape where it holds, each its own split but
@@ -2886,6 +2891,11 @@ inline std::vector<KSplit> cuda_int_splits(Func out, bool wmma_tiny, bool wmma_s
         small(wmma_tiny, M <= 16, true, false);
         if (m24 && wmma_small) splits.push_back(s24);
         small(wmma_small, M <= 32, false, true);
+    }
+    if (m40 && m40 != 2 && m40 != 4) throw std::invalid_argument("int_m40: 0, 2 or 4, not " + std::to_string(m40));
+    if (m40 && !wmma_mid) {
+        const bool k4 = m40 == 4;
+        splits.push_back({m40, M > 32 && M <= 40 && N >= 64, {ishape(Expr(), 2, 5, 1, false, 128, 1, k4 ? 0 : 2)}, false, k4, 255});
     }
     if (wmma_mid && wmma_big) {
         // (unsplit from M = 128: q1_0 at 4096 x 4096 x 128 0.078 ms; in 2,
@@ -3937,7 +3947,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             if (it.size() == 3) t = {it[0], it[0], it[1], it[1], it[2]};
             if (it.size() == 4) t = {it[0], it[1], it[2], it[2], it[3]};
             if (t.size() != 5 || t.find_first_not_of("mw") != std::string::npos) throw std::invalid_argument("int_tiles: 3 to 5 of w and m, not " + it);
-            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, t[4] == 'w'), 2, k.code_words, cuda_int_splits(out, t[0] == 'w', t[1] == 'w', t[2] == 'w', t[3] == 'w', k.int_narrow48, k.int_m24), t[4] == 'w', k.packed_tables);
+            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, t[4] == 'w'), 2, k.code_words, cuda_int_splits(out, t[0] == 'w', t[1] == 'w', t[2] == 'w', t[3] == 'w', k.int_narrow48, k.int_m24, k.int_m40), t[4] == 'w', k.packed_tables);
             return;
         }
         // CUDA: acts quantized here (f32:q8_1, as GGML's mmvq quantizes its

@@ -355,6 +355,21 @@ set(GGML_SCHEDULE_PARAMS
     "q4_1 mul_mat f32:q8_1.soa int_m24=true"
     "q1_0 mul_mat f32:q8_0.soa int_m24=true"
     "iq1_s mul_mat f32:q8_0.soa int_m24=true"
+    # int_m40 (from M = 33 to 40 one warp's 32 x 40, K split in 2 or 4; else
+    # the K split in 2's 32 x 48 on 2 warps), ms at 4096^2 x 33 / 40: in 4
+    # q1_0 0.0329 / 0.0337 -> 0.0310 / 0.0299, iq3_xxs 0.0460 / 0.0469 ->
+    # 0.0437 / 0.0445, iq2_xxs 0.0406 / 0.0415 -> 0.0394 / 0.0403; in 2 q2_K
+    # 0.0528 / 0.0534 -> 0.0485 / 0.0490, q4_1 0.0408 / 0.0413 -> 0.0388 /
+    # 0.0395, q4_0 0.0369 / 0.0355 -> 0.0355 / 0.0342 (the others as fast or
+    # slower either way; q4_K, q5_K slower at 33; iq2_s 0.0544 / 0.0520 ->
+    # 0.0507 / 0.0479, but at M = 96 0.0725 -> 0.0753;
+    # RTX 3090)
+    "q1_0 mul_mat f32:q8_0.soa int_m40=4"
+    "iq3_xxs mul_mat f32:q8_0.soa int_m40=4"
+    "iq2_xxs mul_mat f32:q8_0.soa int_m40=4"
+    "q2_K mul_mat f32:q8_0.soa int_m40=2"
+    "q4_1 mul_mat f32:q8_1.soa int_m40=2"
+    "q4_0 mul_mat f32:q8_0.soa int_m40=2"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the

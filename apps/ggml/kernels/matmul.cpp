@@ -65,6 +65,10 @@ public:
     // CUDA's integer gemm: where its tiles from M = 17 to 32 are wmma's,
     // mma.sync's 32 x 24 to M = 24 (see ggml::cuda_int_splits)
     GeneratorParam<bool> int_m24{"int_m24", false};
+    // CUDA's integer gemm: from M = 33 to 40 one warp's 32 x 40 tiles, K
+    // split in int_m40 (2 or 4; 0: the K split in 2's 32 x 48; see
+    // ggml::cuda_int_splits)
+    GeneratorParam<int> int_m40{"int_m40", 0};
     // CUDA's dp4a rows: the warps splitting K at M = 2 (see
     // ggml::metal_rows)
     GeneratorParam<int> rows_kw{"rows_kw", 2};
@@ -268,7 +272,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, int_m24, rows_kw, rows_words, act_lanes, packed_tables, rows_lanes};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, int_m24, rows_kw, rows_words, act_lanes, packed_tables, rows_lanes, int_m40};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {
