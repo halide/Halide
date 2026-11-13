@@ -102,6 +102,17 @@ endif ()
 
 add_test(NAME ggml_check COMMAND ggml-quant-bench --check --shapes smoke)
 set_tests_properties(ggml_check PROPERTIES LABELS ggml)
+if (GGML_CUDA)
+    # The CUDA libraries (not GGML's) where N has fewer rows than their
+    # tiles (K x N x M)
+    add_test(
+        NAME ggml_cuda_small_n
+        COMMAND
+            ggml-quant-bench --op mul_mat --acts f32,dot --providers cuda,!ggml-cuda --check
+            --shapes 1024x2x7,1024x3x3,1024x4x2,1024x5x3,1024x6x5,1024x7x8,1024x6x17,1024x7x64
+    )
+    set_tests_properties(ggml_cuda_small_n PROPERTIES LABELS ggml_cuda)
+endif ()
 
 # Properties of the schemes, checked by JIT (Halide's approximation testing).
 add_executable(ggml_scheme_properties schemes/q8_1_properties.cpp)

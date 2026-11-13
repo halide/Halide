@@ -1941,8 +1941,11 @@ inline void inline_codes(Func ws, const std::vector<ApproximationResult> &rs, Fu
 // rows of `cols` columns, the widest cols <= 8 that M allows (gemv: nr rows
 // of one column); N < max(nr * sg, nmin), a row per threadgroup. Edge tiles
 // shift in. `sg8`: the simdgroups of the 8-column tiles' threadgroups, if not
-// sg; `groups(cols)`, if given, those of every tile's.
-inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows, int sg8 = 0, int nmin = 0, const std::function<int(int)> &groups = {}) {
+// sg; `groups(cols)`, if given, those of every tile's. `fit`: a tile of more
+// rows than that bound's only where N has them, else a row per threadgroup
+// of its columns, so that no tile shifts in past row 0.
+inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows, int sg8 = 0, int nmin = 0, const std::function<int(int)> &groups = {},
+                        bool fit = false) {
     Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi");
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     auto tile = [&](Stage o, int rows, int groups, int cols) {
@@ -1954,11 +1957,18 @@ inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<
         }
         o.unroll(ni).gpu_threads(ns);
     };
-    Stage big = Stage(out).specialize(N >= std::max(nr * sg, nmin));
+    const int least = std::max(nr * sg, nmin);
+    Stage big = Stage(out).specialize(N >= least);
     for (int cols = 8; cols > 1; cols--) {
-        tile(big.specialize(M >= cols), rows(cols), groups ? groups(cols) : cols == 8 && sg8 ? sg8 :
-                                                                                               sg,
-             cols);
+        const int g = groups ? groups(cols) : cols == 8 && sg8 ? sg8 :
+                                                                 sg;
+        Stage s = big.specialize(M >= cols);
+        if (fit && rows(cols) * g > least) {
+            tile(s.specialize(N >= rows(cols) * g), rows(cols), g, cols);
+            tile(s, 1, 1, cols);
+        } else {
+            tile(s, rows(cols), g, cols);
+        }
     }
     tile(big, nr, groups ? groups(1) : sg, 1);
     tile(Stage(out), 1, 1, 1);
@@ -2073,6 +2083,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     // 0.72-0.89x, 8 rows 0.74-1.07x; RTX A4500)
     // (8 columns: 2 warps a block also where the gemv takes one; CUDA, q4_K
     // on f32 acts at 4096^2 x 64..512 1.05-1.08x)
+    // (integer: each tile where N has its rows, metal_tiles()'s `fit`)
     auto tile_rows = [=](int cols) {
         if (kw > 1 && cols == 2) return 2;
         if (narrow && cols <= 4) return cols > 2 ? 2 : 1;
@@ -2080,9 +2091,9 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
     };
     if (kw > 1) {
         metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2), 0, [=](int cols) { return cols == 2 ? 1 : cols == 8 ? std::max(sg, 2) :
-                                                                                                                        sg; });
+                                                                                                                        sg; }, integer);
     } else {
-        metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2));
+        metal_tiles(out, dot, nr, sg, tile_rows, std::max(sg, 2), 0, {}, integer);
     }
     // (integer: the gemv's lanes at every M, their runs the dp4a's)
     if (!integer) {
