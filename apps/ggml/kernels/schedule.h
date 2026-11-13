@@ -2833,8 +2833,8 @@ struct KSplit {
 // ms; in 4 0.078; unsplit 64 x 64 0.076), 64 x 112, 96 and 80 above 96, 80
 // and 64, 64 x 64 of 2 x 1 above 48 (M = 64: 0.046; in 4, 64 x 64 of 2 x 2
 // 0.049), 32 x 48 of 1 x 2 warps below (q4_0 at 4096 x 4096 x 40 0.041 ->
-// 0.035 ms, iq2_xxs 0.046 -> 0.041; `narrow48`, else 64 x 48 of 2 x 1, which
-// gpu_int_gemm() keeps for some formats: iq1_s 0.047 against 0.049), above
+// 0.035 ms, iq2_xxs 0.046 -> 0.041, iq1_s 0.042 -> 0.039; `narrow48`, else
+// 64 x 48 of 2 x 1), above
 // 128 two blocks in M of the first of those at or above half of it (q4_0
 // at 129 / 160 0.109 / 0.112 -> 0.082 / 0.084, two of 64 x 128 before), 32
 // x 32 where N < 64; in 4 to 32, one warp of 32 x 32 above 24 (0.032; 2
