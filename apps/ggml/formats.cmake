@@ -239,6 +239,13 @@ set(GGML_SCHEDULE_PARAMS
     # word's two bytes each in 4 lanes): at 4096^2 x 1 / 2 / 8 0.0122 /
     # 0.0127 / 0.0211 -> 0.0110 / 0.0118 / 0.0201 ms; RTX 3090)
     "q2_0 mul_mat * rows_lanes=4"
+    # (the dp4a rows' two rows a warp to M = 7 or 6, not 5: at 4096^2 x 6 /
+    # 7 q4_1 0.0212 / 0.0231 -> 0.0207 / 0.0221 ms; to 6, iq4_xs at 6 0.0233
+    # -> 0.0223, iq1_m 0.0251 -> 0.0243, at 7 0.0238 -> 0.0248, 0.0253 ->
+    # 0.0263; q4_0 0.0190 / 0.0200 -> 0.0205 / 0.0227; RTX 3090)
+    "q4_1 mul_mat f32:q8_1 rows_narrow=7"
+    "iq4_xs mul_mat f32:q8_1 rows_narrow=6"
+    "iq1_m mul_mat f32:q8_1 rows_narrow=6"
     "iq1_s mul_mat * rows_words=false"
     "iq1_m mul_mat * rows_words=false"
     "q3_K mul_mat q8_K rows_words=false"
