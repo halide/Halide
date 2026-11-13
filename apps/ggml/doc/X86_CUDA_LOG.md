@@ -3849,3 +3849,130 @@ and `f32:f16` acts, and `halide-by-m-f16.acc16_f32_cuda` picks it by M beside
     reach 0.041-0.042 at M = 1, 2 only (0.050 at 4).
   - f32 at M = 8 / 12 (0.88-0.93): the guarded 16-row tile converts the f32
     weights in the kernel (0.090-0.093 ms against `mul_mat_f`'s tf32 0.082).
+
+## Phase 24: a step's copies of both operands awaited together (RTX 3090)
+
+Same machine and conventions (4096^2, `--rounds 7`, GGML, d1a0c7aee's binary and
+the new one back to back in one invocation; GGML / Halide). Phase 23 left the
+copied f16 and bf16 gemms one stage of K at a time, a step's copies awaited
+before its multiplies. A PTX-level experiment (the scratch `round24/`: `pipe.py`
+edits the module's K-step loops, a shim scales the launch's shared memory) asked
+what pipelining the steps would buy before any schedule for it.
+
+- Double-buffering is a null result. S stages of the same step (step k + S - 1
+  copied while step k multiplies; ms, f16.acc16 on f16 acts at M = 48 / 96 / 128
+  / 256 / 384 / 512): one stage 0.055 / 0.069 / 0.070 / 0.109 / 0.144 / 0.187,
+  two 0.056 / 0.073 / 0.075 / 0.124 / 0.162 / 0.223, three no better; bf16 x
+  bf16 at 64 / 128 0.060 / 0.085 against 0.073 / 0.093. The same with the loop
+  unrolled S times (immediate stage offsets), with or without the blocks in M
+  innermost: 0.055-0.075 at 48 to 128, 0.115-0.121 at 256. 32-value steps in 1
+  to 3 stages (one 64-value step's shared memory): 0.127 to 0.164 at 256. The
+  cost is occupancy: the one-stage kernel given twice its shared memory (same
+  code, fewer blocks an SM) takes 0.069 / 0.109 / 0.110 / 0.192 at 48 / 96 / 128
+  / 256, bf16 at 64 0.105. ncu at M = 256 (128 x 64 blocks of 8 warps): one
+  stage 107.8 us, 3 blocks an SM, long-scoreboard 15.3 stalls per issue, the
+  tensor pipe 56% busy; two stages (55 KB) 120.5 us, 1 block an SM,
+  long-scoreboard 1.1, the pipe 60%. cuBLAS's
+  `h16816gemm_128x128_ldg8_stages_32x5` (one block of 4 warps an SM, 162
+  registers): 81.1 us, the pipe 93%. Loading the next step into registers during
+  this one's multiplies (one stage; not in this round's scope): 0.114-0.120 at
+  256, 0.176-0.180 at 512.
+
+- One copy group per step (`m1`, the only single-stage edit that helped): a step
+  issued the acts' copies, committed and waited for them, then issued the
+  weights'. One commit and one wait, ms: f16.acc16 M = 48 0.0548 -> 0.0528, 96
+  0.0684 -> 0.0647, 128 0.0700 -> 0.0662, 384 (blocks in M innermost) 0.1441 ->
+  0.1398; bf16 at 64 (M innermost) 0.0598 -> 0.0565; but f16.acc16 256 +7%, 512
+  +8%, bf16 128 +2%. ncu at M = 128 (f16.acc16): 63.0 -> 59.7 us,
+  long-scoreboard 15.8 -> 11.7 stalls per issue, the tensor pipe 50% -> 55%
+  (cuBLAS's 256 x 128, 3 stages: 72.3 us).
+
+- Why the wait sat between them: MarkAsyncCopies (core, `91387a1b8`) leaves a
+  copied producer's wait to the barrier that publishes it only where the block
+  next stages a Func through registers; followed by another copied producer it
+  waits at its end, inside its loops over threads. The weights' and acts' staged
+  Funcs (gpu_staged()'s ws, xs) are two producers.
+
+- The schedule alone does it: `compute_with` of the two staged Funcs at their
+  lanes' loop (`GemmShape::together`) puts both operands' copies of a step in
+  one loop over the threads; each producer's wait is at the end of its innermost
+  loop over threads, so both come after every copy: commit, commit, then the
+  waits (`wait_group 1` and `wait_group 0`, or the second alone), the barrier
+  (m1: one commit, one wait; the same gains). No core change. `compute_with`
+  takes a Func without specializations, so only kernels of one shape can: the K
+  splits', and a range of M given a kernel on a dot of its own (`GemmSplit` with
+  kz = 1, the rest of the branches on a clone of it, as the splits'), which also
+  carries the blocks-in-M-innermost order (`GemmSplit::mfirst`, Phase 22's
+  `Staging::mfirst`).
+
+- Not the integer gemm's structure: its acts are copied (one group), its weights
+  decoded and staged through registers, so the acts' wait is already left to the
+  barrier (one `wait_group 0` a step, `91387a1b8`); nothing to merge. Nor
+  `f32:f16`'s (weights converted through registers, acts copied).
+
+- f16.acc16: every K split (M = 33 to 160) stages its operands together; the 128
+  x 80 tiles end at M = 160 (from 161 they took three tiles of 80 in M, where
+  128 x 64 takes three of 64). Not taken: together on the 128 x 64 split above
+  160 (M = 192 0.096 -> 0.102 ms; 176 on 128 x 80 0.112 -> 0.115), and the 128 x
+  96 tiles (352 to 479) on a kernel of their own, together and with the blocks
+  in M innermost (M = 384 0.143 -> 0.142-0.144, 479 0.155 -> 0.160-0.164). ms
+  before -> after (GGML / Halide):
+
+  | M   | f16 acts                        | f32 acts (`f32:f16`)            |
+  | --- | ------------------------------- | ------------------------------- |
+  | 40  | 0.0545 -> 0.0519 (0.93 -> 0.97) | 0.0558 -> 0.0546 (0.96 -> 0.98) |
+  | 48  | 0.0540 -> 0.0519 (0.88 -> 0.91) | 0.0563 -> 0.0552 (0.90 -> 0.92) |
+  | 64  | 0.0546 -> 0.0526 (0.94 -> 0.98) | 0.0568 -> 0.0564 (0.97 -> 0.98) |
+  | 72  | 0.0668 -> 0.0633 (0.90 -> 0.95) | 0.0689 -> 0.0670 (0.93 -> 0.96) |
+  | 96  | 0.0673 -> 0.0637 (0.92 -> 0.97) | 0.0704 -> 0.0673 (0.94 -> 0.99) |
+  | 112 | 0.0681 -> 0.0643 (1.00 -> 1.06) | 0.0713 -> 0.0684 (1.03 -> 1.07) |
+  | 128 | 0.0690 -> 0.0655 (1.09 -> 1.15) | 0.0730 -> 0.0700 (1.11 -> 1.15) |
+  | 136 | 0.0758 -> 0.0716 (1.00 -> 1.06) | 0.0807 -> 0.0749 (1.01 -> 1.09) |
+  | 160 | 0.0777 -> 0.0726 (1.00 -> 1.07) | 0.0831 -> 0.0771 (1.01 -> 1.09) |
+  | 161 | 0.1102 -> 0.0943 (0.71 -> 0.83) | 0.1162 -> 0.1010 (0.72 -> 0.83) |
+  | 176 | 0.1114 -> 0.0947 (0.71 -> 0.83) | 0.1175 -> 0.1022 (0.72 -> 0.83) |
+  | 192 | 0.0957 -> 0.0957 (0.84)         | 0.1040 -> 0.1039 (0.84)         |
+
+- f32 accumulators (f16 and bf16 on acts of their type and `f32:...`): M = 33 to
+  127 (N >= 64) had 2 warps of 16 x 16 to 63 (3 or 4 blocks in M) and 4 warps of
+  16 x 32 from 64, a block's N tile reading its weights from DRAM once per block
+  in M. Now kernels of their own (`GemmSplit` kz = 1) on 4 warps of 16 x 32 from
+  33 (2 blocks in M to 64), their blocks in M innermost, to 64 their operands
+  staged together. Sweeps (bf16 x bf16 and f16 x `f32:f16`): together alone on
+  the old tiles 0.069 / 0.069 / 0.094 at 33 / 48 / 63 against 0.064 / 0.065 /
+  0.088; the blocks in M innermost alone on them 0.059 / 0.062 / 0.079; together
+  from 65 slower (bf16 at 80 / 96 0.085 against 0.078); 64 x 64 blocks from 65
+  0.096-0.110; together on M = 128's split 0.085 -> 0.088 (f16 x f16). ms before
+  -> after (GGML / Halide):
+
+  | M   | f16 x f16                       | f16 x f32                       | bf16 x bf16                     | bf16 x f32                      |
+  | --- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
+  | 33  | 0.0647 -> 0.0575 (0.78 -> 0.87) | 0.0669 -> 0.0598 (0.79 -> 0.88) | 0.0638 -> 0.0570 (0.72 -> 0.81) | 0.0668 -> 0.0596 (0.74 -> 0.82) |
+  | 40  | 0.0642 -> 0.0572 (0.79 -> 0.88) | 0.0664 -> 0.0595 (0.80 -> 0.90) | 0.0637 -> 0.0567 (1.00 -> 1.12) | 0.0659 -> 0.0591 (1.01 -> 1.13) |
+  | 48  | 0.0656 -> 0.0573 (0.72 -> 0.83) | 0.0682 -> 0.0594 (0.74 -> 0.85) | 0.0647 -> 0.0568 (0.99 -> 1.13) | 0.0677 -> 0.0591 (0.99 -> 1.14) |
+  | 56  | 0.0874 -> 0.0573 (0.55 -> 0.83) | 0.0917 -> 0.0597 (0.56 -> 0.86) | 0.0868 -> 0.0567 (0.75 -> 1.15) | 0.0908 -> 0.0592 (0.75 -> 1.15) |
+  | 63  | 0.0891 -> 0.0578 (0.58 -> 0.89) | 0.0928 -> 0.0606 (0.59 -> 0.90) | 0.0887 -> 0.0572 (0.58 -> 0.90) | 0.0916 -> 0.0596 (0.61 -> 0.93) |
+  | 64  | 0.0599 -> 0.0572 (0.86 -> 0.90) | 0.0624 -> 0.0598 (0.88 -> 0.92) | 0.0595 -> 0.0567 (0.85 -> 0.89) | 0.0622 -> 0.0596 (0.87 -> 0.91) |
+  | 72  | 0.0835 -> 0.0781 (0.72 -> 0.77) | 0.0868 -> 0.0811 (0.74 -> 0.79) | 0.0828 -> 0.0775 (0.96 -> 1.02) | 0.0863 -> 0.0805 (0.96 -> 1.03) |
+  | 96  | 0.0844 -> 0.0784 (0.73 -> 0.79) | 0.0883 -> 0.0818 (0.75 -> 0.81) | 0.0841 -> 0.0780 (0.89 -> 0.96) | 0.0871 -> 0.0812 (0.90 -> 0.96) |
+  | 112 | 0.1285 -> 0.1203 (0.53 -> 0.57) | 0.1329 -> 0.1238 (0.55 -> 0.59) | 0.1283 -> 0.1201 (0.58 -> 0.62) | 0.1321 -> 0.1235 (0.59 -> 0.63) |
+  | 127 | 0.1302 -> 0.1210 (0.58 -> 0.62) | 0.1341 -> 0.1258 (0.60 -> 0.64) | 0.1292 -> 0.1210 (0.58 -> 0.62) | 0.1332 -> 0.1255 (0.60 -> 0.63) |
+
+  (f16 against GGML's f16 accumulators; bf16 is the like-for-like.)
+
+- Where the rest is (under 0.95): M = 97 to 127 on f32 accumulators (0.57-0.64;
+  bf16's 0.121 ms against cuBLAS's 0.075): four blocks of 32 rows in M, where M
+  = 128 takes its K split on 64 x 128 tiles (0.085), which do not shift in below
+  128 rows; f16.acc16 from 161 to 256 (0.81-0.84: 128 x 64 split in 2, then
+  unsplit), 48 (0.91), 352 to 384 (0.89-0.92, Phase 23); on f32 accumulators M =
+  33, 63 and 64 (bf16 0.81-0.93), and the f16 rows against cuBLAS's f16
+  accumulators (0.77-0.90 from 33 to 96).
+
+- Gate: `--check` of the six touched CUDA libraries (checked and bench) and the
+  by-M providers of f16, f16.acc16 and bf16 on f32 acts, K = 128, 256, 320 and
+  4096 on N = 512 and N = 1, 2, 3, 5, 7, 9, M at every tile and split boundary
+  from 1 to 512 (41 M): 17220 results, 0 failures, 1372 unchecked (f16.acc16 at
+  K = 4096, as Phase 23). `ctest -L ggml_cuda`: 79/79. `.stmt` against
+  d1a0c7aee's generator: the 82 Metal libraries' and 23 sampled x86 libraries'
+  byte-identical; of the 148 CUDA bench libraries' only the six touched differ.
+  No core change.

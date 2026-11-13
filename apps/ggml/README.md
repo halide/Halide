@@ -619,11 +619,14 @@ it on acts of their type (`f16`, `f32:f16`; `bf16`, `f32:bf16`, on wmma's bf16
 fragments) for K % 32 == 0 and M * N >= 2^13, from M = 2: their operands are
 copied to shared memory as stored (`MemoryType::GPUSharedAsync`: `cp.async`), by
 blocks of 2 warps of 16 x 16 in steps of 256 values of K (M < 32) or 128, of 4
-warps of 16 x 32 (M >= 64) or 16 x 64 (M >= 128, 64-value steps), 2 x 2 of 32 x
-64 from 193 to 256: a step's loads take 1-2 us to arrive whatever their size, so
-few rows of M take long steps and many blocks. At M = 128, K is split in 2 (each
-part every other step, on the 64 x 128 blocks, then a kernel summing them).
-Below 16 rows one guarded tile of 16 rows. Acts encoded in the pipeline
+warps of 16 x 32 (M > 32, N >= 64; their blocks in M innermost) or 16 x 64 (M >=
+128, 64-value steps), 2 x 2 of 32 x 64 from 193 to 256: a step's loads take 1-2
+us to arrive whatever their size, so few rows of M take long steps and many
+blocks. At M = 128, K is split in 2 (each part every other step, on the 64 x 128
+blocks, then a kernel summing them). Where a kernel has one tile shape (the K
+splits', and M = 33 to 64), a step's copies of both operands are issued before
+either is awaited (`GemmShape::together`: the staged Funcs `compute_with` each
+other). Below 16 rows one guarded tile of 16 rows. Acts encoded in the pipeline
 (`f32:f16`) are encoded by a kernel of their own and copied likewise. Blocked
 weights, decoded in the kernel, take tiles of 16 x 16 (one warp, 128-value
 steps) below M = 32, then 16 x 32, 32 x 64, 128 x 64 and 64 x 128 (M >= 256) of
@@ -638,21 +641,21 @@ rows below M = 3 (f32: 4), else the library on f16 (bf16) operands;
 (where GGML takes cuBLAS's f16 gemm). `f16.acc16`'s gemm (N >= 128) has tiles of
 its own, its f16 fragments taking half the registers: 128 x 64 blocks of 4 x 2
 warps of 32 x 32, K split in 4 from M = 33 to 64 and in 2 to 192 (128 x 80 from
-129 to 176), unsplit above, 128 x 96 from 352, 128 x 128 of 2 x 2 warps of 64 x
-64 from 480. `--check` derives each library's tolerance from its declared
-roundings (`Precision::w_quant`, `act_quant`, `act_nearest`). The gemm
-libraries' tests (`ctest -L ggml_cuda`) check that their PTX multiplies on the
-tensor cores (`mma.sync`), `f16.acc16`'s also into f16 accumulators
-(`m16n16k16.f16.f16`).
+129 to 160; both operands staged together to 160), unsplit above, 128 x 96 from
+352, 128 x 128 of 2 x 2 warps of 64 x 64 from 480. `--check` derives each
+library's tolerance from its declared roundings (`Precision::w_quant`,
+`act_quant`, `act_nearest`). The gemm libraries' tests (`ctest -L ggml_cuda`)
+check that their PTX multiplies on the tensor cores (`mma.sync`), `f16.acc16`'s
+also into f16 accumulators (`m16n16k16.f16.f16`).
 
 On an RTX 3090 at 4096 x 4096, GGML's time over ours at M = 1, 2, 4, 8, 16, 32,
-64, 128, 512: f16 x f16 1.12, 1.07, 1.07, 0.99, 1.04, 1.05, 0.87, 0.90, 0.60
+64, 128, 512: f16 x f16 1.12, 1.07, 1.07, 0.99, 1.04, 1.05, 0.90, 0.90, 0.60
 (GGML's cuBLAS accumulates in f16; against its bf16 x bf16, f32 accumulators,
 1.11, 0.98, 0.98, 1.01, 1.05, 0.98, 0.88, 0.90, 0.96), `f16.acc16` (f16
-accumulators) 1.13, 1.10, 1.11, 1.00, 1.06, 1.07, 0.94, 1.15, 0.96; on f32 acts,
-the by-M providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.89, 0.90, 0.62;
-`f16.acc16` 1.00, 0.99, 0.89, 0.89, 0.96, 1.08, 0.97, 1.15, 0.99; bf16 1.01,
-0.99, 0.89, 0.90, 0.95, 0.99, 0.87, 0.89, 0.99; f32 0.98, 0.98, 0.97, 0.91,
+accumulators) 1.13, 1.10, 1.11, 1.00, 1.06, 1.07, 0.98, 1.15, 0.96; on f32 acts,
+the by-M providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.92, 0.90, 0.62;
+`f16.acc16` 1.00, 0.99, 0.89, 0.89, 0.96, 1.08, 0.98, 1.15, 0.99; bf16 1.01,
+0.99, 0.89, 0.90, 0.95, 0.99, 0.91, 0.89, 0.99; f32 0.98, 0.98, 0.97, 0.91,
 0.96, 1.04, 0.96, 0.99, 1.34; bf16 x bf16 1.11, 0.98, 0.98, 1.01, 1.06, 0.95,
 0.89, 0.90, 0.99; on f32 acts, the by-M provider, q4_0 1.01, 1.02, 1.01, 1.21,
 1.21, 1.19, 1.09, 1.15, 0.92; q8_0 1.02, 1.01, 0.95, 1.01, 1.16, 1.13, 1.17,
@@ -663,17 +666,19 @@ the by-M providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.89, 0.90, 0.62;
 nvfp4 1.01, 1.09, 1.26, 1.40, 1.37, 1.31, 1.17, 1.25, 0.91 (Phase 15's map has
 every type from M = 1 to 512, Phase 16 the M between, Phase 17 M \<= 8, Phase 18
 M = 5 and 33 to 48, Phase 19 to 21 M = 1 to 512 again, Phase 22 the float
-weights, Phase 23 f16 accumulators). `doc/X86_CUDA_LOG.md` (Phases 3 to 23) has
-every type, the `full` preset's layers and where the rest of the time is: from M
-= 8 the integer gemm kernel (q4_0's at M = 512 1.07x the time of a hand-written
-kernel of GGML's formulation, the acts' scales loaded from their planar field;
-not the fit of its tiles to the SMs, at M = 512 its time follows its work), most
-at M = 512 (q4_K's also an fma per element and block for its mins; the grid
-formats' 0.78-0.84, a weight block of several blocks as the K-quants'); below 8,
-iq1_s, iq1_m and q2_0 (0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M =
-40 and 48 (0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators
-(`f16.acc16`'s: M = 48 and 192 to 256, 0.81-0.90, one step of K staged at a
-time).
+weights, Phase 23 f16 accumulators, Phase 24 the float gemm's M = 33 to 160).
+`doc/X86_CUDA_LOG.md` (Phases 3 to 24) has every type, the `full` preset's
+layers and where the rest of the time is: from M = 8 the integer gemm kernel
+(q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
+formulation, the acts' scales loaded from their planar field; not the fit of its
+tiles to the SMs, at M = 512 its time follows its work), most at M = 512 (q4_K's
+also an fma per element and block for its mins; the grid formats' 0.78-0.84, a
+weight block of several blocks as the K-quants'); below 8, iq1_s, iq1_m and q2_0
+(0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M = 40 and 48
+(0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators (`f16.acc16`'s: M =
+48 and 161 to 256, 0.81-0.91, one step of K staged at a time); the f16 and bf16
+gemm on f32 accumulators from M = 97 to 127 (0.57-0.64, four blocks of 32 rows
+in M).
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
