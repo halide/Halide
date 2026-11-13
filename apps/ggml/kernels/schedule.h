@@ -225,6 +225,7 @@ struct Knobs {
     int rows_kw = 2;
     bool rows_words = true;
     int act_lanes = 8;
+    bool packed_tables = true;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs share each decoded
@@ -1910,11 +1911,52 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     blocked(out, 0, dots[0], Expr(), {1, 1, k.interleave}, r, fmt.block, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, k, true, wper);
 }
 
+// A grid's table (Tabulate's precomputed Func `table`, `per` values a row)
+// whose values lie in [lo, lo + 2^k) for k of 1 or 2 (iq1's -1, 0, 1: k = 2)
+// as `fields`, a precomputed table of their k-bit fields (value - lo), a
+// row's in its per * k / 8 bytes: value p in byte p % bytes, at bit k * (p /
+// bytes). A row's read decodes in a word (SWAR) as a load of its bytes, a
+// copy of them in each part of the word, a shift and a mask per part. The
+// fields are computed from table's own definition. Else table itself (4-bit
+// fields of iq3_s's 2 KB table: by-M at 4096 x 4096 x 8 / 32 / 512 0.0290 /
+// 0.0430 / 0.2427 -> 0.0312 / 0.0388 / 0.2490 ms; RTX 3090).
+struct FieldTable {
+    Func table, fields;
+    int k = 0, bytes = 0, lo = 0;
+};
+inline FieldTable field_table(Func table, int per, int entries) {
+    using namespace Internal;
+    FieldTable ft{table};
+    if (table.dimensions() != 2 || table.outputs() != 1 || !table.type().is_int_or_uint() || table.type().bits() != 8) return ft;
+    std::vector<Var> a = table.args();
+    Scope<Interval> in;
+    in.push(a[0].name(), Interval(0, per - 1));
+    in.push(a[1].name(), Interval(0, entries - 1));
+    Interval b = bounds_of_expr_in_scope(table.value(), in);
+    auto lo = b.is_bounded() ? as_const_int(simplify(b.min)) : std::nullopt, hi = b.is_bounded() ? as_const_int(simplify(b.max)) : std::nullopt;
+    if (!lo || !hi) return ft;
+    for (int k : {1, 2}) {
+        if (*hi - *lo >= (1 << k) || (per * k) % 8) continue;
+        ft.k = k, ft.bytes = per * k / 8, ft.lo = (int)*lo;
+        Func f(table.name() + "_fields");
+        Var c, v;
+        Expr e = make_zero(UInt(8));
+        for (int i = 0; i < 8 / k; i++) {
+            e = e | (cast<uint8_t>(table(c + i * ft.bytes, v) - cast(table.type(), ft.lo)) << (k * i));
+        }
+        f(c, v) = e;
+        ft.fields = f.precompute();
+        return ft;
+    }
+    return ft;
+}
+
 // ws (a copy of the weight's codes wcodes) computing them itself: the
 // weight's decode inlined into it, a sign's multiply x * (1 - y * 2), y in
 // [0, 1], as (x ^ -y) + y, so that a grid point's codes decode in a GPR
-// (SWAR)
-inline void inline_codes(Func ws, const std::vector<ApproximationResult> &rs, Func wcodes) {
+// (SWAR). With `fields`, a grid's table read from its field_table()'s
+// fields where it has them (iq1_s, iq1_m: 4 KB, not 16 KB of int8 values).
+inline void inline_codes(Func ws, const std::vector<ApproximationResult> &rs, Func wcodes, bool fields = false) {
     using namespace Internal;
     Expr &v = ws.function().definition().values()[0];
     for (;;) {
@@ -1936,6 +1978,23 @@ inline void inline_codes(Func ws, const std::vector<ApproximationResult> &rs, Fu
         }
         return self->visit_base(op);
     });
+    if (!fields) return;
+    static std::map<std::string, FieldTable> fts;
+    for (Func f : decoders(rs, all_but({}), 0, 1, true)) {
+        const Tabulate *t = tabulate(rs[0], f, false, true);
+        if (!t || !t->data) continue;
+        Func table = rs[0].defining_call(f)->intermediates[0];
+        auto it = fts.find(table.name());
+        if (it == fts.end()) it = fts.emplace(table.name(), field_table(table, t->per, t->entries)).first;
+        const FieldTable &ft = it->second;
+        if (!ft.k) continue;
+        v = mutate_with(v, [&](auto *self, const Call *c) -> Expr {
+            if (c->call_type != Call::Halide || c->name != table.name()) return self->visit_base(c);
+            Expr p = self->mutate(c->args[0]), i = self->mutate(c->args[1]);
+            Expr x = (ft.fields(p % ft.bytes, i) >> cast<uint8_t>((p / ft.bytes) * ft.k)) & make_const(UInt(8), (1 << ft.k) - 1);
+            return cast(table.type(), x) + cast(table.type(), ft.lo);
+        });
+    }
 }
 
 // The Metal tiles of out: threadgroups of `sg` simdgroups, each `rows(cols)`
@@ -2047,9 +2106,9 @@ inline std::vector<Func> clone_paths(Func g, const std::function<bool(const Func
 // codes, a grid point's a load of its table each (not 8 byte loads), a
 // lut's a lookup in the word (iq2_xxs at 4096 x 4096 x 1 0.0286 -> 0.0142
 // ms, q3_K 0.0256 -> 0.0200, q4_0 the same); `per`: the act blocks of a
-// weight block.
+// weight block. With `packed_tables`, inline_codes()'s fields.
 inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::vector<ApproximationResult> &rs, int sub = 0, bool on_codes = true,
-                       bool integer = false, int sg = 2, bool narrow = false, int kw = 1, bool words = false, int per = 1) {
+                       bool integer = false, int sg = 2, bool narrow = false, int kw = 1, bool words = false, int per = 1, bool packed_tables = false) {
     Var n = out.args()[0], m = out.args()[1], ns("ns"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), rl("rl");
     Expr M = out.output_buffer().dim(1).extent();
@@ -2305,7 +2364,7 @@ inline void metal_rows(Func out, Func dot, const RDom &r, int block, const std::
                 Var wx("wx"), wn("wn");
                 Func ws(wc[0].name() + "_words");
                 ws(wx, u, wn) = wc[0](wx + (u % per) * block, u / per, wn);
-                inline_codes(ws, rs, wc[0]);
+                inline_codes(ws, rs, wc[0], packed_tables);
                 Expr uv = Variable::make(Int(32), u.name());
                 Expr &v = f.function().update(0).values()[0];
                 v = mutate_with(substitute_in_all_lets(v), [&](auto *self, const Call *c) -> Expr {
@@ -3027,9 +3086,9 @@ inline void round_extent(Func f, const RVar &rv, int l, Func out) {
 // part's copy, its blocks over n, m and the partial sums; the last in m
 // rounded up, its rows past M on the act's last row), then out their sums. A block's steps bound its time, so few tiles gain from kz times the
 // blocks. The next split, the gemm on all of K and the rows are then clones'
-// of dot.
+// of dot. `packed_tables`: a grid's points read as inline_codes()'s fields.
 inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs, std::vector<GemmShape> shapes, int sg,
-                         bool code_words, std::vector<KSplit> splits = {}, bool wmma = false) {
+                         bool code_words, std::vector<KSplit> splits = {}, bool wmma = false, bool packed_tables = false) {
     const int fn = 16, pad = 16;
     // (a weight block of several blocks is staged whole, once per `kw`,
     // its steps the acts'; on wmma's fragments the K split's steps are
@@ -3317,7 +3376,7 @@ inline void gpu_int_gemm(Func out, Func dot, const RDom &r, const Formats &fmt, 
             g.wstep = wstep;
         }
         g.ws = wcodes.in(g.codes), g.xs = ac[0].in(g.codes);
-        if (point) inline_codes(g.ws, rs, wcodes);
+        if (point) inline_codes(g.ws, rs, wcodes, packed_tables);
         // the weights' luts the gemm's own, per block (as gpu_staged()'s),
         // or with code_words inlined: a lookup of a word's 4 codes in a GPR,
         // byte permutes of the lut's words (iq4_nl at 4096 x 4096 x 16 /
@@ -3866,7 +3925,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             if (it.size() == 3) t = {it[0], it[0], it[1], it[1], it[2]};
             if (it.size() == 4) t = {it[0], it[1], it[2], it[2], it[3]};
             if (t.size() != 5 || t.find_first_not_of("mw") != std::string::npos) throw std::invalid_argument("int_tiles: 3 to 5 of w and m, not " + it);
-            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, t[4] == 'w'), 2, k.code_words, cuda_int_splits(out, t[0] == 'w', t[1] == 'w', t[2] == 'w', t[3] == 'w', k.int_narrow48, k.int_m24), t[4] == 'w');
+            gpu_int_gemm(out, dots[0], r, fmt, rs, cuda_int_shapes(out, t[4] == 'w'), 2, k.code_words, cuda_int_splits(out, t[0] == 'w', t[1] == 'w', t[2] == 'w', t[3] == 'w', k.int_narrow48, k.int_m24), t[4] == 'w', k.packed_tables);
             return;
         }
         // CUDA: acts quantized here (f32:q8_1, as GGML's mmvq quantizes its
@@ -3919,7 +3978,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // (rows_words: the luts inlined into the codes' words, a lookup in
         // each, not a shared copy)
         if (!(integer && k.rows_words)) metal_luts(out, rs);
-        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer, integer ? k.rows_kw : 1, integer && k.rows_words, fmt.per);
+        metal_rows(out, dots[0], r, fmt.block, rs, fmt.sub, true, integer, integer ? 2 : sg, integer, integer ? k.rows_kw : 1, integer && k.rows_words, fmt.per, k.packed_tables);
         return;
     }
     if (fmt.rowwise) {
