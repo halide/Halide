@@ -3291,3 +3291,122 @@ and 1 (0.79, 0.80), q2_K, iq2_s and q1_0 at 40 (0.80-0.81), q2_0 at 12 and 16
   - q2_0 at M = 1 and 2 (0.79, 0.80): the rows' codes not in words.
   - M = 40 (q1_0 0.81, iq2_s, iq3_xxs, iq2_xxs, q4_K, q4_1 0.87-0.91) and iq2_s
     at 24 to 48 and 128 (0.83-0.89): as Phase 18.
+
+## Phase 20: iq1's grid table in 2-bit fields; q2_0's rows in words; q2_K to M = 96 (RTX 3090)
+
+Same machine and conventions as Phase 19. The targets: iq1_s from M = 12 to 48
+(0.70-0.84) and iq1_m and iq1_s at M \<= 8 (0.84-0.93), q2_0's rows at M = 1 and
+2 (0.79, 0.80), M = 40 (q1_0 0.81, iq2_s, iq3_xxs, iq2_xxs, q4_K, q4_1
+0.87-0.91) and q2_K at 96 (0.77, the f16 gemm).
+
+- iq1_s's integer gemm (ncu at 4096^2 x 16, its gemm kernel): Phase 19's cost
+  was its grid table, 2048 points of 8 int8 values (-1, 0, 1), 16 KB, read a
+  point a lane beside 7 blocks' shared memory an SM. `field_table` (CUDA, in
+  `inline_codes`, `packed_tables`, default on): a precomputed table of int8
+  values within \[lo, lo + 2^k), k of 1 or 2, is read from a second precomputed
+  table of its k-bit fields (value - lo), defined from the first's own
+  definition, a row's 8 values in 2 bytes, value p in byte p % 2 at bit 2 (p /
+  2): in the word (SWAR) a 2-byte load, copied to the word's 4 pairs of bytes by
+  a multiply, a shift and a mask per pair, 4 KB in all. Kernel 35.2 -> 26.0 us,
+  L1 hits 61% -> 82% of sectors, 6.79 -> 4.17 cycles an issue, at 4.24M -> 4.89M
+  instructions. Only iq1_s's and iq1_m's tables have such values (iq3_s's 1 to
+  15 would take 4-bit fields, below).
+
+- Library, ms at 4096^2 (iq1_s, f32:q8_0.soa), before / with the fields / with
+  them and mma.sync's 32 x 24 to M = 24 (`int_m24`) and the K split's 32 x 48
+  (`int_narrow48`, which iq1_s had off):
+
+  | M      | 12     | 16     | 24     | 32     | 40     | 48     |
+  | ------ | ------ | ------ | ------ | ------ | ------ | ------ |
+  | before | 0.0360 | 0.0362 | 0.0400 | 0.0408 | 0.0450 | 0.0454 |
+  | fields | 0.0256 | 0.0259 | 0.0315 | 0.0324 | 0.0418 | 0.0423 |
+  | tiles  | 0.0261 | 0.0260 | 0.0297 | 0.0320 | 0.0387 | 0.0395 |
+
+  With the fields, iq1_s's tiles again (ms at M = 12 / 16 / 24 / 32 / 40 / 48):
+  `int_tiles` mmm 0.0288 / 0.0269 / 0.0295 / 0.0338 / 0.0422 / 0.0425, wmmm
+  0.0278 / 0.0259 / 0.0294 / 0.0343 / 0.0421 / 0.0427, mwmm 0.0288 / 0.0266 /
+  0.0335 / 0.0349 / 0.0423 / 0.0429 (wmm kept).
+
+- M \<= 8 (the dp4a rows, `rows_words=false` for iq1_s and iq1_m): the table is
+  not their cost. With words and the fields, iq1_s at M = 1 / 2 / 3 / 4 / 5 / 8
+  0.0137 / 0.0144 / 0.0161 / 0.0179 / 0.0202 / 0.0266 -> 0.0131 / 0.0141 /
+  0.0162 / 0.0177 / 0.0197 / 0.0258 ms, iq1_m 0.0152 / 0.0168 / 0.0183 / 0.0201
+  / 0.0226 / 0.0302 -> 0.0154 / 0.0166 / 0.0186 / 0.0202 / 0.0225 / 0.0309:
+  within 3% but iq1_s at 1 and 8, not taken (the rows' library unchanged). Not
+  attributed further.
+
+- q2_0's dp4a rows on its codes in words: 8 codes a word (two bytes, 4 codes
+  each) fail to lower, the load a `repeat_each_lane` of the two bytes across 4
+  lanes each ("a shuffle that moves values between lanes"); 4 codes a word (one
+  byte, broadcast, each lane shifted by its code's bits) lower as they are
+  (`rows_lanes=4`, a word a dp4a's operand), so no core change. At 4096^2 x 1 /
+  2 / 3 / 4 / 5 / 8: 0.0122 / 0.0127 / 0.0141 / 0.0153 / 0.0165 / 0.0211 ->
+  0.0110 / 0.0118 / 0.0130 / 0.0146 / 0.0164 / 0.0201 ms (GGML 0.0098 / 0.0103 /
+  0.0126 / 0.0153 / 0.0156 / 0.0223).
+
+- q2_K from M = 65 (the f16 gemm, 0.106-0.109 ms; `subsums` kept the integer
+  gemm to 64-row tiles, two blocks of them from 65: 0.108-0.114): the K split's
+  64 x 80 on 2 x 2 warps of 32 x 40 to M = 80 (42 KB of shared memory) and two
+  blocks of 32 x 48 to 96, else as before; the by-M provider's picks of 7
+  letters, the fifth M = 65 to 96's (q2_K `riiiihi`). ms at 4096^2:
+
+  | M              | 65     | 72     | 80     | 88     | 96     | 104    | 112    | 127    |
+  | -------------- | ------ | ------ | ------ | ------ | ------ | ------ | ------ | ------ |
+  | GGML           | 0.0661 | 0.0670 | 0.0682 | 0.0811 | 0.0820 | 0.0973 | 0.0991 | 0.1289 |
+  | f16 gemm       | 0.1066 | 0.1071 | 0.1065 | 0.1077 | 0.1065 | 0.1073 | 0.1071 | 0.1083 |
+  | integer before | 0.1078 | 0.1081 | 0.1086 | 0.1104 | 0.1111 | 0.1117 | 0.1124 | 0.1142 |
+  | integer after  | 0.0740 | 0.0744 | 0.0748 | 0.0958 | 0.0969 | 0.1112 | 0.1120 | 0.1139 |
+
+  64 x 80 also above 80 (two blocks): 0.133-0.137.
+
+- Tried, not taken (ms of a call of the library, 4096^2):
+
+  | change                                                                              | effect                                                                                                                                                                                                                                  |
+  | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | iq3_s's table (512 points of 4 values 1 to 15, 2 KB) in 4-bit fields                | by-M at M = 1 / 8 / 16 / 32 / 128 / 512 0.0178 / 0.0290 / 0.0320 / 0.0430 / 0.0731 / 0.2427 -> 0.0179 / 0.0312 / 0.0325 / 0.0388 / 0.0746 / 0.2490: fields of 1 or 2 bits only                                                          |
+  | M = 33 to 40 on one warp of 32 x 40 in the K split in 2 (before 32 x 48 of 2 warps) | at 40 q4_K 0.0429 -> 0.0405, q4_1 0.0417 -> 0.0400, iq2_s 0.0496 -> 0.0475, q4_0 0.0354 -> 0.0340, q1_0 and iq2_xxs the same, iq3_xxs 0.0472 -> 0.0510; at 33 q4_K 0.0427 -> 0.0455, iq2_xxs 0.0409 -> 0.0435, iq3_xxs 0.0464 -> 0.0515 |
+  | that on 2 x 1 warps (64 x 40)                                                       | at 40 q1_0 0.0334 -> 0.0325, the others the same or slower (iq2_xxs 0.0413 -> 0.0433, iq3_xxs 0.0472 -> 0.0513)                                                                                                                         |
+
+- Gate: `--check` of the integer gemm and by-M providers of iq1_s and iq1_m on
+  4096 x 1001, 4096 x 4099 and 1280 x 512 x 8, 9, 12, 16, 17, 20, 24, 25, 31,
+  32, 33, 40, 48, 49, 63, 64, 65, 96, 128, 129, 200, 256, 512 (414 results); of
+  q2_0's dp4a rows (f32:q8_1 and q8_0 acts) and by-M provider on those and 1088
+  x 512 x 1 to 9 (180); of q2_K's integer gemm and by-M provider on 4096 x 1001,
+  4096 x 4099, 1280 x 512 x 48, 49, 63, 64, 65, 72, 79, 80, 81, 88, 95, 96, 97,
+  112, 127, 128, 129 (153); and the small-N grid at K = 1024, N in {1 to 9, 12,
+  15, 16, 17, 24, 31, 33, 40, 63}, of every Halide CUDA provider of iq1_s and
+  iq1_m at M = 12, 16, 17, 24, 25, 32, 33, 40, 48, 49, 64 (3564), of q2_0 at M =
+  1 to 9, f32 and pre-quantized acts (1782), of q2_K at M = 63, 64, 65, 72, 80,
+  81, 88, 96, 97 (1458): 0 failures, 0 unchecked. Of the 146 CUDA bench
+  libraries' `.stmt`, those of iq1_s's and iq1_m's integer gemm, q2_0's rows on
+  f32:q8_1 and q8_0 and q2_K's integer gemm differ; the 82 Metal ones are
+  byte-identical, the 371 x86 ones identical after renumbering temporaries
+  (q2_0's CPU libraries take `rows_lanes=4` and not `rows_words=false`, which
+  only CUDA reads). `ctest -L ggml_cuda` 75/75.
+
+- Scorecard, by-M provider, 4096^2, f32 acts, --rounds 5, all 23 types at M = 1
+  to 8, 12, 16, 24, 32, 40, 48, 64, 96, 128, 512: 89 of the 414 cells under 0.95
+  (Phase 19: 92). Cells more than 3% slower than Phase 19's map: iq2_s at M = 12
+  to 48 (+5-13%), iq2_xxs at 8 and 16 (+3-5%), q2_K at 8 and iq1_s at 8 (+4%),
+  their libraries unchanged; retimed back to back with Phase 19's build, the
+  same (iq2_s at 12 / 16 / 24 / 32 / 40 / 48 0.0372 / 0.0350 / 0.0450 / 0.0456 /
+  0.0520 / 0.0525 ms against 0.0372 / 0.0353 / 0.0453 / 0.0460 / 0.0524 /
+  0.0527; iq2_xxs at 8 0.0275 / 0.0255, iq1_s at 8 0.0291 / 0.0270, q2_K at 8
+  0.0259 / 0.0259). Changed (ms; GGML / it, before -> after):
+
+  | type  | M = 12                | M = 16                | M = 24                | M = 32                | M = 40                | M = 48                | M = 512               |
+  | ----- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- | --------------------- |
+  | iq1_s | 0.0255 (0.77 -> 1.02) | 0.0256 (0.77 -> 1.02) | 0.0288 (0.70 -> 1.00) | 0.0326 (0.74 -> 0.95) | 0.0385 (0.75 -> 0.92) | 0.0394 (0.84 -> 1.00) | 0.2284 (0.87 -> 0.93) |
+  | iq1_m | 0.0285 (2.87 -> 3.68) | 0.0286 (2.88 -> 3.67) | 0.0405 (2.33 -> 2.61) | 0.0410 (2.39 -> 2.65) | 0.0478 (2.01 -> 2.27) | 0.0484 (1.92 -> 2.20) |                       |
+
+  q2_0 at M = 1 / 2 / 4 / 8 0.0109 / 0.0117 / 0.0146 / 0.0204 (0.80 / 0.79 /
+  1.01 / 1.05 -> 0.90 / 0.87 / 1.07 / 1.07); q2_K at 96 0.0966 (0.77 -> 0.85).
+
+- Where the rest is (below M = 129):
+
+  - M \<= 8: iq1_m (0.84-0.93) and iq1_s (0.87-0.93) on the dp4a rows, not their
+    table; q2_0 at M = 1, 2 (0.90, 0.87) in words of 4 codes.
+  - M = 40: q1_0 0.81, q2_K 0.80, iq2_s 0.82, iq3_xxs 0.88, iq2_xxs 0.89, q4_K
+    0.90, iq1_s, q4_1 0.92 (a 40-row tile: above); iq2_s from 12 to 128
+    (0.79-0.94); q2_K from 12 to 48 (0.80-0.92) and at 96 (0.85: two blocks of
+    48 rows, a weight tile decoded twice).
