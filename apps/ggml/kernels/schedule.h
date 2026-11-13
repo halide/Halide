@@ -2844,21 +2844,28 @@ struct GemmSplit {
 // `narrow` (f16 accumulators; N >= 128): 128 x 64
 // blocks of 4 x 2 warps of 32 x 32, K in 4 from M = 33 to 64 (M = 48 0.063 ->
 // 0.054 ms; 64 x 64 of 2 x 2 warps in 4 0.054, unsplit 0.096), in 2 from 65
-// to 192 (M = 96 0.078 -> 0.067, 128 0.080 -> 0.068; 128 x 64 unsplit at 128
+// to 128 (M = 96 0.078 -> 0.067, 128 0.080 -> 0.068; 128 x 64 unsplit at 128
 // 0.098), but 128 x 80 of 4 warps of 32 x 80 in 2 from 129 to 160 (M = 160
 // 0.095 -> 0.081; from 161 three tiles of 80 in M against three of 64: 0.111
-// -> 0.094). Their operands staged together (GemmShape::together) to M =
-// 160 (M = 48 0.054 -> 0.052 ms, 96 0.068 -> 0.065, 128 0.069 -> 0.066, 160
-// 0.078 -> 0.073; at 192 0.096 -> 0.102). (RTX 3090)
+// -> 0.094), and 128 x 112 of 4 warps of 32 x 112 in 2 from 161 to 224, its
+// blocks in M innermost (f16 x f16, ms: M = 168 0.095 -> 0.089, 192 0.096 ->
+// 0.091, 208 0.110 -> 0.093, 224 0.110 -> 0.094; blocks in M outermost 0.095
+// / 0.097 / 0.098 / 0.100; 128 x 96 in 2 0.094-0.096 to 192; 128 x 128 in 2
+// 0.112-0.117; 256 x 64 0.118-0.126; 128 x 64 or 128 x 96 unsplit, blocks in
+// M innermost, 0.104-0.121; from 225 to 256 none faster than 128 x 64
+// unsplit: 128 x 112 in 2 0.161, 128 x 80 0.113-0.158, 128 x 128 0.115-0.118).
+// Their operands staged together (GemmShape::together) to M = 160 (M = 48
+// 0.054 -> 0.052 ms, 96 0.068 -> 0.065, 128 0.069 -> 0.066, 160 0.078 ->
+// 0.073; at 192 0.096 -> 0.102; 128 x 128 at 168 to 256 +1%). (RTX 3090)
 inline std::vector<GemmSplit> cuda_splits(Func out, bool copied, bool narrow = false) {
     Expr M = out.output_buffer().dim(1).extent(), N = out.output_buffer().dim(0).extent();
     if (!copied) return {};
     if (narrow) {
-        GemmShape sh{Expr(), 2, 2, 4, false, 2}, sh80{Expr(), 2, 5, 4};
-        sh.kstep = sh80.kstep = 64;
+        GemmShape sh{Expr(), 2, 2, 4, false, 2}, sh80{Expr(), 2, 5, 4}, sh112{Expr(), 2, 7, 4};
+        sh.kstep = sh80.kstep = sh112.kstep = 64;
         GemmShape tog = sh, tog80 = sh80;
         tog.together = tog80.together = true;
-        return {{4, M > 32 && M <= 64 && N >= 128, tog}, {2, M > 128 && M <= 160 && N >= 128, tog80}, {2, M > 64 && M <= 128 && N >= 128, tog}, {2, M > 64 && M <= 192 && N >= 128, sh}};
+        return {{4, M > 32 && M <= 64 && N >= 128, tog}, {2, M > 128 && M <= 160 && N >= 128, tog80}, {2, M > 64 && M <= 128 && N >= 128, tog}, {2, M > 160 && M <= 224 && N >= 128, sh112, true}};
     }
     GemmShape sh{Expr(), 2, 4, 2, false, 2}, sh192{Expr(), 2, 6, 2, false, 2}, g{Expr(), 1, 2, 4};
     sh.kstep = sh192.kstep = 64;
