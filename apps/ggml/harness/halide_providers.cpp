@@ -405,7 +405,7 @@ void register_halide_providers() {
     // takes the letter of the first of those six at or above it (as the
     // integer gemm's K split rounds its tiles up in M), from 256 512's. Of
     // seven letters, the fifth is M = 96's (65 to 96), the sixth 128's (97
-    // to 255).
+    // to 255); of ten, then 128's (97 to 128), 160's, 192's and 255's.
     static const std::map<std::string, std::string> by_m = {
         {"iq1_m", "riiiii"},
         {"iq1_s", "riiiii"},
@@ -417,7 +417,7 @@ void register_halide_providers() {
         {"mxfp4", "riiiii"},
         {"nvfp4", "riiiii"},
         {"q2_0", "riiiii"},
-        {"q2_K", "riiiihi"},
+        {"q2_K", "riiiihiihi"},
         {"q4_0", "riiiii"},
         {"q4_1", "riiiii"},
         {"q5_0", "riiiii"},
@@ -455,13 +455,17 @@ void register_halide_providers() {
         providers().push_back({"halide-by-m-" + id + "_f32_cuda", GQ_mul_mat, true,
                                [mv = make(rows_name), makes, names, rows_name, picks](const Inputs &in) {
                                    const int M = in.s.M;
-                                   const std::string p = picks.size() == 7 ? picks : picks.substr(0, 5) + picks.substr(4);
+                                   const std::string p7 = picks.size() == 6 ? picks.substr(0, 5) + picks.substr(4) : picks;
+                                   const std::string p = p7.size() == 7 ? p7.substr(0, 5) + std::string(4, p7[5]) + p7.substr(6) : p7;
                                    const char c = M < 8 ? 'r' : p[M <= 8 ? 0 : M <= 16 ? 1 :
                                                                            M <= 32     ? 2 :
                                                                            M <= 64     ? 3 :
                                                                            M <= 96     ? 4 :
-                                                                           M < 256     ? 5 :
-                                                                                         6];
+                                                                           M <= 128    ? 5 :
+                                                                           M <= 160    ? 6 :
+                                                                           M <= 192    ? 7 :
+                                                                           M < 256     ? 8 :
+                                                                                         9];
                                    auto k = (c == 'r' ? mv : makes.at(c))(in);
                                    if (k) k->path = "halide:cuda:" + (c == 'r' ? rows_name : names.at(c));
                                    return k;
