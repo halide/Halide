@@ -605,11 +605,16 @@ the `f32:q8_1` rows below 8 rows, then the integer gemm where the type has one,
 else (above 16) the f16 gemm; per type, another of the three where it was
 measured more than 3% faster at M = 8, 16, 32, 64, 128 or 512, each M taking the
 first of those at or above it (`by_m` in `harness/halide_providers.cpp`: the
-rows at M = 8 on 16 types, the f16 gemm from 65 to 255 on q2_K). The integer
-gemm's K split (below M = 256) rounds its last tile in M up where M is less than
-a tile's rows, so each range of M takes one tile of its rows or more (32 x 16
-from M = 8, 32 x 24, 32 x 32, 64 x 48, 64 x 64, 64 x 80, 64 x 96, 64 x 112, 64 x
-128; above M = 128 two blocks of the first tile at or above half of M).
+rows at M = 8 on 16 types, the f16 gemm from 97 to 128 and 193 to 255 on q2_K).
+The integer gemm's K split (to M = 128) rounds its last tile in M up where M is
+less than a tile's rows, so each range of M takes one tile of its rows or more
+(32 x 16 from M = 8, 32 x 24, 32 x 32, 64 x 48, 64 x 64, 64 x 80, 64 x 96, 64 x
+112, 64 x 128). Above 128 its blocks fit the SMs' waves (2 blocks of 4 warps an
+SM, `int_big` by type and range of M): to 255 two blocks in M on all of K of the
+first of 64 x 80 to 64 x 128 at or above half of M (or the K split on them),
+from 257 five of the first of 64 x 64 to 64 x 112 at or above a fifth, or, for
+the one-block weights on f32:q8_0.soa, two of 64 x 160 on 8 warps to 320 and
+three of 64 x 128 on 64-value steps to 384.
 
 The f16 gemm's staging is Metal's, on 16 bytes per lane and rows padded by 8
 values (a fragment's rows, 128 bytes apart, share their banks): the weights'
@@ -662,28 +667,28 @@ the by-M providers: f16 1.00, 1.00, 0.89, 0.90, 0.95, 1.07, 0.92, 0.90, 0.62;
 0.99, 0.89, 0.90, 0.95, 0.99, 0.91, 0.89, 0.99; f32 0.98, 0.98, 0.97, 0.91,
 0.96, 1.04, 0.96, 0.99, 1.34; bf16 x bf16 1.11, 0.98, 0.98, 1.01, 1.06, 0.95,
 0.89, 0.90, 0.99; on f32 acts, the by-M provider, q4_0 1.01, 1.02, 1.01, 1.21,
-1.21, 1.19, 1.09, 1.15, 0.92; q8_0 1.02, 1.01, 0.95, 1.01, 1.16, 1.13, 1.17,
-1.19, 0.94; q4_K 1.01, 1.00, 1.13, 1.12, 1.14, 1.00, 0.96, 1.03, 0.83; q6_K
-0.97, 0.99, 0.97, 1.24, 1.22, 1.05, 0.93, 1.01, 0.83; iq2_xs 1.04, 1.06, 1.09,
-1.07, 1.05, 0.97, 0.95, 0.92, 0.80; iq4_nl 0.99, 1.00, 1.00, 1.07, 1.29, 1.27,
-1.06, 1.08, 0.87; q2_K 1.20, 1.16, 1.38, 1.29, 0.91, 0.87, 0.94, 1.15, 0.99;
-nvfp4 1.01, 1.09, 1.26, 1.40, 1.37, 1.31, 1.17, 1.25, 0.91 (Phase 15's map has
+1.21, 1.19, 1.09, 1.15, 0.95; q8_0 1.02, 1.01, 0.95, 1.01, 1.16, 1.13, 1.17,
+1.19, 0.95; q4_K 1.01, 1.00, 1.13, 1.12, 1.14, 1.00, 0.96, 1.03, 0.86; q6_K
+0.97, 0.99, 0.97, 1.24, 1.22, 1.05, 0.93, 1.01, 0.88; iq2_xs 1.04, 1.06, 1.09,
+1.07, 1.05, 0.97, 0.95, 0.92, 0.91; iq4_nl 0.99, 1.00, 1.00, 1.07, 1.29, 1.27,
+1.06, 1.08, 0.93; q2_K 1.20, 1.16, 1.38, 1.29, 0.91, 0.87, 0.94, 1.15, 0.97;
+nvfp4 1.01, 1.09, 1.26, 1.40, 1.37, 1.31, 1.17, 1.25, 1.06 (Phase 15's map has
 every type from M = 1 to 512, Phase 16 the M between, Phase 17 M \<= 8, Phase 18
 M = 5 and 33 to 48, Phase 19 to 21 M = 1 to 512 again, Phase 22 the float
 weights, Phase 23 f16 accumulators, Phase 24 the float gemm's M = 33 to 160,
-Phase 25 the float weights at every 8 rows of M from 24 to 288).
-`doc/X86_CUDA_LOG.md` (Phases 3 to 25) has every type, the `full` preset's
-layers and where the rest of the time is: from M = 8 the integer gemm kernel
-(q4_0's at M = 512 1.07x the time of a hand-written kernel of GGML's
-formulation, the acts' scales loaded from their planar field; not the fit of its
-tiles to the SMs, at M = 512 its time follows its work), most at M = 512 (q4_K's
-also an fma per element and block for its mins; the grid formats' 0.78-0.84, a
-weight block of several blocks as the K-quants'); below 8, iq1_s, iq1_m and q2_0
-(0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M = 40 and 48
-(0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators (`f16.acc16`'s: M =
-48, 56, 161 to 256 and 352 to 384, 0.80-0.94, one step of K staged at a time);
-the f16 and bf16 gemm on f32 accumulators from M = 97 to 192 (bf16 x bf16
-0.84-0.94, likewise one step of K at a time).
+Phase 25 the float weights at every 8 rows of M from 24 to 288, Phase 26 the
+integer gemm at every 16 rows from 128 to 512). `doc/X86_CUDA_LOG.md` (Phases 3
+to 26) has every type, the `full` preset's layers and where the rest of the time
+is: from M = 8 the integer gemm kernel (q4_0's at M = 512 1.07x the time of a
+hand-written kernel of GGML's formulation, the acts' scales loaded from their
+planar field), most above M = 256 (two waves of blocks staging a step of K at a
+time, where GGML's stream-k fills the SMs: the K-quants and grids 0.77-0.89 from
+257 to 512; q4_K's also an fma per element and block for its mins); below 8,
+iq1_s, iq1_m and q2_0 (0.83-0.93); from 12 to 48 q2_K and iq2_s (0.84-0.94), M =
+40 and 48 (0.87-0.94); on f16 from M = 64, cuBLAS's f16 accumulators
+(`f16.acc16`'s: M = 48, 56, 161 to 256 and 352 to 384, 0.80-0.94, one step of K
+staged at a time); the f16 and bf16 gemm on f32 accumulators from M = 97 to 192
+(bf16 x bf16 0.84-0.94, likewise one step of K at a time).
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
