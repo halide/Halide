@@ -1750,9 +1750,11 @@ void TransposeOp::execute() {
 
     // Adjust the ordering of the output to match the input.
     const int transpose_rank = in_buf.dimensions();
-    assert(dims_buf.dim(0).extent() == transpose_rank);
+    HCHECK(dims_buf.dim(0).extent() == transpose_rank && out_buf.dimensions() == transpose_rank)
+        << "Transpose permutation does not match the input rank\n";
     std::vector<int> order(transpose_rank);
-    for (int i = 0; i < dims_buf.dim(0).extent(); i++) {
+    for (int i = 0; i < transpose_rank; i++) {
+        HCHECK(dims_buf(i) >= 0 && dims_buf(i) < transpose_rank) << "Transpose permutation is out of range\n";
         order[transpose_rank - 1 - i] = transpose_rank - 1 - dims_buf(i);
     }
     out_buf.transpose(order);

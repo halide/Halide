@@ -73,6 +73,10 @@ class ConcatenationOp : public Op {
 public:
     ConcatenationOp(std::vector<TensorPtr> inputs, const TensorPtr &output, int axis)
         : Op(std::move(inputs), {output}), axis_(axis) {
+        HCHECK(axis_ >= 0 && axis_ < output->rank()) << "Concatenation axis " << axis_ << " is out of range\n";
+        for (int i = 0; i < input_count(); i++) {
+            HCHECK(input(i)->rank() == output->rank()) << "Concatenation inputs must have the same rank as the output\n";
+        }
     }
 
     int axis() const {
@@ -240,6 +244,7 @@ class GatherOp : public Op {
 public:
     GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis, int batch_dims)
         : Op({input, indices}, {output}), axis_(axis), batch_dims_(batch_dims) {
+        HCHECK(axis_ >= 0 && axis_ < input->rank()) << "Gather axis " << axis_ << " is out of range\n";
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -474,6 +479,10 @@ class SplitOp : public Op {
 public:
     SplitOp(const TensorPtr &input, std::vector<TensorPtr> outputs, int axis)
         : Op({input}, std::move(outputs)), axis_(axis) {
+        HCHECK(axis_ >= 0 && axis_ < input->rank()) << "Split axis " << axis_ << " is out of range\n";
+        for (int i = 0; i < output_count(); i++) {
+            HCHECK(output(i)->rank() == input->rank()) << "Split outputs must have the same rank as the input\n";
+        }
     }
 
     int axis() const {
