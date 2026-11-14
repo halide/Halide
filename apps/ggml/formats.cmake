@@ -379,6 +379,31 @@ set(GGML_SCHEDULE_PARAMS
     "q2_K mul_mat f32:q8_0.soa int_m40=2"
     "q4_1 mul_mat f32:q8_1.soa int_m40=2"
     "q4_0 mul_mat f32:q8_0.soa int_m40=2"
+    # int_big (above M = 128, by M: 129 to 160, 161 to 192, 193 to 224, 225
+    # to 255, 257 to 320, 321 to 384; s the K split in 2, or from 257 64 x
+    # 128 in 3 blocks, as at 256; u the gemm on all of K, two blocks in M to
+    # 255, five from 257; w from 257 64 x 160 on 8 warps, from 321 64 x 128
+    # on 64-value steps), ms at 4096^2 x 144 / 176 / 288 / 352, s / u / w:
+    # q4_0 0.086 / 0.093 / 0.162 / 0.164, 0.086 / 0.085 / 0.140 / 0.174, - /
+    # - / 0.130 / 0.154; q8_0 0.092 / 0.102 / 0.174 / 0.175, 0.096 / 0.094 /
+    # 0.164 / 0.210, - / - / 0.141 / 0.166; iq3_s 0.103 / 0.114 / 0.203 /
+    # 0.204, 0.099 / 0.118 / 0.218 / 0.203, - / - / - / 0.183; q2_K at 144 /
+    # 176 0.148 / 0.152, 0.129 / 0.208 (the rest uuuuuu; w from 257 takes
+    # more than 48 KB of shared memory but where a weight block is a block
+    # on f32:q8_0.soa; from 321, where it is several, w does not compile
+    # beside the other letters' shapes, "stored in Tile memory, but no
+    # matrix multiply" (iq2_xxs, iq3_xxs, q4_K, q5_K), or reads the weights
+    # out of bounds (iq3_s), where in a build of s from 129 to 255 it was
+    # 4-11% faster at 352; RTX 3090)
+    "iq3_s mul_mat f32:q8_0.soa int_big=usuusu"
+    "iq4_nl mul_mat f32:q8_0.soa int_big=suuuww"
+    "mxfp4 mul_mat f32:q8_0.soa int_big=suuuww"
+    "nvfp4 mul_mat f32:q8_0.soa int_big=suuuuu"
+    "q2_0 mul_mat f32:q8_0.soa int_big=ssuuuu"
+    "q2_K mul_mat f32:q8_0.soa int_big=usssuu"
+    "q4_0 mul_mat f32:q8_0.soa int_big=suuuww"
+    "q5_0 mul_mat f32:q8_0.soa int_big=uuuuww"
+    "q8_0 mul_mat f32:q8_0.soa int_big=suuuww"
 )
 # A row may lead with an architecture, `[x86] type op act params...` or
 # `[arm]`: it applies only when building for that host CPU, and overrides the

@@ -69,6 +69,13 @@ public:
     // split in int_m40 (2 or 4; 0: the K split in 2's 32 x 48; see
     // ggml::cuda_int_splits)
     GeneratorParam<int> int_m40{"int_m40", 0};
+    // CUDA's integer gemm above M = 128, a letter each of 129 to 160, 161
+    // to 192, 193 to 224, 225 to 255, 257 to 320 and 321 to 384: s the K
+    // split in 2 (from 257 64 x 128 tiles, as at 256), u the gemm on all of
+    // K, two blocks in M to 255 and five from 257, w (the last two only) 64
+    // x 160 tiles on 8 warps, 64 x 128 on 64-value steps (see
+    // ggml::cuda_int_shapes)
+    GeneratorParam<std::string> int_big{"int_big", "uuuuuu"};
     // CUDA's dp4a rows: two rows a warp from M = 3 to rows_narrow, else 4
     // (see ggml::metal_rows)
     GeneratorParam<int> rows_narrow{"rows_narrow", 5};
@@ -276,7 +283,7 @@ public:
     }
 
     void generate() {
-        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, int_m24, rows_kw, rows_words, act_lanes, packed_tables, rows_lanes, int_m40, rows_narrow};
+        ggml::Knobs k{interleave, sublanes, gpr_scales, fold_offsets, row_pairs, gemm_index_words, plain_index_words, cuda_one_warp, code_words, int_tiles, int_narrow48, int_m24, rows_kw, rows_words, act_lanes, packed_tables, rows_lanes, int_m40, rows_narrow, int_big};
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, k);
         } else {

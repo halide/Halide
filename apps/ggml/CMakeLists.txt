@@ -122,6 +122,15 @@ if (GGML_CUDA)
             --shapes 256x512x33,256x512x97,256x512x127,256x512x161,256x512x191,256x512x223
     )
     set_tests_properties(ggml_cuda_partial_m_tiles PROPERTIES LABELS ggml_cuda)
+    # The integer gemms above M = 128, where M is not a whole number of their
+    # blocks in M (the last shifted onto the one before)
+    add_test(
+        NAME ggml_cuda_int_big_m
+        COMMAND
+            ggml-quant-bench --op mul_mat --acts f32 --providers soa_mul_mat_cuda --check
+            --shapes 256x512x129,256x512x200,256x512x225,256x512x257,256x512x300,256x512x321,256x512x350,256x512x401,256x512x481
+    )
+    set_tests_properties(ggml_cuda_int_big_m PROPERTIES LABELS ggml_cuda)
 endif ()
 
 # Properties of the schemes, checked by JIT (Halide's approximation testing).
