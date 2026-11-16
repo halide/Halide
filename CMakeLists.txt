@@ -259,7 +259,7 @@ Halide_feature(
     DEPENDS WITH_TUTORIALS AND WITH_PYTHON_BINDINGS
 )
 Halide_feature(
-    WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL
+    WITH_UTILS "Optional utility programs for Halide, including HalideTraceDump" TOP_LEVEL
 )
 
 
