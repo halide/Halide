@@ -394,17 +394,15 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
         {
             Expr lo = simplify(substitute(entry.name, at_lower, e));
             ConstantInterval b = to_constant_interval(Halide::Internal::find_constant_bounds(lo, scope));
-            if (b.min_defined && (!interval.min_defined || b.min > interval.min)) {
-                interval.min_defined = true;
-                interval.min = b.min;
+            if (b.min_defined) {
+                interval.intersect_if_nonempty(ConstantInterval::bounded_below(b.min));
             }
         }
         {
             Expr hi = simplify(substitute(entry.name, at_upper, e));
             ConstantInterval b = to_constant_interval(Halide::Internal::find_constant_bounds(hi, scope));
-            if (b.max_defined && (!interval.max_defined || b.max < interval.max)) {
-                interval.max_defined = true;
-                interval.max = b.max;
+            if (b.max_defined) {
+                interval.intersect_if_nonempty(ConstantInterval::bounded_above(b.max));
             }
         }
     }
@@ -418,8 +416,8 @@ ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
         return interval;
     }
     Expr wrapped = simplify_with_context(e);
-    interval = ConstantInterval::make_intersection(
-        interval, to_constant_interval(Halide::Internal::find_constant_bounds(wrapped, scope)));
+    interval.intersect_if_nonempty(
+        to_constant_interval(Halide::Internal::find_constant_bounds(wrapped, scope)));
     if (interval.is_single_point()) {
         return interval;
     }
