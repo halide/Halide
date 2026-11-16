@@ -566,6 +566,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         }
     } else if (op->is_intrinsic(Call::require)) {
         Expr cond = mutate(op->args[0], nullptr);
+        bool cond_unreachable = in_unreachable;
         // likely(const-bool) is deliberately not reduced
         // by the simplify(), but for our purposes here, we want
         // to ignore the likely() wrapper. (Note that this is
@@ -594,6 +595,10 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         if (is_const_one(cond)) {
             return result;
         }
+
+        // An unreachable value only means the condition is false, so the
+        // require fails rather than being unreachable itself.
+        in_unreachable = cond_unreachable;
 
         Expr message = mutate(op->args[2], nullptr);
 
