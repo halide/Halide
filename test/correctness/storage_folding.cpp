@@ -180,6 +180,30 @@ int main(int argc, char **argv) {
     }
 
     {
+        Func f, g;
+
+        f(x, y) = x + y;
+        g(x, y) = f(x - 1, y + 1) + f(x, y - 1);
+        f.store_root().compute_at(g, y).fold_storage(y, 3);
+        g.specialize(g.output_buffer().width() > 4).vectorize(x, 4);
+
+        // As above, but taking the unspecialized branch, which must also
+        // be folded. The output is tall enough that indexing the folded
+        // allocation without folding would run far out of bounds.
+
+        Buffer<int> im = g.realize({4, 100000});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int correct = 2 * (x + y) - 1;
+                if (im(x, y) != correct) {
+                    printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         custom_malloc_sizes.clear();
         Func f, g;
 

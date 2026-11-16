@@ -2552,6 +2552,18 @@ void check_unreachable() {
           Evaluate::make(unreachable()));
     check(For::make("i", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable())),
           Evaluate::make(0));
+
+    // Facts that contradict the bounds of a sum or difference make it
+    // unreachable. The facts about the pair have to come first, or the
+    // comparison itself would already fold to false.
+    Var z("z");
+    check_with_assumptions(max(z - x, y) / 2, unreachable(), {z <= x, 0 <= z, x <= -1});
+    check_with_assumptions(max(x + z * 5, y) / 2, unreachable(), {x > z * -5, x <= -1, z <= 0});
+
+    // An unreachable value in a require only means the requirement fails.
+    Expr r = Call::make(Int(32), Call::require, {0 < x, unreachable(), Expr("msg")}, Call::PureIntrinsic);
+    check(Block::make(not_no_op(r), not_no_op(y)),
+          Block::make(not_no_op(r), not_no_op(y)));
 }
 
 void check_facts() {
