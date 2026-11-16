@@ -214,12 +214,6 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
 
-# Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
-HL_AVCONV ?= avconv
-
-# Utility to show h264 video
-HL_VIDEOPLAYER ?= mplayer
-
 # ------- RunGen/Benchmark support
 
 # Really, .SECONDARY is what we want instead of .PRECIOUS (here and elsewhere),
