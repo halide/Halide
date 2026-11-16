@@ -87,8 +87,17 @@ protected:
     const map<string, Function> &env;
     const unordered_map<string, Box> &external_buffers;
     Scope<Box> buffer_bounds;
+    // The LetStmts enclosing the current node, innermost last.
+    vector<const LetStmt *> lets;
 
     using IRMutator::visit;
+
+    Stmt visit(const LetStmt *op) override {
+        lets.push_back(op);
+        Stmt s = IRMutator::visit(op);
+        lets.pop_back();
+        return s;
+    }
 
     Box get_buffer_bounds(const string &name, int dims) {
         if (const Box *b = buffer_bounds.find(name)) {
@@ -124,7 +133,14 @@ protected:
 
         // Add loop variable + prefetch offset to interval scope for box computation
         Expr fetch_at = from + p.offset;
-        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.from, fetch_at, body));
+        // Bounds inference may have put lets that depend on p.from
+        // between its loop and the prefetch, so re-evaluate those at
+        // the prefetched iteration too.
+        Stmt fetched = body;
+        for (auto it = lets.rbegin(); it != lets.rend(); ++it) {
+            fetched = LetStmt::make((*it)->name, (*it)->value, fetched);
+        }
+        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.from, fetch_at, fetched));
 
         // TODO(psuriana): Only prefetch the newly accessed data. We
         // should subtract the box accessed during previous iteration
