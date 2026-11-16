@@ -79,6 +79,14 @@ directory to `CMAKE_PREFIX_PATH`. This can be done by running
 Other build systems can find the Halide root path by running
 `python -c "import halide; print(halide.install_dir())"`.
 
+## Alternative for no-Python Environments
+
+If you cannot use Python tooling (e.g. `pip` or `uv`) to download the Halide
+wheels, you can download them directly from either our
+[nightly index](https://pypi.halide-lang.org/simple/halide-bin/) or the public
+[PyPI index](https://pypi.org/simple/halide-bin/). Python wheel files are just
+standard zip files with a `.whl` extension.
+
 ## Homebrew
 
 Alternatively, if you use macOS, you can install Halide via
@@ -87,19 +95,6 @@ Alternatively, if you use macOS, you can install Halide via
 ```
 $ brew install halide
 ```
-
-## Binary tarballs
-
-The latest version of Halide can always be found on GitHub at
-https://github.com/halide/Halide/releases
-
-We provide binary releases for many popular platforms and architectures,
-including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM
-Ubuntu Linux.
-
-The Linux tarballs are built on a recent Ubuntu LTS; if your distribution is too
-old, it might not have the requisite glibc. The [pip wheels](#pip) are built for
-manylinux_2_28 and are more broadly compatible.
 
 ## Vcpkg
 
@@ -522,8 +517,8 @@ default, the number of cores on the host is used.)
 
 `HL_TRACE_FILE=...` specifies a binary target file to dump tracing data into
 (ignored unless at least one `trace_` feature is enabled in the target). The
-output can be parsed programmatically by starting from the code in
-`utils/HalideTraceViz.cpp`.
+output can be visualized with `tools/halidoscope`, or parsed programmatically by
+starting from the code in `util/HalideTraceDump.cpp`.
 
 `HL_CACHE_DIR=...` enables the opt-in generator compile cache, restoring a
 generator's previously emitted artifacts instead of recompiling when its inputs

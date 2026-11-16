@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <map>
+#include <type_traits>
 #include <utility>
 
 #include "CSE.h"
@@ -8,6 +10,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Solve.h"
@@ -117,7 +120,7 @@ public:
 
 // The goal of loop partitioning is to split loops up into a prologue,
 // a clean steady state, and an epilogue. The next visitor
-// (FindSimplifications) finds a list of simplifications that can be
+// (FindSimplifications) finds a set of simplifications that can be
 // applied to produce that clean steady-state version of the loop
 // body. It tries to simplify selects, mins, and maxes to just their
 // likely branch. For example:
@@ -209,18 +212,21 @@ public:
 struct Simplification {
     // This condition is sufficient for the simplification to occur.
     Expr condition;
-    // The expression we're simplifying
-    Expr old_expr;
+    // The Expr or Stmt we're simplifying
+    IRHandle old_node;
     // The replacement if the condition is true
-    Expr likely_value;
+    IRHandle likely_value;
     // The replacement if the condition is false. Not useful
     // unless it's tight.
-    Expr unlikely_value;
+    IRHandle unlikely_value;
     // Is the condition necessary (as well as sufficient)?
     bool tight;
     // The interval over which this simplification applies. Comes from solving the condition.
     Interval interval;
 };
+
+// Simplifications, keyed by the node they replace.
+using Simplifications = std::map<const IRNode *, Simplification>;
 
 class ExprUsesInvalidBuffers : public IRVisitor {
     using IRVisitor::visit;
@@ -249,20 +255,23 @@ bool expr_uses_invalid_buffers(const Expr &e, const Scope<> &invalid_buffers) {
     return uses.invalid;
 }
 
-// Then we define the visitor that hunts for them.
-class FindSimplifications : public IRVisitor {
-    using IRVisitor::visit;
+// Then we define the mutator that hunts for them. Each node a
+// simplification applies to is replaced with a fresh copy, so that
+// applying the simplification by node identity only affects the place
+// it was found.
+class FindSimplifications : public IRMutator {
+    using IRMutator::visit;
 
     Scope<> depends_on_loop_var, depends_on_invalid_buffers;
     Scope<> vars_with_uncaptured_likely, vars_with_likely;
     Scope<> buffers;
 
-    void visit(const Allocate *op) override {
+    Stmt visit(const Allocate *op) override {
         buffers.push(op->name);
-        IRVisitor::visit(op);
+        return IRMutator::visit(op);
     }
 
-    void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
+    void new_simplification(Expr condition, IRHandle old, IRHandle likely_val, IRHandle unlikely_val) {
         if (!expr_uses_vars(condition, depends_on_loop_var)) {
             return;
         }
@@ -274,8 +283,8 @@ class FindSimplifications : public IRVisitor {
             return;
         }
         condition = remove_likelies(condition);
-        Simplification s = {condition, std::move(old), std::move(likely_val), std::move(unlikely_val), true};
-        simplifications.push_back(s);
+        const IRNode *key = old.get();
+        simplifications.emplace(key, Simplification{condition, std::move(old), std::move(likely_val), std::move(unlikely_val), true});
     }
 
     bool has_uncaptured_likely(const Expr &e) const {
@@ -286,18 +295,14 @@ class FindSimplifications : public IRVisitor {
         return has_likely_tag(e, vars_with_likely);
     }
 
-    void visit(const Min *op) override {
+    Expr visit(const Min *op) override {
         bool likely_a = has_uncaptured_likely(op->a);
         bool likely_b = has_uncaptured_likely(op->b);
 
         // If one side has an uncaptured likely, don't hunt for
         // simplifications in the other side.
-        if (!likely_a) {
-            op->b.accept(this);
-        }
-        if (!likely_b) {
-            op->a.accept(this);
-        }
+        Expr b = likely_a ? op->b : mutate(op->b);
+        Expr a = likely_b ? op->a : mutate(op->a);
 
         // Prefer the side that has an uncaptured top-level likely
         // call. If neither does, prefer the side that contains any
@@ -308,25 +313,29 @@ class FindSimplifications : public IRVisitor {
         }
 
         if (likely_b && !likely_a) {
-            new_simplification(op->b <= op->a, op, op->b, op->a);
+            Expr fresh = Min::make(a, b);
+            new_simplification(b <= a, fresh, b, a);
+            return fresh;
         } else if (likely_a && !likely_b) {
-            new_simplification(op->a <= op->b, op, op->a, op->b);
+            Expr fresh = Min::make(a, b);
+            new_simplification(a <= b, fresh, a, b);
+            return fresh;
         } else if (likely_a && likely_b) {
             // Likelies on both sides, continue inwards.
-            IRVisitor::visit(op);
+            return IRMutator::visit(op);
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            return op;
+        } else {
+            return Min::make(a, b);
         }
     }
 
-    void visit(const Max *op) override {
+    Expr visit(const Max *op) override {
         bool likely_a = has_uncaptured_likely(op->a);
         bool likely_b = has_uncaptured_likely(op->b);
 
-        if (!likely_a) {
-            op->b.accept(this);
-        }
-        if (!likely_b) {
-            op->a.accept(this);
-        }
+        Expr b = likely_a ? op->b : mutate(op->b);
+        Expr a = likely_b ? op->a : mutate(op->a);
 
         if (!likely_a && !likely_b) {
             likely_a = has_likely(op->a);
@@ -334,72 +343,105 @@ class FindSimplifications : public IRVisitor {
         }
 
         if (likely_b && !likely_a) {
-            new_simplification(op->b >= op->a, op, op->b, op->a);
+            Expr fresh = Max::make(a, b);
+            new_simplification(b >= a, fresh, b, a);
+            return fresh;
         } else if (likely_a && !likely_b) {
-            new_simplification(op->a >= op->b, op, op->a, op->b);
+            Expr fresh = Max::make(a, b);
+            new_simplification(a >= b, fresh, a, b);
+            return fresh;
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            return op;
+        } else {
+            return Max::make(a, b);
         }
     }
 
-    void visit_select(const Expr &condition, const Expr &old, const Expr &true_value, const Expr &false_value) {
-        condition.accept(this);
+    template<typename SelectOrCall>
+    Expr visit_select(const SelectOrCall *op) {
+        Expr condition, true_value, false_value;
+        if constexpr (std::is_same_v<SelectOrCall, Select>) {
+            condition = op->condition;
+            true_value = op->true_value;
+            false_value = op->false_value;
+        } else {
+            condition = op->args[0];
+            true_value = op->args[1];
+            false_value = op->args.size() == 3 ? op->args[2] : make_zero(op->type);
+        }
+
+        Expr c = mutate(condition);
 
         bool likely_t = has_uncaptured_likely(true_value);
         bool likely_f = has_uncaptured_likely(false_value);
 
-        if (!likely_t) {
-            false_value.accept(this);
-        }
-        if (!likely_f) {
-            true_value.accept(this);
-        }
+        Expr f = likely_t ? false_value : mutate(false_value);
+        Expr t = likely_f ? true_value : mutate(true_value);
 
         if (!likely_t && !likely_f) {
             likely_t = has_likely(true_value);
             likely_f = has_likely(false_value);
         }
 
-        if (likely_t && !likely_f) {
-            new_simplification(condition, old, true_value, false_value);
-        } else if (likely_f && !likely_t) {
-            new_simplification(!condition, old, false_value, true_value);
+        if (likely_t == likely_f &&
+            c.same_as(condition) && t.same_as(true_value) && f.same_as(false_value)) {
+            return op;
         }
-    }
 
-    void visit(const Select *op) override {
-        visit_select(op->condition, op, op->true_value, op->false_value);
-    }
-
-    void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
-            if (op->args.size() == 3) {
-                visit_select(op->args[0], op, op->args[1], op->args[2]);
-            } else {
-                visit_select(op->args[0], op, op->args[1], make_zero(op->type));
-            }
+        Expr fresh;
+        if constexpr (std::is_same_v<SelectOrCall, Select>) {
+            fresh = Select::make(c, t, f);
         } else {
-            IRVisitor::visit(op);
+            vector<Expr> args = {c, t};
+            if (op->args.size() == 3) {
+                args.push_back(f);
+            }
+            fresh = Call::make(op->type, Call::if_then_else, args, op->call_type);
         }
+
+        if (likely_t && !likely_f) {
+            new_simplification(c, fresh, t, f);
+        } else if (likely_f && !likely_t) {
+            new_simplification(!c, fresh, f, t);
+        }
+        return fresh;
     }
 
-    void visit(const IfThenElse *op) override {
+    Expr visit(const Select *op) override {
+        return visit_select(op);
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            return visit_select(op);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
         // For select statements, mins, and maxes, you can mark the
         // likely branch with likely. For if statements there's no way
         // to mark the likely stmt. So if the condition of an if
         // statement is marked as likely, treat it as likely true and
         // partition accordingly.
-        IRVisitor::visit(op);
-        if (has_uncaptured_likely(op->condition)) {
-            new_simplification(op->condition, op->condition, const_true(), const_false());
+        Stmt mutated = IRMutator::visit(op);
+        if (!has_uncaptured_likely(op->condition)) {
+            return mutated;
         }
+        const IfThenElse *m = mutated.as<IfThenElse>();
+        Stmt fresh = IfThenElse::make(m->condition, m->then_case, m->else_case);
+        Stmt else_case = m->else_case.defined() ? m->else_case : Evaluate::make(0);
+        new_simplification(m->condition, fresh, m->then_case, else_case);
+        return fresh;
     }
 
-    void visit(const For *op) override {
-        vector<Simplification> old;
+    Stmt visit(const For *op) override {
+        Simplifications old;
         old.swap(simplifications);
-        IRVisitor::visit(op);
+        Stmt mutated = IRMutator::visit(op);
 
         // Relax all the new conditions using the loop bounds
-        for (Simplification &s : simplifications) {
+        for (auto &[node, s] : simplifications) {
             if (expr_uses_var(s.condition, op->name)) {
                 Scope<Interval> varying;
                 varying.push(op->name, Interval(op->min, op->max));
@@ -415,27 +457,42 @@ class FindSimplifications : public IRVisitor {
             }
         }
 
-        simplifications.insert(simplifications.end(), old.begin(), old.end());
+        simplifications.merge(old);
+        return mutated;
     }
 
-    void visit(const Store *op) override {
-        IRVisitor::visit(op);
-        if (has_uncaptured_likely(op->predicate)) {
-            const int lanes = op->predicate.type().lanes();
-            new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
+    Stmt visit(const Store *op) override {
+        Stmt mutated = IRMutator::visit(op);
+        if (!has_uncaptured_likely(op->predicate)) {
+            return mutated;
         }
+        const Store *m = mutated.as<Store>();
+        Stmt fresh = Store::make(m->name, m->value, m->index, m->param,
+                                 m->predicate, m->alignment, m->is_streaming);
+        Stmt unpredicated = Store::make(m->name, m->value, m->index, m->param,
+                                        const_true(m->predicate.type().lanes()),
+                                        m->alignment, m->is_streaming);
+        new_simplification(m->predicate, fresh, unpredicated, Evaluate::make(0));
+        return fresh;
     }
 
-    void visit(const Load *op) override {
-        IRVisitor::visit(op);
-        if (has_uncaptured_likely(op->predicate)) {
-            const int lanes = op->predicate.type().lanes();
-            new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
+    Expr visit(const Load *op) override {
+        Expr mutated = IRMutator::visit(op);
+        if (!has_uncaptured_likely(op->predicate)) {
+            return mutated;
         }
+        const Load *m = mutated.as<Load>();
+        Expr fresh = Load::make(m->type, m->name, m->index, m->image, m->param,
+                                m->predicate, m->alignment, m->is_streaming);
+        Expr unpredicated = Load::make(m->type, m->name, m->index, m->image, m->param,
+                                       const_true(m->predicate.type().lanes()),
+                                       m->alignment, m->is_streaming);
+        new_simplification(m->predicate, fresh, unpredicated, make_zero(m->type));
+        return fresh;
     }
 
     template<typename LetOrLetStmt>
-    void visit_let(const LetOrLetStmt *op) {
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         ScopedBinding<> bind_varying(expr_uses_vars(op->value, depends_on_loop_var),
                                      depends_on_loop_var, op->name);
         ScopedBinding<> bind_invalid(expr_uses_invalid_buffers(op->value, buffers) ||
@@ -446,55 +503,71 @@ class FindSimplifications : public IRVisitor {
         ScopedBinding<> bind_likely(has_likely(op->value),
                                     vars_with_likely, op->name);
 
-        vector<Simplification> old;
+        Simplifications old;
         old.swap(simplifications);
-        IRVisitor::visit(op);
-        for (Simplification &s : simplifications) {
+        auto mutated = IRMutator::visit(op);
+        for (auto &[node, s] : simplifications) {
             if (expr_uses_var(s.condition, op->name)) {
                 s.condition = Let::make(op->name, op->value, s.condition);
             }
         }
-        simplifications.insert(simplifications.end(), old.begin(), old.end());
+        simplifications.merge(old);
+        return mutated;
     }
 
-    void visit(const LetStmt *op) override {
-        visit_let(op);
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
-    void visit(const Let *op) override {
-        visit_let(op);
+    Expr visit(const Let *op) override {
+        return visit_let(op);
     }
 
 public:
-    vector<Simplification> simplifications;
+    Simplifications simplifications;
+
+    using IRMutator::mutate;
 
     FindSimplifications(const std::string &v) {
         depends_on_loop_var.push(v);
     }
 };
 
-// Blindly apply a list of simplifications.
+// Blindly apply a set of simplifications.
 class MakeSimplifications : public IRMutator {
-    using IRMutator::visit;
+    const Simplifications &simplifications;
 
-    const vector<Simplification> &simplifications;
+    const Simplification *find(const IRHandle &n) const {
+        auto it = simplifications.find(n.get());
+        if (it == simplifications.end()) {
+            return nullptr;
+        }
+        const Simplification &s = it->second;
+        internal_assert(!s.likely_value.same_as(s.old_node))
+            << "Loop partitioning simplification does not mutate value: "
+            << s.old_node << "\n";
+        return &s;
+    }
 
 public:
-    MakeSimplifications(const vector<Simplification> &s)
+    MakeSimplifications(const Simplifications &s)
         : simplifications(s) {
     }
 
     using IRMutator::mutate;
+
     Expr mutate(const Expr &e) override {
-        for (auto const &s : simplifications) {
-            if (e.same_as(s.old_expr)) {
-                internal_assert(!s.likely_value.same_as(s.old_expr))
-                    << "Loop partitioning simplification does not mutate value: "
-                    << s.old_expr << "\n";
-                return mutate(s.likely_value);
-            }
+        if (const Simplification *s = find(e)) {
+            return mutate(Expr((const BaseExprNode *)s->likely_value.get()));
         }
         return IRMutator::mutate(e);
+    }
+
+    Stmt mutate(const Stmt &stmt) override {
+        if (const Simplification *s = find(stmt)) {
+            return mutate(Stmt((const BaseStmtNode *)s->likely_value.get()));
+        }
+        return IRMutator::mutate(stmt);
     }
 };
 
@@ -564,7 +637,7 @@ class PartitionLoops : public IRMutator {
 
         // Find simplifications in this loop body
         FindSimplifications finder(op->name);
-        body.accept(&finder);
+        body = finder.mutate(body);
 
         if (finder.simplifications.empty()) {
             return {IRMutator::visit(op), mutated};
@@ -573,9 +646,9 @@ class PartitionLoops : public IRMutator {
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
 
         vector<Expr> min_vals, max_vals;
-        vector<Simplification> middle_simps, prologue_simps, epilogue_simps;
+        Simplifications middle_simps, prologue_simps, epilogue_simps;
         bool lower_bound_is_tight = true, upper_bound_is_tight = true;
-        for (auto &s : finder.simplifications) {
+        for (auto &[node, s] : finder.simplifications) {
 
             // Devectorize the condition
             while (s.condition.type().is_vector()) {
@@ -599,7 +672,7 @@ class PartitionLoops : public IRMutator {
 
             debug(3) << "\nSimplification: \n"
                      << "  condition: " << s.condition << "\n"
-                     << "  old: " << s.old_expr << "\n"
+                     << "  old: " << s.old_node << "\n"
                      << "  new: " << s.likely_value << "\n"
                      << "  min: " << s.interval.min << "\n"
                      << "  max: " << s.interval.max << "\n"
@@ -640,7 +713,7 @@ class PartitionLoops : public IRMutator {
 
                 // We'll apply this simplification to the
                 // steady-state.
-                middle_simps.push_back(s);
+                middle_simps.emplace(node, s);
             }
         }
 
@@ -659,18 +732,18 @@ class PartitionLoops : public IRMutator {
         }
 
         // Find simplifications we can apply to the prologue and epilogue.
-        for (const auto &s : middle_simps) {
+        for (const auto &[node, s] : middle_simps) {
             // If it goes down to minus infinity, we can also
             // apply it to the prologue
             if (can_simplify_prologue &&
                 !s.interval.has_lower_bound()) {
-                prologue_simps.push_back(s);
+                prologue_simps.emplace(node, s);
             }
 
             // If it goes up to positive infinity, we can also
             // apply it to the epilogue
             if (!s.interval.has_upper_bound()) {
-                epilogue_simps.push_back(s);
+                epilogue_simps.emplace(node, s);
             }
 
             // If our simplifications only contain one lower bound, and
@@ -686,7 +759,7 @@ class PartitionLoops : public IRMutator {
                 // correct.
                 s2.condition = !s2.condition;
                 std::swap(s2.likely_value, s2.unlikely_value);
-                prologue_simps.push_back(s2);
+                prologue_simps.emplace(node, s2);
             }
             if (s.interval.has_upper_bound() &&
                 upper_bound_is_tight) {
@@ -694,7 +767,7 @@ class PartitionLoops : public IRMutator {
                 Simplification s2 = s;
                 s2.condition = !s2.condition;
                 std::swap(s2.likely_value, s2.unlikely_value);
-                epilogue_simps.push_back(s2);
+                epilogue_simps.emplace(node, s2);
             }
         }
 
