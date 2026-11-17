@@ -184,6 +184,25 @@ Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Ty
     return AddPredicates(cond, func, type)(s);
 }
 
+// The dimensions of a stage whose extent is known, from a bound,
+// align_bounds, or an RDom, to be a multiple of some Expr.
+map<string, Expr> known_extent_alignments(const FuncSchedule &func_s, const StageSchedule &stage_s) {
+    map<string, Expr> result;
+    for (const auto &entry : func_s.bounds()) {
+        const Bound &i = entry.second;
+        if (i.extent.defined()) {
+            result[i.var] = i.extent;
+        }
+        if (i.modulus.defined()) {
+            result[i.var] = i.modulus;
+        }
+    }
+    for (const ReductionVariable &i : stage_s.rvars()) {
+        result[i.var] = i.extent;
+    }
+    return result;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
@@ -199,26 +218,8 @@ Stmt build_loop_nest(
     // then wrapping it in for loops.
     Stmt stmt = body;
 
-    // A map of the dimensions for which we know the extent is a
-    // multiple of some Expr. This can happen due to a bound, or
-    // align_bounds directive, or if a dim comes from the inside
-    // of a split.
-    map<string, Expr> dim_extent_alignment;
-
-    // First hunt through the bounds for them.
-    for (const auto &entry : func_s.bounds()) {
-        const Bound &i = entry.second;
-        if (i.extent.defined()) {
-            dim_extent_alignment[i.var] = i.extent;
-        }
-        if (i.modulus.defined()) {
-            dim_extent_alignment[i.var] = i.modulus;
-        }
-    }
-    // Then use any reduction domain.
-    for (const ReductionVariable &i : stage_s.rvars()) {
-        dim_extent_alignment[i.var] = i.extent;
-    }
+    // Splits add the dims that come from their inside.
+    map<string, Expr> dim_extent_alignment = known_extent_alignments(func_s, stage_s);
 
     vector<Split> splits = stage_s.splits();
 
@@ -2234,6 +2235,166 @@ public:
     }
 };
 
+// A window slides forwards one value at a time, so the loops a dimension of a
+// consumer is split into must count through its values in order: serial,
+// adjacent, outer outside inner, with constant split factors, and with no tail
+// that skips or repeats values anywhere but the outermost of them. Returns
+// each var the dimension was split into on the way to those loops, starting
+// with the dimension itself, paired with the loops it spans, outermost first.
+// Returns nothing if the stage doesn't have the dimension.
+vector<pair<string, vector<string>>> validate_slide_level(const Function &f, const LoopLevel &l,
+                                                          const Function &g,
+                                                          const StageSchedule &s) {
+    const string &v = l.var_name();
+    auto matches = [&](const string &n) {
+        return n == v || ends_with(n, "." + v);
+    };
+    const string error_prefix = "Func " + f.name() + " was told to slide over " +
+                                l.to_string() + ", but ";
+
+    map<string, Expr> alignment = known_extent_alignments(g.schedule(), s);
+    // The vars the dimension is currently split into, outermost first.
+    vector<string> digits;
+    // The vars each split var on the way there was split into.
+    map<string, vector<string>> parts;
+    string root;
+    for (const Split &split : s.splits()) {
+        if (digits.empty() && matches(split.old_var)) {
+            digits.push_back(split.old_var);
+            root = split.old_var;
+        }
+        apply_split(split, "", alignment);
+        auto k = std::find(digits.begin(), digits.end(), split.old_var);
+        switch (split.split_type) {
+        case Split::SplitVar:
+            if (k != digits.end()) {
+                user_assert(is_const(split.factor))
+                    << error_prefix << split.old_var << " is split by "
+                    << split.factor << ", which is not a constant. The window "
+                    << "must advance by a constant amount per iteration of the "
+                    << "loop it slides along.\n";
+                bool exact = is_const_one(split.factor) || alignment.count(split.outer);
+                user_assert(exact ||
+                            (k == digits.begin() &&
+                             split.tail != TailStrategy::ShiftInwards &&
+                             split.tail != TailStrategy::ShiftInwardsAndBlend))
+                    << error_prefix << "the split of " << split.old_var
+                    << " with TailStrategy::" << split.tail << " means it does not "
+                    << "step through its values one at a time. Only the outermost "
+                    << "split of the dimension may have a tail, and it can't shift "
+                    << "inwards. Use TailStrategy::RoundUp or GuardWithIf, or "
+                    << "align_bounds.\n";
+                parts[split.old_var] = {split.outer, split.inner};
+                *k = split.inner;
+                digits.insert(k, split.outer);
+            }
+            break;
+        case Split::RenameVar:
+            if (k != digits.end()) {
+                parts[split.old_var] = {split.outer};
+                *k = split.outer;
+            }
+            break;
+        case Split::FuseVars:
+            user_assert(std::find(digits.begin(), digits.end(), split.outer) == digits.end() &&
+                        std::find(digits.begin(), digits.end(), split.inner) == digits.end())
+                << error_prefix << "it is fused into " << split.old_var
+                << ". A window can't slide over a fused dimension.\n";
+            break;
+        }
+    }
+
+    // Dims are innermost first.
+    vector<Dim> loops(s.dims().rbegin(), s.dims().rend());
+    if (digits.empty()) {
+        for (const Dim &d : loops) {
+            if (matches(d.var)) {
+                digits.push_back(d.var);
+                root = d.var;
+                break;
+            }
+        }
+        if (digits.empty()) {
+            return {};
+        }
+    }
+    size_t pos = 0;
+    while (loops[pos].var != digits[0]) {
+        pos++;
+    }
+    for (size_t i = 0; i < digits.size(); i++) {
+        const Dim *d = pos + i < loops.size() ? &loops[pos + i] : nullptr;
+        user_assert(d && d->var == digits[i] &&
+                    (d->for_type == ForType::Serial || d->for_type == ForType::Unrolled))
+            << error_prefix << "the loop " << (d ? d->var : digits[i])
+            << " breaks the sequence. A window can only slide along loops that "
+            << "run in order, one iteration at a time, so the loops the "
+            << "dimension is split into must be serial and adjacent, outer "
+            << "outside inner.\n";
+    }
+
+    // Pre-order, so the dimension itself comes first.
+    vector<pair<string, vector<string>>> result;
+    std::function<vector<string>(const string &)> span = [&](const string &v) {
+        size_t idx = result.size();
+        result.emplace_back(v, vector<string>{});
+        auto it = parts.find(v);
+        if (it == parts.end()) {
+            result[idx].second = {v};
+        } else {
+            for (const string &p : it->second) {
+                vector<string> sub = span(p);
+                result[idx].second.insert(result[idx].second.end(), sub.begin(), sub.end());
+            }
+        }
+        return result[idx].second;
+    };
+    span(root);
+    return result;
+}
+
+struct SlideLoops {
+    LoopLevel level;
+    // The loops it slides along, outermost first.
+    vector<LoopLevel> loops;
+    // As returned by validate_slide_level.
+    vector<pair<string, vector<string>>> spans;
+};
+
+// Returns the loops each slide level slides along, for every stage of the
+// consumer that has the dimension.
+vector<SlideLoops> validate_slide_levels(const Function &f,
+                                         const map<string, Function> &env) {
+    vector<SlideLoops> result;
+    for (const LoopLevel &l : f.schedule().slide_levels()) {
+        auto it = env.find(l.func());
+        if (it == env.end()) {
+            continue;
+        }
+        const Function &g = it->second;
+        vector<Definition> defs = g.updates();
+        if (g.has_pure_definition()) {
+            defs.push_back(g.definition());
+        }
+        for (size_t i = 0; i < defs.size(); i++) {
+            for (const Specialization &spec : defs[i].specializations()) {
+                defs.push_back(spec.definition);
+            }
+            vector<pair<string, vector<string>>> spans =
+                validate_slide_level(f, l, g, defs[i].schedule());
+            if (!spans.empty()) {
+                SlideLoops s{l, {}, spans};
+                for (const string &d : spans[0].second) {
+                    s.loops.emplace_back(g, Var(d));
+                    s.loops.back().lock();
+                }
+                result.push_back(std::move(s));
+            }
+        }
+    }
+    return result;
+}
+
 // Check a schedule is legal, throwing an error if it is not. Returns whether or
 // not a realization of the Func should be injected. Unused intermediate Funcs
 // that somehow made it into the Func DAG can be discarded. May also return a
@@ -2412,6 +2573,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    vector<SlideLoops> slide_loops = validate_slide_levels(f, env);
+
     if (is_output) {
         // None of the checks below apply to outputs
         return true;
@@ -2538,6 +2701,72 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         s.accept(&printer);
 
         user_error << err.str();
+    }
+
+    // The window lives in f's storage and moves as f is computed, so every
+    // loop it slides along must be between the two. A stage of the consumer
+    // with none of those loops around f's uses doesn't move the window.
+    for (const SlideLoops &s : slide_loops) {
+        bool around_uses = false;
+        for (const LoopLevel &loop : s.loops) {
+            for (const auto &site : sites) {
+                around_uses |= site.loop_level.match(loop);
+            }
+        }
+        if (!around_uses) {
+            continue;
+        }
+        vector<string> enclosing;
+        for (const LoopLevel &loop : s.loops) {
+            bool encloses = false;
+            for (size_t i = 0; i < sites.size(); i++) {
+                if (!sites[i].loop_level.match(loop)) {
+                    continue;
+                }
+                user_assert((int)i > store_idx)
+                    << "Func " << f.name() << " was told to slide over " << s.level.to_string()
+                    << ", but that dimension varies over the loop " << loop.to_string()
+                    << ", which is outside " << f.name() << "'s storage. Sliding "
+                    << "would read values from a previous iteration of that loop, "
+                    << "which have been thrown away by then. Store " << f.name()
+                    << " at a coarser level, or slide over a dimension that doesn't "
+                    << "span that loop.\n";
+                encloses |= (int)i <= compute_idx;
+            }
+            if (encloses) {
+                enclosing.push_back(s.spans[0].second[enclosing.size()]);
+                continue;
+            }
+            user_assert(!enclosing.empty())
+                << "Func " << f.name() << " was told to slide over " << s.level.to_string()
+                << ", but it is computed outside the loop " << loop.to_string()
+                << ", so the window would never move. Compute " << f.name()
+                << " at or inside that loop.\n";
+            // Suggest the var split into exactly the loops around f, if any.
+            string outer;
+            for (const auto &[var, loops] : s.spans) {
+                if (loops.size() == enclosing.size() &&
+                    std::equal(loops.begin(), loops.end(), enclosing.begin())) {
+                    outer = var;
+                }
+            }
+            auto user_name = [&](const string &var) {
+                return s.level.func() + "." + var.substr(var.rfind('.') + 1);
+            };
+            std::ostringstream suggestion;
+            if (!outer.empty()) {
+                suggestion << "Slide over " << user_name(outer) << " instead, which "
+                           << "is the part of " << s.level.to_string() << " outside "
+                           << f.name() << "'s compute level, or compute " << f.name();
+            } else {
+                suggestion << "Compute " << f.name();
+            }
+            user_error
+                << "Func " << f.name() << " was told to slide over " << s.level.to_string()
+                << ", but it is computed outside the loop " << user_name(s.spans[0].second[enclosing.size()])
+                << ", which that dimension also varies over. " << suggestion.str() << " at or inside "
+                << user_name(s.spans[0].second.back()) << ".\n";
+        }
     }
 
     return true;
