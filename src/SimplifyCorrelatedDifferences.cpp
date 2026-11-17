@@ -60,7 +60,7 @@ protected:
                 // = min(min(x, y - c0) - max(x, z), 0) + c0
                 // = min(min(x, y - c0) - max(x, z) + c0, c0)
                 // = min(min(x + c0, y) - max(x, z), c0)
-                rewrite(min(x + c0, y) - max(x, z), min(min(x, y) - max(x, z), c0)) ||
+                rewrite(min(x + c0, y) - max(x, z), min(min(x + c0, y) - max(x, z), c0)) ||
 
                 rewrite(min(x + c0, y) - select(z, min(x, y) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
                 rewrite(min(y, x + c0) - select(z, min(y, x) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||

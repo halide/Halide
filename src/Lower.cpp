@@ -62,6 +62,7 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
+#include "RotateRegisters.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "Simplify.h"
@@ -412,6 +413,10 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after partitioning loops (partition_loops):", s);
     s = simplify(s);
     log("Lowering after partitioning loops:", s);
+
+    debug(1) << "Rotating folded allocations in registers...\n";
+    s = rotate_registers(s);
+    log("Lowering after rotating folded allocations in registers:", s);
 
     debug(1) << "Staging strided loads...\n";
     s = stage_strided_loads(s, t);
