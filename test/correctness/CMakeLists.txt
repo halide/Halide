@@ -724,6 +724,7 @@ tests(
     vector_math.cpp
     vector_reductions.cpp
     vulkan_bool_minmax.cpp
+    vulkan_if_then_else.cpp
     # keep-sorted end
 )
 
@@ -752,6 +753,10 @@ target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
 target_include_directories(correctness_vulkan_bool_minmax PRIVATE "${Halide_SOURCE_DIR}/src")
 target_link_libraries(correctness_vulkan_bool_minmax PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_vulkan_bool_minmax PRIVATE WITH_SPIRV)
+
+target_include_directories(correctness_vulkan_if_then_else PRIVATE "${Halide_SOURCE_DIR}/src")
+target_link_libraries(correctness_vulkan_if_then_else PRIVATE SPIRV-Headers::SPIRV-Headers)
+target_compile_definitions(correctness_vulkan_if_then_else PRIVATE WITH_SPIRV)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(
