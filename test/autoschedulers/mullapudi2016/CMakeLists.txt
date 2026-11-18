@@ -1,11 +1,11 @@
 tests(
-    GROUPS mullapudi2016 autoschedulers_cpu
+    GROUPS mullapudi2016 autoschedulers_cpu target_from_environment calls_llvm
     SOURCES extern.cpp param.cpp
     ARGS $<TARGET_FILE:Halide::Mullapudi2016>
 )
 
 tests(
-    GROUPS mullapudi2016 autoschedulers_cpu multithreaded
+    GROUPS mullapudi2016 autoschedulers_cpu multithreaded target_from_environment calls_llvm
     SOURCES
         cost_function.cpp
         data_dependent.cpp

@@ -38,6 +38,11 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
 bool debug_is_active_impl(int verbosity, const char *tag, const char *file, const char *function, int line);
 
+/** Arm one-shot JIT execution logging after a parallel-schedule debug event. */
+void arm_jit_execution_debug();
+/** Return true once per process, on the first JIT execution after arming. */
+bool consume_jit_execution_debug();
+
 /** Ask an arbitrary std::ostream whether it is a DebugStream and,
  * if so, where the output is being routed to. */
 enum class DebugStreamSink {

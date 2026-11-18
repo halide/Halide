@@ -26,7 +26,9 @@ add_halide_test(
 )
 
 tests(
-    GROUPS li2018 autoschedulers_cpu autoschedulers_gpu
+    GROUPS
+        li2018 autoschedulers_cpu autoschedulers_gpu gpu multithreaded target_from_environment
+        calls_llvm
     SOURCES test.cpp
     ARGS $<TARGET_FILE:Halide::Li2018>
 )
