@@ -112,15 +112,15 @@ jobs:
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "performance|autoschedulers" -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L "performance|autoschedulers" --repeat until-pass:5
 
       - name: Test (no extensions)
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "performance|autoschedulers" -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L "performance|autoschedulers" --repeat until-pass:5
 
   android-apps:
     # Deliberately its own job on Ubuntu (not folded into `macos`/HelloiOS's
