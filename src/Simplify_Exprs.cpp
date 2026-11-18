@@ -56,7 +56,7 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *info) {
 
     const int lanes = op->lanes;
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type, this);
     if (rewrite(broadcast(broadcast(x, c0), lanes), broadcast(x, c0 * lanes)) ||
         rewrite(broadcast(IRMatcher::Overflow(), lanes), IRMatcher::Overflow()) ||
         false) {
@@ -152,7 +152,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
 
     switch (op->op) {
     case VectorReduce::Add: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type, this);
         if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes)) ||
@@ -164,7 +164,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::Min: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type, this);
         if (rewrite(h_min(min(x, broadcast(y, arg_lanes)), lanes), min(h_min(x, lanes), broadcast(y, lanes))) ||
             rewrite(h_min(min(broadcast(x, arg_lanes), y), lanes), min(h_min(y, lanes), broadcast(x, lanes))) ||
             rewrite(h_min(max(x, broadcast(y, arg_lanes)), lanes), max(h_min(x, lanes), broadcast(y, lanes))) ||
@@ -182,7 +182,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::Max: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_max(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_max(value, lanes), op->type, this);
         if (rewrite(h_max(min(x, broadcast(y, arg_lanes)), lanes), min(h_max(x, lanes), broadcast(y, lanes))) ||
             rewrite(h_max(min(broadcast(x, arg_lanes), y), lanes), min(h_max(y, lanes), broadcast(x, lanes))) ||
             rewrite(h_max(max(x, broadcast(y, arg_lanes)), lanes), max(h_max(x, lanes), broadcast(y, lanes))) ||
@@ -200,7 +200,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::And: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type, this);
         if (rewrite(h_and(x || broadcast(y, arg_lanes), lanes), h_and(x, lanes) || broadcast(y, lanes)) ||
             rewrite(h_and(broadcast(x, arg_lanes) || y, lanes), h_and(y, lanes) || broadcast(x, lanes)) ||
             rewrite(h_and(x && broadcast(y, arg_lanes), lanes), h_and(x, lanes) && broadcast(y, lanes)) ||
@@ -233,7 +233,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::Or: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type, this);
         if (rewrite(h_or(x || broadcast(y, arg_lanes), lanes), h_or(x, lanes) || broadcast(y, lanes)) ||
             rewrite(h_or(broadcast(x, arg_lanes) || y, lanes), h_or(y, lanes) || broadcast(x, lanes)) ||
             rewrite(h_or(x && broadcast(y, arg_lanes), lanes), h_or(x, lanes) && broadcast(y, lanes)) ||
@@ -348,7 +348,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
     // but it helps to have as many rules as possible written as
     // formal rewrites, so that they can be formally verified,
     // etc.
-    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type, this);
     if (rewrite(ramp(x, 0, lanes), broadcast(x, lanes)) ||
         rewrite(ramp(ramp(x, c0, c2), broadcast(c1, c4), c3),
                 ramp(x, c0, c2 * c3),

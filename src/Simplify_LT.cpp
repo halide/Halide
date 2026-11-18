@@ -45,7 +45,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
         }
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty, this);
 
     if (EVAL_IN_LAMBDA  //
         (rewrite(c0 < c1, fold(c0 < c1)) ||
@@ -338,13 +338,13 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
            // and last lanes are provably < or >= the broadcast
            // we can collapse the comparison.
            rewrite(ramp(x, c1, lanes) < broadcast(z, lanes), true,
-                   can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
+                   can_prove(x + fold(max(0, c1 * (lanes - 1))) < z)) ||
            rewrite(ramp(x, c1, lanes) < broadcast(z, lanes), false,
-                   can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
+                   can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z)) ||
            rewrite(broadcast(z, lanes) < ramp(x, c1, lanes), true,
-                   can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
+                   can_prove(z < x + fold(min(0, c1 * (lanes - 1))))) ||
            rewrite(broadcast(z, lanes) < ramp(x, c1, lanes), false,
-                   can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this)) ||
+                   can_prove(z >= x + fold(max(0, c1 * (lanes - 1))))) ||
 
            false))) ||
         (no_overflow_int(ty) &&

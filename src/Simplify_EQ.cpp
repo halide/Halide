@@ -30,7 +30,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
     }
 
     if (a.type().is_bool()) {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, this);
         if (rewrite(x == x, true) ||
             rewrite(x == neg(x), false) ||
             rewrite(x == 1, x) ||
@@ -57,7 +57,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
         return const_false(op->type.lanes(), info);
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, a.type());
+    auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, a.type(), this);
 
     if (EVAL_IN_LAMBDA  //
         (rewrite(x == x, true) ||

@@ -59,7 +59,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
         }
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type, this);
 
     if (rewrite(IRMatcher::Overflow() + x, a) ||
         rewrite(x + IRMatcher::Overflow(), b) ||
