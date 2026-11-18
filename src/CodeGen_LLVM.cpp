@@ -2808,13 +2808,35 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                                                  {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
                 store = dyn_cast<Instruction>(value);
             } else {
-                if (!slice_val->getType()->isVectorTy()) {
-                    slice_val = create_broadcast(slice_val, 1);
+#if LLVM_VERSION >= 230 && LLVM_VERSION < 240
+                // LLVM 23 cannot scalarize a one-lane masked-store mask with SVE enabled.
+                // Fixed upstream in https://github.com/llvm/llvm-project/pull/230202.
+                if (target.arch == Target::ARM && target.bits == 64 &&
+                    target.has_feature(Target::SVE2) && slice_lanes == 1) {
+                    if (slice_val->getType()->isVectorTy()) {
+                        slice_val = builder->CreateExtractElement(slice_val, (uint64_t)0);
+                    }
+                    if (slice_mask->getType()->isVectorTy()) {
+                        slice_mask = builder->CreateExtractElement(slice_mask, (uint64_t)0);
+                    }
+                    BasicBlock *store_bb = BasicBlock::Create(*context, "predicated_store", function);
+                    BasicBlock *after_bb = BasicBlock::Create(*context, "after_predicated_store", function);
+                    builder->CreateCondBr(slice_mask, store_bb, after_bb);
+                    builder->SetInsertPoint(store_bb);
+                    store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
+                    builder->CreateBr(after_bb);
+                    builder->SetInsertPoint(after_bb);
+                } else
+#endif
+                {
+                    if (!slice_val->getType()->isVectorTy()) {
+                        slice_val = create_broadcast(slice_val, 1);
+                    }
+                    if (!slice_mask->getType()->isVectorTy()) {
+                        slice_mask = create_broadcast(slice_mask, 1);
+                    }
+                    store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
                 }
-                if (!slice_mask->getType()->isVectorTy()) {
-                    slice_mask = create_broadcast(slice_mask, 1);
-                }
-                store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
             if (op->is_streaming) {
