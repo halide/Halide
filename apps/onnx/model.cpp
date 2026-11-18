@@ -1,6 +1,8 @@
-#include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/unordered_map.h>
+#include <nanobind/stl/vector.h>
 
 #include "benchmarking_utils.h"
 #include "common_types.h"
@@ -10,18 +12,23 @@
 #include <fstream>
 #include <limits>
 #include <random>
+#include <type_traits>
 #include <unordered_set>
 
-namespace py = pybind11;
+namespace py = nanobind;
+using Array = py::ndarray<py::numpy, py::ro, py::device::cpu>;
 
 namespace {
 
 HalideModel convert_onnx_model(
-    const std::string &onnx_model_str,
+    const py::bytes &onnx_model_str,
     const std::unordered_map<std::string, int> &expected_dim_sizes,
     const IOLayout layout) {
     onnx::ModelProto onnx_model;
-    if (!onnx_model.ParseFromString(onnx_model_str)) {
+    if (onnx_model_str.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::invalid_argument("The ONNX model is too large");
+    }
+    if (!onnx_model.ParseFromArray(onnx_model_str.c_str(), static_cast<int>(onnx_model_str.size()))) {
         throw std::invalid_argument("Failed to parse the ONNX model");
     }
 
@@ -144,7 +151,7 @@ template<typename T>
 void prepare_actual_image_param(
     Halide::ImageParam &image_param,
     const std::vector<int> &shape,
-    const py::array &np_data) {
+    const Array &np_data) {
     // The numpy layout is the opposite of the halide layout. Create a halide
     // buffer op top of the raw numpy buffer and transpose it to end up with the
     // expected dim order. This will avoid the need to copy the data explicitly.
@@ -160,7 +167,7 @@ void prepare_actual_image_param(
 
 void prepare_py_array_input(
     const HalideModel &pipeline,
-    const py::array &ndarray,
+    const Array &ndarray,
     const std::string &input_name) {
     const int rank = ndarray.ndim();
     std::vector<int> input_shape;
@@ -168,9 +175,9 @@ void prepare_py_array_input(
         input_shape.push_back(ndarray.shape(i));
     }
     // Make sure the input is contiguous.
-    int stride = ndarray.request().itemsize;
+    int64_t stride = ndarray.itemsize();
     for (int i = rank - 1; i >= 0; --i) {
-        if (stride != ndarray.strides(i)) {
+        if (stride != ndarray.stride(i) * static_cast<int64_t>(ndarray.itemsize())) {
             throw std::invalid_argument(
                 std::string("Non contiguous array in dim ") + std::to_string(i) +
                 " for input " + input_name + ". Make a copy before calling.");
@@ -180,32 +187,31 @@ void prepare_py_array_input(
 
     Halide::ImageParam &input = pipeline.model->inputs.at(input_name);
 
-    if (py::isinstance<py::array_t<bool>>(ndarray)) {
+    if (ndarray.dtype() == py::dtype<bool>()) {
         prepare_actual_image_param<bool>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::int8_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::int8_t>()) {
         prepare_actual_image_param<std::int8_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::int16_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::int16_t>()) {
         prepare_actual_image_param<std::int16_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::int32_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::int32_t>()) {
         prepare_actual_image_param<std::int32_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::int64_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::int64_t>()) {
         prepare_actual_image_param<std::int64_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::uint8_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::uint8_t>()) {
         prepare_actual_image_param<std::uint8_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::uint16_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::uint16_t>()) {
         prepare_actual_image_param<std::uint16_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::uint32_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::uint32_t>()) {
         prepare_actual_image_param<std::uint32_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<std::uint64_t>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<std::uint64_t>()) {
         prepare_actual_image_param<std::uint64_t>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<float>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<float>()) {
         prepare_actual_image_param<float>(input, input_shape, ndarray);
-    } else if (py::isinstance<py::array_t<double>>(ndarray)) {
+    } else if (ndarray.dtype() == py::dtype<double>()) {
         prepare_actual_image_param<double>(input, input_shape, ndarray);
     } else {
         throw std::invalid_argument(
-            std::string("Unsupported type ") + ndarray.dtype().kind() +
-            " for input " + input_name);
+            "Unsupported type for input " + input_name);
     }
 }
 
@@ -285,16 +291,30 @@ void prepare_random_input(
 }
 
 template<typename T>
-py::array_t<T> export_output(
+py::object export_output(
     const Halide::Buffer<T> &output_values,
     const HalideModel &pipeline,
     const std::vector<int> &output_shape) {
+    // Keep NumPy responsible for allocating and owning the output storage.
+    auto shape = output_shape.empty() ? std::vector<int>{1} : output_shape;
+    std::string dtype;
+    if constexpr (std::is_same_v<T, bool>) {
+        dtype = "bool";
+    } else {
+        dtype = std::string(std::is_floating_point_v<T> ? "float" : std::is_signed_v<T> ? "int" :
+                                                                                          "uint") +
+                std::to_string(sizeof(T) * 8);
+    }
+    auto result = py::module_::import_("numpy").attr("empty")(
+        py::cast(shape), py::arg("dtype") = dtype);
+    if (std::find(shape.begin(), shape.end(), 0) != shape.end()) {
+        return result;
+    }
+    auto array = py::cast<py::ndarray<py::numpy, T, py::c_contig>>(result);
+    T *mutable_data = array.data();
+
     // TODO:Better handling of scalar outputs.
     if (output_shape.size() > 0) {
-        py::array_t<T, py::array::c_style> result(output_shape);
-
-        T *mutable_data = result.mutable_data();
-
         int np_index = 0;
         output_values.for_each_value([&, np_index](const T &v) mutable {
             mutable_data[np_index] = v;
@@ -302,10 +322,6 @@ py::array_t<T> export_output(
         });
         return result;
     } else {
-        py::array_t<T, py::array::c_style> result({1});
-
-        T *mutable_data = result.mutable_data();
-
         output_values.for_each_element([&](const int *halide_coords) {
             mutable_data[0] = output_values(halide_coords);
         });
@@ -343,9 +359,9 @@ Halide::Type onnx_type_to_halide_type(int t) {
     }
 }
 
-std::vector<py::array> run(
+std::vector<py::object> run(
     const HalideModel &pipeline,
-    const std::vector<py::array> &inputs,
+    const std::vector<Array> &inputs,
     const std::string &device) {
     // Force denormal numbers to be flushed to zero until the class destructor is
     // called.
@@ -396,7 +412,7 @@ std::vector<py::array> run(
 
     pipeline.rep->realize(real, tgt);
 
-    std::vector<py::array> results;
+    std::vector<py::object> results;
 
     for (int i = 0; i < num_outputs; ++i) {
         const std::string &output_name = pipeline.output_names[i];
@@ -583,7 +599,8 @@ void print_lowered_statement(const HalideModel &pipeline) {
 
 }  // namespace
 
-PYBIND11_MODULE(model_cpp, m) {
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
+NB_MODULE(model_cpp, m) {
     if (const auto autoscheduler = Halide::Internal::get_env_variable("MODEL_AUTOSCHEDULER");
         !autoscheduler.empty()) {
         Halide::load_plugin(autoscheduler);

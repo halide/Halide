@@ -173,7 +173,7 @@ def test_target():
     try:
         t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, ["this is a string"])
     except TypeError as e:
-        assert "incompatible constructor arguments" in str(e)
+        assert "incompatible function arguments" in str(e)
     else:
         assert False, "Did not see expected exception!"
 

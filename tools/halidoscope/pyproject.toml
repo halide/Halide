@@ -11,7 +11,7 @@ maintainers = [
 description = "An interactive GUI and CLI for working with Halide traces."
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dynamic = ["version"]
 keywords = ["halide", "trace", "profiling", "visualization", "gui"]
 classifiers = [

@@ -129,7 +129,7 @@ class LowerStructTypesMutator : public IRMutator {
 
         if (const Let *let = e.as<Let>()) {
             if (let->value.type().is_struct()) {
-                ScalarizedStructValue scalarized = scalarize_struct_value(let->name, let->value);
+                ScalarizedStructValue scalarized = bind_struct_value(let->name, let->value);
                 Expr body = substitute(let->name, scalarized.replacement, let->body);
                 Expr result = project_field(body, field_index, elem_index);
                 return rewrap_all_lets(result, scalarized.lets);
@@ -175,9 +175,58 @@ class LowerStructTypesMutator : public IRMutator {
         return result;
     }
 
+    // Bind the value of a struct-typed Let to scalar Lets, returning a
+    // struct-typed Expr to substitute for the Let's name that is cheap to
+    // repeat. Unlike scalarize_struct_value, a struct-typed Load (possibly
+    // under Selects) is not split into all of its fields: only its index and
+    // predicate (and the Select conditions) are bound, and each use of the
+    // Let then reads just the fields it needs straight from the buffer. This
+    // matters for an array field read at a non-constant element index (e.g.
+    // a vectorized loop over the elements): reading it from the Load is one
+    // dense load, whereas reading it from the scalarized fields is a select
+    // chain over every element. Uses read the same record as the Let did, at
+    // the same point in the same Expr, so this is safe in an Expr context
+    // (Let), but not across the Stores a LetStmt's body may contain.
+    ScalarizedStructValue bind_struct_value(const std::string &name, const Expr &value) {
+        ScalarizedStructValue result;
+        result.replacement = bind_struct_leaves(name, value, result.lets);
+        return result;
+    }
+
+    Expr bind_struct_leaves(const std::string &name, const Expr &value, vector<std::pair<std::string, Expr>> &lets) {
+        internal_assert(value.type().is_struct());
+        auto bind = [&](const Expr &e, const char *suffix) {
+            Expr m = mutate(e);
+            if (is_const(m) || m.as<Variable>()) {
+                return m;
+            }
+            std::string var_name = unique_name(name + suffix);
+            lets.emplace_back(var_name, m);
+            return Variable::make(m.type(), var_name);
+        };
+        if (const Load *load = value.as<Load>()) {
+            Expr index = bind(load->index, ".index");
+            Expr predicate = bind(load->predicate, ".predicate");
+            return Load::make(load->type, load->name, index, load->image, load->param,
+                              predicate, load->alignment, load->is_streaming);
+        }
+        if (const Select *sel = value.as<Select>()) {
+            Expr condition = bind(sel->condition, ".condition");
+            Expr true_value = bind_struct_leaves(name, sel->true_value, lets);
+            Expr false_value = bind_struct_leaves(name, sel->false_value, lets);
+            return Select::make(condition, true_value, false_value);
+        }
+        ScalarizedStructValue scalarized = scalarize_struct_value(name, value);
+        lets.insert(lets.end(), scalarized.lets.begin(), scalarized.lets.end());
+        return scalarized.replacement;
+    }
+
     Stmt lower_struct_store(const Store *op, const Expr &value) {
         if (const Let *let = value.as<Let>()) {
             if (let->value.type().is_struct()) {
+                // Scalarize rather than bind_struct_value: the Store becomes
+                // one Store per field, and the record must be read before
+                // any of them in case it is the one being overwritten.
                 ScalarizedStructValue scalarized = scalarize_struct_value(let->name, let->value);
                 Expr value_body = substitute(let->name, scalarized.replacement, let->body);
                 Stmt body = lower_struct_store(op, value_body);
@@ -274,7 +323,7 @@ protected:
 
     Expr visit(const Let *op) override {
         if (op->value.type().is_struct()) {
-            ScalarizedStructValue scalarized = scalarize_struct_value(op->name, op->value);
+            ScalarizedStructValue scalarized = bind_struct_value(op->name, op->value);
             Expr body = substitute(op->name, scalarized.replacement, op->body);
             return rewrap_all_lets(mutate(body), scalarized.lets);
         }
@@ -283,6 +332,8 @@ protected:
 
     Stmt visit(const LetStmt *op) override {
         if (op->value.type().is_struct()) {
+            // The body may contain Stores, so read the whole record here
+            // rather than at each use (see bind_struct_value).
             ScalarizedStructValue scalarized = scalarize_struct_value(op->name, op->value);
             Stmt body = substitute(op->name, scalarized.replacement, op->body);
             return rewrap_all_lets(mutate(body), scalarized.lets);

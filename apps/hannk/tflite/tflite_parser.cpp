@@ -137,7 +137,12 @@ public:
                 const void *data = static_cast<const void *>(tflite_buffer->Data());
                 assert(data);
                 HalideBuffer<void> buffer(type, const_cast<void *>(data), shape);
-                assert(tflite_buffer->size() == buffer.size_in_bytes());
+                // The shape and the data length are independent fields in the
+                // model, so a mismatch would let ops read past the data.
+                HCHECK(tflite_buffer->size() == buffer.size_in_bytes())
+                    << "tflite model tensor " << t->name()->str() << " has "
+                    << tflite_buffer->size() << " bytes of data, but its shape requires "
+                    << buffer.size_in_bytes();
 
                 auto p = std::make_shared<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
                 p->set_constant();
@@ -337,12 +342,12 @@ public:
     }
 
     OpPtr parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
-        assert(axis_tensor_index < (int)op->inputs()->size());
+        HCHECK(axis_tensor_index < (int)op->inputs()->size());
         TensorPtr axis_tensor = get_tensor(op->inputs()->Get(axis_tensor_index));
         HCHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
-        assert(input_tensor_index < (int)op->inputs()->size());
+        HCHECK(input_tensor_index < (int)op->inputs()->size());
         TensorPtr input = get_tensor(op->inputs()->Get(input_tensor_index));
         std::vector<TensorPtr> outputs;
         for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {

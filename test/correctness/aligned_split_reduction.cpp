@@ -22,7 +22,7 @@
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int test(bool gpu) {
     for (auto ts : {TailStrategy::GuardWithIf, TailStrategy::RoundUpAndBlend, TailStrategy::ShiftInwardsAndBlend}) {
         printf("Testing tail strategy: %d\n", (int)ts);
 
@@ -39,6 +39,15 @@ int main(int argc, char **argv) {
         h.update(0)
             .aligned_split(x, xo, xi, 4, p, ts)
             .vectorize(xi);
+        if (gpu) {
+            // The blend strategies read and write neighboring tiles, so only
+            // GuardWithIf may run its tiles in parallel.
+            if (ts == TailStrategy::GuardWithIf) {
+                h.update(0).gpu_blocks(xo);
+            } else {
+                h.update(0).gpu_single_thread();
+            }
+        }
 
         // h is read through a further Func rather than realized directly,
         // so that RoundUpAndBlend/ShiftInwardsAndBlend get an
@@ -58,6 +67,19 @@ int main(int argc, char **argv) {
                     return 1;
                 }
             }
+        }
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (test(false) != 0) {
+        return 1;
+    }
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Testing the GPU schedule\n");
+        if (test(true) != 0) {
+            return 1;
         }
     }
 

@@ -151,12 +151,17 @@ install(
     TYPE DOC
 )
 
+# The excluded directories hold Sphinx-only sources, which would otherwise be
+# installed as empty directories.
 install(
     DIRECTORY "${Halide_SOURCE_DIR}/doc"
     COMPONENT Halide_Documentation
     TYPE DOC
     FILES_MATCHING
     PATTERN "*.md"
+    PATTERN "_static" EXCLUDE
+    PATTERN "api" EXCLUDE
+    PATTERN "tutorial_website" EXCLUDE
 )
 
 ##
@@ -397,6 +402,13 @@ cpack_add_component(
     Halide_Python
     DISPLAY_NAME "Python bindings"
     DESCRIPTION "Python package providing bindings to Halide"
+    DEPENDS Halide_Runtime
+)
+
+cpack_add_component(
+    Halide_PythonBin
+    DISPLAY_NAME "Python binary loader"
+    DESCRIPTION "The halide.bin module imported by the Python bindings"
     DEPENDS Halide_Runtime
 )
 

@@ -23,6 +23,8 @@ set(RUNTIME_CPP
     fopen
     fopen_lfs
     force_include_types
+    freebsd_host_cpu_count
+    freebsd_thread_id
     fuchsia_clock
     fuchsia_host_cpu_count
     fuchsia_thread_id

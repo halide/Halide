@@ -37,6 +37,7 @@ function(_add_python_aot_and_stub_extension)
         add_halide_generator(${GEN_TARGET} SOURCES ${ARG_SOURCES})
     else ()
         add_halide_generator(${GEN_TARGET} PYSTUB ${GEN_NAME} SOURCES ${ARG_SOURCES})
+        add_dependencies(PythonCorrectnessGenerators ${GEN_TARGET}_pystub)
     endif ()
 
     foreach (G IN LISTS ARG_GENERATORS)
@@ -105,7 +106,7 @@ if (NOT MSVC)
     add_test(
         NAME test_export_single_symbol
         COMMAND
-            $ENV{SHELL}
+            sh
             -c "[ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | wc -l) -eq 1 ] && \
                                      [ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | grep PyInit_multi_method_module | wc -l) -eq 1 ]"
         VERBATIM

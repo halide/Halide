@@ -55,6 +55,8 @@ if (NOT found_blases)
     message(FATAL_ERROR "Could not find any BLAS libraries! Searched among ${known_vendors}")
 endif ()
 
+add_custom_target(linear_algebra DEPENDS test_halide_blas)
+
 # Load in the rest of the project.
 add_subdirectory(src)
 add_subdirectory(tests)

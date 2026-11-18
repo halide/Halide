@@ -28,6 +28,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "ExtractTileOperations.h"
+#include "ExtractWMMAOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -304,7 +305,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Canonicalizing GPU var names...\n";
-        s = canonicalize_gpu_vars(s);
+        s = canonicalize_gpu_vars(s, t);
         log("Lowering after canonicalizing GPU var names:", s);
     }
 
@@ -385,6 +386,13 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::Vulkan)) {
+        debug(1) << "Extracting tensor core operations...\n";
+        s = extract_wmma_operations(s);
+        log("Lowering after extracting tensor core operations:", s);
+    }
+
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         log("Lowering after fusing GPU thread loops:", s);
@@ -440,7 +448,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::CUDA)) {
+    if (t.has_feature(Target::CUDA) || t.has_feature(Target::Metal)) {
         debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);

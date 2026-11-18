@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_error(py::module &m);
+void define_error(py::module_ &m);
 
 struct PyJITUserContext : public JITUserContext {
     PyJITUserContext();

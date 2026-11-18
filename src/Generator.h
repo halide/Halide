@@ -4333,15 +4333,24 @@ struct halide_global_ns;
 // The HALIDE_GENERATOR_PYSTUB macro is used to produce "PyStubs" -- i.e., CPython wrappers to let a C++ Generator
 // be called from Python. It shouldn't be necessary to use by anything but the build system in most cases.
 
-#define HALIDE_GENERATOR_PYSTUB(GEN_REGISTRY_NAME, MODULE_NAME)                                                           \
-    static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");                                 \
-    extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory); \
-    namespace halide_register_generator::GEN_REGISTRY_NAME##_ns {                                                         \
-        extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);     \
-    }                                                                                                                     \
-    extern "C" HALIDE_EXPORT_SYMBOL PyObject *PyInit_##MODULE_NAME() {                                                    \
-        const auto factory = halide_register_generator::GEN_REGISTRY_NAME##_ns::factory;                                  \
-        return _halide_pystub_impl(#MODULE_NAME, factory);                                                                \
+#define HALIDE_GENERATOR_PYSTUB(GEN_REGISTRY_NAME, MODULE_NAME)                                                       \
+    static_assert(PY_VERSION_HEX >= 0x030C0000, "Python bindings for Halide require Python 3.12+");                   \
+    extern "C" int _halide_pystub_impl(PyObject *module, const Halide::Internal::GeneratorFactory &factory);          \
+    namespace halide_register_generator::GEN_REGISTRY_NAME##_ns {                                                     \
+        extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context); \
+    }                                                                                                                 \
+    static int MODULE_NAME##_exec(PyObject *module) {                                                                 \
+        const auto factory = halide_register_generator::GEN_REGISTRY_NAME##_ns::factory;                              \
+        return _halide_pystub_impl(module, factory);                                                                  \
+    }                                                                                                                 \
+    static PyModuleDef_Slot MODULE_NAME##_slots[] = {                                                                 \
+        {Py_mod_exec, reinterpret_cast<void *>(MODULE_NAME##_exec)},                                                  \
+        {Py_mod_multiple_interpreters, Py_MOD_MULTIPLE_INTERPRETERS_NOT_SUPPORTED},                                   \
+        {0, nullptr}};                                                                                                \
+    static PyModuleDef MODULE_NAME##_def = {                                                                          \
+        PyModuleDef_HEAD_INIT, #MODULE_NAME, nullptr, 0, nullptr, MODULE_NAME##_slots, nullptr, nullptr, nullptr};    \
+    PyMODINIT_FUNC PyInit_##MODULE_NAME() {                                                                           \
+        return PyModuleDef_Init(&MODULE_NAME##_def);                                                                  \
     }
 
 #endif  // HALIDE_GENERATOR_H_

@@ -25,8 +25,11 @@ public:
 
     ModulusRemainder result;
     Scope<ModulusRemainder> scope;
+    const AlignmentLookup *alignment_of = nullptr;
 
-    ComputeModulusRemainder(const Scope<ModulusRemainder> *s) {
+    ComputeModulusRemainder(const Scope<ModulusRemainder> *s,
+                            const AlignmentLookup *alignment_of = nullptr)
+        : alignment_of(alignment_of) {
         scope.set_containing_scope(s);
     }
 
@@ -114,6 +117,8 @@ void ComputeModulusRemainder::visit(const Reinterpret *) {
 void ComputeModulusRemainder::visit(const Variable *op) {
     if (const auto *m = scope.find(op->name)) {
         result = *m;
+    } else if (alignment_of && *alignment_of) {
+        result = (*alignment_of)(op->name);
     } else {
         result = ModulusRemainder{};
     }
@@ -309,6 +314,11 @@ ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> 
     return mr.analyze(e);
 }
 
+ModulusRemainder modulus_remainder(const Expr &e, const AlignmentLookup &alignment_of) {
+    ComputeModulusRemainder mr(nullptr, &alignment_of);
+    return mr.analyze(e);
+}
+
 bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
@@ -328,6 +338,17 @@ bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder) {
 }
 bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
     ModulusRemainder result = modulus_remainder(expr, scope);
+
+    if (mod(result.modulus, modulus) == 0) {
+        *remainder = mod(result.remainder, modulus);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder, const AlignmentLookup &alignment_of) {
+    ModulusRemainder result = modulus_remainder(expr, alignment_of);
 
     if (mod(result.modulus, modulus) == 0) {
         *remainder = mod(result.remainder, modulus);

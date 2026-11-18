@@ -4,7 +4,7 @@
 # package here.
 set(python_package_dir "${Halide_Python_PACKAGE_DIR}/bin")
 set(python_sources "${CMAKE_CURRENT_SOURCE_DIR}/src/halide/bin/__init__.py")
-set(stamp_file "$<CONFIG>/Halide_PythonBin_sources.stamp")
+set(stamp_file "Halide_PythonBin_sources-$<CONFIG>.stamp")
 
 add_custom_command(
     OUTPUT "${stamp_file}"

@@ -24,8 +24,8 @@ public:
     int mux_count{0};
 };
 
-int main(int argc, char **argv) {
-    Var x{"x"}, xo{"xo"}, xi{"xi"};
+int test(bool gpu) {
+    Var x{"x"}, xo{"xo"}, xi{"xi"}, xoo{"xoo"}, xoi{"xoi"};
     for (auto ts : {TailStrategy::ShiftInwards, TailStrategy::GuardWithIf}) {
         Func f;
         Param<int> offset{"offset"};
@@ -35,18 +35,28 @@ int main(int argc, char **argv) {
         f
             .aligned_split(x, xo, xi, 4, offset, ts)
             .unroll(xi);
+        if (gpu) {
+            f.gpu_tile(xo, xoo, xoi, 2);
+        }
 
-        Module module = f.compile_to_module({offset});
+        // The GPU kernels are compiled to device code by the time we get a
+        // Module, so only the CPU schedule is inspected for loops and muxes.
         MuxCounter checker;
-        for (const LoweredFunc &f : module.functions()) {
-            f.body.accept(&checker);
+        if (!gpu) {
+            Module module = f.compile_to_module({offset});
+            for (const LoweredFunc &f : module.functions()) {
+                f.body.accept(&checker);
+            }
         }
 
         for (int i = 0; i < 4; i++) {
             printf("Testing runtime alignment: %d\n", i);
             offset.set(i);
             Buffer<int> im = f.realize({32});
-            f.realize(im, get_target_from_environment());
+            if (!gpu) {
+                f.realize(im, get_target_from_environment());
+            }
+            im.copy_to_host();
 
             for (int x = 0; x < 32; x++) {
                 int selector = (4 + x - offset.get()) % 4;
@@ -67,6 +77,9 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (gpu) {
+            continue;
+        }
         if (ts == Halide::TailStrategy::ShiftInwards) {
             if (checker.mux_count != 8) {
                 std::printf("Expected 8 muxes: %d\n", checker.mux_count);
@@ -87,6 +100,19 @@ int main(int argc, char **argv) {
                 std::printf("Expected one for loop: %d\n", checker.for_count);
                 return 1;
             }
+        }
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (test(false) != 0) {
+        return 1;
+    }
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Testing the GPU schedule\n");
+        if (test(true) != 0) {
+            return 1;
         }
     }
 

@@ -1153,6 +1153,8 @@ void GatherOp::execute() {
     const int pos_dims = indices.dimensions();
     indices.for_each_element([&](const int *pos) {
         const int index = indices(pos);
+        HCHECK(index >= in.dim(axis_).min() && index <= in.dim(axis_).max())
+            << "Gather index " << index << " is out of range\n";
         HalideBuffer<const void> in_i = in.sliced(axis_, index);
         HalideBuffer<void> out_i = out.sliced(axis_, pos[0]);
         for (int i = 1; i < pos_dims; i++) {

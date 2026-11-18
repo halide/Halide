@@ -61,7 +61,6 @@ struct LockFreeThreadPool {
     // A worker thread
     struct Worker {
         LockFreeThreadPool *pool = nullptr;
-        std::thread thread;
 
         // When go is false, the main thread is messing with the fields below. When
         // go is true, they are frozen.
@@ -72,6 +71,10 @@ struct LockFreeThreadPool {
         halide_task_t task = nullptr;
         int first = 0, last = 0;
         uint8_t *closure = nullptr;
+
+        // Declared last so that run() only starts once the fields above are
+        // initialized.
+        std::thread thread;
 
         void run() {
             auto *s = &(pool->shutdown);

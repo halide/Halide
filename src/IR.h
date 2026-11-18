@@ -767,11 +767,30 @@ struct Call : public ExprNode<Call> {
         extract_bits,
         // Extracts a single element from a mask vector
         extract_mask_element,
+        // fixed_to_float(x, k) reads the integer x as a fixed-point number with
+        // k fractional bits: float(x) * 2^-k, where k is a positive constant
+        // (broadcast to x's lanes).
+        fixed_to_float,
         // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
         get_runtime_streaming_vscale,
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
         get_user_context,
+        // Read a value held by another lane of the same group of gpu lanes.
+        // Args are (value, x, width). The lanes are partitioned into groups
+        // of width lanes, which must be a power of two no greater than 32
+        // and correspond to aligned groups of hardware SIMD lanes. x is
+        // the source lane relative to the current one (gpu_shuffle_down
+        // reads lane + x, gpu_shuffle_up reads lane - x, and
+        // gpu_shuffle_xor reads lane ^ x), or, for gpu_shuffle_idx, the
+        // index of the source lane within the group. For all but
+        // gpu_shuffle_idx, x must be the same in every lane. The result is
+        // undefined if the source lane is outside the group or is
+        // inactive. value must be a 32-bit scalar.
+        gpu_shuffle_down,
+        gpu_shuffle_idx,
+        gpu_shuffle_up,
+        gpu_shuffle_xor,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
@@ -932,6 +951,45 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+        // Every intrinsic below takes the lane of the warp it runs in, because
+        // its value depends on which lane that is and nothing else in its
+        // arguments does. Without it a call whose other arguments are all
+        // constants, such as wmma_lane_owns, could be hoisted out of the loop
+        // over lanes. They are Intrinsic rather than PureIntrinsic only to stop
+        // lets being hoisted out from under them, which makes instruction
+        // selection in the backend harder.
+        //
+        // Permute this lane's tensor core accumulator (d) fragment up into a
+        // whole matrix, leaving the entries this lane doesn't hold undefined.
+        // wmma_fragment_to_matrix_d(M, N, K, fragment, lane)
+        wmma_fragment_to_matrix_d,
+        // Whether this lane holds each entry of an M x N tensor core
+        // accumulator in its fragment. Used as the predicate of the store that
+        // copies an accumulator out to memory.
+        // wmma_lane_owns(M, N, K, lane)
+        wmma_lane_owns,
+        // Take this lane's share of a tensor core fragment out of a matrix.
+        // The a operand is M x K, the b operand is K x N, and the accumulator
+        // (c) is M x N. The mapping from matrix entry to lane is opaque,
+        // because it isn't architecturally specified.
+        //
+        // The matrix argument is a Load of the whole of it, with its lanes in
+        // row-major order; the layout in memory and the distance between its
+        // rows or columns are recoverable from the index. The hardware can only
+        // do this as part of a memory read, which is why the argument has to be
+        // a Load rather than an arbitrary matrix value.
+        // wmma_matrix_to_fragment_a(M, N, K, matrix, lane)
+        // @{
+        wmma_matrix_to_fragment_a,
+        wmma_matrix_to_fragment_b,
+        wmma_matrix_to_fragment_c,
+        // @}
+        // A tensor core matrix multiply-accumulate. The layouts say how the a
+        // and b fragments were taken out of their matrices, which changes how
+        // the hardware arranges them in registers. The accumulator's fragment
+        // layout doesn't depend on how it was loaded, so it isn't a parameter.
+        // wmma_mma(M, N, K, a_layout, b_layout, a, b, c, lane)
+        wmma_mma,
         // keep-sorted end
         IntrinsicOpCount  // Sentinel: keep last.
     };
@@ -1212,9 +1270,15 @@ struct Shuffle : public ExprNode<Shuffle> {
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
 
-    /** Convenience constructor for making a shuffle representing a
-     * broadcast of a vector. */
+    /** Convenience constructor for making a shuffle that repeats an entire
+     * vector the given number of times. For example, with a factor of 3, ABCD
+     * becomes ABCDABCDABCD. */
     static Expr make_broadcast(Expr vector, int factor);
+
+    /** Convenience constructor for making a shuffle that repeats each lane of
+     * a vector the given number of times. For example, with a factor of 3,
+     * ABCD becomes AAABBBCCCDDD. */
+    static Expr make_repeat_each_lane(Expr vector, int factor);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
@@ -1228,19 +1292,22 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle is an in-place transpose of a single vector. The
-     * factor is the number of columns of the source matrix, or equivalently,
-     * the number of rows of the destination matrix, interpreting a vector as a
-     * matrix stored row-major. */
-    bool is_transpose() const;
-    int transpose_factor() const;
+    /** If this shuffle is an in-place transpose of a single vector, returns the
+     * number of columns of the source matrix, or equivalently the number of rows
+     * of the destination matrix, interpreting a vector as a matrix stored
+     * row-major. Otherwise returns nullopt. */
+    std::optional<int> is_transpose() const;
 
-    /** Check if this shuffle can be represented as a repeating pattern that
-     * repeats the same shuffle of the single input vector some number of times.
-     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
-     */
-    bool is_broadcast() const;
-    int broadcast_factor() const;
+    /** If this shuffle repeats an entire single vector of at least two lanes
+     * some number of times (at least two), returns the number of repeats.
+     * Otherwise returns nullopt. For example: 0, 1, 2, 0, 1, 2, 0, 1, 2. */
+    std::optional<int> is_broadcast() const;
+
+    /** If this shuffle repeats each lane of a single vector of at least two
+     * lanes some number of times (at least two), returns the number of
+     * repeats. Otherwise returns nullopt. For example: 0, 0, 0, 1, 1, 1, 2, 2,
+     * 2. */
+    std::optional<int> is_repeat_each_lane() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
@@ -1250,13 +1317,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * vector arguments, and if so, the offset and stride of the
      * slice. */
     ///@{
-    bool is_slice() const;
-    int slice_begin() const {
-        return indices[0];
-    }
-    int slice_stride() const {
-        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
-    }
+    struct Slice {
+        int begin, stride;
+    };
+    std::optional<Slice> is_slice() const;
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector

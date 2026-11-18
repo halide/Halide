@@ -345,7 +345,8 @@ public:
 // An allocation inside the thread loops stays in register/local memory
 // (handled by ExtractRegisterAllocations) rather than being pulled out to the
 // block level (handled by ExtractSharedAndHeapAllocations) if it has a fixed
-// size or an explicit register/stack memory type.
+// size or an explicit register/stack/tile memory type. A tensor core fragment
+// is per-lane, so it belongs in registers wherever it was declared.
 bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
     bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
     return (fixed_size_thread_allocation &&
@@ -353,7 +354,8 @@ bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
             !is_gpu_shared(op->memory_type) &&
             op->memory_type != MemoryType::GPUTexture) ||
            op->memory_type == MemoryType::Register ||
-           op->memory_type == MemoryType::Stack;
+           op->memory_type == MemoryType::Stack ||
+           op->memory_type == MemoryType::Tile;
 }
 
 // Rename an allocation and all of its loads, stores, and frees. Relies on the
@@ -1307,7 +1309,8 @@ protected:
         user_assert(op->memory_type == MemoryType::Stack ||
                     op->memory_type == MemoryType::Register ||
                     op->memory_type == MemoryType::Heap ||
-                    op->memory_type == MemoryType::Auto)
+                    op->memory_type == MemoryType::Auto ||
+                    op->memory_type == MemoryType::Tile)
             << "Allocation " << op->name << " is scheduled inside a loop over GPU threads, so "
             << "it must live in stack memory, heap memory, or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";

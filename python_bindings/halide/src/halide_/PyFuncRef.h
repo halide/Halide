@@ -43,7 +43,7 @@ struct UnevaluatedFuncRefExpr {
         throw InternalError("Invalid Op value.");
     }
 };
-void define_func_ref(py::module &m);
+void define_func_ref(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

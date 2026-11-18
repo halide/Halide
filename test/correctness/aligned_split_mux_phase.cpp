@@ -33,7 +33,7 @@ public:
     int mux_count{0};
 };
 
-int test(int period) {
+int test(int period, bool gpu) {
     const int width = 1024;
     // The tile has to be a whole number of periods for the phase to be the
     // same in every tile, and the vector a whole number of periods for each
@@ -41,7 +41,7 @@ int test(int period) {
     const int tile = period * 64;
     const int vec = period * 2;
 
-    Var x{"x"}, xo{"xo"}, xi{"xi"};
+    Var x{"x"}, xo{"xo"}, xi{"xi"}, xio{"xio"}, xii{"xii"};
     Param<int> off{"off"};
     off.set_range(0, period - 1);
 
@@ -59,35 +59,58 @@ int test(int period) {
 
     out.output_buffer().dim(0).set_min(0);
 
-    // The consumer is tiled with a split aligned to the same offset, so every
-    // tile starts at a position congruent to off.
-    out.aligned_split(x, xo, xi, tile, off, TailStrategy::GuardWithIf)
-        .vectorize(xi)
-        .never_partition_all();
+    if (gpu) {
+        // One tile per block, and on GPU the vector is a single period (or
+        // half of one for X-Trans: OpenCL C has no vectors of 6). The
+        // producer is staged per tile in local memory with dense vector
+        // stores at offsets that are multiples of the vector width.
+        const int gpu_vec = (period == 6) ? 3 : period;
+        out.aligned_split(x, xo, xi, tile, off, TailStrategy::GuardWithIf)
+            .gpu_blocks(xo)
+            .split(xi, xio, xii, gpu_vec)
+            .gpu_threads(xio)
+            .vectorize(xii);
 
-    // The producer is computed per tile. align_bounds keeps its min congruent
-    // to off as well, so its phase really is constant, and then it is split
-    // again to vectorize.
-    prod.compute_at(out, xo)
-        .never_partition_all()
-        .align_bounds(x, period, off)
-        .vectorize(x, vec, TailStrategy::RoundUp);
+        prod.compute_at(out, xo)
+            .align_bounds(x, period, off)
+            .gpu_threads(x)
+            .vectorize(x, gpu_vec, TailStrategy::RoundUp);
+    } else {
+        // The consumer is tiled with a split aligned to the same offset, so every
+        // tile starts at a position congruent to off.
+        out.aligned_split(x, xo, xi, tile, off, TailStrategy::GuardWithIf)
+            .vectorize(xi)
+            .never_partition_all();
+
+        // The producer is computed per tile. align_bounds keeps its min congruent
+        // to off as well, so its phase really is constant, and then it is split
+        // again to vectorize.
+        prod.compute_at(out, xo)
+            .never_partition_all()
+            .align_bounds(x, period, off)
+            .vectorize(x, vec, TailStrategy::RoundUp);
+    }
 
     Pipeline p(out);
 
     // Every phase is known at compile time, so no mux should survive lowering.
-    Module m = p.compile_to_module({off}, "aligned_split_mux_phase");
-    MuxCounter checker;
-    m.functions().front().body.accept(&checker);
-    if (checker.mux_count != 0) {
-        printf("Period %d: expected 0 muxes, got %d\n", period, checker.mux_count);
-        return 1;
+    // The GPU kernels are compiled to device code by the time we get a
+    // Module, so only the CPU schedule is inspected.
+    if (!gpu) {
+        Module m = p.compile_to_module({off}, "aligned_split_mux_phase");
+        MuxCounter checker;
+        m.functions().front().body.accept(&checker);
+        if (checker.mux_count != 0) {
+            printf("Period %d: expected 0 muxes, got %d\n", period, checker.mux_count);
+            return 1;
+        }
     }
 
     // And it still has to compute the right thing.
     for (int o = 0; o < period; o++) {
         off.set(o);
         Buffer<int> result = p.realize({width});
+        result.copy_to_host();
         for (int i = 0; i < width; i++) {
             int phase = (((i - o) % period) + period) % period;
             int correct = i * (phase + 1) + phase;
@@ -104,9 +127,16 @@ int test(int period) {
 
 int main(int argc, char **argv) {
     // Bayer, a three-phase pattern, and X-Trans.
+    bool gpu = get_jit_target_from_environment().has_gpu_feature();
     for (int period : {2, 3, 6}) {
-        if (test(period) != 0) {
+        if (test(period, false) != 0) {
             return 1;
+        }
+        if (gpu) {
+            printf("Testing the GPU schedule, period %d\n", period);
+            if (test(period, true) != 0) {
+                return 1;
+            }
         }
     }
 

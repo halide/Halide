@@ -705,7 +705,12 @@ struct RFactorProjection {
     }
 };
 
-pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
+// If include_split_predicates is false, the predicates that splits of RVars
+// place on the projected RDom (e.g. to guard the tail of a GuardWithIf split)
+// are left out, so the projected RDom may cover points that are outside the
+// original RDom.
+pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits,
+                                                    bool include_split_predicates = true) {
     // The bounds projections maps expressions that reference the old RDom
     // bounds to expressions that reference the new RDom bounds (from dims).
     // We call this a projection because we are computing the symbolic image
@@ -752,7 +757,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             case ApplySplitResult::PredicateCalls:
             case ApplySplitResult::PredicateProvides:
             case ApplySplitResult::Predicate:
-                new_rdom.where(substitute(bounds_projection, result.value));
+                if (include_split_predicates) {
+                    new_rdom.where(substitute(bounds_projection, result.value));
+                }
                 break;
             case ApplySplitResult::Substitution:
             case ApplySplitResult::SubstitutionInCalls:
@@ -767,6 +774,33 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(dim_projection, dims[i].var, RVar(new_rdom, i));
     }
     return {new_rdom, dim_projection};
+}
+
+// Is the identity of the associative op also a right identity of the op as
+// written, i.e. does op(x, identity) simplify to x for every element of the
+// Tuple? If so, combining an element of an rfactor intermediate that was never
+// updated (and so still holds the identity) into the result is a no-op. This
+// is not the case for e.g. the unary op f() = g(r), or an argmax that keeps
+// the index from y on ties.
+bool identity_is_right_identity(const AssociativeOp &prover_result) {
+    std::map<string, Expr> y_to_identity;
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        if (!prover_result.ys[i].var.empty()) {
+            y_to_identity.emplace(prover_result.ys[i].var, prover_result.pattern.identities[i]);
+        }
+    }
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        const string &x = prover_result.xs[i].var;
+        if (x.empty()) {
+            return false;
+        }
+        Expr combined = simplify(substitute(y_to_identity, prover_result.pattern.ops[i]));
+        const Variable *v = combined.as<Variable>();
+        if (!v || v->name != x) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // A semiring distributive law used by hoist_invariants(): `inner` distributes
@@ -1129,8 +1163,25 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             intermediate_rdom.set_predicate(simplify(pred));
         }
 
-        // Preserved
-        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits);
+        // Preserved. Each point of the preserved RDom combines one element of
+        // the intermediate into the result. For example, consider summing over
+        // r in [0, N), splitting r into ro * 4 + ri with GuardWithIf, and
+        // preserving ri. The intermediate has four partial sums, one per ri,
+        // each initialized to zero and updated only where ro * 4 + ri < N.
+        // If N is 3, the partial sum for ri = 3 is never updated and stays zero.
+        // The final merge can still add all four partial sums: adding that
+        // zero is a no-op. Omitting the split's guard from the merge lets its
+        // RDom be [0, 4), independent of N.
+        //
+        // More generally, we can omit split predicates when the intermediate's
+        // initial value is a right identity: merging an element that was never
+        // updated does not change the result. The intermediate still needs the
+        // predicates to avoid evaluating the original update outside its RDom.
+        // The extra merge work is limited to the split tail (fewer than the
+        // split factor in each dimension). We keep user predicates, which
+        // might exclude much more.
+        const bool include_split_predicates = !identity_is_right_identity(prover_result);
+        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits, include_split_predicates);
         Scope<Interval> intm_rdom;
         for (size_t i = 0; i < intermediate_rdom.domain().size(); i++) {
             const auto &var = intermediate_rdims[i].var;
@@ -3792,7 +3843,7 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
 //
 // This constraint keeps the recurrence visible to the overflow proof.
 Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
-                  const FuncValueBounds &fvb) {
+                  const FuncValueBounds &fvb, bool unsafe) {
     auto retype_self_reference = [&](const Expr &expr) {
         if (const Call *c = expr.as<Call>(); c && c->call_type == Call::Halide && c->name == fname) {
             return Call::make(dst, c->args, c->value_index, /*follow_global_wrappers=*/false);
@@ -3819,6 +3870,21 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
         user_assert(e.node_type() != IRNodeType::Sub || a_is_self)
             << "change_type() only supports difference reductions of the form "
             << fname << "(...) - term.\n";
+        // Accumulating a product at a float type t (unsafe: rounding each
+        // step): when both factors are exactly representable in t, prefer
+        // fma(a, b, acc), rounding the step once rather than the product and
+        // then the sum (cf. the widening_mul preference in retype_leaf()).
+        // A safe retype's steps are exact, so there it would change nothing.
+        const Expr &term = a_is_self ? operands->second : operands->first;
+        if (const Mul *mul = term.as<Mul>();
+            unsafe && mul && e.node_type() == IRNodeType::Add && t.is_float() && !t.is_bfloat()) {
+            std::map<Expr, ConstantInterval, ExprCompare> cache;
+            Expr x = lossless_cast(t, mul->a, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+            Expr y = lossless_cast(t, mul->b, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+            if (x.defined() && y.defined()) {
+                return fma(x, y, retype_self_reference(a_is_self ? operands->first : operands->second));
+            }
+        }
         Expr a = a_is_self ? retype_self_reference(operands->first) : retype_leaf(operands->first, t, fvb);
         Expr b = b_is_self ? retype_self_reference(operands->second) : retype_leaf(operands->second, t, fvb);
         return make_binary_op(e.node_type(), a, b);
@@ -4204,7 +4270,7 @@ Func Func::change_type(Type t, bool unsafe) {
         vector<Expr> vals;
         vals.reserve(def.values().size());
         for (const Expr &v : def.values()) {
-            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds, unsafe));
         }
         typed.function().define_update(def.args(), vals);
         typed.function().update(u).schedule() = def.schedule().get_copy();

@@ -5,7 +5,7 @@
 #   3. host-opencl                 — only tests whose name contains "gpu" or "opencl"
 #   4. wasm-32-wasmrt-wasm_simd128 — all tests (exercises WasmExecutor for JIT)
 #
-# Prerequisites: Homebrew LLVM 21 (for llvm-profdata and llvm-cov).
+# Prerequisites: Homebrew LLVM 22 (for llvm-profdata and llvm-cov).
 #
 # Usage: tools/run-coverage.sh [--report-only]
 #   --report-only  Skip build and test steps; re-merge existing profraw files
@@ -16,7 +16,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$REPO_ROOT/build/macOS-coverage"
-LLVM_DIR="/opt/homebrew/opt/llvm@21/bin"
+LLVM_DIR="/opt/homebrew/opt/llvm@22/bin"
 NPROC=$(sysctl -n hw.logicalcpu)
 
 REPORT_ONLY=0

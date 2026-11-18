@@ -2,12 +2,13 @@
 
 #include <filesystem>
 
-#include <pybind11/stl/filesystem.h>
+#include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/variant.h>
 
 namespace Halide {
 namespace PythonBindings {
 
-void define_serialization(py::module &m) {
+void define_serialization(py::module_ &m) {
     // Serialize pipeline functions
     m.def("serialize_pipeline",  //
           [](const Pipeline &pipeline, const std::filesystem::path &filename, std::optional<bool> get_params) -> std::optional<std::map<std::string, Parameter>> {
@@ -47,7 +48,7 @@ void define_serialization(py::module &m) {
           [](const py::bytes &data, const std::map<std::string, Parameter> &user_params) -> Pipeline {
               // TODO: rework API in serialize_pipeline to take a std::span<> in C++20
               // https://github.com/halide/Halide/issues/8722
-              std::string_view view{data};
+              std::string_view view{data.c_str(), data.size()};
               std::vector<uint8_t> span{view.begin(), view.end()};
               return deserialize_pipeline(span, user_params);  //
           },
@@ -68,7 +69,7 @@ void define_serialization(py::module &m) {
           [](const py::bytes &data) -> std::map<std::string, Parameter> {
               // TODO: rework API in serialize_pipeline to take a std::span<> in C++20
               // https://github.com/halide/Halide/issues/8722
-              std::string_view view{data};
+              std::string_view view{data.c_str(), data.size()};
               std::vector<uint8_t> span{view.begin(), view.end()};
               return deserialize_parameters(span);  //
           },

@@ -32,3 +32,18 @@ rewrite(-3_i16 * 2_i16, -6_i16)
 
 # Bitwise not
 rewrite(~0_i16 + 1_i16, 0_i16)
+
+# in_range is half-open, with an optional matcher context.
+rewrite(in_range(0, 0, 1), true)
+rewrite(in_range(1, 0, 1), false)
+rewrite(in_range(-1, 0, 1), false)
+rewrite(in_range(0, 0, 0), false)
+rewrite(in_range(-3, -3, -1, this), true)
+rewrite(in_range(-1, -3, -1, this), false)
+rewrite(in_range(-4, -3, -1, this), false)
+rewrite(in_range(0, 1, 0, this), false)
+rewrite(select(in_range(x, 0, 1), x, 0), 0)
+
+# Bounded-offset division rules can be checked verbatim.
+rewrite((x * c0 + y) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this))
+rewrite((y + x * c0) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this))

@@ -1,6 +1,5 @@
 #include "PyGenerator.h"
 
-#include <pybind11/embed.h>
 #include <string>
 #include <vector>
 
@@ -29,7 +28,7 @@ public:
     // by calling is_valid() later.
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
-          generator_(py::module_::import("halide").attr("_create_python_generator")(name, context)) {  // could be None!
+          generator_(py::module_::import_("halide").attr("_create_python_generator")(name, context)) {  // could be None!
     }
 
     bool is_valid() const {
@@ -44,7 +43,7 @@ public:
     }
 
     GeneratorContext context() const override {
-        return generator_.attr("context")().cast<GeneratorContext>();
+        return py::cast<GeneratorContext>(generator_.attr("context")());
     }
 
     std::vector<ArgInfo> arginfos() override {
@@ -52,7 +51,7 @@ public:
     }
 
     bool allow_out_of_order_inputs_and_outputs() const override {
-        return generator_.attr("allow_out_of_order_inputs_and_outputs")().cast<bool>();
+        return py::cast<bool>(generator_.attr("allow_out_of_order_inputs_and_outputs")());
     }
 
     void set_generatorparam_value(const std::string &name, const std::string &value) override {
@@ -64,15 +63,15 @@ public:
     }
 
     Pipeline build_pipeline() override {
-        return generator_.attr("_build_pipeline")().cast<Pipeline>();
+        return py::cast<Pipeline>(generator_.attr("_build_pipeline")());
     }
 
     std::vector<Parameter> input_parameter(const std::string &name) override {
-        return {generator_.attr("_get_input_parameter")(name).cast<Parameter>()};
+        return {py::cast<Parameter>(generator_.attr("_get_input_parameter")(name))};
     }
 
     std::vector<Func> output_func(const std::string &name) override {
-        return {generator_.attr("_get_output_func")(name).cast<Func>()};
+        return {py::cast<Func>(generator_.attr("_get_output_func")(name))};
     }
 
     void bind_input(const std::string &name, const std::vector<Parameter> &v) override {
@@ -105,7 +104,7 @@ public:
     PyGeneratorFactoryProvider() = default;
 
     std::vector<std::string> enumerate() const override {
-        py::object f = py::module_::import("halide").attr("_get_python_generator_names");
+        py::object f = py::module_::import_("halide").attr("_get_python_generator_names");
         return args_to_vector<std::string>(f());
     }
     AbstractGeneratorPtr create(const std::string &name,
@@ -120,19 +119,16 @@ public:
 
 }  // namespace
 
-void define_generator(py::module &m) {
+void define_generator(py::module_ &m) {
     auto arginfo_class =
         py::class_<ArgInfo>(m, "ArgInfo")
             .def(py::init<>())
-            .def(py::init([](const std::string &name, ArgInfoDirection dir, ArgInfoKind kind, std::vector<Type> types, int dimensions) -> ArgInfo {
-                     return ArgInfo{name, dir, kind, std::move(types), dimensions};
-                 }),
-                 py::arg("name"), py::arg("dir"), py::arg("kind"), py::arg("types"), py::arg("dimensions"))
-            .def_readonly("name", &ArgInfo::name)
-            .def_readonly("dir", &ArgInfo::dir)
-            .def_readonly("kind", &ArgInfo::kind)
-            .def_readonly("types", &ArgInfo::types)
-            .def_readonly("dimensions", &ArgInfo::dimensions);
+            .def("__init__", [](ArgInfo *self, const std::string &name, ArgInfoDirection dir, ArgInfoKind kind, std::vector<Type> types, int dimensions) { new (self) ArgInfo(ArgInfo{name, dir, kind, std::move(types), dimensions}); }, py::arg("name"), py::arg("dir"), py::arg("kind"), py::arg("types"), py::arg("dimensions"))
+            .def_ro("name", &ArgInfo::name)
+            .def_ro("dir", &ArgInfo::dir)
+            .def_ro("kind", &ArgInfo::kind)
+            .def_ro("types", &ArgInfo::types)
+            .def_ro("dimensions", &ArgInfo::dimensions);
 
     // Note that we need py::dynamic_attr() here so that the Python code can add a token stack
     // for __enter__ and __exit__ handling
@@ -142,20 +138,18 @@ void define_generator(py::module &m) {
             .def(py::init<const Target &, const AutoschedulerParams &>(), py::arg("target"), py::arg("autoscheduler_params"))
             .def("target", &GeneratorContext::target)
             .def("autoscheduler_params", &GeneratorContext::autoscheduler_params)
-            .def("__enter__", [](const GeneratorContext &context) -> py::object {
-                auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
+            .def("__enter__", [](py::handle context) -> py::object {
+                auto _generatorcontext_enter = py::module_::import_("halide").attr("_generatorcontext_enter");
                 return _generatorcontext_enter(context);
             })
-            .def("__exit__", [](const GeneratorContext &context, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
-                auto _generatorcontext_exit = py::module_::import("halide").attr("_generatorcontext_exit");
+            .def("__exit__", [](py::handle context, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
+                auto _generatorcontext_exit = py::module_::import_("halide").attr("_generatorcontext_exit");
                 _generatorcontext_exit(context);
-                return false;
-            })
+                return false; }, py::arg("exc_type").none(), py::arg("exc_value").none(), py::arg("exc_traceback").none())
             .def("__repr__", [](const GeneratorContext &context) -> std::string {
                 std::ostringstream o;
                 o << "<halide.GeneratorContext " << context.target() << ">";
-                return o.str();
-            });
+                return o.str(); });
 
     m.def("_generate_filter_main",  //
           [](const std::vector<std::string> &arguments) -> void {

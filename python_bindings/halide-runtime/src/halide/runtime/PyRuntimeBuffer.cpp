@@ -1,11 +1,12 @@
 #include "PyRuntimeBuffer.h"
 
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
+#include "PyBufferProtocol.h"
+#include <nanobind/stl/pair.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <atomic>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -15,7 +16,7 @@
 #include "Float16.h"
 #include "HalideBuffer.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 namespace Halide::PythonRuntimeBindings {
 namespace {
@@ -28,83 +29,6 @@ std::string unique_name() {
     return "b" + std::to_string(next++);
 }
 
-template<typename T>
-std::string format_descriptor() {
-    return py::format_descriptor<T>::format();
-}
-
-template<>
-std::string format_descriptor<float16_t>() {
-    return "e";
-}
-
-halide_type_t format_descriptor_to_type(std::string format, py::ssize_t itemsize) {
-    char byte_order = '@';
-    if (!format.empty() && std::strchr("@<>!=", format.front())) {
-        byte_order = format.front();
-        format.erase(format.begin());
-    }
-    const uint16_t endian_test = 1;
-    const bool native_is_little_endian = *reinterpret_cast<const uint8_t *>(&endian_test) == 1;
-    const bool non_native_byte_order =
-        (native_is_little_endian && (byte_order == '>' || byte_order == '!')) ||
-        (!native_is_little_endian && byte_order == '<');
-    if (non_native_byte_order && itemsize > 1) {
-        throw py::value_error("Non-native byte order is not supported.");
-    }
-
-#define HANDLE_TYPE(TYPE)                                                               \
-    if (format == format_descriptor<TYPE>()) {                                          \
-        const halide_type_t type = Halide::Runtime::Buffer<TYPE>::static_halide_type(); \
-        if (type.bytes() != itemsize) {                                                 \
-            throw py::value_error("Buffer item size does not match its format.");       \
-        }                                                                               \
-        return type;                                                                    \
-    }
-    HANDLE_TYPE(bool)
-    HANDLE_TYPE(uint8_t)
-    HANDLE_TYPE(uint16_t)
-    HANDLE_TYPE(uint32_t)
-    HANDLE_TYPE(uint64_t)
-    HANDLE_TYPE(int8_t)
-    HANDLE_TYPE(int16_t)
-    HANDLE_TYPE(int32_t)
-    HANDLE_TYPE(int64_t)
-    HANDLE_TYPE(float16_t)
-    HANDLE_TYPE(float)
-    HANDLE_TYPE(double)
-#undef HANDLE_TYPE
-    if (format == "l") {
-        const halide_type_t type = itemsize == 8 ? Runtime::Buffer<int64_t>::static_halide_type() : Runtime::Buffer<int32_t>::static_halide_type();
-        if (type.bytes() != itemsize) {
-            throw py::value_error("Buffer item size does not match its format.");
-        }
-        return type;
-    }
-    throw py::value_error("Unsupported Buffer<> type.");
-}
-
-std::string type_to_format_descriptor(halide_type_t type) {
-#define HANDLE_TYPE(TYPE)                                      \
-    if (type == Runtime::Buffer<TYPE>::static_halide_type()) { \
-        return format_descriptor<TYPE>();                      \
-    }
-    HANDLE_TYPE(bool)
-    HANDLE_TYPE(uint8_t)
-    HANDLE_TYPE(uint16_t)
-    HANDLE_TYPE(uint32_t)
-    HANDLE_TYPE(uint64_t)
-    HANDLE_TYPE(int8_t)
-    HANDLE_TYPE(int16_t)
-    HANDLE_TYPE(int32_t)
-    HANDLE_TYPE(int64_t)
-    HANDLE_TYPE(float16_t)
-    HANDLE_TYPE(float)
-    HANDLE_TYPE(double)
-#undef HANDLE_TYPE
-    throw py::value_error("Unsupported Buffer<> type.");
-}
-
 std::string type_string(const halide_type_t &type) {
     std::ostringstream out;
     out << type;
@@ -113,12 +37,12 @@ std::string type_string(const halide_type_t &type) {
 
 template<typename T>
 T value_cast(const py::object &value) {
-    return value.cast<T>();
+    return py::cast<T>(value);
 }
 
 template<>
 float16_t value_cast<float16_t>(const py::object &value) {
-    return float16_t(value.cast<double>());
+    return float16_t(py::cast<double>(value));
 }
 
 class Buffer {
@@ -160,26 +84,17 @@ public:
         return *this;
     }
 
-    Buffer(py::buffer source, std::string name, bool reverse_axes)
-        : owner_(std::move(source)), identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
-        py::buffer_info info = py::reinterpret_borrow<py::buffer>(owner_).request(true);
-        if (info.ndim < 0 || info.ndim > INT32_MAX) {
+    Buffer(const PythonBuffer &source, std::string name, bool reverse_axes)
+        : identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
+        PythonArray array = source.request(true);
+        owner_ = py::cast(array, py::rv_policy::reference);
+        if (array.ndim() > INT32_MAX) {
             throw py::value_error("Out of range dimensionality in buffer conversion.");
         }
-        const halide_type_t type = format_descriptor_to_type(info.format, info.itemsize);
-        std::vector<halide_dimension_t> dims(info.ndim);
-        for (int i = 0; i < info.ndim; ++i) {
-            if (info.strides[i] % type.bytes() != 0) {
-                throw py::value_error("Buffer byte stride is not a multiple of its item size.");
-            }
-            const auto stride = info.strides[i] / type.bytes();
-            if (info.shape[i] < 0 || info.shape[i] > INT32_MAX || stride < INT32_MIN || stride > INT32_MAX) {
-                throw py::value_error("Out of range dimensions in buffer conversion.");
-            }
-            const int dst = reverse_axes ? info.ndim - i - 1 : i;
-            dims[dst] = {0, static_cast<int32_t>(info.shape[i]), static_cast<int32_t>(stride)};
-        }
-        buffer_ = RuntimeBuffer(type, info.ptr, info.ndim, dims.data());
+        const halide_type_t type = python_dtype_to_halide_type(array.dtype());
+        std::vector<halide_dimension_t> dims(array.ndim());
+        python_array_dimensions(array, dims.data(), reverse_axes);
+        buffer_ = RuntimeBuffer(type, const_cast<void *>(array.data()), array.ndim(), dims.data());
         runtime_buffer().set_host_dirty();
     }
 
@@ -205,7 +120,7 @@ public:
         Buffer result;
         result.borrowed_buffer_ = static_cast<RuntimeBuffer *>(PyCapsule_GetPointer(capsule.ptr(), runtime_buffer_capsule_name));
         if (!result.borrowed_buffer_) {
-            throw py::error_already_set();
+            throw py::python_error();
         }
         result.owner_ = std::move(owner);
         result.identity_ = std::make_shared<char>();
@@ -273,25 +188,13 @@ public:
         name_ = name;
     }
 
-    py::buffer_info buffer_info(bool reverse_axes) {
+    PythonMutableArray buffer_array(py::handle owner, bool reverse_axes) {
         require_defined();
-        RuntimeBuffer &buffer = runtime_buffer();
-        if (buffer.data() == nullptr) {
-            throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
-        }
-        const int d = buffer.dimensions();
-        const int bytes = buffer.type().bytes();
-        std::vector<py::ssize_t> shape(d), strides(d);
-        for (int i = 0; i < d; ++i) {
-            const int dst = reverse_axes ? d - i - 1 : i;
-            shape[dst] = buffer.dim(i).extent();
-            strides[dst] = static_cast<py::ssize_t>(buffer.dim(i).stride()) * bytes;
-        }
-        return py::buffer_info(buffer.data(), bytes, type_to_format_descriptor(buffer.type()), d, shape, strides);
+        return python_buffer_array(*runtime_buffer().raw_buffer(), owner, reverse_axes);
     }
 
-    py::array numpy_view(bool reverse_axes) {
-        return py::array(buffer_info(reverse_axes), py::cast(this));
+    py::object numpy_view(bool reverse_axes) {
+        return python_numpy_view(buffer_array(py::cast(this, py::rv_policy::reference), reverse_axes));
     }
 
     py::object getitem(const std::vector<int> &pos) {
@@ -390,10 +293,36 @@ public:
         throw py::value_error("Unsupported Buffer<> type.");
     }
 
+    void copy_from(const Buffer &other) {
+        check_copy_from(other);
+        runtime_buffer().copy_from(other.runtime_buffer());
+    }
+
 private:
     void require_defined() const {
         if (!defined_) {
             throw py::value_error("Undefined buffer");
+        }
+    }
+
+    // Runtime::Buffer::copy_from() reads the source at the destination's
+    // element size and crops both buffers along the destination's dimensions,
+    // so a mismatch in either reads (and crops) past the end of the source.
+    void check_copy_from(const Buffer &other) const {
+        require_defined();
+        other.require_defined();
+        const RuntimeBuffer &dst = runtime_buffer();
+        const RuntimeBuffer &src = other.runtime_buffer();
+        if (src.dimensions() != dst.dimensions()) {
+            std::ostringstream out;
+            out << "Cannot copy a buffer with " << src.dimensions() << " dimensions into a buffer with "
+                << dst.dimensions() << " dimensions.";
+            throw py::value_error(out.str().c_str());
+        }
+        if (src.type().bytes() != dst.type().bytes()) {
+            std::ostringstream out;
+            out << "Cannot copy a buffer of type " << src.type() << " into a buffer of type " << dst.type() << ".";
+            throw py::value_error(out.str().c_str());
         }
     }
 
@@ -409,7 +338,7 @@ private:
                 std::ostringstream out;
                 out << "index " << pos[i] << " is out of bounds for axis " << i
                     << " with min=" << dim.min() << ", extent=" << dim.extent();
-                throw py::index_error(out.str());
+                throw py::index_error(out.str().c_str());
             }
         }
     }
@@ -422,19 +351,48 @@ private:
     bool defined_ = false;
 };
 
+PythonMutableArray buffer_array(Buffer &b, py::handle owner, bool reverse_axes) {
+    return b.buffer_array(owner, reverse_axes);
+}
+
+// crop(), slice(), dim() and friends forward a dimension index straight to
+// Halide::Runtime::Buffer, whose only bounds check on it is an assert() that
+// compiles out of release builds. Validate here, like check_position() and
+// set_min() already do. embed() may name the dimension one past the end, so
+// allow that when for_embed is set.
+void check_dimension(const RuntimeBuffer &buffer, int d, bool for_embed = false) {
+    const int limit = buffer.dimensions() + (for_embed ? 1 : 0);
+    if (d < 0 || d >= limit) {
+        std::ostringstream out;
+        out << "Dimension " << d << " is out of range for a buffer with " << buffer.dimensions() << " dimensions.";
+        throw py::index_error(out.str().c_str());
+    }
+}
+
+// The vector overloads of crop() and translate() index one dimension per
+// entry, so a longer argument walks past the buffer's dimensions.
+void check_rank(const RuntimeBuffer &buffer, size_t n) {
+    if (n > static_cast<size_t>(buffer.dimensions())) {
+        throw py::value_error("Too many dimensions for this buffer.");
+    }
+}
+
+// transpose(order) requires exactly one entry per dimension; a different count
+// swaps dimensions past the end.
+void check_transpose_order(const RuntimeBuffer &buffer, const std::vector<int> &order) {
+    if (order.size() != static_cast<size_t>(buffer.dimensions())) {
+        throw py::value_error("transpose() requires exactly one entry per dimension.");
+    }
+}
+
 }  // namespace
 
 void define_buffer(py::module_ &m) {
     py::class_<halide_type_t>(m, "Type")
-        .def(py::init([](int code, int bits) {
-                 return halide_type_t(static_cast<halide_type_code_t>(code), static_cast<uint8_t>(bits));
-             }),
-             py::arg("code"), py::arg("bits"))
+        .def("__init__", [](halide_type_t *self, int code, int bits) { new (self) halide_type_t(halide_type_t(static_cast<halide_type_code_t>(code), static_cast<uint8_t>(bits))); }, py::arg("code"), py::arg("bits"))
         .def("code", [](const halide_type_t &type) { return static_cast<int>(type.code); })
         .def("bits", [](const halide_type_t &type) { return type.bits; })
-        .def("__eq__", [](const halide_type_t &a, const py::object &other) {
-            return py::isinstance<halide_type_t>(other) && a == other.cast<halide_type_t>();
-        })
+        .def("__eq__", [](const halide_type_t &a, const py::object &other) { return py::isinstance<halide_type_t>(other) && a == py::cast<halide_type_t>(other); }, py::arg("other").none())
         .def("__str__", &type_string)
         .def("__repr__", &type_string);
 
@@ -444,10 +402,10 @@ void define_buffer(py::module_ &m) {
         .def("extent", &BufferDimension::extent)
         .def("max", &BufferDimension::max);
 
-    py::class_<Buffer>(m, "Buffer", py::buffer_protocol())
+    py::class_<Buffer>(m, "Buffer", py::type_slots(python_buffer_slots<Buffer, buffer_array>))
         .def(py::init<>())
         .def(py::init<const Buffer &>(), py::keep_alive<1, 2>())
-        .def(py::init<py::buffer, std::string, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
+        .def(py::init<PythonBuffer, std::string, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
         .def(py::init<halide_type_t, const std::vector<int> &, std::string>(),
              py::arg("type"), py::arg("sizes"), py::arg("name") = "")
         .def(py::init<halide_type_t, const std::vector<int> &, const std::vector<int> &, std::string>(),
@@ -458,7 +416,6 @@ void define_buffer(py::module_ &m) {
         .def_static("make_scalar", &Buffer::make_scalar, py::arg("type"), py::arg("name") = "")
         .def_static("make_interleaved", &Buffer::make_interleaved, py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
         .def_static("make_with_shape_of", &Buffer::make_with_shape_of, py::arg("src"), py::arg("name") = "")
-        .def_buffer([](Buffer &b) { return b.buffer_info(true); })
         .def("numpy_view", &Buffer::numpy_view, py::arg("reverse_axes") = true)
         .def("set_name", &Buffer::set_name)
         .def("name", &Buffer::name)
@@ -481,7 +438,7 @@ void define_buffer(py::module_ &m) {
         .def("set_host_dirty", [](Buffer &b, bool dirty) { b.runtime_buffer().set_host_dirty(dirty); }, py::arg("dirty") = true)
         .def("set_device_dirty", [](Buffer &b, bool dirty) { b.runtime_buffer().set_device_dirty(dirty); }, py::arg("dirty") = true)
         .def("copy", [](const Buffer &b) { return Buffer::from_runtime(b.runtime_buffer().copy(), unique_name(), true); })
-        .def("copy_from", [](Buffer &b, const Buffer &other) { b.runtime_buffer().copy_from(other.runtime_buffer()); })
+        .def("copy_from", &Buffer::copy_from)
         .def("reverse_axes", [](const Buffer &b) {
             std::vector<int> order;
             for (int i = b.runtime_buffer().dimensions() - 1; i >= 0; --i) {
@@ -492,28 +449,28 @@ void define_buffer(py::module_ &m) {
         .def("allocate", [](Buffer &b) { b.runtime_buffer().allocate(nullptr, nullptr); })
         .def("deallocate", [](Buffer &b) { b.runtime_buffer().deallocate(); })
         .def("device_deallocate", [](Buffer &b) { b.runtime_buffer().device_deallocate(); })
-        .def("crop", [](Buffer &b, int d, int min, int extent) { b.runtime_buffer().crop(d, min, extent); }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
-        .def("crop", [](Buffer &b, const std::vector<std::pair<int, int>> &rect) { b.runtime_buffer().crop(rect); }, py::arg("rect"))
-        .def("cropped", [](const Buffer &b, int d, int min, int extent) { return b.view(b.runtime_buffer().cropped(d, min, extent)); })
-        .def("cropped", [](const Buffer &b, const std::vector<std::pair<int, int>> &rect) { return b.view(b.runtime_buffer().cropped(rect)); })
-        .def("embed", [](Buffer &b, int d, int pos) { b.runtime_buffer().embed(d, pos); })
-        .def("embed", [](Buffer &b, int d) { b.runtime_buffer().embed(d); })
-        .def("embedded", [](const Buffer &b, int d, int pos) { return b.view(b.runtime_buffer().embedded(d, pos)); })
-        .def("embedded", [](const Buffer &b, int d) { return b.view(b.runtime_buffer().embedded(d)); })
-        .def("slice", [](Buffer &b, int d, int pos) { b.runtime_buffer().slice(d, pos); })
-        .def("slice", [](Buffer &b, int d) { b.runtime_buffer().slice(d); })
-        .def("sliced", [](const Buffer &b, int d, int pos) { return b.view(b.runtime_buffer().sliced(d, pos)); })
-        .def("sliced", [](const Buffer &b, int d) { return b.view(b.runtime_buffer().sliced(d)); })
-        .def("translate", [](Buffer &b, int d, int dx) { b.runtime_buffer().translate(d, dx); })
-        .def("translate", [](Buffer &b, const std::vector<int> &delta) { b.runtime_buffer().translate(delta); })
-        .def("translated", [](const Buffer &b, int d, int dx) { return b.view(b.runtime_buffer().translated(d, dx)); })
-        .def("translated", [](const Buffer &b, const std::vector<int> &delta) { return b.view(b.runtime_buffer().translated(delta)); })
-        .def("transpose", [](Buffer &b, int d1, int d2) { b.runtime_buffer().transpose(d1, d2); })
-        .def("transpose", [](Buffer &b, const std::vector<int> &order) { b.runtime_buffer().transpose(order); })
-        .def("transposed", [](const Buffer &b, int d1, int d2) { return b.view(b.runtime_buffer().transposed(d1, d2)); })
-        .def("transposed", [](const Buffer &b, const std::vector<int> &order) { return b.view(b.runtime_buffer().transposed(order)); })
-        .def("dim", [](Buffer &b, int dimension) { return b.runtime_buffer().dim(dimension); }, py::keep_alive<0, 1>())
-        .def("for_each_element", [](Buffer &b, const py::function &f) {
+        .def("crop", [](Buffer &b, int d, int min, int extent) { check_dimension(b.runtime_buffer(), d); b.runtime_buffer().crop(d, min, extent); }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        .def("crop", [](Buffer &b, const std::vector<std::pair<int, int>> &rect) { check_rank(b.runtime_buffer(), rect.size()); b.runtime_buffer().crop(rect); }, py::arg("rect"))
+        .def("cropped", [](const Buffer &b, int d, int min, int extent) { check_dimension(b.runtime_buffer(), d); return b.view(b.runtime_buffer().cropped(d, min, extent)); })
+        .def("cropped", [](const Buffer &b, const std::vector<std::pair<int, int>> &rect) { check_rank(b.runtime_buffer(), rect.size()); return b.view(b.runtime_buffer().cropped(rect)); })
+        .def("embed", [](Buffer &b, int d, int pos) { check_dimension(b.runtime_buffer(), d, /*for_embed*/ true); b.runtime_buffer().embed(d, pos); })
+        .def("embed", [](Buffer &b, int d) { check_dimension(b.runtime_buffer(), d, /*for_embed*/ true); b.runtime_buffer().embed(d); })
+        .def("embedded", [](const Buffer &b, int d, int pos) { check_dimension(b.runtime_buffer(), d, /*for_embed*/ true); return b.view(b.runtime_buffer().embedded(d, pos)); })
+        .def("embedded", [](const Buffer &b, int d) { check_dimension(b.runtime_buffer(), d, /*for_embed*/ true); return b.view(b.runtime_buffer().embedded(d)); })
+        .def("slice", [](Buffer &b, int d, int pos) { check_dimension(b.runtime_buffer(), d); b.runtime_buffer().slice(d, pos); })
+        .def("slice", [](Buffer &b, int d) { check_dimension(b.runtime_buffer(), d); b.runtime_buffer().slice(d); })
+        .def("sliced", [](const Buffer &b, int d, int pos) { check_dimension(b.runtime_buffer(), d); return b.view(b.runtime_buffer().sliced(d, pos)); })
+        .def("sliced", [](const Buffer &b, int d) { check_dimension(b.runtime_buffer(), d); return b.view(b.runtime_buffer().sliced(d)); })
+        .def("translate", [](Buffer &b, int d, int dx) { check_dimension(b.runtime_buffer(), d); b.runtime_buffer().translate(d, dx); })
+        .def("translate", [](Buffer &b, const std::vector<int> &delta) { check_rank(b.runtime_buffer(), delta.size()); b.runtime_buffer().translate(delta); })
+        .def("translated", [](const Buffer &b, int d, int dx) { check_dimension(b.runtime_buffer(), d); return b.view(b.runtime_buffer().translated(d, dx)); })
+        .def("translated", [](const Buffer &b, const std::vector<int> &delta) { check_rank(b.runtime_buffer(), delta.size()); return b.view(b.runtime_buffer().translated(delta)); })
+        .def("transpose", [](Buffer &b, int d1, int d2) { check_dimension(b.runtime_buffer(), d1); check_dimension(b.runtime_buffer(), d2); b.runtime_buffer().transpose(d1, d2); })
+        .def("transpose", [](Buffer &b, const std::vector<int> &order) { check_transpose_order(b.runtime_buffer(), order); b.runtime_buffer().transpose(order); })
+        .def("transposed", [](const Buffer &b, int d1, int d2) { check_dimension(b.runtime_buffer(), d1); check_dimension(b.runtime_buffer(), d2); return b.view(b.runtime_buffer().transposed(d1, d2)); })
+        .def("transposed", [](const Buffer &b, const std::vector<int> &order) { check_transpose_order(b.runtime_buffer(), order); return b.view(b.runtime_buffer().transposed(order)); })
+        .def("dim", [](Buffer &b, int dimension) { check_dimension(b.runtime_buffer(), dimension); return b.runtime_buffer().dim(dimension); }, py::keep_alive<0, 1>())
+        .def("for_each_element", [](Buffer &b, const py::callable &f) {
             std::vector<int> position(b.runtime_buffer().dimensions());
             b.runtime_buffer().for_each_element([&](const int *pos) {
                 std::copy(pos, pos + position.size(), position.begin());

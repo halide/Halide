@@ -76,7 +76,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     }
 
     int lanes = op->type.lanes();
-    auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type, this);
 
     if (rewrite(min(IRMatcher::Overflow(), x), a) ||
         rewrite(min(x, IRMatcher::Overflow()), b)) {
@@ -131,9 +131,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
 
          (no_overflow(op->type) &&
           (rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), a,
-                   can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
+                   can_prove(x + y * (lanes - 1) <= z && x <= z)) ||
            rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), b,
-                   can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
+                   can_prove(x + y * (lanes - 1) >= z && x >= z)) ||
            // Compare x to a stair-step function in x
            rewrite(min(((x + c0) / c1) * c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
            rewrite(min(x, ((x + c0) / c1) * c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||

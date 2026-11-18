@@ -460,6 +460,7 @@ SOURCE_FILES = \
   Bounds.cpp \
   BoundsInference.cpp \
   BoundSmallAllocations.cpp \
+  BoundsTracker.cpp \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
@@ -508,6 +509,7 @@ SOURCE_FILES = \
   Error.cpp \
   Expr.cpp \
   ExtractTileOperations.cpp \
+  ExtractWMMAOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
@@ -667,6 +669,7 @@ HEADER_FILES = \
   Bounds.h \
   BoundsInference.h \
   BoundSmallAllocations.h \
+  BoundsTracker.h \
   Buffer.h \
   Callable.h \
   CanonicalizeGPUVars.h \
@@ -715,6 +718,7 @@ HEADER_FILES = \
   Extern.h \
   ExternFuncArgument.h \
   ExtractTileOperations.h \
+  ExtractWMMAOperations.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
@@ -852,6 +856,8 @@ RUNTIME_CPP_COMPONENTS = \
   fopen \
   fopen_lfs \
   force_include_types \
+  freebsd_host_cpu_count \
+  freebsd_thread_id \
   fuchsia_clock \
   fuchsia_host_cpu_count \
   fuchsia_thread_id \
@@ -2513,7 +2519,6 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 ifeq ($(UNAME), Darwin)
@@ -2587,15 +2592,12 @@ $(DISTRIB_DIR)/halide.tgz: distrib
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
-$(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
-	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
-
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: format
 format:
@@ -2603,7 +2605,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-22
 
 .PHONY: clang-tidy
 clang-tidy:

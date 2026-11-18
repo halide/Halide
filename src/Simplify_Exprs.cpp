@@ -56,7 +56,7 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *info) {
 
     const int lanes = op->lanes;
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type, this);
     if (rewrite(broadcast(broadcast(x, c0), lanes), broadcast(x, c0 * lanes)) ||
         rewrite(broadcast(IRMatcher::Overflow(), lanes), IRMatcher::Overflow()) ||
         false) {
@@ -152,7 +152,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
 
     switch (op->op) {
     case VectorReduce::Add: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type, this);
         if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes)) ||
@@ -164,7 +164,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::Min: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type, this);
         if (rewrite(h_min(min(x, broadcast(y, arg_lanes)), lanes), min(h_min(x, lanes), broadcast(y, lanes))) ||
             rewrite(h_min(min(broadcast(x, arg_lanes), y), lanes), min(h_min(y, lanes), broadcast(x, lanes))) ||
             rewrite(h_min(max(x, broadcast(y, arg_lanes)), lanes), max(h_min(x, lanes), broadcast(y, lanes))) ||
@@ -182,7 +182,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::Max: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_max(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_max(value, lanes), op->type, this);
         if (rewrite(h_max(min(x, broadcast(y, arg_lanes)), lanes), min(h_max(x, lanes), broadcast(y, lanes))) ||
             rewrite(h_max(min(broadcast(x, arg_lanes), y), lanes), min(h_max(y, lanes), broadcast(x, lanes))) ||
             rewrite(h_max(max(x, broadcast(y, arg_lanes)), lanes), max(h_max(x, lanes), broadcast(y, lanes))) ||
@@ -200,7 +200,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::And: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type, this);
         if (rewrite(h_and(x || broadcast(y, arg_lanes), lanes), h_and(x, lanes) || broadcast(y, lanes)) ||
             rewrite(h_and(broadcast(x, arg_lanes) || y, lanes), h_and(y, lanes) || broadcast(x, lanes)) ||
             rewrite(h_and(x && broadcast(y, arg_lanes), lanes), h_and(x, lanes) && broadcast(y, lanes)) ||
@@ -233,7 +233,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::Or: {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type, this);
         if (rewrite(h_or(x || broadcast(y, arg_lanes), lanes), h_or(x, lanes) || broadcast(y, lanes)) ||
             rewrite(h_or(broadcast(x, arg_lanes) || y, lanes), h_or(y, lanes) || broadcast(x, lanes)) ||
             rewrite(h_or(x && broadcast(y, arg_lanes), lanes), h_or(x, lanes) && broadcast(y, lanes)) ||
@@ -266,8 +266,24 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     }
 }
 
+bool Simplify::known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi) {
+    if (e->node_type == IRNodeType::Broadcast) {
+        e = ((const Broadcast *)e)->value.get();
+    }
+    if (e->node_type == IRNodeType::IntImm) {
+        const int64_t v = ((const IntImm *)e)->value;
+        return lo <= v && v < hi;
+    } else if (e->node_type == IRNodeType::Variable) {
+        if (const ExprInfo *b = find_bounds_and_alignment_info(((const Variable *)e)->name)) {
+            return (b->bounds.min_defined && lo <= b->bounds.min &&
+                    b->bounds.max_defined && b->bounds.max < hi);
+        }
+    }
+    return false;
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *info) {
-    if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
+    if (const ExprInfo *b = find_bounds_and_alignment_info(op->name)) {
         if (info) {
             *info = *b;
         }
@@ -332,7 +348,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
     // but it helps to have as many rules as possible written as
     // formal rewrites, so that they can be formally verified,
     // etc.
-    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type, this);
     if (rewrite(ramp(x, 0, lanes), broadcast(x, lanes)) ||
         rewrite(ramp(ramp(x, c0, c2), broadcast(c1, c4), c3),
                 ramp(x, c0, c2 * c3),
@@ -373,7 +389,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     // unreachable loads.
     if (is_const_one(op->predicate)) {
         string alloc_extent_name = op->name + ".total_extent_bytes";
-        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+        if (const auto *alloc_info = find_bounds_and_alignment_info(alloc_extent_name)) {
             if (index_info.bounds < 0 ||
                 index_info.bounds * op->type.bytes() > alloc_info->bounds) {
                 in_unreachable = true;
@@ -423,12 +439,20 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
+    } else if (auto repeat_factor = s_index ? s_index->is_repeat_each_lane() : std::nullopt;
+               repeat_factor && is_const_one(predicate)) {
+        // A load of a repeat of each lane of an index vector is a repeat of
+        // each lane of the load.
+        Expr new_index = s_index->vectors[0];
+        int new_lanes = new_index.type().lanes();
+        Expr load = op->with(new_index, const_true(new_lanes, nullptr), ModulusRemainder{});
+        return Shuffle::make_repeat_each_lane(mutate(load, info), *repeat_factor);
     } else if (MultiRamp mr;
                index.type().is_vector() &&
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
                // It's a multi-dimensional multiramp.
-               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr, let_var_alignment()) &&
                mr.dimensions() > 1 &&
                // The innermost stride isn't already one.
                !is_const_one(mr.strides[0]) &&
@@ -450,6 +474,14 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             op->with(mr.to_expr(), permuted_predicate, align);
         int B = op->type.lanes() / A;
         return mutate(Shuffle::make_transpose(permuted_load, B), info);
+    } else if (mr.dimensions() >= 1 &&
+               is_const_one(mr.strides[0]) &&
+               !mr.matches_expr(index)) {
+        // The index is a multiramp that is already dense innermost, but it's
+        // spelled some other way (e.g. with vector div and mod). Write it as
+        // nested ramps, which later become a concat of dense loads (or as a
+        // single dense ramp, if it has one dim).
+        return op->with(mr.to_expr(), predicate, align);
     } else {
         return op->with(index, predicate, align);
     }

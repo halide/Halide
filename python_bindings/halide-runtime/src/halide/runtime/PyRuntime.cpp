@@ -1,7 +1,7 @@
 // The `halide.runtime` extension module.
 //
 // This module deliberately depends ONLY on the header-only Halide runtime
-// (HalideRuntime.h / HalideBuffer.h) and pybind11 -- it must NOT depend on
+// (HalideRuntime.h / HalideBuffer.h) and nanobind -- it must NOT depend on
 // libHalide. It provides just enough to load a precompiled AOT Halide kernel
 // (a shared object exporting `<name>_argv` and `<name>_metadata`) and call it
 // with buffer-protocol objects (e.g. NumPy arrays) and Python scalars.
@@ -11,9 +11,12 @@
 // `halide.Buffer` (from the compiler module) flows through a duck-typed,
 // named-capsule protocol, so no libHalide types cross the boundary.
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <pybind11/stl/filesystem.h>
+#include "PyBufferProtocol.h"
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <climits>
 #include <cstdint>
@@ -33,7 +36,7 @@
 #include <dlfcn.h>
 #endif
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 namespace {
 
@@ -56,109 +59,6 @@ struct PythonRuntimeAPI {
                              int expose_user_context,
                              int log_errors_to_stderr);
 };
-
-bool unpack_buffer(PyObject *py_obj,
-                   int py_getbuffer_flags,
-                   const char *name,
-                   int dimensions,
-                   Py_buffer &py_buf,
-                   halide_dimension_t *halide_dim,
-                   halide_buffer_t &halide_buf,
-                   bool &py_buf_valid,
-                   bool &needs_device_free) {
-    py_buf_valid = false;
-    needs_device_free = false;
-
-    std::memset(&py_buf, 0, sizeof(py_buf));
-    if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | py_getbuffer_flags) < 0) {
-        return false;
-    }
-    py_buf_valid = true;
-
-    if (dimensions && py_buf.ndim != dimensions) {
-        PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
-        return false;
-    }
-    if (py_buf.itemsize <= 0) {
-        PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer item size must be positive", name);
-        return false;
-    }
-    // Always reverse axes.
-    // TODO(jiawen): Consolidate this with similar code in PyCallable.cpp and
-    // pybufferinfo_to_halidebuffer() in PyBuffer.h.
-    for (int i = 0; i < py_buf.ndim; ++i) {
-        const int j = py_buf.ndim - 1 - i;
-        if (py_buf.shape[j] < 0 || py_buf.shape[j] > INT32_MAX) {
-            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer extent is out of range", name);
-            return false;
-        }
-        if (py_buf.strides[j] % py_buf.itemsize != 0) {
-            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer byte stride is not a multiple of its item size", name);
-            return false;
-        }
-        const Py_ssize_t element_stride = py_buf.strides[j] / py_buf.itemsize;
-        if (element_stride < INT32_MIN || element_stride > INT32_MAX) {
-            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer stride is out of range", name);
-            return false;
-        }
-        halide_dim[i].min = 0;
-        halide_dim[i].stride = static_cast<int32_t>(element_stride);
-        halide_dim[i].extent = static_cast<int32_t>(py_buf.shape[j]);
-        halide_dim[i].flags = 0;
-        if (py_buf.suboffsets && py_buf.suboffsets[j] >= 0) {
-            PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
-            return false;
-        }
-    }
-
-    halide_buf = {};
-    if (!py_buf.format) {
-        if (py_buf.itemsize != 1) {
-            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Missing format for a multi-byte buffer", name);
-            return false;
-        }
-        halide_buf.type.code = halide_type_uint;
-        halide_buf.type.bits = 8;
-    } else {
-        const char *p = py_buf.format;
-        char byte_order = '@';
-        if (std::strchr("@<>!=", *p)) {
-            byte_order = *p++;
-        }
-        const uint16_t endian_test = 1;
-        const bool native_is_little_endian = *reinterpret_cast<const uint8_t *>(&endian_test) == 1;
-        const bool non_native_byte_order =
-            (native_is_little_endian && (byte_order == '>' || byte_order == '!')) ||
-            (!native_is_little_endian && byte_order == '<');
-        if (non_native_byte_order && py_buf.itemsize > 1) {
-            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Non-native byte order %s is not supported", name, py_buf.format);
-            return false;
-        }
-        if (*p == 'f' || *p == 'd' || *p == 'e') {
-            halide_buf.type.code = halide_type_float;
-        } else if (*p >= 'a' && *p <= 'z') {
-            halide_buf.type.code = halide_type_int;
-        } else {
-            halide_buf.type.code = halide_type_uint;
-        }
-        const char *type_codes = "bBhHiIlLqQfde";
-        if (*p == '?' && p[1] == '\0' && py_buf.itemsize == 1) {
-            halide_buf.type.bits = 1;
-        } else if (std::strchr(type_codes, *p) && p[1] == '\0' &&
-                   (py_buf.itemsize == 1 || py_buf.itemsize == 2 ||
-                    py_buf.itemsize == 4 || py_buf.itemsize == 8)) {
-            halide_buf.type.bits = static_cast<uint8_t>(py_buf.itemsize * 8);
-        } else {
-            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, py_buf.format);
-            return false;
-        }
-    }
-    halide_buf.dimensions = py_buf.ndim;
-    halide_buf.dim = halide_dim;
-    halide_buf.host = static_cast<uint8_t *>(py_buf.buf);
-    needs_device_free = true;
-    return true;
-}
 
 // ---------------------------------------------------------------------------
 // Cross-platform dynamic library handling
@@ -355,9 +255,8 @@ public:
         halide_scalar_value_t scalar{};
         halide_buffer_t buffer{};
         std::vector<halide_dimension_t> dims;
-        Py_buffer py_buf{};
+        PythonArray array;
         py::object capsule;
-        bool py_buf_valid = false;
         bool needs_device_free = false;
     };
 
@@ -367,16 +266,13 @@ public:
         std::vector<ArgSlot> slots(argc);
         std::vector<void *> argv(argc, nullptr);
 
-        // Release any Python buffers / device allocations on scope exit.
+        // Release device allocations before the imported ndarrays.
         struct Cleanup {
             std::vector<ArgSlot> &slots;
             ~Cleanup() {
                 for (auto &s : slots) {
                     if (s.needs_device_free) {
                         device_free(&s.buffer);
-                    }
-                    if (s.py_buf_valid) {
-                        PyBuffer_Release(&s.py_buf);
                     }
                 }
             }
@@ -499,8 +395,7 @@ private:
     }
 
     // Convert one buffer-protocol / Halide-buffer argument into a halide_buffer_t.
-    // Uses the shared named-capsule fast path first, then falls back
-    // to the shared unpack_buffer() implementation.
+    // Uses the named-capsule fast path first, then imports an ndarray.
     halide_buffer_t *unpack_buffer_arg(const halide_filter_argument_t &a,
                                        py::handle value,
                                        bool writable,
@@ -516,21 +411,26 @@ private:
             void *ptr = PyCapsule_GetPointer(
                 capsule.ptr(), Halide::PythonRuntimeBindings::halide_buffer_capsule_name);
             if (!ptr) {
-                throw py::error_already_set();
+                throw py::python_error();
             }
             slot.capsule = std::move(capsule);
             return static_cast<halide_buffer_t *>(ptr);
         }
 
         // General path: buffer-protocol object (e.g. NumPy array).
-        slot.dims.resize(a.dimensions > 0 ? a.dimensions : 1);
-        bool ok = unpack_buffer(
-            value.ptr(), writable ? PyBUF_WRITABLE : 0, a.name, a.dimensions,
-            slot.py_buf, slot.dims.data(), slot.buffer, slot.py_buf_valid,
-            slot.needs_device_free);
-        if (!ok) {
-            throw py::error_already_set();
+        slot.array = py::borrow<PythonBuffer>(value).request(writable);
+        if (a.dimensions && slot.array.ndim() != static_cast<size_t>(a.dimensions)) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d",
+                         a.name, a.dimensions, static_cast<int>(slot.array.ndim()));
+            throw py::python_error();
         }
+        slot.dims.resize(slot.array.ndim());
+        python_array_dimensions(slot.array, slot.dims.data(), true);
+        slot.buffer.type = python_dtype_to_halide_type(slot.array.dtype());
+        slot.buffer.dimensions = static_cast<int>(slot.array.ndim());
+        slot.buffer.dim = slot.dims.data();
+        slot.buffer.host = static_cast<uint8_t *>(const_cast<void *>(slot.array.data()));
+        slot.needs_device_free = true;
         return &slot.buffer;
     }
 
@@ -616,7 +516,7 @@ PyObject *make_borrowed_kernel(const char *name,
         py::object result = py::cast(make_kernel(
             nullptr, argv_fn, md, name ? name : "", expose_user_context != 0));
         return result.release().ptr();
-    } catch (py::error_already_set &e) {
+    } catch (py::python_error &e) {
         e.restore();
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -671,18 +571,19 @@ std::shared_ptr<Kernel> load(const std::filesystem::path &path_obj, const py::ob
 
 }  // namespace
 
-PYBIND11_MODULE(_runtime, m) {
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
+NB_MODULE(_runtime, m) {
     m.doc() = "Standalone Halide runtime: load and call precompiled AOT kernels "
               "without depending on libHalide.";
 
     Halide::PythonRuntimeBindings::define_buffer(m);
 
-    py::class_<Kernel, std::shared_ptr<Kernel>>(m, "Kernel")
+    py::class_<Kernel>(m, "Kernel")
         .def("__call__", &Kernel::call)
-        .def_property_readonly("name", &Kernel::name)
-        .def_property_readonly("target", &Kernel::target)
-        .def_property_readonly("argument_names", &Kernel::argument_names)
-        .def_property_readonly("arguments", &Kernel::arguments)
+        .def_prop_ro("name", &Kernel::name)
+        .def_prop_ro("target", &Kernel::target)
+        .def_prop_ro("argument_names", &Kernel::argument_names)
+        .def_prop_ro("arguments", &Kernel::arguments)
         .def("__repr__", [](const Kernel &k) {
             return "<halide.runtime.Kernel '" + k.name() + "'>";
         });

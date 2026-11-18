@@ -1,11 +1,17 @@
 {
   "name": "halide",
-  "version": "22.0.0",
+  "version": "23.0.0",
   "description": "Halide is a programming language designed to make it easier to write high-performance image and array processing code on modern machines.",
   "homepage": "https://github.com/halide/Halide",
   "license": "MIT",
   "supports": "!uwp",
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+  "overrides": [
+    {
+      "name": "nanobind",
+      "version": "2.11.0"
+    }
+  ],
   "default-features": [
     "jit"
   ],
@@ -82,7 +88,7 @@
     "python-bindings": {
       "description": "Halide's native Python module (not the whole pip package)",
       "dependencies": [
-        "pybind11"
+        "nanobind"
       ]
     },
     "serialization": {

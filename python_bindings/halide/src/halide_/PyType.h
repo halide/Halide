@@ -11,7 +11,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(UnspecifiedType);
 namespace Halide {
 namespace PythonBindings {
 
-void define_type(py::module &m);
+void define_type(py::module_ &m);
 
 std::string halide_type_to_string(const Type &type);
 

@@ -138,14 +138,13 @@ public:
 
         // Mix in existing knowledge about this Expr
         void intersect(const ExprInfo &other) {
-            if (bounds < other.bounds || other.bounds < bounds) {
+            if (!bounds.intersect_if_nonempty(other.bounds)) {
                 // Impossible. We must be in unreachable code. TODO: It might
                 // be nice to surface this to the simplify instance's
                 // in_unreachable flag, but we'd have to be sure that it's going
                 // to be caught at the right place.
                 return;
             }
-            bounds = ConstantInterval::make_intersection(bounds, other.bounds);
             alignment = ModulusRemainder::intersect(alignment, other.alignment);
             trim_bounds_using_alignment();
         }
@@ -235,13 +234,13 @@ public:
         // infer everything there is to infer about a constant. The best we can
         // do at this point is just wrap to the right number of bits.
         int dropped_bits = 64 - t.bits();
+        // Shift left as unsigned, since left-shifting a negative value is UB.
         if (t.is_int()) {
-            c <<= dropped_bits;
+            c = (int64_t)((uint64_t)c << dropped_bits);
             c >>= dropped_bits;  // sign-extend
         } else if (t.is_uint()) {
             // For uints, normalization is considerably less problematic
-            c <<= dropped_bits;
-            c = (int64_t)(((uint64_t)c >> dropped_bits));  // zero-extend
+            c = (int64_t)(((uint64_t)c << dropped_bits) >> dropped_bits);  // zero-extend
         }
         return c;
     }
@@ -392,6 +391,38 @@ public:
 
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
+
+    // Bounds and alignment of free variables, lazily copied into
+    // bounds_and_alignment_info on first lookup.
+    const Scope<Interval> *outer_bounds;
+    const Scope<ModulusRemainder> *outer_alignment;
+    const ExprInfo *find_outer_bounds_and_alignment_info(const std::string &name);
+
+    HALIDE_ALWAYS_INLINE
+    const ExprInfo *find_bounds_and_alignment_info(const std::string &name) {
+        if (const ExprInfo *info = bounds_and_alignment_info.find(name)) {
+            return info;
+        }
+        return find_outer_bounds_and_alignment_info(name);
+    }
+
+    /** Looks up the alignment of let and free vars (see
+     * find_bounds_and_alignment_info), for analyses that take an
+     * AlignmentLookup. */
+    AlignmentLookup let_var_alignment() {
+        return [this](const std::string &name) {
+            const ExprInfo *info = find_bounds_and_alignment_info(name);
+            return info ? info->alignment : ModulusRemainder{};
+        };
+    }
+
+    /** Whether e is known to lie in [lo, hi): an integer constant, or a
+     * variable with known constant bounds (see
+     * find_bounds_and_alignment_info), or a broadcast of either. Doesn't
+     * simplify or build any IR, so it is safe to call with the raw node a
+     * rewrite rule has bound to a wildcard (see IRMatcher::in_range). Returns
+     * false when nothing is known. */
+    bool known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi);
 
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;

@@ -3,6 +3,10 @@
 A tiny, standalone runtime for calling **precompiled Halide AOT kernels** from
 Python, with **no dependency on libHalide** (no compiler, no LLVM).
 
+Requires regular, GIL-enabled CPython 3.12 or newer. The `cp312-abi3` wheels use
+the stable Python ABI and work unchanged on newer regular CPython versions;
+free-threaded Python is not supported.
+
 ```shell
 pip install halide-runtime
 uv add halide-runtime

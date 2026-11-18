@@ -378,9 +378,9 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
         // Check if shuffle can be treated as a broadcast.
         if (const Shuffle *shuff = x.as<Shuffle>()) {
             int factor = x.type().lanes() / ty.lanes();
-            if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
-                                                                   shuff->indices.begin() + ty.lanes()));
+            if (auto broadcast_factor = shuff->is_broadcast();
+                broadcast_factor && *broadcast_factor % factor == 0) {
+                x = Shuffle::make_broadcast(shuff->vectors[0], *broadcast_factor / factor);
             }
         }
     }
@@ -521,7 +521,7 @@ class OptimizePatterns : public IRMutator {
             }
             std::stable_sort(mpys.begin(), mpys.end(),
                              [](const MulExpr &m1, const MulExpr &m2) {
-                                 return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+                                 return m1.first.as<Shuffle>()->indices[0] < m2.first.as<Shuffle>()->indices[0];
                              });
             return;
         } else if (const Load *first_load = mpys[0].first.as<Load>()) {
@@ -1271,16 +1271,16 @@ class VectorReducePatterns : public IRMutator {
 
             if (sig.flags & Signature::ScalarB) {
                 if (const Shuffle *shuff = b.as<Shuffle>()) {
-                    if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                        internal_assert(shuff->vectors.size() == 1);
-                        b = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
+                    if (shuff->is_broadcast() && factor % shuff->vectors[0].type().lanes() == 0) {
+                        const Expr &v = shuff->vectors[0];
+                        b = Shuffle::make_broadcast(v, factor / v.type().lanes());
                     }
                 } else if (const Shuffle *shuff = a.as<Shuffle>()) {
                     // If the types are equal, we can commute the ops.
                     if (a.type().element_of() == b.type().element_of() &&
-                        shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                        internal_assert(shuff->vectors.size() == 1);
-                        a = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
+                        shuff->is_broadcast() && factor % shuff->vectors[0].type().lanes() == 0) {
+                        const Expr &v = shuff->vectors[0];
+                        a = Shuffle::make_broadcast(v, factor / v.type().lanes());
                         std::swap(a, b);
                     }
                 }

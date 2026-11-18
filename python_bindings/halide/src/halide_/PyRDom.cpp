@@ -6,12 +6,12 @@ namespace Halide {
 namespace PythonBindings {
 
 namespace {
-void define_rvar(py::module &m) {
+void define_rvar(py::module_ &m) {
     auto rvar_class =
         py::class_<RVar>(m, "RVar")
             .def(py::init<>())
             .def(py::init<std::string>(), py::arg("name"))
-            .def(py::init([](const RDom &r) -> RVar { return r; }))
+            .def("__init__", [](RVar *self, const RDom &r) { new (self) RVar(r); })
             .def("min", &RVar::min)
             .def("extent", &RVar::extent)
             .def("name", &RVar::name)
@@ -27,7 +27,7 @@ void define_rvar(py::module &m) {
 }
 }  // namespace
 
-void define_rdom(py::module &m) {
+void define_rdom(py::module_ &m) {
     define_rvar(m);
 
     // A small iterator wrapper to expose RDom iteration to Python.
@@ -72,14 +72,14 @@ void define_rdom(py::module &m) {
             .def("where", &RDom::where, py::arg("predicate"))
             .def("__getitem__", [](RDom &r, const int i) -> RVar {
                 if (i < 0 || i >= r.dimensions()) {
-                    throw pybind11::key_error();
+                    throw nanobind::key_error();
                 }
                 return r[i];  //
             })
-            .def_readonly("x", &RDom::x)
-            .def_readonly("y", &RDom::y)
-            .def_readonly("z", &RDom::z)
-            .def_readonly("w", &RDom::w)
+            .def_ro("x", &RDom::x)
+            .def_ro("y", &RDom::y)
+            .def_ro("z", &RDom::z)
+            .def_ro("w", &RDom::w)
             .def("__repr__", [](const RDom &r) -> std::string {
                 std::ostringstream o;
                 o << "<halide.RDom " << r << ">";

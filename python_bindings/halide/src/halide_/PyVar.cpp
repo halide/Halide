@@ -15,7 +15,7 @@ std::string var_repr(const Var &var) {
 
 }  // namespace
 
-void define_var(py::module &m) {
+void define_var(py::module_ &m) {
     auto var_class =
         py::class_<Var>(m, "Var")
             .def(py::init<>())

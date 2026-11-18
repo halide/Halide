@@ -12,6 +12,10 @@ of a Halide pipeline using Halide's Python API. You can then compile this
 representation to an object file, or JIT-compile it and run it in the same
 process.
 
+Requires regular, GIL-enabled CPython 3.12 or newer. The compiler and runtime
+extensions use nanobind and ship `cp312-abi3` wheels, reusable on newer regular
+CPython versions. Free-threaded Python is not supported.
+
 Install the complete Python and native toolchain with:
 
 ```shell

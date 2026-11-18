@@ -5,7 +5,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_image_param(py::module &m) {
+void define_image_param(py::module_ &m) {
     using Dimension = Internal::Dimension;
 
     auto dimension_class =

@@ -623,6 +623,7 @@ def test_runtime_buffer_is_distinct():
     assert hl.BufferDimension is hlr.BufferDimension
 
     runtime_type = hlr.Type(0, 32)
+    assert runtime_type.__eq__(None) is False
 
     runtime_buffer = hlr.Buffer(runtime_type, [4, 3], "runtime_buffer")
     assert runtime_buffer.type() == runtime_type
@@ -673,6 +674,163 @@ def test_runtime_buffer_is_distinct():
     assert runtime_view[0] == 23
 
 
+def test_buffer_export_lifetime():
+    class Exporter:
+        def __init__(self):
+            self.data = bytearray(range(8))
+            self.exports = 0
+
+        def __buffer__(self, flags):
+            self.exports += 1
+            return memoryview(self.data)
+
+        def __release_buffer__(self, view):
+            self.exports -= 1
+
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        source = Exporter()
+        buffer = buffer_type(source)
+        view = buffer.numpy_view()
+        del buffer
+        gc.collect()
+        assert source.exports > 0
+        view[3] = 42
+        assert source.data[3] == 42
+        del view
+        gc.collect()
+        assert source.exports == 0
+        source.data.extend(b"more")
+
+        try:
+            buffer_type(memoryview(b"readonly"))
+        except BufferError:
+            pass
+        else:
+            assert False, "read-only storage must not become a writable Halide Buffer"
+
+
+def test_buffer_ndarray_dtypes():
+    for dtype in (
+        np.bool_,
+        np.int8,
+        np.uint8,
+        np.int16,
+        np.uint16,
+        np.int32,
+        np.uint32,
+        np.int64,
+        np.uint64,
+        np.float16,
+        np.float32,
+        np.float64,
+    ):
+        for buffer_type in (hl.Buffer, hlr.Buffer):
+            source = np.array([[0, 1, 0], [1, 0, 1]], dtype=dtype)[:, ::-1]
+            buffer = buffer_type(source)
+            view = memoryview(buffer)
+            assert view.shape == source.shape
+            assert view.strides == source.strides
+            assert view.itemsize == source.itemsize
+            exported = buffer.numpy_view()
+            assert exported.dtype == source.dtype
+            assert np.shares_memory(exported, source)
+            assert np.array_equal(exported, source)
+            del buffer, source
+            gc.collect()
+            exported[0, 0] = 1
+            assert np.asarray(view)[0, 0] == 1
+
+
+def test_buffer_contiguous_requests():
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        source = np.arange(12, dtype=np.int32).reshape(3, 4)
+        contiguous = buffer_type(source)
+        assert np.shares_memory(np.frombuffer(contiguous, dtype=np.int32), source)
+        strided = buffer_type(source[:, ::2])
+        assert np.array_equal(np.asarray(strided), source[:, ::2])
+        try:
+            np.frombuffer(strided, dtype=np.int32)
+        except BufferError:
+            pass
+        else:
+            assert False, "a non-contiguous buffer satisfied a contiguous request"
+
+
+def test_copy_from_mismatched_buffers():
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+        dst = buffer_type(np.zeros(16, dtype=np.float32))
+        src = buffer_type(np.full(16, 7, dtype=np.uint8))
+        try:
+            dst.copy_from(src)
+        except ValueError as e:
+            assert "type uint8 into a buffer of type float32" in str(e)
+        else:
+            assert False, "copy_from accepted a source with a different element size"
+
+        dst = buffer_type(np.zeros((2,) * 6, dtype=np.uint8))
+        src = buffer_type(np.zeros((2,) * 5, dtype=np.uint8))
+        try:
+            dst.copy_from(src)
+        except ValueError as e:
+            assert "with 5 dimensions into a buffer with 6" in str(e)
+        else:
+            assert False, "copy_from accepted a source with a different dimensionality"
+
+        # Element types of the same size still copy.
+        dst = buffer_type(np.zeros(4, dtype=np.uint8))
+        dst.copy_from(buffer_type(np.array([True, False, True, True])))
+        assert np.array_equal(np.asarray(dst), [1, 0, 1, 1])
+
+
+def test_dimension_out_of_range():
+    # crop/slice/dim and friends forward the dimension index to the runtime
+    # buffer, whose bounds check on it is an assert() that is gone in release
+    # builds. The bindings must reject an out-of-range dimension instead.
+    for buffer_type in (hl.Buffer, hlr.Buffer):
+
+        def expect_raises(exc, fn):
+            try:
+                fn()
+            except exc:
+                pass
+            else:
+                assert False, f"{buffer_type.__name__}: expected {exc.__name__}"
+
+        # A fresh 2-D buffer per mutating call, so a bad index can't leave it
+        # in a half-modified state between checks.
+        def buf():
+            return buffer_type(np.zeros((4, 6), dtype=np.uint8))
+
+        expect_raises(IndexError, lambda: buf().dim(5))
+        expect_raises(IndexError, lambda: buf().dim(-1))
+        expect_raises(IndexError, lambda: buf().crop(5, 0, 1))
+        expect_raises(IndexError, lambda: buf().cropped(5, 0, 1))
+        expect_raises(IndexError, lambda: buf().slice(5, 0))
+        expect_raises(IndexError, lambda: buf().sliced(5, 0))
+        expect_raises(IndexError, lambda: buf().translate(5, 1))
+        expect_raises(IndexError, lambda: buf().translated(5, 1))
+        expect_raises(IndexError, lambda: buf().transpose(0, 5))
+        expect_raises(IndexError, lambda: buf().transposed(0, 5))
+        # embed() may name the dimension one past the end (2 here), but not beyond.
+        expect_raises(IndexError, lambda: buf().embed(9))
+        expect_raises(IndexError, lambda: buf().embedded(9))
+
+        # Vector overloads walk one dimension per entry.
+        expect_raises(ValueError, lambda: buf().crop([(0, 1)] * 5))
+        expect_raises(ValueError, lambda: buf().translate([0] * 5))
+        expect_raises(ValueError, lambda: buf().transpose([0, 1, 2]))
+
+        # In-range calls still work.
+        b = buf()
+        b.crop(0, 0, 2)
+        assert b.dim(0).extent() == 2
+        b = buf()
+        e0, e1 = b.dim(0).extent(), b.dim(1).extent()
+        bt = b.transposed(0, 1)
+        assert bt.dim(0).extent() == e1 and bt.dim(1).extent() == e0
+        assert buf().embedded(2).dimensions() == 3
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -684,6 +842,11 @@ if __name__ == "__main__":
     test_buffer_copy_no_reverse()
     test_ndarray_negative_strides()
     test_runtime_buffer_is_distinct()
+    test_buffer_export_lifetime()
+    test_buffer_ndarray_dtypes()
+    test_buffer_contiguous_requests()
+    test_copy_from_mismatched_buffers()
+    test_dimension_out_of_range()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()

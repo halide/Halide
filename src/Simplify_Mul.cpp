@@ -33,7 +33,7 @@ Expr Simplify::visit(const Mul *op, ExprInfo *info) {
         std::swap(a_info, b_info);
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type, this);
 
     if (rewrite(IRMatcher::Overflow() * x, a) ||
         rewrite(x * IRMatcher::Overflow(), b)) {

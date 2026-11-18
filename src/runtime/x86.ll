@@ -154,3 +154,61 @@ define weak_odr void @xgetbv_halide(i32* %info) nounwind uwtable {
   call void asm sideeffect inteldialect "mov ecx, dword ptr $$0 $0\0A\09xgetbv\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, edx", "=*m,~{eax},~{ecx},~{edx},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
   ret void
 }
+
+; Generic IR for pmulh(u)w. LLVM 24 removed the x86 pmulh intrinsics, and the
+; backend pattern-matches this form. Using full-width wrappers lets Halide pad
+; narrower vectors so that they still use pmulh(u)w.
+
+define weak_odr <8 x i16> @pmulhwx8(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+  %1 = sext <8 x i16> %a to <8 x i32>
+  %2 = sext <8 x i16> %b to <8 x i32>
+  %3 = mul <8 x i32> %1, %2
+  %4 = lshr <8 x i32> %3, <i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16>
+  %5 = trunc <8 x i32> %4 to <8 x i16>
+  ret <8 x i16> %5
+}
+
+define weak_odr <8 x i16> @pmulhuwx8(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+  %1 = zext <8 x i16> %a to <8 x i32>
+  %2 = zext <8 x i16> %b to <8 x i32>
+  %3 = mul <8 x i32> %1, %2
+  %4 = lshr <8 x i32> %3, <i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16>
+  %5 = trunc <8 x i32> %4 to <8 x i16>
+  ret <8 x i16> %5
+}
+
+define weak_odr <16 x i16> @pmulhwx16(<16 x i16> %a, <16 x i16> %b) nounwind alwaysinline {
+  %1 = sext <16 x i16> %a to <16 x i32>
+  %2 = sext <16 x i16> %b to <16 x i32>
+  %3 = mul <16 x i32> %1, %2
+  %4 = lshr <16 x i32> %3, <i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16>
+  %5 = trunc <16 x i32> %4 to <16 x i16>
+  ret <16 x i16> %5
+}
+
+define weak_odr <16 x i16> @pmulhuwx16(<16 x i16> %a, <16 x i16> %b) nounwind alwaysinline {
+  %1 = zext <16 x i16> %a to <16 x i32>
+  %2 = zext <16 x i16> %b to <16 x i32>
+  %3 = mul <16 x i32> %1, %2
+  %4 = lshr <16 x i32> %3, <i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16>
+  %5 = trunc <16 x i32> %4 to <16 x i16>
+  ret <16 x i16> %5
+}
+
+define weak_odr <32 x i16> @pmulhwx32(<32 x i16> %a, <32 x i16> %b) nounwind alwaysinline {
+  %1 = sext <32 x i16> %a to <32 x i32>
+  %2 = sext <32 x i16> %b to <32 x i32>
+  %3 = mul <32 x i32> %1, %2
+  %4 = lshr <32 x i32> %3, <i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16>
+  %5 = trunc <32 x i32> %4 to <32 x i16>
+  ret <32 x i16> %5
+}
+
+define weak_odr <32 x i16> @pmulhuwx32(<32 x i16> %a, <32 x i16> %b) nounwind alwaysinline {
+  %1 = zext <32 x i16> %a to <32 x i32>
+  %2 = zext <32 x i16> %b to <32 x i32>
+  %3 = mul <32 x i32> %1, %2
+  %4 = lshr <32 x i32> %3, <i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16, i32 16>
+  %5 = trunc <32 x i32> %4 to <32 x i16>
+  ret <32 x i16> %5
+}

@@ -120,6 +120,7 @@ double run_test_2(bool auto_schedule) {
 
 double run_test_3(bool auto_schedule) {
     Buffer<uint8_t> im(1024, 1028, 14, 14);
+    im.fill(17);
 
     Var x("x"), y("y"), dx("dx"), dy("dy"), c("c");
 

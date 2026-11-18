@@ -2771,13 +2771,14 @@ public:
      * This splits the Func in two: a new intermediate Func (returned) that
      * copies this Func's definitions but accumulates at the requested type `t`
      * (with the appropriate casts inserted, preferring integer forms such as
-     * widening_mul over float round-trips), and this Func, which is rewritten in
-     * place into an inline wrapper that casts the intermediate's result back to
-     * the original type. Every existing consumer therefore keeps seeing the
-     * original type, while the returned intermediate can be scheduled to exploit
-     * the new type (e.g. an Int(32) accumulator eligible for dot-product
-     * instructions). Schedule the returned Func to control the retyped
-     * computation.
+     * widening_mul over float round-trips, and, for an unsafe float `t`, a
+     * fused multiply-add of a product whose factors `t` represents exactly),
+     * and this Func, which is rewritten in place into an inline wrapper that
+     * casts the intermediate's result back to the original type. Every
+     * existing consumer therefore keeps seeing the original type, while the
+     * returned intermediate can be scheduled to exploit the new type (e.g. an
+     * Int(32) accumulator eligible for dot-product instructions). Schedule the
+     * returned Func to control the retyped computation.
      *
      * The change is validated with the bounds machinery: for an integer or
      * floating-point target, change_type() proves the accumulation cannot

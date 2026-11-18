@@ -320,7 +320,7 @@ void write_coff_archive(std::ostream &out,
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
     std::error_code err;
-    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::OF_None));
+    auto raw_out = std::make_unique<llvm::raw_fd_ostream>(filename, err, llvm::sys::fs::OF_None);
     if (err) {
         error_string = err.message();
     }
@@ -394,7 +394,11 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(triple));
     pass_manager.add(llvm::createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
-#if LLVM_VERSION >= 220
+#if LLVM_VERSION >= 240
+    pass_manager.add(new llvm::RuntimeLibraryInfoWrapper(
+        target_machine->Options.MCOptions.ABIName,
+        target_machine->Options.VecLib));
+#else
     pass_manager.add(new llvm::RuntimeLibraryInfoWrapper(
         module->getTargetTriple(), target_machine->Options.ExceptionModel,
         target_machine->Options.FloatABIType,
@@ -412,17 +416,6 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
-
-#if LLVM_VERSION < 220
-    if (triple.isMacOSX() && triple.isAArch64()) {
-        // The AArch64 syntax variant is able to display the arguments to SDOT
-        // while the Darwin-specific one is bugged. See this GitHub issue for
-        // more info: https://github.com/llvm/llvm-project/issues/151330
-        enum { Generic = 0,
-               Apple = 1 } variant = Generic;
-        target_machine->Options.MCOptions.OutputAsmVariant = variant;
-    }
-#endif
 
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);

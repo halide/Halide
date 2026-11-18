@@ -584,7 +584,15 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
              << value_type << "' to target type '" << target_type << "' for value id '" << value_id << "' !\n";
 
     if (!value_type.is_bool()) {
-        value_id = cast_type(Bool(), value_type, value_id);
+        internal_assert(target_type.is_bool());
+        make_zero(value_type).accept(this);
+        SpvId zero_id = builder.current_id();
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        // Convert numerically to bool by testing for nonzero; unordered float
+        // comparison also makes NaN truthy.
+        SpvOp op_code = value_type.is_float() ? SpvOpFUnordNotEqual : SpvOpINotEqual;
+        builder.append(SpvFactory::binary_op(op_code, builder.declare_type(target_type), result_id, value_id, zero_id));
+        return result_id;
     }
 
     const int true_value = 1;
@@ -1469,16 +1477,23 @@ bool CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_narrow_storage(const Load *op,
     SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
     SpvId storage_type_id = builder.declare_type(storage_type);
 
-    Type index_type = Int(32);
+    // Each Halide index addresses a full value, so scale it to the first
+    // storage element before adding offsets for that value's constituent bytes.
+    Type index_type = op->index.type().element_of();
     SpvId index_type_id = builder.declare_type(index_type);
+    make_const(index_type, lanes).accept(this);
+    SpvId lanes_id = builder.current_id();
+    SpvId base_index_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::binary_op(SpvOpIMul, index_type_id, base_index_id, index_id, lanes_id));
 
     SpvId accum_id = SpvInvalidId;
     for (int i = 0; i < lanes; i++) {
-        SpvId byte_index_id = index_id;
+        SpvId byte_index_id = base_index_id;
         if (i != 0) {
-            SpvId offset_id = builder.declare_constant(index_type, &i);
+            make_const(index_type, i).accept(this);
+            SpvId offset_id = builder.current_id();
             byte_index_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::integer_add(index_type_id, byte_index_id, index_id, offset_id));
+            builder.append(SpvFactory::integer_add(index_type_id, byte_index_id, base_index_id, offset_id));
         }
 
         SpvId src_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, byte_index_id, storage_class);
@@ -1629,8 +1644,14 @@ bool CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_narrow_storage(const Store *op,
         builder.append(SpvFactory::bitcast(wide_type_id, wide_value_id, value_id));
     }
 
-    Type index_type = Int(32);
+    // Match load_from_narrow_storage(): each Halide index addresses a full
+    // value, while the backing array is indexed by its constituent bytes.
+    Type index_type = op->index.type().element_of();
     SpvId index_type_id = builder.declare_type(index_type);
+    make_const(index_type, lanes).accept(this);
+    SpvId lanes_id = builder.current_id();
+    SpvId base_index_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::binary_op(SpvOpIMul, index_type_id, base_index_id, index_id, lanes_id));
 
     for (int i = 0; i < lanes; i++) {
         SpvId shifted_id = wide_value_id;
@@ -1653,11 +1674,12 @@ bool CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_narrow_storage(const Store *op,
             builder.append(SpvFactory::bitcast(builder.declare_type(storage_type), storage_value_id, truncated_id));
         }
 
-        SpvId byte_index_id = index_id;
+        SpvId byte_index_id = base_index_id;
         if (i != 0) {
-            SpvId offset_id = builder.declare_constant(index_type, &i);
+            make_const(index_type, i).accept(this);
+            SpvId offset_id = builder.current_id();
             byte_index_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::integer_add(index_type_id, byte_index_id, index_id, offset_id));
+            builder.append(SpvFactory::integer_add(index_type_id, byte_index_id, base_index_id, offset_id));
         }
 
         SpvId dst_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, byte_index_id, storage_class);

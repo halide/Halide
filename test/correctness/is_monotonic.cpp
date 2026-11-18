@@ -56,7 +56,15 @@ int main() {
     check_decreasing(x <= y);
     check_decreasing(x < y);
     check_unknown(x * y);
+    check_unknown(x / y);
 
+    // Scaling by something of known sign that doesn't depend on x.
+    check_increasing(x * max(y, 1));
+    check_increasing(max(y, 0) * x);
+    check_increasing(x / max(y, 1));
+    check_decreasing(x * min(y, -1));
+    check_decreasing(x / min(y, -1));
+    check_decreasing((4 - x) / max(y, 1));
     // Not constant despite having constant args, because there's a side-effect.
     check_unknown(Call::make(Int(32), "foo", {Expr(3)}, Call::Extern));
 

@@ -439,6 +439,25 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Sliding over a division by a param of known sign.
+        count = 0;
+        Param<int> k;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        Expr i = x / max(k, 1);
+        g(x) = f(i) + f(i + 1);
+        f.store_root().compute_at(g, x);
+
+        k.set(3);
+        g.realize({100});
+        // f spans x in [0, 34], so 35 calls when slid.
+        if (count != 35) {
+            printf("f was called %d times instead of %d times\n", count, 35);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

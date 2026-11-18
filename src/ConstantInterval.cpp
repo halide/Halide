@@ -117,8 +117,11 @@ ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const C
     return result;
 }
 
-ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
-                                                     const ConstantInterval &b) {
+namespace {
+
+// The intersection of two intervals, which is empty (min > max) if they don't
+// overlap.
+ConstantInterval intersection_or_empty(const ConstantInterval &a, const ConstantInterval &b) {
     ConstantInterval result;
     if (a.min_defined) {
         if (b.min_defined) {
@@ -142,12 +145,29 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
         result.max_defined = b.max_defined;
         result.max = b.max;
     }
+    return result;
+}
+
+}  // namespace
+
+ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
+                                                     const ConstantInterval &b) {
+    ConstantInterval result = intersection_or_empty(a, b);
     // Our class invariant is that whenever they're both defined, min <=
     // max. Intersection is the only method that could break that, and it
     // happens when the intersected intervals do not overlap.
     internal_assert(!result.is_bounded() || result.min <= result.max)
         << "Empty ConstantInterval constructed in make_intersection";
     return result;
+}
+
+bool ConstantInterval::intersect_if_nonempty(const ConstantInterval &other) {
+    ConstantInterval result = intersection_or_empty(*this, other);
+    if (result.is_bounded() && result.min > result.max) {
+        return false;
+    }
+    *this = result;
+    return true;
 }
 
 ConstantInterval covering_constant_interval(const Interval &in) {
@@ -230,7 +250,7 @@ void ConstantInterval::cast_to(const Type &t) {
         if (t.is_int()) {
             if (t.bits() <= 64) {
                 type_bounds.min_defined = type_bounds.max_defined = true;
-                type_bounds.min = ((int64_t)(-1)) << (t.bits() - 1);
+                type_bounds.min = (int64_t)((uint64_t)(-1) << (t.bits() - 1));
                 type_bounds.max = ~type_bounds.min;
             }
         } else if (t.is_uint()) {

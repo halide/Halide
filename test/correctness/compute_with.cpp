@@ -1699,7 +1699,7 @@ int update_stage_diagonal_test() {
     return 0;
 }
 
-int update_stage_rfactor_test() {
+int update_stage_rfactor_test_helper(bool split, LoopAlignStrategy align) {
     Func f0, f1, cost;
     Var x;
     f0(x) = x;
@@ -1713,6 +1713,12 @@ int update_stage_rfactor_test() {
     f0.compute_root();
     f1.compute_root();
 
+    RVar ro("ro"), ri("ri");
+    if (split) {
+        cost.update(0).split(r.x, ro, ri, 8);
+        cost.update(1).split(r.x, ro, ri, 16);
+    }
+
     // Move the reductions into their own Funcs
     Func tmp1 = cost.update(0).rfactor({});
     Func tmp2 = cost.update(1).rfactor({});
@@ -1721,7 +1727,7 @@ int update_stage_rfactor_test() {
     tmp2.compute_root();
 
     // Now that they're independent funcs, we can fuse the loops using compute_with
-    tmp1.update().compute_with(tmp2.update(), r.x);
+    tmp1.update().compute_with(tmp2.update(), split ? ri : r.x, align);
 
     Buffer<int> result = cost.realize();
 
@@ -1731,6 +1737,19 @@ int update_stage_rfactor_test() {
         return 1;
     }
 
+    return 0;
+}
+
+int update_stage_rfactor_test() {
+    for (bool split : {false, true}) {
+        for (LoopAlignStrategy align : {LoopAlignStrategy::NoAlign,
+                                        LoopAlignStrategy::AlignStart,
+                                        LoopAlignStrategy::AlignEnd}) {
+            if (update_stage_rfactor_test_helper(split, align)) {
+                return 1;
+            }
+        }
+    }
     return 0;
 }
 

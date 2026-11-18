@@ -266,10 +266,14 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             dim_extent_alignment[split.old_var] = inner_dim->second * outer_dim->second;
         }
     } break;
-    case Split::RenameVar:
+    case Split::RenameVar: {
         result.emplace_back(prefix + split.old_var, outer, ApplySplitResult::Substitution);
         result.emplace_back(prefix + split.old_var, outer, ApplySplitResult::LetStmt);
-        break;
+        auto iter = dim_extent_alignment.find(split.old_var);
+        if (iter != dim_extent_alignment.end()) {
+            dim_extent_alignment[split.outer] = iter->second;
+        }
+    } break;
     }
 
     return result;

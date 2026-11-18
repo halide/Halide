@@ -83,16 +83,17 @@ class SubstituteInStridedLoads : public IRMutator {
     }
 
     Expr visit(const Shuffle *op) override {
-        int stride = op->slice_stride();
+        auto slice = op->is_slice();
         const Variable *var = op->vectors[0].as<Variable>();
         const Expr *vec = nullptr;
-        if (var &&
+        if (slice &&
+            var &&
             poisoned_vars.count(var->name) == 0 &&
             op->vectors.size() == 1 &&
-            2 <= stride && stride <= 4 &&
-            op->slice_begin() < stride &&
+            2 <= slice->stride && slice->stride <= 4 &&
+            slice->begin < slice->stride &&
             (vec = loads.find(var->name))) {
-            return Shuffle::make_slice({*vec}, op->slice_begin(), op->slice_stride(), op->type.lanes());
+            return Shuffle::make_slice({*vec}, slice->begin, slice->stride, op->type.lanes());
         } else {
             return IRMutator::visit(op);
         }
@@ -1111,6 +1112,13 @@ void CodeGen_ARM::init_module() {
             }
 
             const auto full_name = [&]() -> string {
+                // LLVM 24 removed the AArch64 NEON integer min/max intrinsics
+                // in favor of the generic intrinsics, which also work on older LLVMs.
+                if (target.bits == 64 && !is_sve_or_streaming &&
+                    (intrin.ret_type.is_int() || intrin.ret_type.is_uint()) &&
+                    (string(intrin.name) == "min" || string(intrin.name) == "max")) {
+                    return concat_strings("llvm.", intrin_name);
+                }
                 const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
                 if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
                     const char *prefix =
@@ -1605,6 +1613,17 @@ void CodeGen_ARM::visit(const Store *op) {
     Expr rhs = peel_lets(op->value, &lets);
     const Shuffle *shuffle = rhs.as<Shuffle>();
 
+    // Storing each lane of a vector repeated k times is a store of an
+    // interleaving of k copies of that vector. On AArch64, for k == 4 and
+    // narrow types a single tbl per output vector is cheaper than st4.
+    if (auto factor = shuffle ? shuffle->is_repeat_each_lane() : std::nullopt) {
+        const int k = *factor;
+        if (k <= 3 || (k == 4 && (target.bits == 32 || shuffle->type.bits() >= 32))) {
+            rhs = Shuffle::make_interleave(vector<Expr>(k, shuffle->vectors[0]));
+            shuffle = rhs.as<Shuffle>();
+        }
+    }
+
     // Interleaving store instructions only exist for certain types.
     bool type_ok_for_vst = false;
     Type intrin_type = Handle();
@@ -2054,18 +2073,42 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     // into native vectors, which triggers shuffle instructions rather than
     // vld2, vld3, vld4. So here we explicitly do the load as a single big dense
     // load.
-    int stride = op->slice_stride();
+    auto slice = op->is_slice();
+    const int stride = slice ? slice->stride : 0;
     const Load *load = op->vectors[0].as<Load>();
     if (target.os != Target::IOS && target.os != Target::MacOS &&
         load &&
         op->vectors.size() == 1 &&
-        op->is_slice() &&
+        slice &&
         2 <= stride && stride <= 4 &&
-        op->slice_begin() < stride &&
+        slice->begin < stride &&
         load->type.lanes() == stride * op->type.lanes()) {
 
+#if LLVM_VERSION >= 240
+        // LLVM 24 folds slices into deinterleave shuffles, obscuring the
+        // interleaved-load pattern. Load one native-width result at a time.
+        const Ramp *ramp = load->index.as<Ramp>();
+        internal_assert(ramp && is_const_one(ramp->stride));
+        const int native_lanes = target_vscale() == 0 ? native_vector_bits() / op->type.bits() : op->type.lanes();
+        vector<Value *> slices;
+        for (int i = 0; i < op->type.lanes(); i += native_lanes) {
+            const int slice_lanes = std::min(native_lanes, op->type.lanes() - i);
+            const int offset = i * stride;
+            Expr slice_index = Ramp::make(simplify(ramp->base + offset), ramp->stride, slice_lanes * stride);
+            Expr slice_predicate = Shuffle::make_slice({load->predicate}, offset, 1, slice_lanes * stride);
+            Expr slice_load = load->with(slice_index, slice_predicate, load->alignment + offset);
+            Value *loaded = codegen_dense_vector_load(slice_load.as<Load>(), nullptr, /* slice_to_native */ false);
+            vector<int> indices(slice_lanes);
+            for (int j = 0; j < slice_lanes; j++) {
+                indices[j] = slice->begin + j * stride;
+            }
+            slices.push_back(CodeGen_CPU::shuffle_vectors(loaded, indices));
+        }
+        value = concat_vectors(slices);
+#else
         value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
         value = CodeGen_CPU::shuffle_vectors(value, op->indices);
+#endif
         return;
     }
 
@@ -2292,13 +2335,7 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
     }
 
     // Lower into llvm.vector.interleave intrinsic.
-    // LLVM only supports non-power-of-2 strides (e.g. 3) for scalable
-    // vectors starting in LLVM 22.
-#if LLVM_VERSION >= 220
     const std::set<int> supported_strides{2, 3, 4, 8};
-#else
-    const std::set<int> supported_strides{2, 4, 8};
-#endif
     const int stride = vecs.size();
     const int src_lanes = get_vector_num_elements(vecs[0]->getType());
 
@@ -2363,11 +2400,7 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
             }
 
             // Lower slice with stride into llvm.vector.deinterleave intrinsic
-#if LLVM_VERSION >= 220
             const std::set<int> supported_strides{2, 3, 4, 8};
-#else
-            const std::set<int> supported_strides{2, 4, 8};
-#endif
             if (supported_strides.find(slice_stride) != supported_strides.end() &&
                 dst_lanes * slice_stride == src_lanes &&
                 indices.front() < slice_stride &&  // Start position cannot be larger than stride
@@ -2518,6 +2551,30 @@ void CodeGen_ARM::visit(const Call *op) {
         // We want these as left shifts with a negative b instead.
         value = codegen(op->args[0] << simplify(-op->args[1]));
         return;
+    } else if (op->is_intrinsic(Call::fixed_to_float)) {
+        // Neon's fixed-point converts (scvtf/ucvtf #k, vcvt.f32.s32 #k) take
+        // 32-bit lanes on both arm32 and arm64 and 64-bit lanes on arm64. SVE
+        // has no fixed-point form.
+        const Expr &x = op->args[0];
+        auto k = as_const_uint(op->args[1]);
+        const int bits = op->type.bits();
+        if (!simd_intrinsics_disabled() && target_vscale() == 0 && op->type.is_vector() && k &&
+            x.type().bits() == bits &&
+            (bits == 32 || (bits == 64 && target.bits == 64))) {
+            const int lanes = (op->type.lanes() * bits <= 64 ? 64 : 128) / bits;
+            const std::string name =
+                std::string(target.bits == 64 ? "llvm.aarch64" : "llvm.arm") + ".neon.vcvtfx" +
+                (x.type().is_int() ? "s" : "u") + "2fp." +
+                "v" + std::to_string(lanes) + "f" + std::to_string(bits) + "." +
+                "v" + std::to_string(lanes) + "i" + std::to_string(bits);
+            llvm::FunctionType *fn_type =
+                llvm::FunctionType::get(llvm_type_of(op->type.with_lanes(lanes)),
+                                        {llvm_type_of(x.type().with_lanes(lanes)), i32_t}, false);
+            llvm::Function *fn = llvm::cast<llvm::Function>(module->getOrInsertFunction(name, fn_type).getCallee());
+            value = call_intrin(llvm_type_of(op->type), lanes, fn,
+                                {codegen(x), llvm::ConstantInt::get(i32_t, *k)});
+            return;
+        }
     } else if (op->is_intrinsic(Call::round)) {
         // llvm's roundeven intrinsic reliably lowers to the correct
         // instructions on aarch64, but despite having the same instruction
