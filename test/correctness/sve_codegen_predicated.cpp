@@ -21,6 +21,13 @@ int main(int argc, char **argv) {
     f.vectorize(x, 24);  // 24 is not a multiple of 16 (natural for uint8 @ 128-bit SVE)
     f.compile_to_object(tmpdir + "sve_dense_pred_store.o", {}, "dense_pred_store", sve2);
 
+    // Three doubles split into a two-lane store and a one-lane masked store.
+    // LLVM 23 cannot scalarize the latter's mask with SVE enabled.
+    Func g("single_lane_pred_store");
+    g(x) = cast<double>(x);
+    g.vectorize(x, 3, TailStrategy::GuardWithIf);
+    g.compile_to_object(tmpdir + "sve_single_lane_pred_store.o", {}, "single_lane_pred_store", sve2);
+
     printf("Success!\n");
     return 0;
 }

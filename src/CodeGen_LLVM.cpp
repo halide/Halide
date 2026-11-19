@@ -2225,7 +2225,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     llvm::Type *load_type = llvm_type_of(type);
 
     llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
-    if (constant_index && constant_index->isNullValue()) {
+    if (constant_index && constant_index->isNullValue() && !index->getType()->isVectorTy()) {
         return base_address;
     }
 
@@ -2826,13 +2826,35 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                                                  {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
                 store = dyn_cast<Instruction>(value);
             } else {
-                if (!slice_val->getType()->isVectorTy()) {
-                    slice_val = create_broadcast(slice_val, 1);
+#if LLVM_VERSION >= 230 && LLVM_VERSION < 240
+                // LLVM 23 cannot scalarize a one-lane masked-store mask with SVE enabled.
+                // Fixed upstream in https://github.com/llvm/llvm-project/pull/230202.
+                if (target.arch == Target::ARM && target.bits == 64 &&
+                    target.has_feature(Target::SVE2) && slice_lanes == 1) {
+                    if (slice_val->getType()->isVectorTy()) {
+                        slice_val = builder->CreateExtractElement(slice_val, (uint64_t)0);
+                    }
+                    if (slice_mask->getType()->isVectorTy()) {
+                        slice_mask = builder->CreateExtractElement(slice_mask, (uint64_t)0);
+                    }
+                    BasicBlock *store_bb = BasicBlock::Create(*context, "predicated_store", function);
+                    BasicBlock *after_bb = BasicBlock::Create(*context, "after_predicated_store", function);
+                    builder->CreateCondBr(slice_mask, store_bb, after_bb);
+                    builder->SetInsertPoint(store_bb);
+                    store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
+                    builder->CreateBr(after_bb);
+                    builder->SetInsertPoint(after_bb);
+                } else
+#endif
+                {
+                    if (!slice_val->getType()->isVectorTy()) {
+                        slice_val = create_broadcast(slice_val, 1);
+                    }
+                    if (!slice_mask->getType()->isVectorTy()) {
+                        slice_mask = create_broadcast(slice_mask, 1);
+                    }
+                    store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
                 }
-                if (!slice_mask->getType()->isVectorTy()) {
-                    slice_mask = create_broadcast(slice_mask, 1);
-                }
-                store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
             if (op->is_streaming) {
@@ -3016,6 +3038,25 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = reverse_vector(flipped);
+    } else if (isa<FixedVectorType>(llvm_type_of(op->type))) {
+        // Emit a masked gather rather than scalarizing here. Scalarizing
+        // produces a branch per lane, and functions with many wide predicated
+        // gathers (e.g. in the tails of vectorized loops) can then spend a
+        // very long time in LLVM's mid-level optimizer. The backend either
+        // selects a native gather or scalarizes the intrinsic after those
+        // passes have run.
+        debug(4) << "Predicated vector gather\n\t" << Expr(op) << "\n";
+        Value *vpred = codegen(op->predicate);
+        Value *vindex = codegen(op->index);
+        Value *ptrs = codegen_buffer_pointer(op->name, op->type.element_of(), vindex);
+        llvm::Type *vec_type = llvm_type_of(op->type);
+        Instruction *gather = builder->CreateMaskedGather(vec_type, ptrs, llvm::Align(op->type.bytes()),
+                                                          vpred, Constant::getNullValue(vec_type));
+        add_tbaa_metadata(gather, op->name, op->index);
+        if (op->is_streaming) {
+            add_streaming_load_metadata(gather);
+        }
+        value = gather;
     } else {  // It's not dense vector load, we need to scalarize it
         Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
