@@ -216,9 +216,10 @@ protected:
     /** Set up debug_info for the module being generated, pointing into
      * source, a printing of input, or if conceptual is set, into
      * conceptual_source, a printing of the conceptual Stmt of input.
-     * Printings that are null are made from input. */
+     * Printings that are null are made from input. With line_tables_only, it
+     * only says which code came from where. */
     void init_debug_info(const StmtSourceMap *source, const StmtSourceMap *conceptual_source,
-                         const Module *input, bool conceptual);
+                         const Module *input, bool conceptual, bool line_tables_only);
 
     /** If there is debug info, give the function being generated a
      * subprogram, starting at where node was printed. If node is null, it is

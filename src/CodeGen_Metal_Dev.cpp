@@ -9,6 +9,7 @@
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Util.h"
 
 namespace Halide {
@@ -57,6 +58,16 @@ public:
     void dump() override;
 
     std::string print_gpu_name(const std::string &name) override;
+
+    void set_line_info(const Stmt &conceptual_stmt, const StmtSourceMap *conceptual_source, bool in_code) override {
+        record_lines = true;
+        conceptual_nodes = nodes_of(conceptual_stmt);
+        line_info_source = in_code ? conceptual_source : nullptr;
+    }
+
+    DeviceCodeLines device_code_lines() override {
+        return lines;
+    }
 
     std::string api_unique_name() override {
         return "metal";
@@ -151,6 +162,15 @@ protected:
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
+
+    // Where the lines of device code came from: the nodes of the conceptual
+    // Stmt, where the Stmts of the kernels were printed, and what to point
+    // into with #line directives, if anything.
+    bool record_lines = false;
+    std::set<const IRNode *> conceptual_nodes;
+    std::vector<IRPrinterLocation> kernel_locations;
+    const StmtSourceMap *line_info_source = nullptr;
+    DeviceCodeLines lines;
     CodeGen_Metal_C metal_c;
 };
 
@@ -308,7 +328,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
-        loop->body.accept(this);
+        print_stmt(loop->body);
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside Metal kernel\n";
@@ -569,7 +589,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 
     if (is_gpu_shared(op->memory_type)) {
         // Already handled
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -600,7 +620,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -686,7 +706,9 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
 
     // We need to scalarize/de-predicate any loads/stores, since Metal does not
     // support predication.
+    Stmt original = s;
     s = scalarize_predicated_loads_stores(s);
+    metal_c.remember_replaced(original, s);
 
     debug(2) << "CodeGen_Metal_Dev: after removing predication: \n"
              << s;
@@ -881,6 +903,8 @@ void CodeGen_Metal_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+    kernel_locations.clear();
+    metal_c.recorded_locations = record_lines ? &kernel_locations : nullptr;
 
     // Write out the Halide math functions.
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
@@ -920,6 +944,11 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     debug(1) << "Metal kernel:\n"
              << str << "\n";
 
+    if (record_lines) {
+        lines = c_like_device_code_lines(str, kernel_locations, conceptual_nodes, line_info_source,
+                                         "halide_metal_kernels");
+        str = lines.text;
+    }
     vector<char> buffer(str.begin(), str.end());
 
     auto metal_compiler = get_metal_compiler();

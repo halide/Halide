@@ -4,7 +4,9 @@
 /** \file
  * Defines the code-generator interface for producing GPU device code
  */
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "CodeGen_C.h"
@@ -14,9 +16,43 @@
 namespace Halide {
 namespace Internal {
 
+struct StmtSourceMap;
+struct IRPrinterLocation;
+struct DeviceCodeLines;
+
+/** All IR nodes in a Stmt. */
+std::set<const IRNode *> nodes_of(const Stmt &s);
+
+/** Where each line of C-like device source came from: the innermost Stmt in
+ * nodes (those of a Stmt that holds the kernels' Stmts) that it was printed
+ * for, according to where the Stmts were printed in it (locations). If ir is
+ * set, a printing of that Stmt, the source also gets #line directives that
+ * say so, and lines made from nothing in it go back to their own line numbers
+ * in source_name. */
+DeviceCodeLines c_like_device_code_lines(const std::string &source, const std::vector<IRPrinterLocation> &locations,
+                                         const std::set<const IRNode *> &nodes, const StmtSourceMap *ir,
+                                         const std::string &source_name);
+
+/** Whether a line of PTX is part of the line information in it: .loc and
+ * .file directives, and the labels and sections that only it uses. */
+bool is_ptx_line_info(std::string_view line);
+
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {
     virtual ~CodeGen_GPU_Dev();
+
+    /** Have the next module record where each line of its device code came
+     * from in conceptual_stmt, a Stmt that holds the kernels' Stmts, for
+     * device_code_lines(). If in_code, the device code says so itself too,
+     * for drivers and debuggers, with the lines of conceptual_source, a
+     * printing of conceptual_stmt. Code generators that need that printing
+     * get it either way. Not all code generators do anything with this. */
+    virtual void set_line_info(const Stmt &conceptual_stmt, const StmtSourceMap *conceptual_source, bool in_code) {
+    }
+
+    /** After compile_to_src(): the device code, with where its lines came
+     * from, if set_line_info() was called. Its name is left empty. */
+    virtual DeviceCodeLines device_code_lines();
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

@@ -930,6 +930,10 @@ StmtSourceMap print_with_source_map(const Stmt &s) {
     return make_source_map(std::move(stream).str(), locations, nullptr, nullptr);
 }
 
+StmtSourceMap source_map_of(std::string text, const std::vector<IRPrinterLocation> &locations) {
+    return make_source_map(std::move(text), locations, nullptr, nullptr);
+}
+
 const StmtSourceMap::Location *StmtSourceMap::find(const IRNode *node, uint32_t parent_start) const {
     auto it = std::lower_bound(locations.begin(), locations.end(), parent_start,
                                [&](const Location &l, uint32_t start) {

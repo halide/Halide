@@ -1334,8 +1334,75 @@ string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     }
 }
 
+namespace {
+
+// The Stmts a Stmt is directly made of, in order.
+std::vector<Stmt> stmt_children(const Stmt &s) {
+    switch (s->node_type) {
+    case IRNodeType::LetStmt:
+        return {s.as<LetStmt>()->body};
+    case IRNodeType::ProducerConsumer:
+        return {s.as<ProducerConsumer>()->body};
+    case IRNodeType::For:
+        return {s.as<For>()->body};
+    case IRNodeType::Acquire:
+        return {s.as<Acquire>()->body};
+    case IRNodeType::Allocate:
+        return {s.as<Allocate>()->body};
+    case IRNodeType::Realize:
+        return {s.as<Realize>()->body};
+    case IRNodeType::Block:
+        return {s.as<Block>()->first, s.as<Block>()->rest};
+    case IRNodeType::Fork:
+        return {s.as<Fork>()->first, s.as<Fork>()->rest};
+    case IRNodeType::IfThenElse:
+        return {s.as<IfThenElse>()->then_case, s.as<IfThenElse>()->else_case};
+    case IRNodeType::Atomic:
+        return {s.as<Atomic>()->body};
+    case IRNodeType::HoistedStorage:
+        return {s.as<HoistedStorage>()->body};
+    case IRNodeType::StreamingStore:
+        return {s.as<StreamingStore>()->body};
+    case IRNodeType::StreamingLoads:
+        return {s.as<StreamingLoads>()->body};
+    default:
+        return {};
+    }
+}
+
+}  // namespace
+
+void CodeGen_C::remember_replaced(const Stmt &original, const Stmt &replacement) {
+    if (!recorded_locations) {
+        return;
+    }
+    std::vector<std::pair<Stmt, Stmt>> todo{{replacement, original}};
+    while (!todo.empty()) {
+        auto [r, o] = todo.back();
+        todo.pop_back();
+        if (!r.defined() || !o.defined() || r.same_as(o) || r->node_type != o->node_type) {
+            continue;
+        }
+        replaced.emplace_back(r, o);
+        replaced_by[r.get()] = o.get();
+        std::vector<Stmt> rc = stmt_children(r), oc = stmt_children(o);
+        if (rc.size() == oc.size()) {
+            for (size_t i = 0; i < rc.size(); i++) {
+                todo.emplace_back(rc[i], oc[i]);
+            }
+        }
+    }
+}
+
 void CodeGen_C::print_stmt(const Stmt &s) {
+    // Record where the Stmt is printed as where the one it replaced is.
+    const IRNode *node = s.get();
+    for (auto it = replaced_by.find(node); it != replaced_by.end(); it = replaced_by.find(node)) {
+        node = it->second;
+    }
+    ScopedValue<int> loc(current_location, record_location(node));
     s.accept(this);
+    end_location(current_location);
 }
 
 string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
@@ -2241,9 +2308,11 @@ void CodeGen_C::visit(const LetStmt *op) {
         stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
-        body = substitute(op->name, new_var, body);
+        Stmt substituted = substitute(op->name, new_var, body);
+        remember_replaced(body, substituted);
+        body = substituted;
     }
-    body.accept(this);
+    print_stmt(body);
 }
 
 // Halide asserts have different semantics to C asserts.  They're
@@ -2311,7 +2380,7 @@ void CodeGen_C::visit(const Acquire *op) {
     open_scope();
     stream << get_indent() << "#pragma omp taskyield\n";
     close_scope("");
-    op->body.accept(this);
+    print_stmt(op->body);
     close_scope("");
 }
 
@@ -2320,11 +2389,11 @@ void CodeGen_C::visit(const Atomic *op) {
         internal_assert(!inside_atomic_mutex_node)
             << "Nested atomic mutex locks detected. This might causes a deadlock.\n";
         ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         // Issue atomic stores.
         ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
-        op->body.accept(this);
+        print_stmt(op->body);
     }
 }
 
@@ -2350,7 +2419,7 @@ void CodeGen_C::visit(const For *op) {
            << "++)\n";
 
     open_scope();
-    op->body.accept(this);
+    print_stmt(op->body);
     close_scope("for " + print_name(op->name));
 }
 
@@ -2517,7 +2586,7 @@ void CodeGen_C::visit(const Allocate *op) {
         emit_halide_free_helper(op_name, free_function);
     }
 
-    op->body.accept(this);
+    print_stmt(op->body);
 
     // Free the memory if it was allocated on the heap and there is no matching
     // Free node.
@@ -2554,13 +2623,13 @@ void CodeGen_C::visit(const IfThenElse *op) {
 
     stream << get_indent() << "if (" << cond_id << ")\n";
     open_scope();
-    op->then_case.accept(this);
+    print_stmt(op->then_case);
     close_scope("if " + cond_id);
 
     if (op->else_case.defined()) {
         stream << get_indent() << "else\n";
         open_scope();
-        op->else_case.accept(this);
+        print_stmt(op->else_case);
         close_scope("if " + cond_id + " else");
     }
 }

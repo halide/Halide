@@ -1217,6 +1217,19 @@ div.asm-hl.selected {
 div#device-code-pane span.line[data-n]:before {
     content: attr(data-n) ".";
 }
+div#device-code-pane span.line[data-ir] {
+    cursor: pointer;
+}
+div#device-code-pane span.line.device-hover {
+    background-color: rgba(255, 200, 0, 0.15);
+}
+div#device-code-pane span.line.device-selected {
+    background-color: rgba(255, 120, 0, 0.3);
+}
+div.ir-code div.l[data-device] span.n {
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
 
 /* Labels in the assembly link to where they are defined. */
 div#assemblyContent span.asm-label:hover {

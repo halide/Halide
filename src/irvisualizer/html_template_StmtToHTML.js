@@ -374,7 +374,8 @@ function scrollToHostAsm(i) {
     });
 }
 
-/* The device code. Its lines have their line number in data-n. */
+/* The device code. Its lines have their line number in data-n, and the line
+ * of IR they were generated for in data-ir, if any. */
 const devicePane = document.getElementById('device-code-pane');
 
 // Highlights CUDA device code (PTX): the kernels can be collapsed, the types
@@ -405,7 +406,7 @@ function highlightPTX(pane) {
     let html = '';
     let kernelId = -1, braceDepth = 0, inSignature = false;
     for (const el of Array.from(code.children)) {
-        const attributes = ' data-n="' + el.dataset.n + '"';
+        const attributes = ' data-n="' + el.dataset.n + '"' + (el.dataset.ir ? ' data-ir="' + el.dataset.ir + '"' : '');
         let text = el.textContent;
         if (text === '' || text === '\t') {
             html += '<span class="line"' + attributes + '></span>\n';
@@ -504,6 +505,45 @@ if (devicePane) {
     highlightPTX(devicePane);
     addHighlight('#device-code-pane');
 }
+const deviceOfIRLine = new Map();
+if (devicePane) {
+    devicePane.querySelectorAll('span.line[data-ir]').forEach(el => {
+        const line = parseInt(el.dataset.ir);
+        if (!deviceOfIRLine.has(line)) {
+            deviceOfIRLine.set(line, []);
+        }
+        deviceOfIRLine.get(line).push(el);
+    });
+}
+function highlightDevice(line, cls) {
+    if (!devicePane) {
+        return;
+    }
+    devicePane.querySelectorAll('span.line.' + cls).forEach(el => el.classList.remove(cls));
+    for (const el of (deviceOfIRLine.get(line) || [])) {
+        el.classList.add(cls);
+    }
+}
+function scrollToDevice(line) {
+    const lines = deviceOfIRLine.get(line) || [];
+    if (!lines.length) {
+        return;
+    }
+    // Expand the kernel it is in.
+    for (let el = lines[0].parentElement; el && el !== devicePane; el = el.parentElement) {
+        if (el.classList.contains('indent') && el.id) {
+            const btn = document.getElementById('show-hide-btn-' + el.id);
+            if (btn) {
+                btn.checked = false;
+            }
+        }
+    }
+    devicePane.scrollTo({
+        behavior : 'instant',
+        top : lines[0].offsetTop - devicePane.clientHeight / 3
+    });
+}
+
 // Hovering a line of IR shows its code, clicking its number goes there.
 // Marks (or unmarks) the lines that collapsing a block would hide, down to
 // its closing brace, along the indentation of the block.
@@ -532,6 +572,7 @@ irPane.addEventListener('mouseover', function(event) {
     }
     const l = event.target.closest('div.l');
     highlightAsm(l ? (asmOfIRLine.get(parseInt(l.dataset.line)) || []) : [], 'hover');
+    highlightDevice(l ? parseInt(l.dataset.line) : 0, 'device-hover');
 });
 irPane.addEventListener('mouseout', function(event) {
     const op = event.target.closest('span.op[data-g]');
@@ -547,6 +588,7 @@ irPane.addEventListener('mouseout', function(event) {
 });
 irPane.addEventListener('mouseleave', function() {
     highlightAsm([], 'hover');
+    highlightDevice(0, 'device-hover');
 });
 
 // Clicking a variable highlights it everywhere, in one of a few colors.
@@ -582,7 +624,7 @@ irPane.addEventListener('click', function(event) {
     }
     if (event.target.classList.contains('t') && l.dataset.blockEnd) {
         toggleBlock(l);
-    } else if (event.target.classList.contains('n') && l.dataset.asm) {
+    } else if (event.target.classList.contains('n') && (l.dataset.asm || l.dataset.device)) {
         const line = parseInt(l.dataset.line);
         const asm = asmOfIRLine.get(line) || [];
         selectIRLine(line);
@@ -590,6 +632,8 @@ irPane.addEventListener('click', function(event) {
         if (asm.length) {
             scrollToHostAsm(asm[0]);
         }
+        highlightDevice(line, 'device-selected');
+        scrollToDevice(line);
     } else if (event.target.classList.contains('var')) {
         toggleVariableHighlight(event.target.textContent);
     }
@@ -600,6 +644,7 @@ function goToIRLine(line) {
     revealIRLine(line);
     selectIRLine(line);
     highlightAsm(asmOfIRLine.get(line) || [], 'selected');
+    highlightDevice(line, 'device-selected');
     irLines[line - 1].scrollIntoView({
         behavior : 'instant',
         block : 'center'
@@ -656,6 +701,14 @@ asmCode.addEventListener('click', function(event) {
         goToIRLine(line);
     }
 });
+if (devicePane) {
+    devicePane.addEventListener('click', function(event) {
+        const el = event.target.closest('span.line[data-ir]');
+        if (el) {
+            goToIRLine(parseInt(el.dataset.ir));
+        }
+    });
+}
 
 
 /* The device code of the APIs other than CUDA is C-like source (OpenCL C,

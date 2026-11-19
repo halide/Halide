@@ -66,6 +66,19 @@ e.g. the call that runs a parallel loop, is attributed to the nearest enclosing
 IR that is, which can be the start of the function. A target can't have both
 features.
 
+## GPU device code
+
+The debug symbols features are about the code of the host. With the
+`gpu_debug_symbols` feature, GPU kernels get line information that points into
+the conceptual stmt (the `conceptual_stmt` output), as that is the IR that still
+holds the code of the kernels. The drivers and tools of the GPU APIs use it.
+
+- CUDA kernels, which are compiled with LLVM, get `.loc` directives only, like
+  `nvcc -lineinfo`, so they are still optimized as usual.
+- The C-like source of OpenCL, Metal and D3D12 kernels gets `#line` directives,
+  which the compilers of these APIs use in their messages and debug info.
+- Kernels for the other GPU APIs get no debug info.
+
 ## The html outputs
 
 The `stmt_html` and `conceptual_stmt_html` outputs show the IR exactly as the
@@ -82,6 +95,14 @@ outputs (and with the debug symbols features), lowering copies the IR nodes that
 the stmt uses in more than one place. `compile_to` and generators do this when
 an html output is requested; when calling `compile_to_module` and
 `Module::compile` yourself, pass `for_html_outputs` to `compile_to_module`.
+
+In the `conceptual_stmt_html`, the device code of CUDA, OpenCL, Metal and D3D12
+kernels is linked in the same way, with or without `gpu_debug_symbols`. The
+device code pane shows the line numbers of the device code as it is compiled
+into the pipeline, without the line information. Lowering only keeps track of
+where the device code came from for an html output (see `for_html_outputs`) or
+with `gpu_debug_symbols`. When all the stores of the pipeline are on a device,
+the assembly pane is hidden until it is asked for.
 
 ## Caveats
 
