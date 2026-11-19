@@ -147,6 +147,29 @@ public:
     }
 };
 
+// Rebuild every node of s, so that no node is used in more than one place.
+// Rebuilding the nodes that have no IR in them forces all others to be
+// rebuilt too.
+Stmt copy_shared_nodes(const Stmt &s) {
+    return mutate_with(
+        s,
+        [](auto *self, const IntImm *op) { return IntImm::make(op->type, op->value); },
+        [](auto *self, const UIntImm *op) { return UIntImm::make(op->type, op->value); },
+        [](auto *self, const FloatImm *op) { return FloatImm::make(op->type, op->value); },
+        [](auto *self, const StringImm *op) { return StringImm::make(op->value); },
+        [](auto *self, const Variable *op) {
+            return Variable::make(op->type, op->name, op->image, op->param, op->reduction_domain);
+        },
+        [](auto *self, const Call *op) -> Expr {
+            if (op->args.empty()) {
+                return Call::make(op->type, op->name, op->args, op->call_type, op->func,
+                                  op->value_index, op->image, op->param);
+            }
+            return self->visit_base(op);
+        },
+        [](auto *self, const Free *op) { return Free::make(op->name); });
+}
+
 void lower_impl(const vector<Function> &output_funcs,
                 const string &pipeline_name,
                 const Target &t,
@@ -155,6 +178,7 @@ void lower_impl(const vector<Function> &output_funcs,
                 const vector<Stmt> &requirements,
                 bool trace_pipeline,
                 const vector<IRMutator *> &custom_passes,
+                bool for_html_outputs,
                 Module &result_module) {
     size_t initial_lowered_function_count = result_module.functions().size();
 
@@ -514,6 +538,14 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
+    // The html outputs and the debug symbols say where code came from by the
+    // IR node of the stmt it was made from, which must then be printed in one
+    // place only.
+    if (for_html_outputs || t.has_feature(Target::DebugSymbols) || t.has_feature(Target::DebugSymbolsConceptual)) {
+        s = copy_shared_nodes(s);
+        log("Lowering after copying shared IR nodes:", s);
+    }
+
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);
     debug(1) << "Lowering after reaching conceptual Stmt:\n"
@@ -668,7 +700,8 @@ Module lower(const vector<Function> &output_funcs,
              const LinkageType linkage_type,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
-             const vector<IRMutator *> &custom_passes) {
+             const vector<IRMutator *> &custom_passes,
+             bool for_html_outputs) {
     // Lowering and code generation inspect a target with all implied features
     // set, so that (e.g.) a check for SSE41 succeeds on an AVX2 target.
     // Normalize once here; the module retains the implied features, and is
@@ -676,7 +709,8 @@ Module lower(const vector<Function> &output_funcs,
     Target target = t.with_implied_features();
     Module result_module{strip_namespaces(pipeline_name), target};
     run_with_large_stack([&]() {
-        lower_impl(output_funcs, pipeline_name, target, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
+        lower_impl(output_funcs, pipeline_name, target, args, linkage_type, requirements, trace_pipeline, custom_passes,
+                   for_html_outputs, result_module);
     });
     return result_module;
 }

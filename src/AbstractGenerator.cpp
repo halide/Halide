@@ -18,7 +18,7 @@ Argument to_argument(const Parameter &param) {
 
 }  // namespace
 
-Module AbstractGenerator::build_module(const std::string &function_name) {
+Module AbstractGenerator::build_module(const std::string &function_name, bool for_html_outputs) {
     const LinkageType linkage_type = LinkageType::ExternalPlusMetadata;
 
     Pipeline pipeline = build_pipeline();
@@ -49,7 +49,8 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target(), linkage_type);
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target(), linkage_type,
+                                               for_html_outputs);
 
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Output) {

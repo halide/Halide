@@ -546,6 +546,10 @@ std::string escape_html(std::string src) {
     return src;
 }
 
+bool begins_with(std::string_view s, std::string_view prefix) {
+    return s.substr(0, prefix.size()) == prefix;
+}
+
 // Writes text as the contents of a JavaScript string literal, which can
 // appear in a <script>.
 void write_js_string(std::ostream &stream, std::string_view text) {
@@ -567,48 +571,26 @@ void write_js_string(std::ostream &stream, std::string_view text) {
     stream << '"';
 }
 
-/** Where the code generated for the loops and produce/consume blocks of a
- * stmt went, in its assembly. */
+/** Where the code generated for each line of a stmt went, in some assembly
+ * with debug info that points into the stmt (or into a stmt it was lowered
+ * from). */
 struct AssemblyMap {
-    /** The lines of the assembly. */
+    /** The lines of the assembly worth showing: all of them except the debug
+     * info, i.e. the directives that carry it and the sections that hold it. */
     std::vector<std::string> lines;
-    /** For each line, its 1-based line number in the assembly. */
+    /** For each shown line, its 1-based line number in the assembly. */
     std::vector<uint32_t> asm_lines;
-    /** For each line, the 1-based line of the stmt it was generated for, or
-     * 0. */
+    /** For each shown line, the 1-based line of the stmt it was generated
+     * for, or 0. */
     std::vector<uint32_t> stmt_lines;
 };
 
-// The basic blocks that code generation makes for loops and produce/consume
-// blocks are named after them, e.g. "3_for_f.s0.x": the IR node of each such
-// name in the functions of m, numbered the same way.
-std::map<std::string, const IRNode *> block_nodes(const Module &m) {
-    std::map<std::string, const IRNode *> result;
-    int for_loop_id = 0, producer_consumer_id = 0;
-    for (const auto &f : m.functions()) {
-        visit_with(
-            f.body,
-            [&](auto *self, const For *op) {
-                if (op->for_type == ForType::Serial) {
-                    result[std::to_string(++for_loop_id) + "_for_" + op->name] = op;
-                }
-                self->visit_base(op);
-            },
-            [&](auto *self, const ProducerConsumer *op) {
-                result[std::to_string(++producer_consumer_id) + (op->is_producer ? "_produce_" : "_consume_") + op->name] = op;
-                self->visit_base(op);
-            });
-    }
-    return result;
-}
-
-// The assembly names the basic block that each label starts in a comment, as
-// %"name". The instructions of a block made for a node of block_nodes are
-// mapped to the line to_line gives for that node.
-AssemblyMap map_assembly(std::string_view code, const std::map<std::string, const IRNode *> &block_nodes,
-                         const std::function<uint32_t(const IRNode *)> &to_line) {
+// The debug info in the assembly says where each instruction came from. To
+// line maps such a line and column to the line of the stmt that is shown.
+AssemblyMap map_assembly(std::string_view code, const std::function<uint32_t(uint32_t, uint32_t)> &to_line) {
     AssemblyMap result;
     uint32_t current = 0;
+    bool in_debug_section = false;
     uint32_t asm_line = 0;
     size_t start = 0;
     while (start < code.size()) {
@@ -623,29 +605,54 @@ AssemblyMap map_assembly(std::string_view code, const std::map<std::string, cons
         size_t first = line.find_first_not_of(" \t");
         std::string_view trimmed = first == std::string_view::npos ? std::string_view{} : line.substr(first);
 
-        // A label, or the comment that stands in for the label of a block
-        // that is only fallen into (e.g. "# %bb.3:"), starts a block.
-        const size_t space = trimmed.find_first_of(" \t");
-        const std::string_view head = trimmed.substr(0, space);
-        const bool starts_block = (!head.empty() && head.back() == ':') ||
-                                  trimmed.find("%bb.") != std::string_view::npos;
-        if (starts_block) {
-            current = 0;
-            const size_t quote = line.find("%\"");
-            if (quote != std::string_view::npos) {
-                const size_t close = line.find('"', quote + 2);
-                const std::string name(line.substr(quote + 2, close == std::string_view::npos ? std::string_view::npos : close - quote - 2));
-                auto it = block_nodes.find(name);
-                if (it != block_nodes.end()) {
-                    current = to_line(it->second);
-                }
+        if (begins_with(trimmed, ".section")) {
+            std::string_view name = trimmed.substr(8);
+            name = name.substr(std::min(name.size(), name.find_first_not_of(" \t")));
+            // .debug_* for DWARF, .debug$* for CodeView.
+            in_debug_section = begins_with(name, ".debug");
+        } else if (begins_with(trimmed, ".text") || begins_with(trimmed, ".data")) {
+            in_debug_section = false;
+        }
+        if (in_debug_section) {
+            continue;
+        }
+
+        if (begins_with(trimmed, ".loc\t") || begins_with(trimmed, ".loc ") ||
+            begins_with(trimmed, ".cv_loc\t") || begins_with(trimmed, ".cv_loc ")) {
+            // .loc <file> <line> <column> [flags] for DWARF, and
+            // .cv_loc <function> <file> <line> <column> for CodeView.
+            const bool codeview = begins_with(trimmed, ".cv_loc");
+            std::istringstream in{std::string(trimmed.substr(codeview ? 7 : 4))};
+            uint32_t function = 0, file = 0, l = 0, column = 0;
+            if (codeview) {
+                in >> function;
             }
+            in >> file >> l >> column;
+            current = l ? to_line(l, column) : 0;
+            continue;
+        }
+        // The other directives of CodeView are debug info too.
+        if (begins_with(trimmed, ".cv_")) {
+            continue;
+        }
+        // The comments that say where variables live are debug info too.
+        if (trimmed.find("DEBUG_VALUE:") != std::string_view::npos &&
+            (begins_with(trimmed, "#") || begins_with(trimmed, "//") ||
+             begins_with(trimmed, ";") || begins_with(trimmed, "@"))) {
+            continue;
+        }
+        if (begins_with(trimmed, ".file\t") || begins_with(trimmed, ".file ") ||
+            (begins_with(trimmed, ".Ltmp") && trimmed.back() == ':')) {
+            continue;
+        }
+        if (begins_with(trimmed, ".Lfunc_end")) {
+            current = 0;
         }
 
         // Only instructions are code; labels and directives are not.
         const bool is_instruction = first != 0 && !trimmed.empty() &&
                                     trimmed[0] != '.' && trimmed[0] != '#' && trimmed[0] != '/' &&
-                                    trimmed[0] != ';' && trimmed.back() != ':';
+                                    trimmed.back() != ':';
         if (line.length() > 500) {
             // Very long lines in the assembly are typically the
             // _gpu_kernel_sources or other buffers (such as static LUTs) as a
@@ -767,16 +774,6 @@ protected:
     }
 };
 
-// What the assembly calls the basic block of a loop or a produce/consume
-// block, without the number that code generation gives it.
-std::string block_name(const IRNode *node) {
-    if (node->node_type == IRNodeType::For) {
-        return "for " + ((const For *)node)->name;
-    }
-    const ProducerConsumer *pc = (const ProducerConsumer *)node;
-    return (pc->is_producer ? "produce " : "consume ") + pc->name;
-}
-
 /** Prints IR exactly as IRPrinter does, into HTMLLines, with each Expr and
  * each styled piece of text in a span. */
 class HTMLStmtPrinter : public IRPrinter {
@@ -784,11 +781,6 @@ public:
     HTMLStmtPrinter(std::ostream &stream, HTMLLines &lines)
         : IRPrinter(stream), lines(lines) {
     }
-
-    /** The 1-based line of each loop and produce/consume block printed, and
-     * of the first of them with each block_name. */
-    std::map<const IRNode *, uint32_t> node_lines;
-    std::map<std::string, uint32_t> name_lines;
 
     void begin_style(IRPrinterStyle style, int depth) const override {
         switch (style) {
@@ -862,10 +854,6 @@ protected:
         HTMLLines::Line &line = lines.lines.back();
         if (!line.stmt && node->node_type != IRNodeType::Block && node->node_type != IRNodeType::Fork) {
             line.stmt = node;
-        }
-        if (node->node_type == IRNodeType::For || node->node_type == IRNodeType::ProducerConsumer) {
-            node_lines[node] = (uint32_t)lines.lines.size();
-            name_lines.emplace(block_name(node), (uint32_t)lines.lines.size());
         }
     }
 
@@ -1001,12 +989,19 @@ void print_lines(std::ostream &stream, std::vector<HTMLLines::Line> lines, IRCos
 class PipelineHTMLInspector {
 public:
     // Construct the visualizer and point it to the output file
-    // Shows the conceptual stmt if conceptual is set.
+    // Shows the conceptual stmt if show_conceptual is set, otherwise stmt.
+    // The debug info of the assembly points into the conceptual stmt if
+    // assembly_in_conceptual is set, otherwise into stmt.
     explicit PipelineHTMLInspector(const std::string &html_output_filename,
                                    const Module &m,
                                    const std::string &assembly_input_filename,
-                                   bool conceptual)
-        : conceptual(conceptual) {
+                                   const StmtSourceMap &stmt,
+                                   const StmtSourceMap *conceptual_stmt,
+                                   bool show_conceptual,
+                                   bool assembly_in_conceptual)
+        : stmt(stmt), conceptual_stmt(conceptual_stmt),
+          conceptual(show_conceptual),
+          assembly_conceptual_stmt(assembly_in_conceptual ? conceptual_stmt : nullptr) {
         // Open output file
         stream.open(html_output_filename.c_str());
 
@@ -1043,17 +1038,29 @@ public:
             ir_stream << m.get_conceptual_stmt();
         }
 
-        // The assembly of the loops and produce/consume blocks is linked to
-        // their lines of IR. The conceptual stmt was lowered further, so
-        // there they are found by name.
-        host_asm = map_assembly(asm_buffer, block_nodes(m), [&](const IRNode *node) -> uint32_t {
-            if (conceptual) {
-                auto it = printer.name_lines.find(block_name(node));
-                return it == printer.name_lines.end() ? 0 : it->second;
-            }
-            auto it = printer.node_lines.find(node);
-            return it == printer.node_lines.end() ? 0 : it->second;
-        });
+        // The debug info in the assembly says which line of the stmt each
+        // instruction was generated for. The html shows the same text as
+        // the stmt files, so its lines are those of the stmt files.
+        if (conceptual && !assembly_conceptual_stmt) {
+            // Through the nodes the stmt has in common with the conceptual
+            // stmt it was lowered from, or their nearest enclosing nodes.
+            std::vector<const StmtSourceMap::Location *> from_conceptual = map_locations(stmt, *conceptual_stmt);
+            host_asm = map_assembly(asm_buffer, [&](uint32_t line, uint32_t column) {
+                const StmtSourceMap::Location *at = stmt.at(line, column);
+                const StmtSourceMap::Location *c = at ? from_conceptual[at - stmt.locations.data()] : nullptr;
+                return c ? c->line : 0;
+            });
+        } else if (!conceptual && assembly_conceptual_stmt) {
+            // Through the nodes the conceptual stmt has in common with the
+            // stmt it was lowered to.
+            host_asm = map_assembly(asm_buffer, [&](uint32_t line, uint32_t column) {
+                const StmtSourceMap::Location *at = assembly_conceptual_stmt->at(line, column);
+                const StmtSourceMap::Location *f = at ? stmt.find(at->node, 0) : nullptr;
+                return f ? f->line : 0;
+            });
+        } else {
+            host_asm = map_assembly(asm_buffer, [](uint32_t line, uint32_t) { return line; });
+        }
 
         Buffer<> device_code_buf = m.get_device_code_buffer();
         if (device_code_buf.defined()) {
@@ -1084,8 +1091,16 @@ private:
     // Holds cost information for visualized program
     IRCostModel cost_model;
 
+    // The IR as it is printed in the stmt files. The conceptual stmt is set
+    // if it is shown, or if the debug info of the assembly points into it.
+    const StmtSourceMap &stmt;
+    const StmtSourceMap *conceptual_stmt;
+
     // Whether the conceptual stmt is shown, rather than the stmt.
     bool conceptual;
+
+    // The conceptual stmt, if the debug info of the assembly points into it.
+    const StmtSourceMap *assembly_conceptual_stmt;
 
     // The lines of IR shown.
     HTMLLines ir_lines;
@@ -1296,16 +1311,23 @@ private:
 // The external interface to this module
 void print_to_stmt_html(const std::string &html_output_filename,
                         const Module &m,
-                        const std::string &assembly_input_filename) {
-    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, false);
+                        const std::string &assembly_input_filename,
+                        const StmtSourceMap &stmt,
+                        const StmtSourceMap *assembly_conceptual_stmt) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, stmt,
+                                    assembly_conceptual_stmt, false, assembly_conceptual_stmt != nullptr);
     inspector.generate_html(m);
     debug(1) << "Done generating HTML IR Inspector - printed to: " << html_output_filename << "\n";
 }
 
 void print_to_conceptual_stmt_html(const std::string &html_output_filename,
                                    const Module &m,
-                                   const std::string &assembly_input_filename) {
-    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, true);
+                                   const std::string &assembly_input_filename,
+                                   const StmtSourceMap &stmt,
+                                   const StmtSourceMap &conceptual_stmt,
+                                   bool assembly_in_conceptual_stmt) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, stmt,
+                                    &conceptual_stmt, true, assembly_in_conceptual_stmt);
     inspector.generate_html(m);
     debug(1) << "Done generating HTML Conceptual IR Inspector - printed to: " << html_output_filename << "\n";
 }

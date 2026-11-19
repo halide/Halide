@@ -205,8 +205,10 @@ public:
     // just take AbstractGeneratorPtr as arguments?
 
     /** Call generate() and produce a Module for the result.
-     *If function_name is empty, generator_name() will be used for the function. */
-    Module build_module(const std::string &function_name = "");
+     *If function_name is empty, generator_name() will be used for the function.
+     * Set for_html_outputs if the Module will be compiled to the stmt_html or
+     * conceptual_stmt_html outputs (see Pipeline::compile_to_module). */
+    Module build_module(const std::string &function_name = "", bool for_html_outputs = false);
 
     /**
      * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.

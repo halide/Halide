@@ -248,10 +248,10 @@ void define_pipeline(py::module_ &m) {
             .def("compile_to_multitarget_object_files", &Pipeline::compile_to_multitarget_object_files, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
 
             .def("compile_to_module",  //
-                 [](Pipeline &p, const std::vector<Argument> &args, const std::string &fn_name, const Target &target, LinkageType linkage_type) -> Module {
-                     return p.compile_to_module(args, fn_name, to_aot_target(target), linkage_type);  //
+                 [](Pipeline &p, const std::vector<Argument> &args, const std::string &fn_name, const Target &target, LinkageType linkage_type, bool for_html_outputs) -> Module {
+                     return p.compile_to_module(args, fn_name, to_aot_target(target), linkage_type, for_html_outputs);  //
                  },
-                 py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
+                 py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target(), py::arg("linkage") = LinkageType::ExternalPlusMetadata, py::arg("for_html_outputs") = false)
 
             .def("compile_jit",  //
                  [](Pipeline &p, const Target &target) {
