@@ -290,7 +290,18 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
            rewrite(select(y, x + c0, z) < x + c1, !y && (z < x + c1), c0 >= c1) ||
            rewrite(select(y, x + c0, z) < x + c1, y || (z < x + c1), c0 < c1) ||
            rewrite(select(y, z, x + c0) < x + c1, y && (z < x + c1), c0 >= c1) ||
-           rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1)) ||
+           rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
+
+           // Both sides of the select give the same answer when one is a
+           // min or max of the other
+           rewrite(select(x, y, min(y, z)) < z + c0, y < z + c0, c0 <= 0) ||
+           rewrite(select(x, y, min(z, y)) < z + c0, y < z + c0, c0 <= 0) ||
+           rewrite(select(x, min(y, z), y) < z + c0, y < z + c0, c0 <= 0) ||
+           rewrite(select(x, min(z, y), y) < z + c0, y < z + c0, c0 <= 0) ||
+           rewrite(z < select(x, y, max(y, z)) + c0, z < y + c0, c0 <= 0) ||
+           rewrite(z < select(x, y, max(z, y)) + c0, z < y + c0, c0 <= 0) ||
+           rewrite(z < select(x, max(y, z), y) + c0, z < y + c0, c0 <= 0) ||
+           rewrite(z < select(x, max(z, y), y) + c0, z < y + c0, c0 <= 0)) ||
 
           // Normalize comparison of ramps to a comparison of a ramp and a broadacst
           EVAL_IN_LAMBDA  //
