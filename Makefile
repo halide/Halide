@@ -2519,7 +2519,6 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 ifeq ($(UNAME), Darwin)
@@ -2592,9 +2591,6 @@ $(DISTRIB_DIR)/halide.tgz: distrib
 		halide/halide_config.*
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
-
-$(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
-	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
 
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
