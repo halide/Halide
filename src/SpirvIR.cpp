@@ -1755,7 +1755,7 @@ SpvBuilder::ConstantKey SpvBuilder::make_constant_key(uint8_t code, uint8_t bits
 }
 
 SpvBuilder::ConstantKey SpvBuilder::make_constant_key(const Type &type, const void *data, bool is_specialization) const {
-    return make_constant_key(type.code(), type.bits(), type.lanes(), type.bytes(), data, is_specialization);
+    return make_constant_key(type.code(), type.bits(), type.lanes(), size_t(type.bytes()) * size_t(type.lanes()), data, is_specialization);
 }
 
 SpvBuilder::ConstantKey SpvBuilder::make_bool_constant_key(bool value) const {
