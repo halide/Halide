@@ -235,10 +235,10 @@ int main(int argc, char **argv) {
     Buffer<uint32_t> result = lerp_constants.realize();
 
     uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
-    if (result(0) != expected) {
-        std::cerr << "Expected " << expected << " got " << result(0) << "\n";
+    if (result() != expected) {
+        std::cerr << "Expected " << expected << " got " << result() << "\n";
     }
-    assert(result(0) == expected);
+    assert(result() == expected);
 
     // Add a little more coverage for uint32_t as this was failing
     // without being detected for a long time.

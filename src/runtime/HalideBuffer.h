@@ -2049,6 +2049,7 @@ private:
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
 #if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+        assert(d < this->dimensions());
         assert(first >= this->buf.dim[d].min);
         assert(first < this->buf.dim[d].min + this->buf.dim[d].extent);
 #endif
