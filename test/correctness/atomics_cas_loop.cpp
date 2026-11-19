@@ -12,9 +12,9 @@ using namespace Halide;
 // An atomic update that can't be done as a single atomic read-modify-write is
 // done as a compare-and-swap loop. The new value must be computed from the
 // value the cmpxchg compares against, so the loop must not contain any other
-// (non-atomic) load of the location being updated. This test compiles a few
-// such updates to LLVM assembly and checks that no basic block containing a
-// cmpxchg also contains a plain load.
+// (non-atomic) load of the location being updated. This test checks the
+// generated code for host LLVM and CUDA/PTX, as well as related upstream passes
+// (ClampUnsafeAccesses and AddAtomicMutex).
 
 namespace {
 
@@ -25,8 +25,45 @@ std::string read_file(const std::string &path) {
     return ss.str();
 }
 
-// Returns the number of basic blocks containing a cmpxchg, or -1 if any of
-// them also contains a non-atomic load.
+// Extract and unescape an LLVM IR private constant byte string like
+// `@opencl_gpu_source_kernels.data = private constant [... x i8] c"...\00"`.
+std::string extract_llvm_string_global(const std::string &ll, const std::string &global_prefix) {
+    size_t pos = ll.find(global_prefix);
+    if (pos == std::string::npos) {
+        return "";
+    }
+    size_t cpos = ll.find(" c\"", pos);
+    if (cpos == std::string::npos) {
+        return "";
+    }
+    size_t i = cpos + 3;
+    std::string out;
+    while (i < ll.size() && ll[i] != '"') {
+        if (ll[i] == '\\' && i + 2 < ll.size()) {
+            auto hex_val = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                return -1;
+            };
+            int hi = hex_val(ll[i + 1]);
+            int lo = hex_val(ll[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                char ch = static_cast<char>((hi << 4) | lo);
+                if (ch != '\0') {
+                    out.push_back(ch);
+                }
+                i += 3;
+                continue;
+            }
+        }
+        out.push_back(ll[i++]);
+    }
+    return out;
+}
+
+// Returns the number of basic blocks containing a cmpxchg, or -1 if any
+// cmpxchg block (or cas.* block) also contains a non-atomic load.
 int check_cas_loops(const std::string &name, const std::string &path) {
     std::ifstream in(path);
     std::string line;
@@ -35,11 +72,14 @@ int check_cas_loops(const std::string &name, const std::string &path) {
     bool ok = true;
     auto finish_block = [&]() {
         bool has_cmpxchg = false;
+        bool is_cas_block = !block.empty() && block[0].find("cas.") == 0;
         for (const auto &l : block) {
             has_cmpxchg |= l.find(" cmpxchg ") != std::string::npos;
         }
         if (has_cmpxchg) {
             cas_blocks++;
+        }
+        if (has_cmpxchg || is_cas_block) {
             for (const auto &l : block) {
                 if (l.find(" = load ") != std::string::npos &&
                     l.find(" = load atomic ") == std::string::npos) {
@@ -66,6 +106,36 @@ int check_cas_loops(const std::string &name, const std::string &path) {
     return ok ? cas_blocks : -1;
 }
 
+bool check_cuda_cas(const std::string &name, const std::string &ptx) {
+    if (ptx.empty()) {
+        printf("%s: failed to extract CUDA PTX kernel source\n", name.c_str());
+        return false;
+    }
+    if (ptx.find("atom.global.cas.") == std::string::npos) {
+        printf("%s: no atom.global.cas found in PTX:\n%s\n", name.c_str(), ptx.c_str());
+        return false;
+    }
+    std::istringstream in(ptx);
+    std::string line;
+    bool in_cas = false;
+    while (std::getline(in, line)) {
+        if (line.find("%casloop.start") != std::string::npos) {
+            in_cas = true;
+            continue;
+        }
+        if (line.find("%casloop.end") != std::string::npos) {
+            in_cas = false;
+            continue;
+        }
+        if (in_cas && line.find("ld.global.") != std::string::npos) {
+            printf("%s: non-volatile ld.global inside CUDA PTX CAS loop:\n  %s\nFull PTX:\n%s\n",
+                   name.c_str(), line.c_str(), ptx.c_str());
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -77,7 +147,9 @@ int main(int argc, char **argv) {
 
     const int hist_size = 7;
     bool ok = true;
-    for (int i = 0; i < 6; i++) {
+
+    // 1. Host LLVM CAS loop checks.
+    for (int i = 0; i < 8; i++) {
         Func hist("hist");
         Var x("x");
         RDom r(0, 1000, "r");
@@ -108,16 +180,30 @@ int main(int argc, char **argv) {
             vector_width = 8;
             break;
         case 4:
+            name = "mul_u32_vectorized_ramp";
+            hist(x) = cast<uint32_t>(1);
+            hist(r) = hist(r) * cast<uint32_t>(3);
+            vector_width = 8;
+            break;
+        case 5:
             name = "min_f16";
             hist(x) = cast<float16_t>(0);
             hist(idx) = min(hist(idx) + cast<float16_t>(1), cast<float16_t>(100));
             break;
-        case 5:
+        case 6:
             // Repeated self-load introduces an internal Let inside Store::value.
             // AddAtomicMutex must not force a mutex lock for this.
             name = "repeated_self_load";
             hist(x) = 1;
             hist(idx) = select(idx == 0, hist(idx) * 2, hist(idx) + 1);
+            check_no_mutex = true;
+            break;
+        case 7:
+            // Runtime-conditional alias: hist(0) may alias hist(idx).
+            // All loads inside the CAS loop must be atomic monotonic.
+            name = "conditional_alias";
+            hist(x) = 1;
+            hist(idx) = select(idx == 0, hist(0) * 2, hist(idx) + 1);
             check_no_mutex = true;
             break;
         }
@@ -155,7 +241,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // ClampUnsafeAccesses must clamp Provide::args symmetrically with
+    // 2. ClampUnsafeAccesses must clamp Provide::args symmetrically with
     // Call::args so an atomic += indexed by a compute_root producer stays on
     // the native atomicrmw add fast path instead of falling back to a CAS loop.
     {
@@ -177,6 +263,90 @@ int main(int argc, char **argv) {
             contents.find(" cmpxchg ") != std::string::npos) {
             printf("clamp_add: expected atomicrmw add without cmpxchg in %s\n", ll.c_str());
             ok = false;
+        }
+    }
+
+    // 3. CUDA/PTX CAS loop codegen checks (compile-only, no device required).
+    {
+        const Target cuda_target = target.with_feature(Target::CUDA);
+        if (cuda_target.supported()) {
+            for (int i = 0; i < 2; i++) {
+                Func hist("hist");
+                Var x("x");
+                RDom r(0, 1024, "r");
+                RVar ro("ro"), ri("ri"), rio("rio"), rii("rii");
+                std::string name;
+                if (i == 0) {
+                    name = "cuda_min_i32";
+                    Expr idx = r % hist_size;
+                    hist(x) = 0;
+                    hist(idx) = min(hist(idx) + 1, 100);
+                    hist.compute_root();
+                    hist.update()
+                        .atomic(true /*override_associativity_test*/)
+                        .split(r, ro, ri, 32)
+                        .gpu_blocks(ro, DeviceAPI::CUDA)
+                        .gpu_threads(ri, DeviceAPI::CUDA);
+                } else {
+                    // 4-wide vectorized 32-bit atomic store must not be
+                    // rewritten into an unsupported i128 store on PTX.
+                    name = "cuda_mul_u32_vec4";
+                    hist(x) = cast<uint32_t>(1);
+                    hist(r) = hist(r) * cast<uint32_t>(3);
+                    hist.compute_root();
+                    hist.update()
+                        .atomic(true /*override_associativity_test*/)
+                        .split(r, ro, ri, 32)
+                        .split(ri, rio, rii, 4)
+                        .gpu_blocks(ro, DeviceAPI::CUDA)
+                        .gpu_threads(rio, DeviceAPI::CUDA)
+                        .vectorize(rii);
+                }
+                const std::string ll = dir + "atomics_cas_loop_" + name + ".ll";
+                hist.compile_to_llvm_assembly(ll, {}, "atomics_cas_loop_" + name, cuda_target);
+                Internal::assert_file_exists(ll);
+                std::string ptx = extract_llvm_string_global(read_file(ll), "@cuda_gpu_source_kernels");
+                ok &= check_cuda_cas(name, ptx);
+            }
+        }
+    }
+
+    // 4. Runtime correctness check for repeated self-load and conditional alias
+    // CAS updates under parallel execution.
+    {
+        for (int mode = 0; mode < 2; mode++) {
+            Func hist("hist_rt");
+            Var x("x");
+            RDom r(0, 100, "r");
+            Expr idx = r % hist_size;
+            hist(x) = 1;
+            if (mode == 0) {
+                hist(idx) = select(idx == 0, hist(idx) * 2, hist(idx) + 1);
+            } else {
+                hist(idx) = select(idx == 0, hist(0) * 2, hist(idx) + 1);
+            }
+            hist.compute_root();
+            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+
+            std::vector<int> expected(hist_size, 1);
+            for (int i = 0; i < 100; i++) {
+                int k = i % hist_size;
+                if (k == 0) {
+                    expected[0] *= 2;
+                } else {
+                    expected[k] += 1;
+                }
+            }
+            for (int iter = 0; iter < 10; iter++) {
+                Buffer<int> out = hist.realize({hist_size});
+                for (int k = 0; k < hist_size; k++) {
+                    if (out(k) != expected[k]) {
+                        printf("runtime mode %d iter %d: out(%d) = %d, expected %d\n",
+                               mode, iter, k, out(k), expected[k]);
+                        ok = false;
+                    }
+                }
+            }
         }
     }
 
