@@ -50,6 +50,9 @@ if (NOT MSVC)
     # device_buffer_utils.cpp
     halide_define_runtime_internal_test(device_buffer_utils)
 
+    # gpu_compilation_cache.cpp
+    halide_define_runtime_internal_test(gpu_compilation_cache)
+
     # linked_list.cpp
     halide_define_runtime_internal_test(linked_list)
 

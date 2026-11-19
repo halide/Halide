@@ -11,10 +11,10 @@ namespace Internal {
 template<typename ContextT, typename ModuleStateT>
 class GPUCompilationCache {
     struct CachedCompilation {
-        ContextT context{};
-        ModuleStateT module_state{};
-        uintptr_t kernel_id{0};
-        uintptr_t use_count{0};
+        ContextT context;
+        ModuleStateT module_state;
+        uintptr_t kernel_id;
+        uintptr_t use_count;
     };
 
     halide_mutex mutex;
@@ -106,9 +106,9 @@ class GPUCompilationCache {
             log2_compilations_size = size_bits;
 
             if (count > 0) {  // Mainly to catch empty initial table case
+                count = 0;
                 for (int32_t i = 0; i < old_size; i++) {
-                    if (old_table[i].kernel_id != kInvalidId &&
-                        old_table[i].kernel_id != kDeletedId) {
+                    if (old_table[i].kernel_id > kDeletedId) {
                         bool result = insert(old_table[i]);
                         halide_debug_assert(nullptr, result);  // Resizing the table while resizing the table is a logic error.
                         (void)result;
@@ -127,14 +127,17 @@ class GPUCompilationCache {
         }
 
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
-            if (compilations[i].kernel_id > kInvalidId &&
+            if (compilations[i].kernel_id > kDeletedId &&
                 (all || (compilations[i].context == context)) &&
                 compilations[i].use_count == 0) {
                 debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state
                                     << " id " << compilations[i].kernel_id
                                     << " context " << compilations[i].context << "\n";
-                f(compilations[i].module_state);
+                if (compilations[i].module_state != nullptr) {
+                    f(compilations[i].module_state);
+                }
                 compilations[i].module_state = nullptr;
+                compilations[i].context = {};
                 compilations[i].kernel_id = kDeletedId;
                 count--;
             }

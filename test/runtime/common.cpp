@@ -21,6 +21,12 @@ void halide_profiler_report(void *user_context) {
 void halide_profiler_reset() {
 }
 
+void halide_mutex_lock(halide_mutex *mutex) {
+}
+
+void halide_mutex_unlock(halide_mutex *mutex) {
+}
+
 }  // extern "C"
 
 namespace {
