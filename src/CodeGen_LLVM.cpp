@@ -1392,10 +1392,21 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
+    PassInstrumentationCallbacks pic;
+    if (get_target().arch == Target::ARM) {
+        // VectorCombine narrows casts across the shuffles Halide uses to
+        // split and concatenate native vectors, producing illegal types
+        // that lower poorly on ARM (e.g. widening multiplies of uint8 by
+        // uint16). On ARM it otherwise buys little.
+        pic.registerShouldRunOptionalPassCallback([](StringRef name, const auto &) {
+            return name != "VectorCombinePass";
+        });
+    }
+
 #if LLVM_VERSION >= 240
-    llvm::PassBuilder pb(module->getContext(), tm.get(), pto);
+    llvm::PassBuilder pb(module->getContext(), tm.get(), pto, std::nullopt, &pic);
 #else
-    llvm::PassBuilder pb(tm.get(), pto);
+    llvm::PassBuilder pb(tm.get(), pto, std::nullopt, &pic);
 #endif
 
     // These analysis managers have to be declared in this order.

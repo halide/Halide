@@ -545,6 +545,13 @@ public:
             check(arm32 ? "vmull.s32" : "smull", 2 * w, i64(i32_1) * i32_2);
             check(arm32 ? "vmull.u32" : "umull", 2 * w, u64(u32_1) * u32_2);
 
+            if (!arm32) {
+                // Multi-register widening multiplies of an 8-bit value by a
+                // 16-bit constant should widen whole registers to 16 bits.
+                check("sshll2", 16 * w, i32(i8_1) * 1000);
+                check("ushll2", 16 * w, u32(u8_1) * 1000);
+            }
+
             // integer division by a constant should use fixed point unsigned
             // multiplication, which is done by using a widening multiply
             // followed by a narrowing
