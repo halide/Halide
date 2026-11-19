@@ -291,7 +291,7 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     auto addr = JIT.lookup(name);
     internal_assert(addr) << llvm::toString(addr.takeError()) << "\n";
 
-    void *f = (void *)addr->getValue();
+    void *f = (void *)addr->toPtr<void()>();
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -319,7 +319,7 @@ public:
                 iter = module.exports().find(name.substr(1));
             }
             if (iter != module.exports().end()) {
-                return (uint64_t)iter->second.address;
+                return llvm::orc::ExecutorAddr::fromPtr(iter->second.address).getValue();
             }
         }
         uint64_t result = SectionMemoryManager::getSymbolAddress(name);
@@ -363,12 +363,19 @@ void compile_module_impl(
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
 
+    if (!WasmModule::can_jit_target(target)) {
+        const Target host = get_host_target();
+        user_assert(target.has_feature(Target::ARM64e) == host.has_feature(Target::ARM64e))
+            << "Cannot JIT target (" << target << ") with a different arm64e pointer authentication ABI than the host (" << host << ").\n";
+    }
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     debug(2) << "Target triple: " << m->getTargetTriple().str() << "\n";
     string error_string;
 
     llvm::for_each(*m, set_function_attributes_from_halide_target_options);
+    apply_arm64e_pointer_authentication(*m, target);
 
     llvm::TargetOptions options;
     get_target_options(*m, options);
@@ -1172,6 +1179,10 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                                           runtime_kind != MainShared);
         if (for_module) {
             clone_target_options(*for_module, *module);
+        } else {
+            CodeGen_LLVM::new_for_target(one_gpu.with_implied_features(),
+                                         *runtime.jit_module->context)
+                ->apply_target_options(*module);
         }
         module->setModuleIdentifier(module_name);
 

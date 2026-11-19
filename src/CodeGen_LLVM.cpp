@@ -433,6 +433,27 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
     return codegen->finish_codegen();
 }
 
+void CodeGen_LLVM::apply_target_options(llvm::Module &m) const {
+    llvm::LLVMContext &ctx = m.getContext();
+    bool enable_bt = target.has_feature(Target::Feature::EnableBacktraces) ||
+                     target.has_feature(Target::Feature::Debug);
+    m.addModuleFlag(llvm::Module::Warning, "halide_enable_backtraces", enable_bt ? 1 : 0);
+    m.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+#if LLVM_VERSION >= 240
+    m.addModuleFlag(llvm::Module::Error, "float-abi", MDString::get(ctx, use_soft_float_abi() ? "soft" : "hard"));
+#endif
+    m.addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(ctx, mcpu_target()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(ctx, mcpu_tune()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(ctx, mattrs()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(ctx, mabi()));
+    m.addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
+    m.addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
+    m.addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
+    if (effective_vscale != 0) {
+        m.addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
+    }
+}
+
 void CodeGen_LLVM::init_codegen(const std::string &name) {
     init_module();
 
@@ -443,23 +464,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
     module->setModuleIdentifier(name);
 
     // Add some target specific info to the module as metadata.
-    bool enable_bt = target.has_feature(Target::Feature::EnableBacktraces) ||
-                     target.has_feature(Target::Feature::Debug);
-    module->addModuleFlag(llvm::Module::Warning, "halide_enable_backtraces", enable_bt ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-#if LLVM_VERSION >= 240
-    module->addModuleFlag(llvm::Module::Error, "float-abi", MDString::get(*context, use_soft_float_abi() ? "soft" : "hard"));
-#endif
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
-    if (effective_vscale != 0) {
-        module->addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
-    }
+    apply_target_options(*module);
 
     // Ensure some types we need are defined
     halide_buffer_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_buffer_t");
@@ -871,6 +876,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
 
     // Optimize
     CodeGen_LLVM::optimize_module();
+
+    apply_arm64e_pointer_authentication(*module, target);
 
     if (target.has_feature(Target::EmbedBitcode)) {
         std::string halide_command = "halide target=" + target.to_string();

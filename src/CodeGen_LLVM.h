@@ -76,6 +76,9 @@ public:
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
+    /** Populate Halide target option metadata flags on an LLVM module. */
+    void apply_target_options(llvm::Module &m) const;
+
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
 

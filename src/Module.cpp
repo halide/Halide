@@ -1,8 +1,10 @@
 #include "Module.h"
 
+#include <algorithm>
 #include <array>
 #include <fstream>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <utility>
 
@@ -901,7 +903,8 @@ void compile_multitarget(const std::string &fn_name,
     // array-of-uint64 for calls to halide_can_use_target_features() anyway,
     // so we'll just build and maintain in that form to avoid extra conversion.
     constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
-    uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
+    uint64_t runtime_features[kFeaturesWordCount];
+    std::fill(std::begin(runtime_features), std::end(runtime_features), ~uint64_t{0});
 
     TemporaryFileDir temp_obj_dir;
     std::vector<Expr> wrapper_args;
@@ -920,7 +923,8 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 11> must_match_features = {{
+        static constexpr std::array must_match_features = {
+            Target::ARM64e,
             Target::ASAN,
             Target::CPlusPlusMangling,
             Target::Debug,
@@ -931,10 +935,10 @@ void compile_multitarget(const std::string &fn_name,
             Target::TSAN,
             Target::SanitizerCoverage,
             Target::UserContext,
-        }};
+        };
         for (auto f : must_match_features) {
             if (target.has_feature(f) != base_target.has_feature(f)) {
-                user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "'' set identically for compile_multitarget.\n";
+                user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "' set identically for compile_multitarget.\n";
                 break;
             }
         }
@@ -1006,6 +1010,10 @@ void compile_multitarget(const std::string &fn_name,
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
         Target runtime_target(base_target.os, base_target.arch, base_target.bits, base_target.processor_tune);
+        if (std::all_of(targets.begin(), targets.end(),
+                        [&](const Target &t) { return t.vector_bits == base_target.vector_bits; })) {
+            runtime_target.vector_bits = base_target.vector_bits;
+        }
         for (int i = 0; i < Target::FeatureEnd; ++i) {
             // We never want NoRuntime set here.
             if (i == Target::NoRuntime) {
@@ -1016,6 +1024,15 @@ void compile_multitarget(const std::string &fn_name,
             if (runtime_features[word] & (((uint64_t)1) << bit)) {
                 runtime_target.set_feature((Target::Feature)i);
             }
+        }
+        if (runtime_target.vector_bits == 0) {
+            runtime_target.set_feature(Target::SVE, false);
+            runtime_target.set_feature(Target::SVE2, false);
+            runtime_target.set_feature(Target::AVX10_1, false);
+        }
+        if (runtime_target.has_feature(Target::SME2) &&
+            runtime_target.sme_streaming_vector_bits() == 0) {
+            runtime_target.set_feature(Target::SME2, false);
         }
         std::string runtime_path = contains(output_files, OutputFileType::static_library) ?
                                        temp_obj_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "_runtime", runtime_target) :
