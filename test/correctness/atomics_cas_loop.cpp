@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <string>
+#include <vector>
 
 using namespace Halide;
 
@@ -15,6 +17,13 @@ using namespace Halide;
 // cmpxchg also contains a plain load.
 
 namespace {
+
+std::string read_file(const std::string &path) {
+    std::ifstream in(path);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
 
 // Returns the number of basic blocks containing a cmpxchg, or -1 if any of
 // them also contains a non-atomic load.
@@ -126,6 +135,31 @@ int main(int argc, char **argv) {
             printf("%s: no compare-and-swap loop found in %s\n", name.c_str(), ll.c_str());
             ok = false;
         } else if (cas_blocks < 0) {
+            ok = false;
+        }
+    }
+
+    // ClampUnsafeAccesses must clamp Provide::args symmetrically with
+    // Call::args so an atomic += indexed by a compute_root producer stays on
+    // the native atomicrmw add fast path instead of falling back to a CAS loop.
+    {
+        Func producer("producer"), hist("hist");
+        Var x("x");
+        RDom r(0, 1000, "r");
+        producer(x) = (x * x) % hist_size;
+        hist(x) = 0;
+        hist(producer(r)) += 1;
+        producer.compute_root().parallel(x);
+        hist.compute_root();
+        hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+
+        const std::string ll = dir + "atomics_cas_loop_clamp_add.ll";
+        hist.compile_to_llvm_assembly(ll, {}, "atomics_cas_loop_clamp_add", target);
+        Internal::assert_file_exists(ll);
+        std::string contents = read_file(ll);
+        if (contents.find("atomicrmw add") == std::string::npos ||
+            contents.find(" cmpxchg ") != std::string::npos) {
+            printf("clamp_add: expected atomicrmw add without cmpxchg in %s\n", ll.c_str());
             ok = false;
         }
     }
