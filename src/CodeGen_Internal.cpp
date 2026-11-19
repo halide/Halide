@@ -616,7 +616,7 @@ std::string get_modflag_string(const llvm::Module &mod, const char *flag, const 
     return get_md_string(mod.getModuleFlag(flag)).value_or(or_default);
 }
 
-#if defined(WITH_AARCH64) && __has_include(<llvm/Support/LibraryOptionsContext.h>)
+#if defined(WITH_AARCH64) && LLVM_VERSION >= 240
 const llvm::cl::LibraryOptionsContext *get_arm64e_x1_library_options() {
     static llvm::cl::LibraryOptionsContext ctx;
     static std::once_flag init_once;
@@ -685,7 +685,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = true;
     options.MCOptions.X86RelaxRelocations = false;
     options.MCOptions.ABIName = mabi;
-#if defined(WITH_AARCH64) && __has_include(<llvm/Support/LibraryOptionsContext.h>)
+#if defined(WITH_AARCH64) && LLVM_VERSION >= 240
     if (get_modflag_bool(module, "halide_arm64e_x1")) {
         options.MCOptions.LibraryOptions = get_arm64e_x1_library_options();
     }

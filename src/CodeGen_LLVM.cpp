@@ -257,7 +257,7 @@ void CodeGen_LLVM::initialize_llvm() {
 #include <llvm/Config/AsmPrinters.def>
 #undef LLVM_ASM_PRINTER
 
-#if defined(WITH_AARCH64) && !__has_include(<llvm/Support/LibraryOptionsContext.h>)
+#if defined(WITH_AARCH64) && LLVM_VERSION < 240
         // In LLVM 22-23, FEAT_CPA instruction selection (addpt/subpt/maddpt) is
         // gated on the hidden AArch64 cl::opt `aarch64-use-featcpa-codegen` in
         // addition to `+cpa` on the subtarget (`Subtarget->hasCPA()`). Set it

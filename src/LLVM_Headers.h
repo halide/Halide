@@ -80,7 +80,7 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormattedStream.h>
-#if __has_include(<llvm/Support/LibraryOptionsContext.h>)
+#if LLVM_VERSION >= 240
 #include <llvm/Support/LibraryOptionsContext.h>
 #endif
 #include <llvm/Support/TargetSelect.h>
