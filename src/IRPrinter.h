@@ -123,23 +123,41 @@ struct Indentation {
 };
 std::ostream &operator<<(std::ostream &stream, const Indentation &);
 
-template<typename T>
-struct Ansi {
-    const T &cnt;
-    const char *open, *close;
+/** The kinds of text that IRPrinter styles, e.g. with colors. */
+enum class IRPrinterStyle {
+    Highlight,
+    Dim,
+    Keyword,
+    ImmInt,
+    ImmFloat,
+    ImmString,
+    Var,
+    Buffer,
+    Function,
+    Type,
+    /** A type in parentheses, which are part of the styled text. */
+    TypeParens,
+    /** Punctuation and operators, styled by how deeply they are nested. */
+    Paren,
+    BoldParen,
 };
 
+class IRPrinter;
+
+/** Text that an IRPrinter styles, as made by its kw(), var(), paren(), ...
+ * helpers. Writing it to a stream writes the text between the printer's
+ * begin_style() and end_style(). */
 template<typename T>
-std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
-    if (a.open) {
-        out << a.open;
-    }
-    out << a.cnt;
-    if (a.close) {
-        out << a.close;
-    }
-    return out;
-}
+struct StyledText {
+    const T &cnt;
+    const IRPrinter *printer;
+    IRPrinterStyle style;
+    /** For punctuation: how deeply it is nested. */
+    int depth;
+    /** For colored text in a terminal: whether the style ends by resetting
+     * all attributes (e.g. bold too), rather than just the color. */
+    bool reset;
+};
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -166,6 +184,16 @@ public:
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
+
+    /** Emit a Module on the output stream, as operator<< does, with the
+     * bodies of its functions printed by this printer. */
+    void print(const Module &);
+
+    /** Called before and after text of the given style is emitted. Without
+     * colors, these only emit the parentheses of IRPrinterStyle::TypeParens.
+     * See StyledText for depth and reset. */
+    virtual void begin_style(IRPrinterStyle style, int depth) const;
+    virtual void end_style(IRPrinterStyle style, bool reset) const;
 
 protected:
     Indentation get_indent() const {
@@ -205,17 +233,17 @@ protected:
     const char *ansi_reset = "";
 
     // clang-format off
-    template<typename T> Ansi<T> hl(const T &t);
-    template<typename T> Ansi<T> kw(const T &t);
-    template<typename T> Ansi<T> imm_int(const T &t);
-    template<typename T> Ansi<T> imm_float(const T &t);
-    template<typename T> Ansi<T> imm_str(const T &t);
-    template<typename T> Ansi<T> var(const T &t);
-    template<typename T> Ansi<T> buf(const T &t);
-    template<typename T> Ansi<T> fn(const T &t);
-    template<typename T> Ansi<T> type(const T &t);
-    template<typename T> Ansi<T> typep(const T &t);
-    template<typename T> Ansi<T> paren(const T &t, bool bold = true, int d = -1);
+    template<typename T> StyledText<T> hl(const T &t);
+    template<typename T> StyledText<T> kw(const T &t);
+    template<typename T> StyledText<T> imm_int(const T &t);
+    template<typename T> StyledText<T> imm_float(const T &t);
+    template<typename T> StyledText<T> imm_str(const T &t);
+    template<typename T> StyledText<T> var(const T &t);
+    template<typename T> StyledText<T> buf(const T &t);
+    template<typename T> StyledText<T> fn(const T &t);
+    template<typename T> StyledText<T> type(const T &t);
+    template<typename T> StyledText<T> typep(const T &t);
+    template<typename T> StyledText<T> paren(const T &t, bool bold = true, int d = -1);
     // clang-format on
 
     /** Either emits "(" or "", depending on the value of implicit_parens */
@@ -293,7 +321,22 @@ protected:
     void visit(const StreamingStore *) override;
     void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
+
+    /** Called before and after an Expr or Stmt is emitted. Do nothing by
+     * default. */
+    virtual void begin_node(const IRNode *) {
+    }
+    virtual void end_node(const IRNode *) {
+    }
 };
+
+template<typename T>
+std::ostream &operator<<(std::ostream &out, const StyledText<T> &a) {
+    a.printer->begin_style(a.style, a.depth);
+    out << a.cnt;
+    a.printer->end_style(a.style, a.reset);
+    return out;
+}
 
 /** Debugging helpers for interactive debuggers (LLDB/GDB).
  *
