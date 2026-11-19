@@ -13,8 +13,8 @@ using namespace Halide;
 // done as a compare-and-swap loop. The new value must be computed from the
 // value the cmpxchg compares against, so the loop must not contain any other
 // (non-atomic) load of the location being updated. This test checks the
-// generated code for host LLVM and CUDA/PTX, as well as related upstream passes
-// (ClampUnsafeAccesses and AddAtomicMutex).
+// generated code for host LLVM, CUDA/PTX, and OpenCL, as well as related
+// upstream passes (ClampUnsafeAccesses and AddAtomicMutex).
 
 namespace {
 
@@ -104,6 +104,62 @@ int check_cas_loops(const std::string &name, const std::string &path) {
     }
     finish_block();
     return ok ? cas_blocks : -1;
+}
+
+bool check_opencl_cas(const std::string &name,
+                      const std::string &src,
+                      const std::string &expected_cmpxchg) {
+    if (src.empty()) {
+        printf("%s: failed to extract OpenCL kernel source\n", name.c_str());
+        return false;
+    }
+    if (src.find(expected_cmpxchg + "(") == std::string::npos) {
+        printf("%s: expected %s in OpenCL kernel:\n%s\n",
+               name.c_str(), expected_cmpxchg.c_str(), src.c_str());
+        return false;
+    }
+    // Check lines inside `for (;;)` loop: any `_hist` array reference must be
+    // inside an atomic cmpxchg call, never a plain load.
+    std::istringstream in(src);
+    std::string line;
+    bool in_loop = false;
+    int brace_depth = 0;
+    int loop_count = 0;
+    bool saw_feedback = false;
+    while (std::getline(in, line)) {
+        if (!in_loop && line.find("for (;;)") != std::string::npos) {
+            in_loop = true;
+            brace_depth = 1;
+            loop_count++;
+            continue;
+        }
+        if (in_loop) {
+            for (char c : line) {
+                if (c == '{') brace_depth++;
+                if (c == '}') brace_depth--;
+            }
+            if (line.find("_hist") != std::string::npos &&
+                line.find("[") != std::string::npos &&
+                line.find(expected_cmpxchg + "(") == std::string::npos) {
+                printf("%s: non-atomic buffer load inside OpenCL CAS loop:\n  %s\nFull kernel:\n%s\n",
+                       name.c_str(), line.c_str(), src.c_str());
+                return false;
+            }
+            if (line.find("old_val = prev_val") != std::string::npos ||
+                line.find("old_bits = prev_bits") != std::string::npos) {
+                saw_feedback = true;
+            }
+            if (brace_depth <= 0) {
+                in_loop = false;
+            }
+        }
+    }
+    if (loop_count == 0 || !saw_feedback) {
+        printf("%s: missing expected OpenCL CAS loop or cmpxchg feedback:\n%s\n",
+               name.c_str(), src.c_str());
+        return false;
+    }
+    return true;
 }
 
 bool check_cuda_cas(const std::string &name, const std::string &ptx) {
@@ -266,7 +322,63 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 3. CUDA/PTX CAS loop codegen checks (compile-only, no device required).
+    // 3. OpenCL CAS loop codegen checks (compile-only, no device required).
+    {
+        const Target ocl_target = target.with_feature(Target::OpenCL);
+        if (ocl_target.supported()) {
+            for (int i = 0; i < 4; i++) {
+                Func hist("hist");
+                Var x("x");
+                RDom r(0, 1024, "r");
+                RVar ro("ro"), ri("ri");
+                Expr idx = r % hist_size;
+                std::string name;
+                Target t = ocl_target;
+                std::string expected_fn = "atomic_cmpxchg";
+                switch (i) {
+                case 0:
+                    name = "opencl_min_i32";
+                    hist(x) = 0;
+                    hist(idx) = min(hist(idx) + 1, 100);
+                    break;
+                case 1:
+                    name = "opencl_max_f32";
+                    hist(x) = 0.0f;
+                    hist(idx) = max(hist(idx), cast<float>(r));
+                    break;
+                case 2:
+                    name = "opencl_max_f64";
+                    t = ocl_target.with_feature(Target::CLAtomics64).with_feature(Target::CLDoubles);
+                    hist(x) = cast<double>(0);
+                    hist(idx) = max(hist(idx), cast<double>(r));
+                    expected_fn = "atom_cmpxchg";
+                    break;
+                case 3:
+                    name = "opencl_cond_alias";
+                    hist(x) = 1;
+                    hist(idx) = select(idx == 0, hist(0) * 2, hist(idx) + 1);
+                    break;
+                }
+                if (!t.supported()) {
+                    continue;
+                }
+                hist.compute_root();
+                hist.update()
+                    .atomic(true /*override_associativity_test*/)
+                    .split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::OpenCL)
+                    .gpu_threads(ri, DeviceAPI::OpenCL);
+
+                const std::string ll = dir + "atomics_cas_loop_" + name + ".ll";
+                hist.compile_to_llvm_assembly(ll, {}, "atomics_cas_loop_" + name, t);
+                Internal::assert_file_exists(ll);
+                std::string src = extract_llvm_string_global(read_file(ll), "@opencl_gpu_source_kernels");
+                ok &= check_opencl_cas(name, src, expected_fn);
+            }
+        }
+    }
+
+    // 4. CUDA/PTX CAS loop codegen checks (compile-only, no device required).
     {
         const Target cuda_target = target.with_feature(Target::CUDA);
         if (cuda_target.supported()) {
