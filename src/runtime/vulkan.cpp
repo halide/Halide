@@ -238,6 +238,12 @@ WEAK void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr) {
 
     VulkanContext ctx(user_context);
     if (ctx.error == halide_error_code_success) {
+        // Submit the work the pipeline recorded if the GPU is running out of work.
+        // Otherwise it is submitted together with what is recorded next, or by
+        // the next wait (e.g. halide_vulkan_device_sync).
+        if (vk_flush_submissions_if_gpu_needs_work(user_context, ctx.allocator) != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to submit recorded work!\n";
+        }
         compilation_cache.release_hold(user_context, ctx.device, state_ptr);
     }
 
@@ -561,12 +567,11 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         return error_code;
     }
 
-    // submit the copy: the submission releases the staging buffer once it is done
+    // end the copy: the submission releases the staging buffer once it is done
     vk_attach_staging_region(submission, staging.take(), request.size);
     error_code = vk_end_submission(user_context, ctx.allocator, submission);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to submit the copy!\n";
-        staging.region = vk_detach_staging_region(submission);
         return halide_error_code_device_buffer_copy_failed;
     }
 
@@ -923,9 +928,6 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             vk_attach_staging_region(submission, staging.take(), src->size_in_bytes());
         }
         error_code = vk_end_submission(user_context, ctx.allocator, submission, to_host);
-        if ((error_code != halide_error_code_success) && from_host && !to_host) {
-            staging.region = vk_detach_staging_region(submission);
-        }
         if ((error_code == halide_error_code_success) && to_host) {
             error_code = vk_wait_for_submissions(user_context, ctx.allocator);
         }
@@ -1169,9 +1171,10 @@ WEAK int halide_vulkan_run(void *user_context,
         return error_code;
     }
 
-    // 3. Begin a submission. Its descriptor set and scalar argument buffer are its
-    //    own, so that the work still in flight is left alone.
-    VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index);
+    // 3. Begin recording into a submission. Its descriptor sets and scalar argument
+    //    buffers are its own, so that the work still in flight is left alone.
+    VulkanSubmission *submission = vk_begin_submission(user_context, ctx.allocator, ctx.queue, ctx.queue_family_index,
+                                                       entry_point_binding->storage_buffer_count);
     if (submission == nullptr) {
         error(user_context) << "Vulkan: Failed to begin a submission!\n";
         return halide_error_code_generic_error;
@@ -1181,7 +1184,6 @@ WEAK int halide_vulkan_run(void *user_context,
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     error_code = vk_create_submission_descriptor_set(user_context, ctx.allocator, submission,
                                                      shader_module->descriptor_set_layouts[entry_point_index],
-                                                     entry_point_binding->uniform_buffer_count,
                                                      entry_point_binding->storage_buffer_count,
                                                      &descriptor_set);
     if (error_code != halide_error_code_success) {
@@ -1229,8 +1231,9 @@ WEAK int halide_vulkan_run(void *user_context,
                             entry_point_index,
                             blocksX, blocksY, blocksZ);
 
-    // 5. Submit the command buffer to our command queue. Nothing waits for it here:
-    //    copies to the host and halide_vulkan_device_sync do.
+    // 5. End the dispatch. It is submitted together with the commands recorded
+    //    around it, and nothing waits for it here: copies to the host and
+    //    halide_vulkan_device_sync do.
     error_code = vk_end_submission(user_context, ctx.allocator, submission);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to submit command buffer!\n";
