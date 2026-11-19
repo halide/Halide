@@ -445,35 +445,56 @@ public:
 class VectorAccessOfFoldedDim : public IRVisitor {
     using IRVisitor::visit;
 
+    int lanes_of(const Expr &e) const {
+        int l = 0;
+        visit_with(e, [&](auto *, const Variable *op) {
+            if (const int *v = vector_lanes.find(op->name)) {
+                l = std::max(l, *v);
+            }
+        });
+        return l;
+    }
+
     void visit(const Provide *op) override {
         if (op->name == func) {
             internal_assert(dim < (int)op->args.size());
-            if (expr_uses_vars(op->args[dim], vector_vars)) {
-                result = true;
-            }
-        } else {
-            IRVisitor::visit(op);
+            lanes = std::max(lanes, lanes_of(op->args[dim]));
         }
+        IRVisitor::visit(op);
     }
 
     void visit(const Call *op) override {
         if (op->name == func &&
             op->call_type == Call::Halide) {
             internal_assert(dim < (int)op->args.size());
-            if (expr_uses_vars(op->args[dim], vector_vars)) {
-                result = true;
-            }
-        } else {
-            IRVisitor::visit(op);
+            lanes = std::max(lanes, lanes_of(op->args[dim]));
         }
+        IRVisitor::visit(op);
+    }
+
+    std::optional<int64_t> as_constant(const Expr &e) const {
+        return as_const_int(simplify(substitute(constants, e)));
     }
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
         op->value.accept(this);
-        bool is_vec = expr_uses_vars(op->value, vector_vars);
-        ScopedBinding<> bind(is_vec, vector_vars, op->name);
+        int l = lanes_of(op->value);
+        ScopedBinding<int> bind(l > 0, vector_lanes, op->name, l);
+        auto c = op->value.type() == Int(32) ? as_constant(op->value) : std::nullopt;
+        auto old = constants.find(op->name);
+        Expr old_value = old == constants.end() ? Expr() : old->second;
+        if (c) {
+            constants[op->name] = (int)*c;
+        } else {
+            constants.erase(op->name);
+        }
         op->body.accept(this);
+        if (old_value.defined()) {
+            constants[op->name] = old_value;
+        } else {
+            constants.erase(op->name);
+        }
     }
 
     void visit(const Let *op) override {
@@ -485,17 +506,23 @@ class VectorAccessOfFoldedDim : public IRVisitor {
     }
 
     void visit(const For *op) override {
-        ScopedBinding<> bind(op->for_type == ForType::Vectorized,
-                             vector_vars, op->name);
+        int l = 0;
+        if (op->for_type == ForType::Vectorized) {
+            auto e = as_constant(op->extent());
+            l = e ? (int)*e : 1;
+        }
+        ScopedBinding<int> bind(l > 0, vector_lanes, op->name, l);
         IRVisitor::visit(op);
     }
 
-    Scope<> vector_vars;
+    Scope<int> vector_lanes;
+    std::map<string, Expr> constants;
     const string &func;
     int dim;
 
 public:
-    bool result = false;
+    // The widest vectorized loop the accesses along dim depend on, or zero.
+    int lanes = 0;
     VectorAccessOfFoldedDim(const string &func, int dim)
         : func(func), dim(dim) {
     }
@@ -857,13 +884,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             internal_assert(factor.defined());
 
-            // Folded registers get rotated so that every access has constant
-            // indices, so a vectorized access doesn't become a gather.
-            if (!explicit_factor.defined() &&
-                func.schedule().memory_type() != MemoryType::Register) {
+            if (!explicit_factor.defined()) {
                 VectorAccessOfFoldedDim vector_access_of_folded_dim{func.name(), dim};
                 body.accept(&vector_access_of_folded_dim);
-                if (vector_access_of_folded_dim.result) {
+                int lanes = vector_access_of_folded_dim.lanes;
+                if (func.schedule().memory_type() == MemoryType::Register) {
+                    // Folded registers get rotated so that every access has
+                    // constant indices. A multiple of the vector width lets
+                    // the rotation move whole vectors.
+                    if (lanes > 1) {
+                        auto f = as_const_int(factor);
+                        internal_assert(f);
+                        factor = (int)(((*f + lanes - 1) / lanes) * lanes);
+                    }
+                } else if (lanes > 0) {
                     user_warning
                         << "Not folding Func " << func.name() << " along dimension " << func.args()[dim]
                         << " because there is vectorized access to that Func in that dimension and "

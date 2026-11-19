@@ -315,10 +315,6 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small realizations:", s);
 
-    debug(1) << "Rotating folded realizations in registers...\n";
-    s = rotate_registers(s);
-    log("Lowering after rotating folded realizations in registers:", s);
-
     // After storage folding, which can make two threads touch the same part of
     // an allocation, and before storage flattening, which makes the check much
     // harder. See CheckGPUCrossTalk.h.
@@ -417,6 +413,10 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after partitioning loops (partition_loops):", s);
     s = simplify(s);
     log("Lowering after partitioning loops:", s);
+
+    debug(1) << "Rotating folded allocations in registers...\n";
+    s = rotate_registers(s);
+    log("Lowering after rotating folded allocations in registers:", s);
 
     debug(1) << "Staging strided loads...\n";
     s = stage_strided_loads(s, t);
