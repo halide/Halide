@@ -13,8 +13,8 @@ using namespace Halide;
 // done as a compare-and-swap loop. The new value must be computed from the
 // value the cmpxchg compares against, so the loop must not contain any other
 // (non-atomic) load of the location being updated. This test checks the
-// generated code for host LLVM, CUDA/PTX, and OpenCL, as well as related
-// upstream passes (ClampUnsafeAccesses and AddAtomicMutex).
+// generated code for host LLVM, CUDA/PTX, OpenCL, and D3D12Compute, as well as
+// related upstream passes (ClampUnsafeAccesses and AddAtomicMutex).
 
 namespace {
 
@@ -156,6 +156,68 @@ bool check_opencl_cas(const std::string &name,
     }
     if (loop_count == 0 || !saw_feedback) {
         printf("%s: missing expected OpenCL CAS loop or cmpxchg feedback:\n%s\n",
+               name.c_str(), src.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool check_d3d12_cas(const std::string &name,
+                     const std::string &src,
+                     const std::string &expected_interlocked) {
+    if (src.empty()) {
+        printf("%s: failed to extract D3D12Compute HLSL kernel source\n", name.c_str());
+        return false;
+    }
+    if (src.find('$') != std::string::npos) {
+        printf("%s: invalid '$' character in D3D12Compute HLSL identifier:\n%s\n",
+               name.c_str(), src.c_str());
+        return false;
+    }
+    if (src.find(expected_interlocked + "(") == std::string::npos) {
+        printf("%s: expected %s in HLSL kernel:\n%s\n",
+               name.c_str(), expected_interlocked.c_str(), src.c_str());
+        return false;
+    }
+    // Check inside `do { ... } while`: any buffer indexing (`_hist[`) must be
+    // inside the InterlockedCompareExchange* intrinsic, never a plain load.
+    std::istringstream in(src);
+    std::string line;
+    bool in_loop = false;
+    int brace_depth = 0;
+    int loop_count = 0;
+    bool saw_old_update = false;
+    while (std::getline(in, line)) {
+        if (!in_loop && line.find("do {") != std::string::npos) {
+            in_loop = true;
+            brace_depth = 1;
+            loop_count++;
+            continue;
+        }
+        if (in_loop) {
+            for (char c : line) {
+                if (c == '{') brace_depth++;
+                if (c == '}') brace_depth--;
+            }
+            if (line.find("_hist") != std::string::npos &&
+                line.find("[") != std::string::npos &&
+                line.find(expected_interlocked + "(") == std::string::npos) {
+                printf("%s: non-atomic buffer load inside HLSL CAS loop:\n  %s\nFull kernel:\n%s\n",
+                       name.c_str(), line.c_str(), src.c_str());
+                return false;
+            }
+            if (line.find("_old") != std::string::npos &&
+                line.find("= ") != std::string::npos &&
+                line.find("_orig") != std::string::npos) {
+                saw_old_update = true;
+            }
+            if (brace_depth <= 0) {
+                in_loop = false;
+            }
+        }
+    }
+    if (loop_count == 0 || !saw_old_update) {
+        printf("%s: missing expected HLSL CAS loop or old=orig feedback:\n%s\n",
                name.c_str(), src.c_str());
         return false;
     }
@@ -378,7 +440,66 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 4. CUDA/PTX CAS loop codegen checks (compile-only, no device required).
+    // 4. D3D12Compute CAS loop codegen checks (compile-only, no device required).
+    {
+        const Target d3d_target = target.with_feature(Target::D3D12Compute)
+                                      .with_feature(Target::HLSL_SM66);
+        if (d3d_target.supported()) {
+            for (int i = 0; i < 4; i++) {
+                Func hist("hist");
+                Var x("x");
+                RDom r(0, 1024, "r");
+                RVar ro("ro"), ri("ri");
+                Expr idx = r % hist_size;
+                std::string name;
+                std::string expected_fn = "InterlockedCompareExchange";
+                switch (i) {
+                case 0:
+                    name = "d3d12_min_i32";
+                    hist(x) = 0;
+                    hist(idx) = min(hist(idx) + 1, 100);
+                    break;
+                case 1:
+                    name = "d3d12_add_f32";
+                    hist(x) = 0.0f;
+                    hist(idx) += 1.0f;
+                    expected_fn = "InterlockedCompareExchangeFloatBitwise";
+                    break;
+                case 2:
+                    name = "d3d12_cond_alias";
+                    hist(x) = 1;
+                    hist(idx) = select(idx == 0, hist(0) * 2, hist(idx) + 1);
+                    break;
+                case 3: {
+                    // Two CAS updates in the same module to verify unique_name
+                    // never emits invalid '$' characters in HLSL identifiers.
+                    name = "d3d12_two_cas";
+                    hist(x) = 0;
+                    hist(idx) = min(hist(idx) + 1, 100);
+                    hist(idx) = max(hist(idx) - 1, 0);
+                    break;
+                }
+                }
+                hist.compute_root();
+                for (int u = 0; u < hist.num_update_definitions(); u++) {
+                    RVar uro("uro"), uri("uri");
+                    hist.update(u)
+                        .atomic(true /*override_associativity_test*/)
+                        .split(r, uro, uri, 32)
+                        .gpu_blocks(uro, DeviceAPI::D3D12Compute)
+                        .gpu_threads(uri, DeviceAPI::D3D12Compute);
+                }
+
+                const std::string ll = dir + "atomics_cas_loop_" + name + ".ll";
+                hist.compile_to_llvm_assembly(ll, {}, "atomics_cas_loop_" + name, d3d_target);
+                Internal::assert_file_exists(ll);
+                std::string src = extract_llvm_string_global(read_file(ll), "@d3d12compute_gpu_source_kernels");
+                ok &= check_d3d12_cas(name, src, expected_fn);
+            }
+        }
+    }
+
+    // 5. CUDA/PTX CAS loop codegen checks (compile-only, no device required).
     {
         const Target cuda_target = target.with_feature(Target::CUDA);
         if (cuda_target.supported()) {
@@ -423,7 +544,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 4. Runtime correctness check for repeated self-load and conditional alias
+    // 6. Runtime correctness check for repeated self-load and conditional alias
     // CAS updates under parallel execution.
     {
         for (int mode = 0; mode < 2; mode++) {

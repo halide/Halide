@@ -175,6 +175,14 @@ protected:
         Scope<> uav_buffer_args;                           // kernel buffer args that use RWBuffer UAV bindings
         std::set<std::string> hlsl_float_only_intrinsics;  // no native double overload
         bool emit_precise = false;
+
+        struct ActiveCAS {
+            std::string buffer;
+            Expr index;
+            std::string id_index;
+            std::string old_var;
+        };
+        ActiveCAS active_cas;
     };
 
     std::ostringstream src_stream;
@@ -884,6 +892,47 @@ struct StoragePackUnpack {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
+    // Inside a compare-and-swap loop, any load from the buffer being updated
+    // must use the compared value when reading the updated element, and must
+    // not emit a non-atomic load of the buffer.
+    if (!active_cas.old_var.empty() && op->name == active_cas.buffer) {
+        user_assert(op->type.is_scalar())
+            << "D3D12Compute: vector load from atomically updated buffer inside CAS loop is not supported.\n";
+        Expr same_index = (op->index.type() == active_cas.index.type()) ?
+                              simplify(op->index == active_cas.index) :
+                              Expr();
+        if (same_index.defined() && is_const_one(same_index)) {
+            id = active_cas.old_var;
+            return;
+        }
+        string id_index = print_expr(op->index);
+        if (id_index == active_cas.id_index) {
+            id = active_cas.old_var;
+            return;
+        }
+        string load_var = print_name(unique_name("halide_atom_load"));
+        string type_str = print_type(op->type);
+        string src = print_name(op->name) + "[" + id_index + "]";
+        stream << get_indent() << type_str << " " << load_var << ";\n";
+        if (same_index.defined() && is_const_zero(same_index)) {
+            stream << get_indent() << "InterlockedCompareExchange("
+                   << src << ", (" << type_str << ")0, (" << type_str << ")0, " << load_var << ");\n";
+        } else {
+            stream << get_indent() << "if (" << id_index << " == " << active_cas.id_index << ") {\n";
+            indent += 2;
+            stream << get_indent() << load_var << " = " << active_cas.old_var << ";\n";
+            indent -= 2;
+            stream << get_indent() << "} else {\n";
+            indent += 2;
+            stream << get_indent() << "InterlockedCompareExchange("
+                   << src << ", (" << type_str << ")0, (" << type_str << ")0, " << load_var << ");\n";
+            indent -= 2;
+            stream << get_indent() << "}\n";
+        }
+        id = load_var;
+        return;
+    }
+
     // SM 5.1 groupshared buffers are always 32-bit; sub-32-bit loads need a
     // bit-reinterpret cast. SM 6.2+ supports 16-bit natively — no cast needed.
     const int sm = target.get_d3d12compute_capability_lower_bound();
@@ -1130,13 +1179,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 string delta_str = print_expr(delta);
                 stream << get_indent() << "{\n";
                 stream << get_indent() << "    float _hfatomic_old, _hfatomic_orig;\n";
+                stream << get_indent() << "    bool _hfatomic_retry;\n";
+                stream << get_indent() << "    InterlockedCompareExchangeFloatBitwise("
+                       << dest << ", 0.0f, 0.0f, _hfatomic_old);\n";
                 stream << get_indent() << "    [allow_uav_condition]\n";
                 stream << get_indent() << "    do {\n";
-                stream << get_indent() << "        _hfatomic_old = " << dest << ";\n";
                 stream << get_indent() << "        InterlockedCompareExchangeFloatBitwise("
                        << dest << ", _hfatomic_old, _hfatomic_old + " << delta_str
                        << ", _hfatomic_orig);\n";
-                stream << get_indent() << "    } while (asuint(_hfatomic_orig) != asuint(_hfatomic_old));\n";
+                stream << get_indent() << "        _hfatomic_retry = (asuint(_hfatomic_orig) != asuint(_hfatomic_old));\n";
+                stream << get_indent() << "        _hfatomic_old = _hfatomic_orig;\n";
+                stream << get_indent() << "    } while (_hfatomic_retry);\n";
                 stream << get_indent() << "}\n";
             } else if (is_atomic_add && t.bits() == 64) {
                 user_assert(false)
@@ -1213,26 +1266,40 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             // or fall back to a compare-and-swap loop for other patterns.
             if (!expr_uses_var(op->value, op->name)) {
                 // Value is independent of current buffer contents: plain atomic exchange.
-                string old_var = unique_name("_halide_atom_old");
+                string old_var = print_name(unique_name("halide_atom_old"));
+                string val_str = print_expr(op->value);
                 stream << get_indent() << print_type(t) << " " << old_var << ";\n";
                 stream << get_indent() << "InterlockedExchange(" << dest << ", "
-                       << print_expr(op->value) << ", " << old_var << ");\n";
+                       << val_str << ", " << old_var << ");\n";
             } else {
                 // CAS loop for unrecognised integer RMW.
-                string old_var = unique_name("_halide_atom_old");
-                string new_var = unique_name("_halide_atom_new");
+                string old_var = print_name(unique_name("halide_atom_old"));
+                string new_var = print_name(unique_name("halide_atom_new"));
+                string orig_var = print_name(unique_name("halide_atom_orig"));
+                string retry_var = print_name(unique_name("halide_atom_retry"));
+                string type_str = print_type(t);
                 stream << get_indent() << "{\n";
                 indent += 2;
-                stream << get_indent() << print_type(t) << " " << old_var << ", " << new_var << ";\n";
+                stream << get_indent() << type_str << " " << old_var << ", " << new_var << ", " << orig_var << ";\n";
+                stream << get_indent() << "bool " << retry_var << ";\n";
+                stream << get_indent() << "InterlockedCompareExchange("
+                       << dest << ", (" << type_str << ")0, (" << type_str << ")0, " << old_var << ");\n";
+                stream << get_indent() << "[allow_uav_condition]\n";
                 stream << get_indent() << "[loop] do {\n";
                 indent += 2;
-                stream << get_indent() << old_var << " = " << dest << ";\n";
                 cache.clear();
-                stream << get_indent() << new_var << " = " << print_expr(op->value) << ";\n";
+                string id_value;
+                {
+                    ScopedValue<ActiveCAS> old_cas(active_cas, {op->name, op->index, id_index, old_var});
+                    id_value = print_expr(op->value);
+                }
+                stream << get_indent() << new_var << " = " << id_value << ";\n";
                 stream << get_indent() << "InterlockedCompareExchange("
-                       << dest << ", " << old_var << ", " << new_var << ", " << old_var << ");\n";
+                       << dest << ", " << old_var << ", " << new_var << ", " << orig_var << ");\n";
+                stream << get_indent() << retry_var << " = (" << orig_var << " != " << old_var << ");\n";
+                stream << get_indent() << old_var << " = " << orig_var << ";\n";
                 indent -= 2;
-                stream << get_indent() << "} while (" << old_var << " != " << new_var << ");\n";
+                stream << get_indent() << "} while (" << retry_var << ");\n";
                 indent -= 2;
                 stream << get_indent() << "}\n";
             }
