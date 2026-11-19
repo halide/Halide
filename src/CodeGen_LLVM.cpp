@@ -1858,9 +1858,12 @@ void CodeGen_LLVM::add_debug_variable(const string &name, const Type &type, llvm
         arg_no ?
             d.builder->createParameterVariable(d.scope, name, arg_no, d.file, line, t, /* AlwaysPreserve */ true) :
             d.builder->createAutoVariable(d.scope, name, d.file, line, t, /* AlwaysPreserve */ true);
-    d.builder->insertDbgValueIntrinsic(value, var, d.builder->createExpression(),
-                                       DILocation::get(*context, line, d.location->getColumn(), d.scope),
-                                       builder->GetInsertPoint());
+    const DILocation *location = DILocation::get(*context, line, d.location->getColumn(), d.scope);
+#if LLVM_VERSION >= 240
+    d.builder->insertDbgValue(value, var, d.builder->createExpression(), location, builder->GetInsertPoint());
+#else
+    d.builder->insertDbgValueIntrinsic(value, var, d.builder->createExpression(), location, builder->GetInsertPoint());
+#endif
 }
 
 llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const {
