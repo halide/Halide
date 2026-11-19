@@ -1597,7 +1597,9 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         ConstantInterval ca = constant_integer_bounds(a);
         while (true) {
             ConstantInterval bigger = ca * 2;
-            if (a.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
+            if (a.type().can_represent(bigger) &&
+                a_shift + b_shift < missing_q &&
+                a_shift + 1 < a.type().bits()) {
                 ca = bigger;
                 a_shift++;
             } else {
@@ -1607,7 +1609,9 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         ConstantInterval cb = constant_integer_bounds(b);
         while (true) {
             ConstantInterval bigger = cb * 2;
-            if (b.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
+            if (b.type().can_represent(bigger) &&
+                a_shift + b_shift < missing_q &&
+                b_shift + 1 < b.type().bits()) {
                 cb = bigger;
                 b_shift++;
             } else {
