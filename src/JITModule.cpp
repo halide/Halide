@@ -364,8 +364,11 @@ void compile_module_impl(
     CodeGen_LLVM::initialize_llvm();
 
     if (!WasmModule::can_jit_target(target)) {
+        auto pac_abi = [](const Target &x) {
+            return x.has_feature(Target::ARM64eX1) ? 2 : (x.has_feature(Target::ARM64e) ? 1 : 0);
+        };
         const Target host = get_host_target();
-        user_assert(target.has_feature(Target::ARM64e) == host.has_feature(Target::ARM64e))
+        user_assert(pac_abi(target) == pac_abi(host))
             << "Cannot JIT target (" << target << ") with a different arm64e pointer authentication ABI than the host (" << host << ").\n";
     }
 

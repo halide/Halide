@@ -198,6 +198,26 @@ def test_target():
         "Target feature arm64e cannot be combined with simulator.",
     )
 
+    t_arm64e_x1 = hl.Target(
+        hl.TargetOS.IOS, hl.TargetArch.ARM, 64, [hl.TargetFeature.ARM64eX1]
+    )
+    assert t_arm64e_x1.has_feature(hl.TargetFeature.ARM64eX1)
+    assert t_arm64e_x1.to_string() == "arm-64-ios-arm64e_x1"
+    assert hl.Target.validate_target_string("arm-64-ios-arm64e_x1")
+    assert hl.Target.validate_target_string("arm-64-macos-arm64e_x1")
+    assert_invalid_target(
+        "arm-64-linux-arm64e_x1",
+        "Target feature arm64e_x1 requires 64-bit ARM on iOS or macOS.",
+    )
+    assert_invalid_target(
+        "x86-64-macos-arm64e_x1",
+        "Target feature arm64e_x1 is incompatible with the Target's architecture.",
+    )
+    assert_invalid_target(
+        "arm-64-ios-arm64e_x1-simulator",
+        "Target feature arm64e_x1 cannot be combined with simulator.",
+    )
+
     # with_feature with non-convertible lists
     try:
         t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, ["this is a string"])

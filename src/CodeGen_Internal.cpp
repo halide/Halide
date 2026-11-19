@@ -1,11 +1,16 @@
 #include "CodeGen_Internal.h"
+
+#include <mutex>
+
 #include "CSE.h"
+#include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
+#include "Util.h"
 #include "runtime/constants.h"
 
 namespace Halide {
@@ -611,6 +616,51 @@ std::string get_modflag_string(const llvm::Module &mod, const char *flag, const 
     return get_md_string(mod.getModuleFlag(flag)).value_or(or_default);
 }
 
+#if defined(WITH_AARCH64) && __has_include(<llvm/Support/LibraryOptionsContext.h>)
+const llvm::cl::LibraryOptionsContext *get_arm64e_x1_library_options() {
+    static llvm::cl::LibraryOptionsContext ctx;
+    static std::once_flag init_once;
+    std::call_once(init_once, []() {
+        CodeGen_LLVM::initialize_llvm();
+        std::vector<std::string> env_tokens;
+        std::string env_args = get_env_variable("HL_LLVM_ARGS");
+        if (!env_args.empty()) {
+            env_tokens = split_string(env_args, " ");
+        }
+        std::vector<const char *> c_args = {"llc"};
+        bool next_is_featcpa_value = false;
+        for (const std::string &tok : env_tokens) {
+            if (tok.empty()) {
+                continue;
+            }
+            if (next_is_featcpa_value) {
+                next_is_featcpa_value = false;
+                if (tok[0] != '-') {
+                    c_args.push_back(tok.c_str());
+                    continue;
+                }
+            }
+            llvm::StringRef stripped(tok);
+            stripped.consume_front("-");
+            stripped.consume_front("-");
+            if (stripped.starts_with("aarch64-use-featcpa-codegen")) {
+                c_args.push_back(tok.c_str());
+                next_is_featcpa_value = !stripped.contains('=');
+            }
+        }
+        if (c_args.size() == 1) {
+            c_args.push_back("-aarch64-use-featcpa-codegen=true");
+        }
+        // In LLVM 24+, target backend flags migrated from cl::opt to per-context
+        // TableGen LibraryOptions read from TargetOptions::MCOptions::LibraryOptions.
+        // Pass &llvm::nulls() so this stays non-fatal if a future LLVM release
+        // enables CPA codegen unconditionally and removes the flag.
+        llvm::cl::parseCommandLineOptions(ctx, c_args, "Halide compiler\n", &llvm::nulls());
+    });
+    return &ctx;
+}
+#endif
+
 }  // namespace
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
@@ -635,6 +685,11 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = true;
     options.MCOptions.X86RelaxRelocations = false;
     options.MCOptions.ABIName = mabi;
+#if defined(WITH_AARCH64) && __has_include(<llvm/Support/LibraryOptionsContext.h>)
+    if (get_modflag_bool(module, "halide_arm64e_x1")) {
+        options.MCOptions.LibraryOptions = get_arm64e_x1_library_options();
+    }
+#endif
 }
 
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {
@@ -645,7 +700,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     // Clone bool metadata
     for (const char *s : {"halide_use_soft_float_abi",
                           "halide_use_pic",
-                          "halide_enable_backtraces"}) {
+                          "halide_enable_backtraces",
+                          "halide_arm64e_x1"}) {
         if (auto md = get_md_bool(from.getModuleFlag(s))) {
             to.addModuleFlag(llvm::Module::Warning, s, *md ? 1 : 0);
         }
@@ -741,11 +797,14 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
         fn.addFnAttr("ptrauth-auth-traps");
         fn.addFnAttr("ptrauth-indirect-gotos");
         fn.addFnAttr("aarch64-jump-table-hardening");
+        if (get_modflag_bool(module, "halide_arm64e_x1")) {
+            fn.addFnAttr("branch-protection-pauth-lr");
+        }
     }
 }
 
 void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &target) {
-    if (!target.has_feature(Target::ARM64e)) {
+    if (!target.has_feature(Target::ARM64e) && !target.has_feature(Target::ARM64eX1)) {
         return;
     }
 
@@ -808,6 +867,18 @@ void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &tar
         }
     }
 
+    auto clear_opportunistic_tail_call = [&](llvm::CallBase *call) {
+        // LLVM's AArch64 AUTH_TCRETURN lowering does not yet support
+        // branch-protection-pauth-lr; clear opportunistic tail markers.
+        if (target.has_feature(Target::ARM64eX1)) {
+            if (auto *ci = llvm::dyn_cast<llvm::CallInst>(call)) {
+                if (ci->isTailCall() && !ci->isMustTailCall()) {
+                    ci->setTailCall(false);
+                }
+            }
+        }
+    };
+
     llvm::OperandBundleDef ptrauth_bundle(
         "ptrauth", std::vector<llvm::Value *>{ptrauth_key, ptrauth_disc});
     for (llvm::Function &fn : module) {
@@ -816,12 +887,16 @@ void apply_arm64e_pointer_authentication(llvm::Module &module, const Target &tar
                 auto *cb = llvm::dyn_cast<llvm::CallBase>(&inst);
                 if (!cb || cb->isInlineAsm() ||
                     cb->getCalledFunction() != nullptr ||
-                    llvm::isa<llvm::Constant>(cb->getCalledOperand()) ||
-                    cb->getOperandBundle(llvm::LLVMContext::OB_ptrauth).has_value()) {
+                    llvm::isa<llvm::Constant>(cb->getCalledOperand())) {
+                    continue;
+                }
+                if (cb->getOperandBundle(llvm::LLVMContext::OB_ptrauth).has_value()) {
+                    clear_opportunistic_tail_call(cb);
                     continue;
                 }
                 llvm::CallBase *signed_cb =
                     llvm::CallBase::Create(cb, ptrauth_bundle, cb->getIterator());
+                clear_opportunistic_tail_call(signed_cb);
                 cb->replaceAllUsesWith(signed_cb);
                 cb->eraseFromParent();
             }
