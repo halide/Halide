@@ -440,6 +440,33 @@ int main(int argc, char **argv) {
     }
 
     {
+        // h slides over both loops of out. The guard on f's unrolled y loop
+        // then compares two expressions that both increase with h's y loop
+        // variable, so simplify_correlated_differences rewrites it.
+        const int size = 15;
+        Func f, g, h, out;
+        f(x, y) = x + y * 32;
+        g(x, y) = f(x, x);
+        h(x, y) = g(2 * y - 1, 2 * x) + f(2 * x + 2, 2 * x);
+        out(x, y) = h(x / 2 + 2, y / 2);
+
+        f.store_at(out, y).compute_at(h, y).unroll(y, 2, TailStrategy::GuardWithIf);
+        h.store_root().compute_at(out, x);
+
+        Buffer<int> im = out.realize({size, size});
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int hx = x / 2 + 2, hy = y / 2;
+                int correct = (2 * hy - 1) * 33 + (2 * hx + 2) + 2 * hx * 32;
+                if (im(x, y) != correct) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // Sliding over a division by a param of known sign.
         count = 0;
         Param<int> k;
