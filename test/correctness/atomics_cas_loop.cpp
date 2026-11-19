@@ -77,13 +77,14 @@ int main(int argc, char **argv) {
 
     const int hist_size = 7;
     bool ok = true;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         Func hist("hist");
         Var x("x");
         RDom r(0, 1000, "r");
         Expr idx = r % hist_size;
         std::string name;
         int vector_width = 1;
+        bool check_no_mutex = false;
         switch (i) {
         case 0:
             name = "min_i32";
@@ -111,6 +112,14 @@ int main(int argc, char **argv) {
             hist(x) = cast<float16_t>(0);
             hist(idx) = min(hist(idx) + cast<float16_t>(1), cast<float16_t>(100));
             break;
+        case 5:
+            // Repeated self-load introduces an internal Let inside Store::value.
+            // AddAtomicMutex must not force a mutex lock for this.
+            name = "repeated_self_load";
+            hist(x) = 1;
+            hist(idx) = select(idx == 0, hist(idx) * 2, hist(idx) + 1);
+            check_no_mutex = true;
+            break;
         }
 
         if (vector_width > 1) {
@@ -136,6 +145,13 @@ int main(int argc, char **argv) {
             ok = false;
         } else if (cas_blocks < 0) {
             ok = false;
+        }
+        if (check_no_mutex) {
+            std::string contents = read_file(ll);
+            if (contents.find("halide_mutex_array_lock") != std::string::npos) {
+                printf("%s: unexpectedly emitted mutex lock in %s\n", name.c_str(), ll.c_str());
+                ok = false;
+            }
         }
     }
 
