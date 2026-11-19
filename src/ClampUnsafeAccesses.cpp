@@ -41,6 +41,17 @@ protected:
         return new_stmt;
     }
 
+    Stmt visit(const Provide *op) override {
+        std::vector<Expr> new_args;
+        {
+            ScopedValue<bool> s(is_inside_indexing, true);
+            new_args = mutate_with_changes(op->args).first;
+        }
+        std::vector<Expr> new_values = mutate_with_changes(op->values).first;
+        Expr new_predicate = mutate(op->predicate);
+        return op->with(new_values, new_args, new_predicate);
+    }
+
     Expr visit(const Let *let) override {
         return visit_let(let);
     }

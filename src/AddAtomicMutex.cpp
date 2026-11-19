@@ -132,7 +132,10 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Let *op) override {
+    // Only LetStmt bindings can be lifted outside a Store node (e.g. by
+    // SplitTuples). Expression-level Let nodes inside Store::value are
+    // re-evaluated on each CAS iteration and do not require a mutex.
+    void visit(const LetStmt *op) override {
         op->value.accept(this);
         {
             ScopedBinding<Expr> bind(let_bindings, op->name, op->value);
@@ -140,12 +143,11 @@ protected:
         }
     }
 
-    void visit(const LetStmt *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<Expr> bind(let_bindings, op->name, op->value);
-            op->body.accept(this);
+    void visit(const Load *op) override {
+        if (!inside_store.empty() && op->name != inside_store && store_names.contains(op->name)) {
+            found = true;
         }
+        IRVisitor::visit(op);
     }
 
     void visit(const Variable *op) override {

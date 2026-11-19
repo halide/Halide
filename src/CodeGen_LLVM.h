@@ -594,6 +594,17 @@ protected:
     /** Emit atomic store instructions? */
     bool emit_atomic_stores = false;
 
+    /** Active compare-and-swap target while codegenning the RHS of a CAS loop.
+     *  Loads from `buffer` at the updated address must read `cmp` rather than
+     *  reloading non-atomically from memory. */
+    struct ActiveCAS {
+        std::string buffer;
+        Expr index;
+        llvm::Value *ptr = nullptr;
+        llvm::Value *cmp = nullptr;
+    };
+    ActiveCAS active_cas;
+
     /** Can we call this operation with float16 type?
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;

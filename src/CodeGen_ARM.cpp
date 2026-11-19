@@ -1933,6 +1933,11 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
+    if (active_cas.cmp && op->name == active_cas.buffer) {
+        CodeGen_CPU::visit(op);
+        return;
+    }
+
     // Predicated load
     const bool is_predicated_load = !is_const_one(op->predicate);
     if (is_predicated_load && target_vscale() == 0) {
