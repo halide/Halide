@@ -913,6 +913,8 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<AutoSchedulerResults> auto_scheduler_results;
     MetadataNameMap metadata_name_map;
 
+    const Target base_target_with_implied = base_target.with_implied_features();
+
     for (size_t i = 0; i < targets.size(); ++i) {
         const Target &target = targets[i];
 
@@ -922,9 +924,12 @@ void compile_multitarget(const std::string &fn_name,
             target.bits != base_target.bits) {
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
-        // Some features must match across all targets.
+        // Some features must match across all targets. Compare after expanding
+        // implied features (e.g. ARM64eX1 implies ARM64e) so unexpanded
+        // targets match targets that already have implied features set.
         static constexpr std::array must_match_features = {
             Target::ARM64e,
+            Target::ARM64eX1,
             Target::ASAN,
             Target::CPlusPlusMangling,
             Target::Debug,
@@ -936,8 +941,9 @@ void compile_multitarget(const std::string &fn_name,
             Target::SanitizerCoverage,
             Target::UserContext,
         };
+        const Target target_with_implied = target.with_implied_features();
         for (auto f : must_match_features) {
-            if (target.has_feature(f) != base_target.has_feature(f)) {
+            if (target_with_implied.has_feature(f) != base_target_with_implied.has_feature(f)) {
                 user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "' set identically for compile_multitarget.\n";
                 break;
             }

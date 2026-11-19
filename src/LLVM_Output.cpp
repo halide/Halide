@@ -5,6 +5,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 
+#include <cstddef>
 #include <fstream>
 #include <iostream>
 
@@ -434,6 +435,39 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
     Internal::run_with_large_stack([&]() {
+        const llvm::Triple &triple = module.getTargetTriple();
+        if (triple.isArm64e() && triple.isOSDarwin()) {
+            const auto *cam = llvm::dyn_cast_or_null<llvm::ConstantAsMetadata>(
+                module.getModuleFlag("halide_arm64e_x1"));
+            const auto *ci = cam ? llvm::dyn_cast<llvm::ConstantInt>(cam->getValue()) : nullptr;
+            if (ci && !ci->isZero()) {
+                llvm::SmallVector<char, 0> buf;
+                llvm::raw_svector_ostream buf_os(buf);
+                emit_file(module, buf_os, llvm::CodeGenFileType::ObjectFile);
+                // TODO: Emit the versioned arm64e.x1 Mach-O cpusubtype (0x8000000c)
+                // directly from the target triple once minimum supported LLVM has
+                // full AArch64SubArch_arm64e_x1 codegen/MC support:
+                //   1. Triple::AArch64SubArch_arm64e_x1 does not exist in LLVM 22.
+                //   2. In LLVM 23-24, Triple::isArm64e() returns false for
+                //      AArch64SubArch_arm64e_x1 (disabling Darwin arm64e PAC ABI
+                //      codegen), and MachObjectWriter::writeHeader() only sets
+                //      CPU_SUBTYPE_ARM64E_VERSIONED_PTRAUTH_ABI_MASK (0x80000000)
+                //      when cpusubtype == CPU_SUBTYPE_ARM64E (0x2), emitting
+                //      unversioned 0x0000000c instead.
+                // Verify MH_MAGIC_64 before stamping mach_header_64.cpusubtype
+                // (avoiding <llvm/BinaryFormat/MachO.h> in LLVM_Headers.h, whose
+                // VM_PROT_* / CPU_* enums collide with Darwin system header macros).
+                constexpr size_t kMachOHeader64Size = 32;
+                constexpr size_t kMachOCpuSubtypeOffset = 8;
+                constexpr uint32_t kMachOMagic64 = 0xfeedfacfu;
+                constexpr uint32_t kCpuSubtypeArm64eX1Versioned = 0x8000000cu;  // CPU_SUBTYPE_ARM64E_X1 (12) | 0x80000000
+                internal_assert(buf.size() >= kMachOHeader64Size &&
+                                llvm::support::endian::read32le(buf.data()) == kMachOMagic64);
+                llvm::support::endian::write32le(&buf[kMachOCpuSubtypeOffset], kCpuSubtypeArm64eX1Versioned);
+                out.write(buf.data(), buf.size());
+                return;
+            }
+        }
         emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
     });
 }

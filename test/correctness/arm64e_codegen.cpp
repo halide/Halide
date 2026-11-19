@@ -131,7 +131,9 @@ bool check_archive_macho_members(const std::vector<char> &ar_bytes,
     return true;
 }
 
-int check_arm64e_target(const std::string &target_str, uint32_t expected_cpusubtype) {
+int check_arm64e_target(const std::string &target_str,
+                        uint32_t expected_cpusubtype,
+                        bool expect_x1) {
     Target target(target_str);
     if (!target.supported()) {
         printf("[SKIP] Target %s is not supported in this build of Halide.\n", target_str.c_str());
@@ -182,12 +184,24 @@ int check_arm64e_target(const std::string &target_str, uint32_t expected_cpusubt
 
     const std::vector<char> asm_bytes = Internal::read_entire_file(asm_path);
     const std::string asm_text(asm_bytes.begin(), asm_bytes.end());
-    if (!require_contains(asm_text, "pacibsp", target_str, "assembly") ||
-        !require_contains(asm_text, "retab", target_str, "assembly") ||
+    const char *expected_prologue_pac = expect_x1 ? "pacibsppc" : "pacibsp";
+    const char *expected_epilogue_ret = expect_x1 ? "retabsppc" : "retab";
+    if (!require_contains(asm_text, expected_prologue_pac, target_str, "assembly") ||
+        !require_contains(asm_text, expected_epilogue_ret, target_str, "assembly") ||
         !require_contains(asm_text, "blraaz", target_str, "assembly") ||
         !require_contains(asm_text, "paciza", target_str, "assembly") ||
         !require_contains(asm_text, "@AUTH(ia,0)", target_str, "assembly")) {
         return 1;
+    }
+
+    if (expect_x1) {
+        if (!require_contains(ll_text, "\"branch-protection-pauth-lr\"", target_str, "LLVM IR") ||
+            !require_contains(ll_text, "\"target-cpu\"=\"apple-m5\"", target_str, "LLVM IR") ||
+            !require_contains(ll_text, "+pauth-lr", target_str, "LLVM IR") ||
+            !require_contains(ll_text, "+cpa", target_str, "LLVM IR") ||
+            !require_contains(asm_text, "addpt", target_str, "assembly")) {
+            return 1;
+        }
     }
 
     const std::vector<char> obj_bytes = Internal::read_entire_file(obj_path);
@@ -206,12 +220,15 @@ int check_arm64e_target(const std::string &target_str, uint32_t expected_cpusubt
         return 1;
     }
 
-    // Verify compile_multitarget preserves word-1 target features (ARM64e)
+    // Verify compile_multitarget preserves word-1 target features (ARM64e / ARM64eX1)
     // across all subtargets, the indirect-call wrapper, and the shared runtime member.
+    Target specialized_target = target
+                                    .with_feature(expect_x1 ? Target::ARMv88a : Target::ARMDotProd)
+                                    .with_feature(Target::ARM64e);
     compile_multitarget(
         "f_arm64e_mt",
         {{OutputFileType::static_library, mt_lib_path}},
-        {target.with_feature(Target::ARMDotProd), target},
+        {specialized_target, target},
         {},
         [&](const std::string &name, const Target &t) {
             return f.compile_to_module({in}, name, t);
@@ -223,25 +240,33 @@ int check_arm64e_target(const std::string &target_str, uint32_t expected_cpusubt
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     {
-        bool threw = false;
-        const std::string bad_mt_path = tmp + "arm64e_codegen_bad_mt_" + target_str + ".a";
-        Internal::ensure_no_file_exists(bad_mt_path);
-        try {
-            compile_multitarget(
-                "f_arm64e_bad_mt",
-                {{OutputFileType::static_library, bad_mt_path}},
-                {target, Target(target.os, target.arch, target.bits)},
-                {},
-                [&](const std::string &name, const Target &t) {
-                    return f.compile_to_module({in}, name, t);
-                });
-        } catch (const Halide::Error &) {
-            threw = true;
+        std::vector<Target> mismatched_targets = {Target(target.os, target.arch, target.bits)};
+        if (expect_x1) {
+            mismatched_targets.emplace_back(target.os, target.arch, target.bits, Target::ProcessorGeneric,
+                                            std::vector<Target::Feature>{Target::ARM64e});
         }
-        if (!threw) {
-            fprintf(stderr, "[%s] Expected mixed-ABI compile_multitarget to fail\n",
-                    target_str.c_str());
-            return 1;
+        for (size_t idx = 0; idx < mismatched_targets.size(); ++idx) {
+            bool threw = false;
+            const std::string bad_mt_path =
+                tmp + "arm64e_codegen_bad_mt_" + std::to_string(idx) + "_" + target_str + ".a";
+            Internal::ensure_no_file_exists(bad_mt_path);
+            try {
+                compile_multitarget(
+                    "f_arm64e_bad_mt",
+                    {{OutputFileType::static_library, bad_mt_path}},
+                    {target, mismatched_targets[idx]},
+                    {},
+                    [&](const std::string &name, const Target &t) {
+                        return f.compile_to_module({in}, name, t);
+                    });
+            } catch (const Halide::Error &) {
+                threw = true;
+            }
+            if (!threw) {
+                fprintf(stderr, "[%s] Expected mixed-ABI compile_multitarget with %s to fail\n",
+                        target_str.c_str(), mismatched_targets[idx].to_string().c_str());
+                return 1;
+            }
         }
     }
 #endif
@@ -253,9 +278,12 @@ int check_arm64e_target(const std::string &target_str, uint32_t expected_cpusubt
 
 int main(int argc, char **argv) {
     constexpr uint32_t kCpuSubtypeArm64eVersioned = 0x80000002u;
+    constexpr uint32_t kCpuSubtypeArm64eX1Versioned = 0x8000000cu;
 
-    if (check_arm64e_target("arm-64-ios-arm64e", kCpuSubtypeArm64eVersioned) != 0 ||
-        check_arm64e_target("arm-64-macos-arm64e", kCpuSubtypeArm64eVersioned) != 0) {
+    if (check_arm64e_target("arm-64-ios-arm64e", kCpuSubtypeArm64eVersioned, false) != 0 ||
+        check_arm64e_target("arm-64-macos-arm64e", kCpuSubtypeArm64eVersioned, false) != 0 ||
+        check_arm64e_target("arm-64-ios-arm64e_x1", kCpuSubtypeArm64eX1Versioned, true) != 0 ||
+        check_arm64e_target("arm-64-macos-arm64e_x1", kCpuSubtypeArm64eX1Versioned, true) != 0) {
         return 1;
     }
 

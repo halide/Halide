@@ -3018,12 +3018,21 @@ string CodeGen_ARM::mcpu_target() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            if (target.has_feature(Target::ARM64e)) {
+            if (target.has_feature(Target::ARM64eX1)) {
+                // apple-m6 (the first Apple CPU model in LLVM with native
+                // FEAT_PAuth_LR and FEAT_CPA) requires LLVM 24+, whereas Halide
+                // supports LLVM 22+; use apple-m5 (available in LLVM 22+) and
+                // add +pauth-lr and +cpa explicitly in mattrs().
+                return "apple-m5";
+            } else if (target.has_feature(Target::ARM64e)) {
                 return "apple-a12";
             } else {
                 return "apple-a7";
             }
         } else if (target.os == Target::MacOS) {
+            if (target.has_feature(Target::ARM64eX1)) {
+                return "apple-m5";
+            }
             return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
@@ -3104,6 +3113,10 @@ string CodeGen_ARM::mattrs() const {
         }
         if (target.os == Target::IOS || target.os == Target::MacOS) {
             attrs.emplace_back("+reserve-x18");
+            if (target.has_feature(Target::ARM64eX1)) {
+                attrs.emplace_back("+pauth-lr");
+                attrs.emplace_back("+cpa");
+            }
         }
     }
     return join_strings(attrs, ",");

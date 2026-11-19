@@ -504,7 +504,15 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else {
             user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
 #ifdef WITH_AARCH64
-            if (target.has_feature(Target::ARM64e)) {
+            if (target.has_feature(Target::ARM64e) || target.has_feature(Target::ARM64eX1)) {
+                // TODO: Use AArch64SubArch_arm64e_x1 for ARM64eX1 once minimum
+                // supported LLVM has full AArch64SubArch_arm64e_x1 codegen/MC
+                // support. AArch64SubArch_arm64e_x1 does not exist in LLVM 22,
+                // and in LLVM 23-24 Triple::isArm64e() returns false for it
+                // (disabling Darwin arm64e PAC ABI lowering) while
+                // MachObjectWriter::writeHeader() omits the versioned ptrauth
+                // ABI bit. Until then, compile_llvm_module_to_object() stamps
+                // the versioned arm64e.x1 Mach-O cpusubtype (0x8000000c).
                 triple.setArch(llvm::Triple::aarch64, llvm::Triple::AArch64SubArch_arm64e);
             } else {
                 triple.setArch(llvm::Triple::aarch64);
@@ -543,7 +551,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::MacOS) {
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::MacOSX);
-            if (!target.has_feature(Target::ARM64e)) {
+            if (!target.has_feature(Target::ARM64e) && !target.has_feature(Target::ARM64eX1)) {
                 triple.setArchName("arm64");
             }
         } else if (target.os == Target::NoOS) {
