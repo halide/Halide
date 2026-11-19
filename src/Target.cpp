@@ -1901,19 +1901,12 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         return false;
     }
 
-    // ARM64eX1 is the only implied_feature_pairs() entry whose implied feature
-    // (ARM64e) is also in matching_features; normalize before comparing so
-    // unexpanded Target("...-arm64e_x1") matches with_implied_features().
-    auto lhs_features = features;
-    auto rhs_features = other.features;
-    if (lhs_features[ARM64eX1]) {
-        lhs_features.set(ARM64e);
-    }
-    if (rhs_features[ARM64eX1]) {
-        rhs_features.set(ARM64e);
-    }
-
-    if ((lhs_features & matching_mask) != (rhs_features & matching_mask)) {
+    // Compare matching_features after expanding implied features (e.g.
+    // ARM64eX1 implies ARM64e) so unexpanded targets match targets that have
+    // already had set_implied_features() applied.
+    const auto lhs_matching = with_implied_features().features & matching_mask;
+    const auto rhs_matching = other.with_implied_features().features & matching_mask;
+    if (lhs_matching != rhs_matching) {
         debug(1) << "runtime targets must agree on ARM64e, ARM64eX1, ASAN, Debug, EnableBacktraces, HexagonDma, HVX, MSAN, SoftFloatABI, TSAN, WasmThreads, SanitizerCoverage, Simulator\n"
                  << "  this:  " << *this << "\n"
                  << "  other: " << other << "\n";
@@ -1924,7 +1917,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
     Target output = Target{os, arch, bits, processor_tune};
-    output.features = ((lhs_features | rhs_features) & union_mask) | ((lhs_features | rhs_features) & matching_mask) | ((lhs_features & rhs_features) & intersection_mask);
+    output.features = ((features | other.features) & union_mask) | lhs_matching | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();

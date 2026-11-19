@@ -444,11 +444,13 @@ void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &
                 llvm::SmallVector<char, 0> buf;
                 llvm::raw_svector_ostream buf_os(buf);
                 emit_file(module, buf_os, llvm::CodeGenFileType::ObjectFile);
-                // LLVM cannot emit the versioned arm64e.x1 Mach-O cpusubtype
-                // (0x8000000c) directly from the target triple:
-                //   1. Triple::AArch64SubArch_arm64e_x1 does not exist in LLVM 22-23.
-                //   2. Even in LLVM 24, Triple::isArm64e() returns false for
-                //      AArch64SubArch_arm64e_x1, and MachObjectWriter only sets
+                // TODO: Emit the versioned arm64e.x1 Mach-O cpusubtype (0x8000000c)
+                // directly from the target triple once minimum supported LLVM has
+                // full AArch64SubArch_arm64e_x1 codegen/MC support:
+                //   1. Triple::AArch64SubArch_arm64e_x1 does not exist in LLVM 22.
+                //   2. In LLVM 23-24, Triple::isArm64e() returns false for
+                //      AArch64SubArch_arm64e_x1 (disabling Darwin arm64e PAC ABI
+                //      codegen), and MachObjectWriter::writeHeader() only sets
                 //      CPU_SUBTYPE_ARM64E_VERSIONED_PTRAUTH_ABI_MASK (0x80000000)
                 //      when cpusubtype == CPU_SUBTYPE_ARM64E (0x2), emitting
                 //      unversioned 0x0000000c instead.
