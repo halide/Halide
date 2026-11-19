@@ -405,18 +405,21 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        // The debug info can't point into both.
-        bool refused = false;
-        try {
-            f.compile_to({{OutputFileType::llvm_assembly, c_ll_path}},
-                         {input, scale, offset}, "debug_symbols_c",
-                         conceptual_target.with_feature(Target::DebugSymbols));
-        } catch (const Halide::CompileError &) {
-            refused = true;
-        }
-        if (!refused) {
-            printf("Asking for both kinds of debug symbols was not an error\n");
-            return 1;
+        // The debug info can't point into both. Without exceptions, asking for
+        // both aborts.
+        if (Halide::exceptions_enabled()) {
+            bool refused = false;
+            try {
+                f.compile_to({{OutputFileType::llvm_assembly, c_ll_path}},
+                             {input, scale, offset}, "debug_symbols_c",
+                             conceptual_target.with_feature(Target::DebugSymbols));
+            } catch (const Halide::CompileError &) {
+                refused = true;
+            }
+            if (!refused) {
+                printf("Asking for both kinds of debug symbols was not an error\n");
+                return 1;
+            }
         }
 
         // JIT compilation with it still computes the right thing.
