@@ -19,7 +19,7 @@ class CheckConstantRegisterIndices : public IRMutator {
 
     std::set<std::string> registers;
 
-    void check(const std::string &name, const Expr &index) {
+    void check(const std::string &name, const Expr &index, bool is_store) {
         if (!registers.count(name)) {
             return;
         }
@@ -28,7 +28,13 @@ class CheckConstantRegisterIndices : public IRMutator {
         if (uses_var) {
             std::cout << "Non-constant index into " << name << ": " << index << "\n";
             failed = true;
+            return;
         }
+        std::vector<int64_t> slots;
+        for (int i = 0; i < index.type().lanes(); i++) {
+            slots.push_back(*as_const_int(simplify(extract_lane(index, i))));
+        }
+        (is_store ? store_slots : load_slots)[name].insert(slots);
     }
 
     Stmt visit(const Allocate *op) override {
@@ -44,22 +50,24 @@ class CheckConstantRegisterIndices : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        check(op->name, op->index);
+        check(op->name, op->index, false);
         return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
-        check(op->name, op->index);
+        check(op->name, op->index, true);
         return IRMutator::visit(op);
     }
 
 public:
     bool failed = false;
     std::map<std::string, int> sizes;
+    // The distinct lists of slots each allocation is loaded from and stored to.
+    std::map<std::string, std::set<std::vector<int64_t>>> load_slots, store_slots;
 };
 
 int check_registers(Func out, const std::string &producer, int expected_size, Buffer<int> &result,
-                    const std::vector<int> &sizes) {
+                    const std::vector<int> &sizes, int *loads_not_stored = nullptr) {
     CheckConstantRegisterIndices checker;
     out.add_custom_lowering_pass(&checker, nullptr);
     result = out.realize(sizes);
@@ -74,6 +82,12 @@ int check_registers(Func out, const std::string &producer, int expected_size, Bu
     if (it->second != expected_size) {
         printf("%s was stored in %d registers instead of %d\n", producer.c_str(), it->second, expected_size);
         return 1;
+    }
+    if (loads_not_stored) {
+        *loads_not_stored = 0;
+        for (const auto &slots : checker.load_slots[producer]) {
+            *loads_not_stored += !checker.store_slots[producer].count(slots);
+        }
     }
     return 0;
 }
@@ -110,19 +124,21 @@ int main(int argc, char **argv) {
     {
         // Sliding over x inside a loop over y folds the stored window over
         // x, which must be restored to its unrotated state at the end of
-        // each x loop for the next iteration of y to use it.
+        // each x loop for the next iteration of y to use it. The loop over x
+        // has an odd constant extent, so the restore is a constant rotation.
         Func f("f"), g("g");
         f(x, y) = x * 3 + y;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1);
+        g.bound(x, 0, 11);
         g.split(y, yo, yi, 4);
         f.store_at(g, yo).compute_at(g, x).store_in(MemoryType::Register);
         g.unroll(yi);
         Buffer<int> out;
-        if (check_registers(g, f.name(), 4, out, {12, 12})) {
+        if (check_registers(g, f.name(), 4, out, {11, 12})) {
             return 1;
         }
         for (int j = 0; j < 12; j++) {
-            for (int i = 0; i < 12; i++) {
+            for (int i = 0; i < 11; i++) {
                 int correct = (i * 3 + j) * 3 - 4;
                 if (out(i, j) != correct) {
                     printf("Restoring: out(%d, %d) = %d instead of %d\n", i, j, out(i, j), correct);
@@ -237,6 +253,117 @@ int main(int argc, char **argv) {
             if (out(j) != correct) {
                 printf("Let chain: out(%d) = %d instead of %d\n", j, out(j), correct);
                 return 1;
+            }
+        }
+    }
+
+    {
+        // Sliding over x inside a loop over y. Nothing reads f after the loop
+        // over x, so the rotation left at the end of it, which is by a
+        // symbolic amount, needn't be undone.
+        Func f("f"), g("g");
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x - 1, y) + f(x, y) + f(x + 1, y);
+        f.store_at(g, y).compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out;
+        if (check_registers(g, f.name(), 3, out, {12, 12})) {
+            return 1;
+        }
+        for (int j = 0; j < 12; j++) {
+            for (int i = 0; i < 12; i++) {
+                int correct = (i * 3 + j) * 3;
+                if (out(i, j) != correct) {
+                    printf("Dead restore: out(%d, %d) = %d instead of %d\n", i, j, out(i, j), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // A vectorized window that isn't a whole number of vectors. Rotation
+        // moves one vector per iteration, so the load of f(x + 1) straddles
+        // the two vectors stored, and is assembled from loads of both.
+        Func f("f"), g("g");
+        f(x) = x * 3;
+        g(x) = f(x + 1) + f(x - 1);
+        f.store_root()
+            .compute_at(g, x)
+            .store_in(MemoryType::Register)
+            .align_bounds(x, 4, 3)
+            .vectorize(x, 4, TailStrategy::RoundUp)
+            .unroll(x);
+        g.vectorize(x, 4, TailStrategy::RoundUp);
+        g.output_buffer().dim(0).set_min(0);
+        Buffer<int> out;
+        int loads_not_stored = 0;
+        if (check_registers(g, f.name(), 8, out, {100}, &loads_not_stored)) {
+            return 1;
+        }
+        if (loads_not_stored != 0) {
+            printf("Straddling: %d loads of f don't match a store\n", loads_not_stored);
+            return 1;
+        }
+        for (int j = 0; j < 100; j++) {
+            if (out(j) != 6 * j) {
+                printf("Straddling: out(%d) = %d instead of %d\n", j, out(j), 6 * j);
+                return 1;
+            }
+        }
+    }
+
+    for (bool vectorize : {false, true}) {
+        // The window is folded over both x and y. The y digit is advanced by
+        // both the loop over y and f's own loop over y, and the x digit by
+        // the loop over x. When vectorized, rotating the y digit moves whole
+        // vectors.
+        Func f("f"), g("g");
+        f(x, y) = x * 3 + y;
+        int w = vectorize ? 4 : 1;
+        g(x, y) = f(x + w - 1, y) + f(x - 1, y) + f(x, y - 1);
+        g.bound(x, 0, 16);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register);
+        if (vectorize) {
+            f.vectorize(x, 4);
+            g.vectorize(x, 4, TailStrategy::RoundUp);
+        }
+        Buffer<int> out;
+        int loads_not_stored = 0;
+        if (check_registers(g, f.name(), 4 * w, out, {16, 12}, &loads_not_stored)) {
+            return 1;
+        }
+        if (loads_not_stored != 0) {
+            printf("Two digits: %d loads of f don't match a store\n", loads_not_stored);
+            return 1;
+        }
+        for (int j = 0; j < 12; j++) {
+            for (int i = 0; i < 16; i++) {
+                int correct = (i + w - 1) * 3 + (i - 1) * 3 + i * 3 + 3 * j - 1;
+                if (out(i, j) != correct) {
+                    printf("Two digits: out(%d, %d) = %d instead of %d\n", i, j, out(i, j), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // Splitting y with ShiftInwards clamps the start of the last split,
+        // so the y digit doesn't advance by a constant amount per iteration
+        // and can't be rotated. The allocation must still work.
+        Func f("f"), g("g");
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1);
+        g.split(y, yo, yi, 2);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register);
+        Buffer<int> out = g.realize({12, 13});
+        for (int j = 0; j < 13; j++) {
+            for (int i = 0; i < 12; i++) {
+                int correct = (i * 3 + j) * 3 - 4;
+                if (out(i, j) != correct) {
+                    printf("Unrotated: out(%d, %d) = %d instead of %d\n", i, j, out(i, j), correct);
+                    return 1;
+                }
             }
         }
     }
