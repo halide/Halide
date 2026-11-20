@@ -219,6 +219,28 @@ WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
     return make_buffer_copy(buf, false, buf, true);
 }
 
+// Lay out one side of a copy densely: starting at offset 0, with the copy's
+// dimensions packed in order. Returns the number of bytes that side then
+// spans. Runtimes that copy between host and device memory through a staging
+// buffer use this to make the staging buffer hold just the copied data.
+ALWAYS_INLINE uint64_t make_dense(const device_copy &c, uint64_t &begin, uint64_t *stride_bytes) {
+    begin = 0;
+    uint64_t size = c.chunk_size;
+    for (int i = 0; i < MAX_COPY_DIMS; i++) {
+        stride_bytes[i] = size;
+        size *= c.extent[i];
+    }
+    return size;
+}
+
+ALWAYS_INLINE uint64_t make_src_dense(device_copy &c) {
+    return make_dense(c, c.src_begin, c.src_stride_bytes);
+}
+
+ALWAYS_INLINE uint64_t make_dst_dense(device_copy &c) {
+    return make_dense(c, c.dst_begin, c.dst_stride_bytes);
+}
+
 // Caller is expected to verify that src->dimensions == dst->dimensions
 ALWAYS_INLINE int64_t calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct halide_buffer_t *dst) {
     int64_t offset = 0;
