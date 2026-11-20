@@ -1787,7 +1787,33 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 
 // --------------------------------------------------------------------------
 
-int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buffer,
+namespace {
+
+// Collects the regions of a buffer-to-buffer copy, and records them with as
+// few vkCmdCopyBuffer commands as possible.
+struct VulkanCopyRegionBatch {
+    static constexpr uint32_t capacity = 256;
+    VkCommandBuffer command_buffer;
+    VkBuffer src = VK_NULL_HANDLE, dst = VK_NULL_HANDLE;
+    VkBufferCopy regions[capacity];
+    uint32_t count = 0;
+
+    void add(uint64_t src_offset, uint64_t dst_offset, uint64_t size) {
+        regions[count++] = {src_offset, dst_offset, size};
+        if (count == capacity) {
+            flush();
+        }
+    }
+
+    void flush() {
+        if (count > 0) {
+            vkCmdCopyBuffer(command_buffer, src, dst, count, regions);
+            count = 0;
+        }
+    }
+};
+
+int vk_do_multidimensional_copy(void *user_context, VulkanCopyRegionBatch &batch,
                                 const device_copy &c, uint64_t src_offset, uint64_t dst_offset,
                                 int d, bool from_host, bool to_host) {
     if (d == 0) {
@@ -1796,20 +1822,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
             (from_host && !to_host) ||
             (!from_host && !to_host)) {
 
-            VkBufferCopy buffer_copy = {
-                src_offset,   // srcOffset
-                dst_offset,   // dstOffset
-                c.chunk_size  // size
-            };
-
-            VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);
-            VkBuffer *dst_buffer = reinterpret_cast<VkBuffer *>(c.dst);
-            if (!src_buffer || !dst_buffer) {
-                error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
-                return halide_error_code_internal_error;
-            }
-
-            vkCmdCopyBuffer(command_buffer, *src_buffer, *dst_buffer, 1, &buffer_copy);
+            batch.add(src_offset, dst_offset, c.chunk_size);
 
         } else if ((c.dst + dst_offset) != (c.src + src_offset)) {
             // Could reach here if a user called directly into the
@@ -1822,7 +1835,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
         // device_buffer_utils.h does not do so either.
         uint64_t src_off = 0, dst_off = 0;
         for (uint64_t i = 0; i < c.extent[d - 1]; i++) {
-            int err = vk_do_multidimensional_copy(user_context, command_buffer, c,
+            int err = vk_do_multidimensional_copy(user_context, batch, c,
                                                   src_offset + src_off,
                                                   dst_offset + dst_off,
                                                   d - 1, from_host, to_host);
@@ -1834,6 +1847,29 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
         }
     }
     return halide_error_code_success;
+}
+
+}  // namespace
+
+int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buffer,
+                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset,
+                                int d, bool from_host, bool to_host) {
+    VulkanCopyRegionBatch batch;
+    batch.command_buffer = command_buffer;
+    if (!(from_host && to_host)) {
+        VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);
+        VkBuffer *dst_buffer = reinterpret_cast<VkBuffer *>(c.dst);
+        if (!src_buffer || !dst_buffer) {
+            error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
+            return halide_error_code_internal_error;
+        }
+        batch.src = *src_buffer;
+        batch.dst = *dst_buffer;
+    }
+    int err = vk_do_multidimensional_copy(user_context, batch, c, src_offset, dst_offset,
+                                          d, from_host, to_host);
+    batch.flush();
+    return err;
 }
 
 int vk_device_crop_from_offset(void *user_context,

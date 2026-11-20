@@ -96,10 +96,6 @@ int main() {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
-    if (target.has_feature(Target::Vulkan)) {
-        printf("[SKIP-WITH-ISSUE-9694] Vulkan does not yet copy correctly between host and device buffers with different strides. See https://github.com/halide/Halide/issues/9694\n");
-        return 0;
-    }
     const halide_device_interface_t *itf =
         get_device_interface_for_device_api(DeviceAPI::Default_GPU, target);
 
