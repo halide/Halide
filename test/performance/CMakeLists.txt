@@ -15,6 +15,7 @@ tests(
     clamped_vector_load.cpp
     const_division.cpp
     device_copy.cpp
+    device_copy_strided.cpp
     fast_inverse.cpp
     fast_pow.cpp
     fast_sine_cosine.cpp

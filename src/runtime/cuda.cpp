@@ -881,12 +881,51 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
+// Whether to copy the innermost d dimensions of the copy, and its contiguous
+// chunk, as one rectangle with cuMemcpy3D.
+WEAK bool cuda_use_rect_copy(const device_copy &c, int d, bool from_host, bool to_host) {
+    // The largest CU_DEVICE_ATTRIBUTE_MAX_PITCH of any device.
+    const uint64_t max_pitch = 0x7fffffff;
+    return (d > 0 && d < c.rect_dims && !(from_host && to_host) &&
+            c.src_stride_bytes[0] <= max_pitch && c.dst_stride_bytes[0] <= max_pitch);
+}
+
 WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
                                        uint64_t src, uint64_t dst, int d, bool from_host, bool to_host,
                                        CUstream stream) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return halide_error_code_bad_dimensions;
+    } else if (cuda_use_rect_copy(c, d, from_host, to_host)) {
+        CUDA_MEMCPY3D p = {};
+        p.srcMemoryType = from_host ? CU_MEMORYTYPE_HOST : CU_MEMORYTYPE_DEVICE;
+        if (from_host) {
+            p.srcHost = (const void *)src;
+        } else {
+            p.srcDevice = (CUdeviceptr)src;
+        }
+        p.srcPitch = c.src_stride_bytes[0];
+        p.srcHeight = d == 2 ? c.src_stride_bytes[1] / c.src_stride_bytes[0] : c.extent[0];
+        p.dstMemoryType = to_host ? CU_MEMORYTYPE_HOST : CU_MEMORYTYPE_DEVICE;
+        if (to_host) {
+            p.dstHost = (void *)dst;
+        } else {
+            p.dstDevice = (CUdeviceptr)dst;
+        }
+        p.dstPitch = c.dst_stride_bytes[0];
+        p.dstHeight = d == 2 ? c.dst_stride_bytes[1] / c.dst_stride_bytes[0] : c.extent[0];
+        p.WidthInBytes = c.chunk_size;
+        p.Height = c.extent[0];
+        p.Depth = d == 2 ? c.extent[1] : 1;
+
+        debug(user_context) << "    rect copy from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << (void *)src << " -> " << (void *)dst << ", "
+                            << c.chunk_size << " x " << (uint64_t)p.Height << " x " << (uint64_t)p.Depth << " bytes\n";
+        CUresult err = stream ? cuMemcpy3DAsync(&p, stream) : cuMemcpy3D(&p);
+        if (err != CUDA_SUCCESS) {
+            return error_cuda(user_context, err, "cuMemcpy3D", " failed");
+        }
     } else if (d == 0) {
         CUresult err = CUDA_SUCCESS;
         const char *copy_name;

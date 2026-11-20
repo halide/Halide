@@ -42,6 +42,14 @@ struct device_copy {
     uint64_t dst_stride_bytes[MAX_COPY_DIMS];
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
+    // For runtimes that can copy a 2D or 3D rectangle in one operation: the
+    // number of dimensions such a copy can span, counting the contiguous
+    // chunk, at most 3. If it is 2 or 3, the innermost 1 or 2 dimensions are
+    // rows (and slices) whose strides are valid pitches: each stride is at
+    // least the size of what it steps over, and the slice stride is a
+    // multiple of the row stride. A runtime that can only copy 2D rectangles
+    // uses at most 2 of them.
+    int rect_dims;
 };
 
 WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
@@ -76,6 +84,19 @@ WEAK void copy_memory(const device_copy &copy, void *user_context) {
     }
 }
 
+// Whether stride_bytes[d] is a valid pitch for dimension d (0 for rows, 1 for
+// slices) of a rectangular copy (see device_copy::rect_dims).
+ALWAYS_INLINE bool valid_rect_pitch(const device_copy &c, int d, const uint64_t *stride_bytes) {
+    if (c.extent[d] <= 1 || (int64_t)stride_bytes[d] <= 0) {
+        return false;
+    } else if (d == 0) {
+        return stride_bytes[0] >= c.chunk_size;
+    } else {
+        return (stride_bytes[1] >= c.extent[0] * stride_bytes[0] &&
+                stride_bytes[1] % stride_bytes[0] == 0);
+    }
+}
+
 // All crops are supported. It copies the maximum amount of pixels from src to dst.
 // That maximum number of pixels is determined by the overlapping region of the two
 // buffers. This means that you can use it in scenarios:
@@ -89,6 +110,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     c.src = src_host ? (uint64_t)src->host : src->device;
     c.dst = dst_host ? (uint64_t)dst->host : dst->device;
     c.chunk_size = src->type.bytes();
+    c.rect_dims = 1;
     for (int i = 0; i < MAX_COPY_DIMS; i++) {
         c.extent[i] = 1;
         c.src_stride_bytes[i] = 0;
@@ -178,6 +200,12 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         c.extent[MAX_COPY_DIMS - 1] = 1;
         c.src_stride_bytes[MAX_COPY_DIMS - 1] = 0;
         c.dst_stride_bytes[MAX_COPY_DIMS - 1] = 0;
+    }
+
+    while (c.rect_dims < 3 &&
+           valid_rect_pitch(c, c.rect_dims - 1, c.src_stride_bytes) &&
+           valid_rect_pitch(c, c.rect_dims - 1, c.dst_stride_bytes)) {
+        c.rect_dims++;
     }
 
     return c;
