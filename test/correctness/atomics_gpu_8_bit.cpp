@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     }
 
     // The exact wording of this error differs by GPU backend.
-    return error_test("atomics_gpu_8_bit", {"8-bit or 16-bit atomics are not supported", "OpenCL only support 32 and 64 bit atomics", "Atomic updates are not supported inside Metal kernels", "Atomic updates are not supported inside Vulkan kernels"},
+    return error_test("atomics_gpu_8_bit", {"8-bit or 16-bit atomics are not supported", "OpenCL only support 32 and 64 bit atomics", "Atomic updates are not supported inside Metal kernels"},
                       []() {
                           int img_size = 10000;
                           int hist_size = 7;

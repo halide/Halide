@@ -2582,6 +2582,36 @@ SpvInstruction SpvFactory::control_barrier(SpvId execution_scope_id, SpvId memor
     return inst;
 }
 
+SpvInstruction SpvFactory::atomic_load(SpvId type_id, SpvId result_id, SpvId ptr_id, SpvId memory_scope_id, SpvId semantics_mask_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpAtomicLoad);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({ptr_id, memory_scope_id, semantics_mask_id});
+    return inst;
+}
+
+SpvInstruction SpvFactory::atomic_store(SpvId ptr_id, SpvId memory_scope_id, SpvId semantics_mask_id, SpvId value_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpAtomicStore);
+    inst.add_operands({ptr_id, memory_scope_id, semantics_mask_id, value_id});
+    return inst;
+}
+
+SpvInstruction SpvFactory::atomic_binary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId ptr_id, SpvId memory_scope_id, SpvId semantics_mask_id, SpvId value_id) {
+    SpvInstruction inst = SpvInstruction::make(op_code);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({ptr_id, memory_scope_id, semantics_mask_id, value_id});
+    return inst;
+}
+
+SpvInstruction SpvFactory::atomic_compare_exchange(SpvId type_id, SpvId result_id, SpvId ptr_id, SpvId memory_scope_id, SpvId equal_semantics_mask_id, SpvId unequal_semantics_mask_id, SpvId value_id, SpvId comparator_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpAtomicCompareExchange);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({ptr_id, memory_scope_id, equal_semantics_mask_id, unequal_semantics_mask_id, value_id, comparator_id});
+    return inst;
+}
+
 SpvInstruction SpvFactory::bitwise_not(SpvId type_id, SpvId result_id, SpvId src_id) {
     return unary_op(SpvOpNot, type_id, result_id, src_id);
 }

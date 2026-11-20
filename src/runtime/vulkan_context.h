@@ -400,9 +400,13 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_ext = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR,
                                                                &shader_f16_i8_ext, VK_FALSE, VK_FALSE, VK_FALSE};
 
+    // note: requires v1.2+ (for 64-bit atomics in storage buffers and shared memory)
+    VkPhysicalDeviceShaderAtomicInt64FeaturesKHR atomic_int64_ext = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR,
+                                                                     &storage_8bit_ext, VK_FALSE, VK_FALSE};
+
     // note: requires v1.1+
     VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_ext = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR,
-                                                                 (has_capability_v12 ? &storage_8bit_ext : nullptr),
+                                                                 (has_capability_v12 ? &atomic_int64_ext : nullptr),
                                                                  VK_FALSE, VK_FALSE, VK_FALSE, VK_FALSE};
 
     VkPhysicalDeviceFeatures2KHR device_features_ext = {
@@ -425,6 +429,8 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         if (has_capability_v12) {
             debug(user_context) << "   storage buffer 8bit access support: " << (storage_8bit_ext.storageBuffer8BitAccess ? "true" : "false") << "...\n";
             debug(user_context) << "   storage buffer 16bit access support: " << (storage_16bit_ext.storageBuffer16BitAccess ? "true" : "false") << "...\n";
+            debug(user_context) << "   storage buffer int64 atomics support: " << (atomic_int64_ext.shaderBufferInt64Atomics ? "true" : "false") << "...\n";
+            debug(user_context) << "   shared memory int64 atomics support: " << (atomic_int64_ext.shaderSharedInt64Atomics ? "true" : "false") << "...\n";
         }
         extended_features_ptr = (void *)(&device_features_ext);  // pass extended features (which also contains the standard features)
     } else {
