@@ -3,6 +3,7 @@
 #include "CodeGen_Internal.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "ExtractWMMAOperations.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
@@ -90,6 +91,12 @@ public:
 
 protected:
     Stmt visit(const Store *s) override {
+        if (is_wmma_matrix_store(s)) {
+            // The predicate of a store of a matrix-unit accumulator says which
+            // lanes hold which entries, and the whole store is one instruction
+            // that the backend recognizes, so it must stay intact.
+            return s;
+        }
         if (!is_const_one(s->predicate)) {
             std::vector<Stmt> scalar_stmts;
             for (int ln = 0; ln < s->value.type().lanes(); ln++) {
