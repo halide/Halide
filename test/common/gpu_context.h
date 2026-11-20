@@ -48,6 +48,11 @@ inline bool create_opencl_context(cl_context &cl_ctx, cl_command_queue &cl_q) {
         printf("Failed to get device\n");
         return false;
     }
+    // deviceCount is the number of devices available, which can be more than
+    // the number written to devices.
+    if (deviceCount > maxDevices) {
+        deviceCount = maxDevices;
+    }
 
     cl_device_id dev = devices[deviceCount - 1];
 
