@@ -119,6 +119,10 @@ int main() {
         printf("[SKIP-WITH-ISSUE-9694] Vulkan does not yet copy correctly between host and device buffers with different strides. See https://github.com/halide/Halide/issues/9694\n");
         return 0;
     }
+    if (target.has_feature(Target::D3D12Compute)) {
+        printf("[SKIP-WITH-ISSUE-9707] D3D12 copies of large strided regions are very slow and can lose the device. See https://github.com/halide/Halide/issues/9707\n");
+        return 0;
+    }
     const halide_device_interface_t *itf =
         get_device_interface_for_device_api(DeviceAPI::Default_GPU, target);
 
