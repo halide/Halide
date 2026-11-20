@@ -377,6 +377,7 @@ tests(
     median3x3.cpp
     memoize_cloned.cpp
     memoize_different_compute_store.cpp
+    memoize_evict_in_use.cpp
     memoize_output_invalid.cpp
     memoize_redefine_eviction_key.cpp
     metal_precompiled_shaders.cpp

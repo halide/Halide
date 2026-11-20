@@ -84,6 +84,9 @@ struct CacheEntry {
     halide_buffer_t *buf;
     uint64_t eviction_key;
     bool has_eviction_key;
+    // Set when the entry was evicted while still in use. It is no longer in
+    // the cache, and is destroyed by the last halide_memoization_cache_release.
+    bool evicted;
 
     bool init(const uint8_t *cache_key, size_t cache_key_size,
               uint32_t key_hash,
@@ -174,6 +177,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 
     has_eviction_key = has_eviction_key_arg;
     eviction_key = eviction_key_arg;
+    evicted = false;
     return true;
 }
 
@@ -549,6 +553,10 @@ WEAK void halide_memoization_cache_release(void *user_context, void *host) {
 
         halide_abort_if_false(user_context, entry->in_use_count > 0);
         entry->in_use_count--;
+        if (entry->evicted && entry->in_use_count == 0) {
+            entry->destroy();
+            halide_free(user_context, entry);
+        }
 #if CACHE_DEBUGGING
         validate_cache();
 #endif
@@ -595,8 +603,15 @@ WEAK void halide_memoization_cache_evict(void *user_context, uint64_t eviction_k
                     } else {
                         least_recently_used = entry->more_recent;
                     }
-                    entry->destroy();
-                    halide_free(user_context, entry);
+                    for (uint32_t i = 0; i < entry->tuple_count; i++) {
+                        current_cache_size -= entry->buf[i].size_in_bytes();
+                    }
+                    if (entry->in_use_count == 0) {
+                        entry->destroy();
+                        halide_free(user_context, entry);
+                    } else {
+                        entry->evicted = true;
+                    }
                 } else {
                     prev = &entry->next;
                 }
