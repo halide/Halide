@@ -10,6 +10,7 @@
 #include "Scope.h"
 #include "Target.h"
 
+#include <sstream>
 #include <unordered_map>
 
 namespace Halide {
@@ -65,6 +66,11 @@ protected:
     /** How to emit 64-bit integer constants */
     IntegerSuffixStyle integer_suffix_style = IntegerSuffixStyle::PlainC;
 
+    /** Emit floating point constants as exact literals, which needs
+     * support for hexadecimal float literals (C99, C++17), instead of as
+     * calls to float_from_bits. */
+    bool hex_float_literals = false;
+
     /** Emit a declaration. */
     // @{
     void compile(const LoweredFunc &func, const MetadataNameMap &metadata_name_map);
@@ -99,8 +105,22 @@ protected:
      * C/C++ *implementation* output only. */
     std::string runtime_prefixes_import_prefix;
 
-    /** A cache of generated values in scope */
+    /** A cache of generated values in scope that read memory, or have
+     * side effects. Cleared on stores and scope changes. */
     std::map<std::string, std::string> cache;
+
+    /** A cache of generated values that do neither, so they stay valid
+     * until the scope they were computed in closes. */
+    std::map<std::string, std::string> pure_cache;
+
+    /** The keys added to pure_cache, and how many there were when each
+     * open scope began. */
+    std::vector<std::string> pure_cache_keys;
+    std::vector<size_t> pure_cache_scope_begin;
+
+    /** Whether the Expr being printed by print_expr reads memory or has
+     * side effects itself. Its operands may not. */
+    bool printing_impure_expr = false;
 
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
@@ -149,8 +169,49 @@ protected:
     /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
     std::string print_scalarized_expr(const Expr &e);
 
-    /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
+    /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id.
+     *
+     * Inside a function body, the assignment is not written out right
+     * away. The returned id is a placeholder, and once the body is
+     * complete, a value that is used exactly once, in the C scope it was
+     * computed in, is printed inline at its use instead of being declared
+     * as a variable. Unused values are dropped. */
     virtual std::string print_assignment(Type t, const std::string &rhs);
+
+    /** Make sure the value behind an id returned by print_assignment
+     * gets declared as a variable, and return the variable's name. Needed
+     * when the id is used as a name, or in code that runs more than once
+     * per evaluation of the value, such as a loop condition. Any other id
+     * is returned unchanged. */
+    std::string force_declaration(const std::string &id);
+
+    struct PendingValue {
+        std::string name;
+        // Everything in the declaration before the rhs.
+        std::string declaration;
+        // A cast to the type of the value, for an inlined use of a value
+        // that the declaration converts implicitly (C arithmetic promotes
+        // narrow integers to int). Empty if not needed.
+        std::string cast;
+        std::string rhs;
+        // The C scope the value is computed in.
+        int scope;
+        bool force_declaration;
+    };
+
+    /** The values printed by print_assignment in the current function body. */
+    std::vector<PendingValue> pending_values;
+
+    /** The ids of the currently open C scopes, outermost first. */
+    std::vector<int> open_scope_ids;
+    int next_scope_id = 0;
+
+    /** The function body is collected here until its outermost scope closes. */
+    std::ostringstream function_body;
+    std::streambuf *output_streambuf = nullptr;
+
+    /** Decide which pending values to inline, and write the function body to the output. */
+    void emit_function_body();
 
     /** Emit free for the heap allocation. **/
     void print_heap_free(const std::string &alloc_name);
