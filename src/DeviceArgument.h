@@ -70,6 +70,14 @@ struct DeviceArgument {
     /** Alignment information for integer parameters. */
     ModulusRemainder alignment;
 
+    /** For buffers, the alignment in bytes that the device address of the
+     * buffer's first element is known to have, or zero if the buffer is one
+     * of the pipeline's own allocations, which starts at the start of a
+     * device allocation. Other buffers (inputs, outputs, the buffers of
+     * extern stages) may be crops, which can start at any element: they are
+     * only as aligned as their host_alignment promises. */
+    int base_alignment = 0;
+
     DeviceArgument() = default;
 
     DeviceArgument(const std::string &_name,

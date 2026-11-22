@@ -345,10 +345,10 @@ public:
     ClContext &operator=(ClContext &&) = delete;
 };
 
-// OpenCL doesn't support creating sub-buffers from some-buffers.  In
-// order to support more generalized (and frankly, minimally useful)
-// crop behavior, we store a cl_mem and an offset and then create
-// sub-buffers as needed.
+// A crop is its parent's cl_mem and the byte offset of the crop's first
+// element in it. Kernels get both (see halide_opencl_run), and copies
+// apply the offset: a sub-buffer would have to start at a multiple of
+// CL_DEVICE_MEM_BASE_ADDR_ALIGN, which crops in general don't.
 struct device_handle {
     // Important: order these to avoid any padding between fields;
     // some Win32 compiler optimizer configurations can inconsistently
@@ -1155,31 +1155,12 @@ WEAK int halide_opencl_run(void *user_context,
     size_t global_dim[3] = {(size_t)blocksX * threadsX, (size_t)blocksY * threadsY, (size_t)blocksZ * threadsZ};
     size_t local_dim[3] = {(size_t)threadsX, (size_t)threadsY, (size_t)threadsZ};
 
-    // Set args
-    int i = 0;
-
-    // Count sub buffers needed for crops.
-    int sub_buffers_needed = 0;
-    while (arg_sizes[i] != 0) {
-        if (arg_is_buffer[i] &&
-            ((device_handle *)((halide_buffer_t *)args[i])->device)->offset != 0) {
-            sub_buffers_needed++;
-        }
-        i += 1;
-    }
-    cl_mem *sub_buffers = nullptr;
-    int sub_buffers_saved = 0;
-    if (sub_buffers_needed > 0) {
-        sub_buffers = (cl_mem *)malloc(sizeof(cl_mem) * sub_buffers_needed);
-        if (sub_buffers == nullptr) {
-            return halide_error_code_out_of_memory;
-        }
-        memset(sub_buffers, 0, sizeof(cl_mem) * sub_buffers_needed);
-    }
-
-    i = 0;
-    while (arg_sizes[i] != 0) {
-        debug(user_context) << "    clSetKernelArg " << i
+    // Set args. Each buffer but an image is passed as its cl_mem and the
+    // byte offset of its crop in it (see CodeGen_OpenCL_Dev), so kernel
+    // argument indices run ahead of the indices into args.
+    cl_uint kernel_arg = 0;
+    for (int i = 0; arg_sizes[i] != 0; i++) {
+        debug(user_context) << "    clSetKernelArg " << kernel_arg
                             << " " << (int)arg_sizes[i]
                             << " [" << (*((void **)args[i])) << " ...] "
                             << arg_is_buffer[i] << "\n";
@@ -1188,41 +1169,31 @@ WEAK int halide_opencl_run(void *user_context,
 
         if (arg_is_buffer[i]) {
             halide_abort_if_false(user_context, arg_sizes[i] == sizeof(uint64_t));
-            cl_mem mem = ((device_handle *)((halide_buffer_t *)this_arg)->device)->mem;
-            uint64_t offset = ((device_handle *)((halide_buffer_t *)this_arg)->device)->offset;
-
-            if (offset != 0) {
-                cl_buffer_region region = {(size_t)offset, ((halide_buffer_t *)this_arg)->size_in_bytes()};
-                // The sub-buffer encompasses the linear range of addresses that
-                // span the crop.
-                mem = clCreateSubBuffer(mem, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
-                sub_buffers[sub_buffers_saved++] = mem;
-                debug(user_context) << "Create subbuffer " << (void *)mem << ": "
-                                    << "offset=" << region.origin << ", size=" << region.size << "\n";
-            }
-            if (err == CL_SUCCESS) {
-                debug(user_context) << "Mapped dev handle is: " << (void *)mem << "\n";
-                err = clSetKernelArg(f, i, sizeof(mem), &mem);
+            const halide_buffer_t *buf = (halide_buffer_t *)this_arg;
+            device_handle *handle = (device_handle *)buf->device;
+            cl_mem mem = handle->mem;
+            debug(user_context) << "Mapped dev handle is: " << (void *)mem << ", offset " << handle->offset << "\n";
+            err = clSetKernelArg(f, kernel_arg++, sizeof(mem), &mem);
+            if (err == CL_SUCCESS && buf->device_interface != &opencl_image_device_interface) {
+                cl_ulong offset = handle->offset;
+                err = clSetKernelArg(f, kernel_arg++, sizeof(offset), &offset);
             }
         } else {
-            err = clSetKernelArg(f, i, arg_sizes[i], this_arg);
+            err = clSetKernelArg(f, kernel_arg++, arg_sizes[i], this_arg);
         }
 
         if (err != CL_SUCCESS) {
-            for (int sub_buf_index = 0; sub_buf_index < sub_buffers_saved; sub_buf_index++) {
-                clReleaseMemObject(sub_buffers[sub_buf_index]);
-            }
-            free(sub_buffers);
+            clReleaseKernel(f);
             return error_opencl(user_context, err, "clSetKernelArg failed");
         }
-        i++;
     }
     // Set the shared mem buffer last
     // Always set at least 1 byte of shmem, to keep the launch happy
     debug(user_context)
-        << "    clSetKernelArg " << i << " " << shared_mem_bytes << " [nullptr]\n";
-    err = clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, nullptr);
+        << "    clSetKernelArg " << kernel_arg << " " << shared_mem_bytes << " [nullptr]\n";
+    err = clSetKernelArg(f, kernel_arg, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, nullptr);
     if (err != CL_SUCCESS) {
+        clReleaseKernel(f);
         return error_opencl(user_context, err, "clSetKernelArg failed");
     }
 
@@ -1238,14 +1209,8 @@ WEAK int halide_opencl_run(void *user_context,
                                  0, nullptr, nullptr);
     debug(user_context) << get_opencl_error_name(err) << "\n";
 
-    // Now that the kernel is enqueued, OpenCL is holding its own
-    // references to sub buffers and the local ones can be released.
-    for (int sub_buf_index = 0; sub_buf_index < sub_buffers_saved; sub_buf_index++) {
-        clReleaseMemObject(sub_buffers[sub_buf_index]);
-    }
-    free(sub_buffers);
-
     if (err != CL_SUCCESS) {
+        clReleaseKernel(f);
         return error_opencl(user_context, err, "clEnqueueNDRangeKernel failed");
     }
 
@@ -1400,7 +1365,7 @@ WEAK int halide_opencl_device_release_crop(void *user_context,
         return result;
     }
     debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
-    // Sub-buffers are released with clReleaseMemObject
+    // Release the reference to the parent cl_mem the crop retained.
     cl_int err = clReleaseMemObject((cl_mem)dev_ptr);
     free((device_handle *)buf->device);
     if (err != CL_SUCCESS) {
