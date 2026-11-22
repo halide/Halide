@@ -3,6 +3,7 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
+#include "scoped_mutex_lock.h"
 #include "scoped_spin_lock.h"
 
 #include "mini_cl.h"
@@ -102,6 +103,16 @@ WEAK bool device_type_initialized = false;
 WEAK char build_options[1024];
 WEAK ScopedSpinLock::AtomicFlag build_options_lock = 0;
 WEAK bool build_options_initialized = false;
+
+// A free list, used when allocations are being cached.
+WEAK struct FreeListItem {
+    cl_mem mem;
+    cl_context ctx;
+    cl_command_queue queue;
+    size_t size;
+    FreeListItem *next;
+} *free_list = nullptr;
+WEAK halide_mutex free_list_lock;
 
 template<typename... Args>
 halide_error_code_t error_opencl(void *user_context, cl_int cl_error, const Args &...args) {
@@ -701,6 +712,92 @@ WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *s
 
 extern "C" {
 
+WEAK int halide_opencl_release_unused_device_allocations(void *user_context) {
+    FreeListItem *to_free;
+    {
+        ScopedMutexLock lock(&free_list_lock);
+        to_free = free_list;
+        free_list = nullptr;
+    }
+    while (to_free) {
+        debug(user_context) << "    clReleaseMemObject " << (void *)(to_free->mem) << "\n";
+        clReleaseMemObject(to_free->mem);
+        FreeListItem *next = to_free->next;
+        free(to_free);
+        to_free = next;
+    }
+    return halide_error_code_success;
+}
+
+}  // extern "C"
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenCL {
+
+WEAK halide_device_allocation_pool opencl_allocation_pool;
+
+WEAK __attribute__((constructor)) void register_opencl_allocation_pool() {
+    opencl_allocation_pool.release_unused = &halide_opencl_release_unused_device_allocations;
+    halide_register_device_allocation_pool(&opencl_allocation_pool);
+}
+
+ALWAYS_INLINE uint64_t quantize_allocation_size(uint64_t sz) {
+    int z = __builtin_clzll(sz);
+    if (z < 60) {
+        sz--;
+        sz = sz >> (60 - z);
+        sz++;
+        sz = sz << (60 - z);
+    }
+    return sz;
+}
+
+// Only a buffer that nothing else holds a reference to (no live crop,
+// no external owner of a wrapped cl_mem) and that looks like the
+// buffers halide_opencl_device_malloc creates may be placed on the
+// free list. Sets *size to the allocated size if so, and to 0 if not.
+WEAK int get_cacheable_allocation_size(void *user_context, const halide_buffer_t *buf, size_t *size) {
+    *size = 0;
+    if (buf->device_interface != &opencl_device_interface) {
+        return halide_error_code_success;
+    }
+    cl_mem mem = ((device_handle *)buf->device)->mem;
+    cl_uint ref_count;
+    cl_int err = clGetMemObjectInfo(mem, CL_MEM_REFERENCE_COUNT, sizeof(ref_count), &ref_count, nullptr);
+    if (err != CL_SUCCESS) {
+        return error_opencl(user_context, err, "clGetMemObjectInfo failed");
+    }
+    cl_mem_flags flags;
+    err = clGetMemObjectInfo(mem, CL_MEM_FLAGS, sizeof(flags), &flags, nullptr);
+    if (err != CL_SUCCESS) {
+        return error_opencl(user_context, err, "clGetMemObjectInfo failed");
+    }
+    cl_mem associated;
+    err = clGetMemObjectInfo(mem, CL_MEM_ASSOCIATED_MEMOBJECT, sizeof(associated), &associated, nullptr);
+    if (err != CL_SUCCESS) {
+        return error_opencl(user_context, err, "clGetMemObjectInfo failed");
+    }
+    if (ref_count != 1 || flags != CL_MEM_READ_WRITE || associated != nullptr) {
+        return halide_error_code_success;
+    }
+    size_t real_size;
+    err = clGetMemObjectInfo(mem, CL_MEM_SIZE, sizeof(real_size), &real_size, nullptr);
+    if (err != CL_SUCCESS) {
+        return error_opencl(user_context, err, "clGetMemObjectInfo failed");
+    }
+    *size = real_size;
+    return halide_error_code_success;
+}
+
+}  // namespace OpenCL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
 WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
     // halide_opencl_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_opencl_device_free on any halide_buffer_t
@@ -729,10 +826,42 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
     if (result) {
         return result;
     }
-    debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
-    cl_int err = clReleaseMemObject((cl_mem)dev_ptr);
-    // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
-    // we just end our reference to it regardless.
+
+    size_t cacheable_size = 0;
+    if (halide_can_reuse_device_allocations(user_context)) {
+        result = get_cacheable_allocation_size(user_context, buf, &cacheable_size);
+        if (result) {
+            return result;
+        }
+    }
+
+    cl_int err = CL_SUCCESS;
+    if (cacheable_size) {
+        debug(user_context) << "    caching allocation for later use: " << (void *)dev_ptr << "\n";
+
+        FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
+        if (item == nullptr) {
+            return halide_error_code_out_of_memory;
+        }
+        item->mem = dev_ptr;
+        item->ctx = ctx.context;
+        // We don't want to use a buffer freed on one queue on
+        // another, as there are no synchronization guarantees.
+        item->queue = ctx.cmd_queue;
+        item->size = cacheable_size;
+
+        {
+            ScopedMutexLock lock(&free_list_lock);
+            item->next = free_list;
+            free_list = item;
+        }
+    } else {
+        debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
+        err = clReleaseMemObject((cl_mem)dev_ptr);
+        // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
+        // we just end our reference to it regardless.
+    }
+
     free((device_handle *)buf->device);
     buf->device = 0;
     buf->device_interface->impl->release_module();
@@ -881,6 +1010,9 @@ WEAK int halide_opencl_device_release(void *user_context) {
             return error_opencl(user_context, err, "clFinish failed");
         }
 
+        // Dump the contents of the free list, ignoring errors.
+        (void)halide_opencl_release_unused_device_allocations(user_context);
+
         compilation_cache.delete_context(user_context, ctx, clReleaseProgram);
 
         // Release the context itself, if we created it.
@@ -920,6 +1052,10 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
         return validate_device_pointer(user_context, buf, size);
     }
 
+    if (halide_can_reuse_device_allocations(user_context)) {
+        size = quantize_allocation_size(size);
+    }
+
     for (int i = 0; i < buf->dimensions; i++) {
         halide_abort_if_false(user_context, buf->dim[i].stride >= 0);
     }
@@ -935,15 +1071,77 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
         return halide_error_code_out_of_memory;
     }
 
-    cl_int err;
-    debug(user_context) << "    clCreateBuffer -> " << (int)size << " ";
-    cl_mem dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, nullptr, &err);
-    if (err != CL_SUCCESS || dev_ptr == nullptr) {
-        free(dev_handle);
-        if (err == CL_SUCCESS) {
-            err = CL_OUT_OF_RESOURCES;
+    cl_mem dev_ptr = nullptr;
+    FreeListItem *to_free = nullptr;
+    if (halide_can_reuse_device_allocations(user_context)) {
+        ScopedMutexLock lock(&free_list_lock);
+        // Best-fit allocation. There are three tunable constants
+        // here. A bucket is claimed if the size requested is at least
+        // 7/8 of the size of the bucket. We keep at most 32 unused
+        // allocations. We round up each allocation size to its top 4
+        // most significant bits (see quantize_allocation_size).
+        FreeListItem *best = nullptr, *item = free_list;
+        FreeListItem **best_prev = nullptr, **prev_ptr = &free_list;
+        int depth = 0;
+        while (item) {
+            if ((size <= item->size) &&                              // Fits
+                (size >= (item->size / 8) * 7) &&                    // Not too much slop
+                (ctx.context == item->ctx) &&                        // Same OpenCL context
+                (ctx.cmd_queue == item->queue) &&                    // Can only safely re-use on the same queue on which it was freed
+                ((best == nullptr) || (best->size > item->size))) {  // Better than previous best fit
+                best = item;
+                best_prev = prev_ptr;
+                prev_ptr = &item->next;
+                item = item->next;
+            } else if (depth > 32) {
+                // Allocations after here have not been used for a
+                // long time. Just detach the rest of the free list
+                // and defer the actual clReleaseMemObject calls until
+                // after we release the free_list_lock.
+                to_free = item;
+                *prev_ptr = nullptr;
+                item = nullptr;
+                break;
+            } else {
+                prev_ptr = &item->next;
+                item = item->next;
+            }
+            depth++;
         }
-        return error_opencl(user_context, err, "clCreateBuffer failed: ");
+
+        if (best) {
+            dev_ptr = best->mem;
+            *best_prev = best->next;
+            free(best);
+        }
+    }
+
+    while (to_free) {
+        FreeListItem *next = to_free->next;
+        clReleaseMemObject(to_free->mem);
+        free(to_free);
+        to_free = next;
+    }
+
+    if (!dev_ptr) {
+        cl_int err;
+        debug(user_context) << "    clCreateBuffer -> " << (int)size << " ";
+        dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, nullptr, &err);
+        if (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES) {
+            auto result = halide_opencl_release_unused_device_allocations(user_context);
+            if (result) {
+                free(dev_handle);
+                return result;
+            }
+            dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, nullptr, &err);
+        }
+        if (err != CL_SUCCESS || dev_ptr == nullptr) {
+            free(dev_handle);
+            if (err == CL_SUCCESS) {
+                err = CL_OUT_OF_RESOURCES;
+            }
+            return error_opencl(user_context, err, "clCreateBuffer failed: ");
+        }
     }
     debug(user_context) << (void *)dev_ptr << " device_handle: " << dev_handle << "\n";
 
