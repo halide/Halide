@@ -270,6 +270,10 @@ int main(int argc, char **argv) {
         {"arm-64-ios-arm64e-armv84a", "arm-64-ios-arm64e", "arm-64-ios-arm64e"},
         {"arm-64-ios-arm64e-armv85a", "arm-64-ios-arm64e-armv84a", "arm-64-ios-arm64e-armv84a"},
         {"arm-64-ios-arm64e", "arm-64-ios", ""},
+        {"arm-64-ios-arm64e_x1-armv88a", "arm-64-ios-arm64e_x1", "arm-64-ios-arm64e_x1"},
+        {"arm-64-ios-arm64e_x1-armv89a", "arm-64-ios-arm64e_x1-armv88a", "arm-64-ios-arm64e_x1-armv88a"},
+        {"arm-64-ios-arm64e_x1", "arm-64-ios-arm64e", ""},
+        {"arm-64-ios-arm64e_x1", "arm-64-ios-arm64e-armv87a", ""},
     };
     for (const auto &test : gcd_tests) {
         Target result{};
@@ -288,7 +292,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (const char *s : {"arm-64-ios-arm64e", "arm-64-macos-arm64e"}) {
+    for (const char *s : {"arm-64-ios-arm64e", "arm-64-macos-arm64e",
+                          "arm-64-ios-arm64e_x1", "arm-64-macos-arm64e_x1"}) {
         Target raw{s};
         Target implied = raw.with_implied_features();
         Target gcd{};
@@ -301,15 +306,16 @@ int main(int argc, char **argv) {
     }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
-    {
+    for (const char *bad_sim : {"arm-64-ios-arm64e-simulator",
+                                "arm-64-ios-arm64e_x1-simulator"}) {
         bool threw = false;
         try {
-            (void)Target("arm-64-ios-arm64e-simulator");
+            (void)Target(bad_sim);
         } catch (const Halide::Error &) {
             threw = true;
         }
         if (!threw) {
-            printf("Expected Target(\"arm-64-ios-arm64e-simulator\") to fail validation.\n");
+            printf("Expected Target(\"%s\") to fail validation.\n", bad_sim);
             return 1;
         }
     }
@@ -403,6 +409,13 @@ int main(int argc, char **argv) {
         {"arm-64-macos-arm64e",
          "arm-64-macos-armv8a-armv81a-armv82a-armv83a-armv84a-arm_fp16-arm64e",
          "arm-64-macos-arm64e"},
+        // Apple arm64e.x1 implies arm64e, ARM v8.7a, fp16, and dotprod.
+        {"arm-64-ios-arm64e_x1",
+         "arm-64-ios-armv8a-armv81a-armv82a-armv83a-armv84a-armv85a-armv86a-armv87a-arm_fp16-arm_dot_prod-arm64e-arm64e_x1",
+         "arm-64-ios-arm64e_x1"},
+        {"arm-64-macos-arm64e_x1",
+         "arm-64-macos-armv8a-armv81a-armv82a-armv83a-armv84a-armv85a-armv86a-armv87a-arm_fp16-arm_dot_prod-arm64e-arm64e_x1",
+         "arm-64-macos-arm64e_x1"},
         // Tracing loads/stores implies tracing realizations.
         {"x86-64-linux-trace_loads",
          "x86-64-linux-trace_loads-trace_realizations",

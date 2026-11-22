@@ -76,9 +76,13 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
+#include <llvm/Support/Endian.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormattedStream.h>
+#if LLVM_VERSION >= 240
+#include <llvm/Support/LibraryOptionsContext.h>
+#endif
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/TypeSize.h>
 #include <llvm/Support/raw_os_ostream.h>
