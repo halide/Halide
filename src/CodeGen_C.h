@@ -38,6 +38,21 @@ public:
         CPlusPlusFunctionInfoHeader,
     };
 
+    /** If set, print_stmt() and print_expr() note in printed_nodes where
+     * they print each Stmt and Expr, and where that is in this printing of
+     * the IR, or of IR that it was lowered from. The stream must support
+     * tellp(). */
+    const StmtSourceMap *line_source = nullptr;
+
+    /** Where a Stmt or an Expr was printed, as byte offsets into the stream,
+     * and where it is in line_source. They are in the order they began
+     * printing. */
+    struct PrintedNode {
+        uint32_t start, end;
+        IRPosition position;
+    };
+    std::vector<PrintedNode> printed_nodes;
+
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &dest,

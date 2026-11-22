@@ -392,7 +392,9 @@ function scrollToHostAsm(i) {
     });
 }
 
-/* The device code. Its lines have their line number in data-n. */
+/* The device code. Its lines have their line number in data-n, and the line
+ * and the node of IR they were generated for in data-ir and data-node, if
+ * any. */
 const devicePane = document.getElementById('device-code-pane');
 
 // Highlights CUDA device code (PTX): the kernels can be collapsed, the types
@@ -423,7 +425,8 @@ function highlightPTX(pane) {
     let html = '';
     let kernelId = -1, braceDepth = 0, inSignature = false;
     for (const el of Array.from(code.children)) {
-        const attributes = ' data-n="' + el.dataset.n + '"';
+        const attributes = ' data-n="' + el.dataset.n + '"' + (el.dataset.ir ? ' data-ir="' + el.dataset.ir + '"' : '') +
+                           (el.dataset.node ? ' data-node="' + el.dataset.node + '"' : '');
         let text = el.textContent;
         if (text === '' || text === '\t') {
             html += '<span class="line"' + attributes + '></span>\n';
@@ -522,6 +525,72 @@ if (devicePane) {
     highlightPTX(devicePane);
     addHighlight('#device-code-pane');
 }
+// The lines of device code generated for each line, and for each node, of IR.
+const deviceOfIRLine = new Map();
+const deviceOfIRNode = new Map();
+if (devicePane) {
+    const add = function(map, key, el) {
+        if (!map.has(key)) {
+            map.set(key, []);
+        }
+        map.get(key).push(el);
+    };
+    devicePane.querySelectorAll('span.line[data-ir]').forEach(el => {
+        add(deviceOfIRLine, parseInt(el.dataset.ir), el);
+        if (el.dataset.node) {
+            add(deviceOfIRNode, parseInt(el.dataset.node), el);
+        }
+    });
+}
+function deviceOfIRNodes(nodes) {
+    const lines = [];
+    for (const n of nodes) {
+        for (const el of (deviceOfIRNode.get(n) || [])) {
+            lines.push(el);
+        }
+    }
+    return lines;
+}
+// Marks lines of the device code. With rainbow set, each also gets the class
+// of the nesting depth of the node of IR it was generated for, and those of
+// the node with the number own are marked as that node's own.
+const depthClasses = ['d0', 'd1', 'd2', 'd3', 'd4', 'd5', 'dn', 'own'];
+function highlightDevice(lines, cls, rainbow, own) {
+    if (!devicePane) {
+        return;
+    }
+    devicePane.querySelectorAll('span.line.' + cls).forEach(el => {
+        el.classList.remove(cls);
+        if (cls.endsWith('-selected')) {
+            el.classList.remove(...depthClasses);
+        }
+    });
+    for (const el of lines) {
+        el.classList.add(cls);
+        if (rainbow) {
+            el.classList.add(depthClassOfIRNode(el.dataset.node || 0));
+            el.classList.toggle('own', Boolean(own) && parseInt(el.dataset.node || '0') === own);
+        }
+    }
+}
+function scrollToDevice(lines) {
+    if (!lines.length) {
+        return;
+    }
+    // Expand the kernel it is in.
+    for (let el = lines[0].parentElement; el && el !== devicePane; el = el.parentElement) {
+        if (el.classList.contains('indent') && el.id) {
+            const btn = document.getElementById('show-hide-btn-' + el.id);
+            if (btn) {
+                btn.checked = false;
+            }
+        }
+    }
+    devicePane.scrollTo({
+        behavior : scrollBehavior(),
+        top : lines[0].offsetTop - devicePane.clientHeight / 3
+    });
+}
 // Marks (or unmarks) the lines that collapsing a block would hide, down to
 // its closing brace, along the indentation of the block.
 function markFold(header, mark) {
@@ -538,7 +607,8 @@ function markFold(header, mark) {
 
 /* Linking the IR to the code generated for it. What is linked is a line of
  * IR, and within it possibly one node: an expression with all that is nested
- * in it, or the node that one instruction was generated for. Hovering shows
+ * in it, or the node that one instruction was generated for. Device code is
+ * linked to lines of IR only. Hovering shows
  * the link, double-clicking keeps it shown, and double-clicking it again or
  * pressing Escape lets go of it. The line is marked faintly, the node
  * strongly. With rainbow parentheses, the code that is selected (of the
@@ -577,11 +647,34 @@ function linkAtIR(target) {
     const line = parseInt(l.dataset.line);
     const lineRows = asmOfIRLine.get(line) || [];
     const g = target.closest('[data-g]');
-    const rows = g ? asmOfIRNodes(irNodesOf(g)) : [];
-    if (!rows.length && !lineRows.length) {
+    const nodes = g ? irNodesOf(g) : [];
+    const rows = asmOfIRNodes(nodes);
+    const device = deviceOfIRNodes(nodes);
+    if (!rows.length && !device.length && !lineRows.length && !deviceOfIRLine.has(line)) {
         return null;
     }
-    return {line : line, node : rows.length ? parseInt(g.dataset.g) : 0, rows : rows, lineRows : lineRows, nested : true};
+    return {
+        line : line,
+        node : rows.length || device.length ? parseInt(g.dataset.g) : 0,
+        rows : rows,
+        lineRows : lineRows,
+        device : device,
+        nested : true
+    };
+}
+// What is linked at a line of the device code: its line of IR, and the node
+// on it that the line was generated for, if that is known.
+function linkAtDeviceLine(el) {
+    const line = parseInt(el.dataset.ir);
+    const node = el.dataset.node ? parseInt(el.dataset.node) : 0;
+    return {
+        line : line,
+        node : node,
+        rows : asmOfIRNode.get(node) || [],
+        lineRows : asmOfIRLine.get(line) || [],
+        device : deviceOfIRNode.get(node) || [],
+        nested : false
+    };
 }
 // What is linked at a line of the assembly, or null if it is not known which
 // IR it was generated for.
@@ -591,7 +684,14 @@ function linkAtAsm(i) {
         return null;
     }
     const node = asmIRNodes[i];
-    return {line : line, node : node, rows : asmOfIRNode.get(node) || [], lineRows : asmOfIRLine.get(line) || [], nested : false};
+    return {
+        line : line,
+        node : node,
+        rows : asmOfIRNode.get(node) || [],
+        lineRows : asmOfIRLine.get(line) || [],
+        device : deviceOfIRNode.get(node) || [],
+        nested : false
+    };
 }
 function sameLink(a, b) {
     return a && b && a.line === b.line && a.node === b.node && a.nested === b.nested;
@@ -621,6 +721,20 @@ function showLink(link, kind) {
         highlightAsm(link ? link.lineRows : [], 'line-' + kind);
         highlightAsm(link ? link.rows : [], 'node-' + kind);
     }
+    const deviceOfLine = link ? (deviceOfIRLine.get(link.line) || []) : [];
+    if (kind === 'selected') {
+        if (link && link.node) {
+            highlightDevice([], 'node-selected');
+            highlightDevice(deviceOfLine, 'line-selected');
+            highlightDevice(link.device, 'node-selected', true, link.node);
+        } else {
+            highlightDevice([], 'node-selected');
+            highlightDevice(deviceOfLine, 'line-selected', true);
+        }
+    } else {
+        highlightDevice(deviceOfLine, 'line-' + kind);
+        highlightDevice(link ? link.device : [], 'node-' + kind);
+    }
 }
 // A few words about a node of IR: its punctuation.
 function describeIRNode(node) {
@@ -637,11 +751,17 @@ function selectLink(link) {
     if (selectedLink) {
         const s = selectedLink;
         const count = n => n + (n === 1 ? ' instruction' : ' instructions');
-        linkStatus.textContent = 'line ' + s.line +
-            (s.node ? ', ' + describeIRNode(s.node) + ' : ' + count(s.rows.length) + ' of ' + s.lineRows.length + ' on the line' :
-                      ' : ' + count(s.lineRows.length));
+        const device = (deviceOfIRLine.get(s.line) || []).length;
+        const parts = [];
+        if (s.lineRows.length || !device) {
+            parts.push(s.node ? count(s.rows.length) + ' of ' + s.lineRows.length + ' on the line' : count(s.lineRows.length));
+        }
+        if (device) {
+            parts.push((s.node ? s.device.length + ' of ' : '') + device + (device === 1 ? ' line' : ' lines') + ' of device code');
+        }
+        linkStatus.textContent = 'line ' + s.line + (s.node ? ', ' + describeIRNode(s.node) : '') + ' : ' + parts.join(', ');
     } else {
-        linkStatus.textContent = 'double-click IR or assembly';
+        linkStatus.textContent = 'double-click IR' + (devicePane ? ', assembly or device code' : ' or assembly');
     }
     linkClear.disabled = !selectedLink;
     return selectedLink;
@@ -738,7 +858,10 @@ irPane.addEventListener('dblclick', function(event) {
     }
     const link = linkAtIR(event.target);
     if (link && selectLink(link)) {
-        scrollToHostAsm(link.rows.length ? link.rows[0] : link.lineRows[0]);
+        if (link.rows.length || link.lineRows.length) {
+            scrollToHostAsm(link.rows.length ? link.rows[0] : link.lineRows[0]);
+        }
+        scrollToDevice(link.device.length ? link.device : (deviceOfIRLine.get(link.line) || []));
     }
 });
 
@@ -824,6 +947,31 @@ asmCode.addEventListener('dblclick', function(event) {
         goToIRLine(link.line);
     }
 });
+// The same for device code.
+if (devicePane) {
+    const linkAtDevice = function(event) {
+        const el = event.target.closest('span.line[data-ir]');
+        return el ? linkAtDeviceLine(el) : null;
+    };
+    devicePane.addEventListener('mouseover', function(event) {
+        const link = linkAtDevice(event);
+        showLink(link, 'hover');
+        devicePane.classList.toggle('linkable', link !== null);
+    });
+    devicePane.addEventListener('mouseleave', function() {
+        showLink(null, 'hover');
+    });
+    devicePane.addEventListener('mousedown', noTextSelection);
+    devicePane.addEventListener('dblclick', function(event) {
+        const link = linkAtDevice(event);
+        if (link && selectLink(link)) {
+            goToIRLine(link.line);
+            if (link.lineRows.length) {
+                scrollToHostAsm(link.lineRows[0]);
+            }
+        }
+    });
+}
 
 
 /* The device code of the APIs other than CUDA is C-like source (OpenCL C,

@@ -464,6 +464,104 @@ int main(int argc, char **argv) {
         }
     }
 
+    // The conceptual html links the device code of GPU kernels to the lines of
+    // the conceptual stmt it was made from, which is where the code of the
+    // kernels is. The device code itself carries no line information.
+    for (Target::Feature api : {Target::CUDA, Target::OpenCL}) {
+        ImageParam gpu_input(Float(32), 2, "gpu_input");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Func blur("blur"), gpu_out("gpu_out");
+        blur(x, y) = (gpu_input(x, y) + gpu_input(x + 1, y)) / 2;
+        gpu_out(x, y) = select(blur(x, y) > 0.5f, sin(blur(x, y)) * 3.0f, blur(x, y + 1));
+        gpu_out.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+        blur.compute_at(gpu_out, xo).gpu_threads(x, y);
+
+        const std::string name = api == Target::CUDA ? "debug_symbols_cuda" : "debug_symbols_opencl";
+        const std::string device_code_path = dir + name + ".device_code";
+        const std::string conceptual_stmt_path = dir + name + ".conceptual.stmt";
+        const std::string conceptual_html_path = dir + name + ".conceptual.stmt.html";
+        for (const auto &p : {device_code_path, conceptual_stmt_path, conceptual_html_path}) {
+            Internal::ensure_no_file_exists(p);
+        }
+        try {
+            gpu_out.compile_to({{OutputFileType::device_code, device_code_path},
+                                {OutputFileType::conceptual_stmt, conceptual_stmt_path},
+                                {OutputFileType::conceptual_stmt_html, conceptual_html_path}},
+                               {gpu_input}, name, get_host_target().with_feature(api));
+        } catch (const Halide::CompileError &e) {
+            printf("[SKIP] %s: %s\n", name.c_str(), e.what());
+            continue;
+        }
+
+        const std::string device_code = read_file(device_code_path);
+        for (const char *line_info : {".loc\t", ".loc ", "$L__tmp", ".debug_", "#line"}) {
+            if (device_code.find(line_info) != std::string::npos) {
+                printf("The device code of %s has line information in it: %s\n", name.c_str(), line_info);
+                return 1;
+            }
+        }
+
+        const std::vector<std::string> conceptual = split_lines(read_file(conceptual_stmt_path));
+        const std::string html = read_file(conceptual_html_path);
+        if (html.find("data-device='1'") == std::string::npos) {
+            printf("The html of %s links no IR to device code\n", name.c_str());
+            return 1;
+        }
+        // Each line of device code that is linked, is linked to a line of the
+        // conceptual stmt that has IR on it.
+        std::regex line_re(R"re(<span class='line' data-n='(\d+)' data-ir='(\d+)'( data-node='(\d+)')?>([^\n]*)</span>)re");
+        int linked = 0, sin_lines = 0;
+        std::set<int> nodes;
+        for (std::sregex_iterator it(html.begin(), html.end(), line_re), end; it != end; ++it) {
+            const int ir_line = std::stoi((*it)[2]);
+            if (ir_line < 1 || ir_line > (int)conceptual.size() ||
+                conceptual[ir_line - 1].find_first_not_of(' ') == std::string::npos) {
+                printf("Line %s of the device code of %s is linked to line %d of the conceptual stmt, which has no IR\n",
+                       (*it)[1].str().c_str(), name.c_str(), ir_line);
+                return 1;
+            }
+            linked++;
+            // Most are also linked to the IR node they were generated for,
+            // which is in the html.
+            if ((*it)[4].matched) {
+                const int node = std::stoi((*it)[4]);
+                if (html.find("data-g='" + std::to_string(node) + "'") != std::string::npos) {
+                    nodes.insert(node);
+                }
+            }
+            // The call of sin in C-like source is made from a Stmt that calls
+            // it: one that starts on the line linked to, and goes on for as
+            // long as the lines are indented more.
+            const std::string text = (*it)[5];
+            if (api == Target::OpenCL && text.find("sin(") != std::string::npos) {
+                sin_lines++;
+                const size_t indent = conceptual[ir_line - 1].find_first_not_of(' ');
+                bool calls_sin = false;
+                for (size_t l = ir_line - 1; l < conceptual.size(); l++) {
+                    if (l > (size_t)ir_line - 1 && conceptual[l].find_first_not_of(' ') <= indent) {
+                        break;
+                    }
+                    calls_sin = calls_sin || conceptual[l].find("sin_f32") != std::string::npos;
+                }
+                if (!calls_sin) {
+                    printf("The call of sin in the device code of %s is linked to line %d of the conceptual stmt: %s\n",
+                           name.c_str(), ir_line, conceptual[ir_line - 1].c_str());
+                    return 1;
+                }
+            }
+        }
+        if (linked == 0 || (api == Target::OpenCL && sin_lines == 0)) {
+            printf("The html of %s links %d lines of device code to the IR, %d of them a call of sin\n",
+                   name.c_str(), linked, sin_lines);
+            return 1;
+        }
+        // The device code of one line of IR is linked to several nodes on it.
+        if (nodes.size() < 8) {
+            printf("The html of %s links device code to only %d IR nodes\n", name.c_str(), (int)nodes.size());
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

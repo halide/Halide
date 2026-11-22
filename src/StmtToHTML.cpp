@@ -96,12 +96,6 @@ struct AssemblyMap {
     std::vector<uint32_t> stmt_nodes;
 };
 
-/** Where code came from in the stmt that is shown: its 1-based line, and its
- * IR node as its StmtSourceMap::Location::order. Either is 0 if unknown. */
-struct IRPosition {
-    uint32_t line = 0, node = 0;
-};
-
 // Writes the lines of the assembly worth showing to the stream, as the text
 // of a <script type='text/plain'>, and returns where they came from.
 //
@@ -342,8 +336,10 @@ protected:
 };
 
 /** Prints the lines of IR in HTML, one div per line, after a gutter with the
- * line number and a toggle to collapse the block that the line starts. */
-void print_lines(std::ostream &stream, const std::vector<HTMLLines::Line> &lines, const std::vector<bool> &has_asm) {
+ * line number and a toggle to collapse the block that the line starts. Lines
+ * with assembly or device code made from them are marked as such. */
+void print_lines(std::ostream &stream, const std::vector<HTMLLines::Line> &lines,
+                 const std::vector<bool> &has_asm, const std::vector<bool> &has_device_code) {
     // The text ends with a newline, which starts a line with nothing on it.
     const uint32_t num_lines = (uint32_t)lines.size() - (lines.size() > 1 && lines.back().text.empty());
     auto line_text = [&](uint32_t line) -> const std::string & {
@@ -428,6 +424,9 @@ void print_lines(std::ostream &stream, const std::vector<HTMLLines::Line> &lines
         }
         if (line < has_asm.size() && has_asm[line]) {
             stream << " data-asm='1'";
+        }
+        if (line < has_device_code.size() && has_device_code[line]) {
+            stream << " data-device='1'";
         }
         stream << ">";
 
@@ -669,30 +668,51 @@ private:
         int pane_count = 0;
         stream << "<div id='visualization-panes'>\n";
         stream << "<div id='resizer-preview' style='display:none;'></div>\n";
-        generate_ir_pane();
+        generate_ir_pane(m);
         generate_resize_bar(pane_count++);
         generate_host_assembly_pane();
         Buffer<> device_code_buf = m.get_device_code_buffer();
         if (device_code_buf.defined()) {
             generate_resize_bar(pane_count++);
-            generate_device_code_pane(device_code_buf);
+            generate_device_code_pane(m, device_code_buf);
         }
 
         stream << "</div>\n";
     }
 
     // Generate pane: Lowered IR code with syntax highlighting in HTML
-    void generate_ir_pane() {
+    void generate_ir_pane(const Module &m) {
         stream << "<div id='ir-code-pane' class='pane" << (conceptual ? " conceptual" : "") << "'>\n";
-        std::vector<bool> has_asm;
-        for (uint32_t line : host_asm.stmt_lines) {
-            if (line >= has_asm.size()) {
-                has_asm.resize(line + 1, false);
+        const auto lines_with_code = [](const std::vector<uint32_t> &code_lines) {
+            std::vector<bool> result;
+            for (uint32_t line : code_lines) {
+                if (line >= result.size()) {
+                    result.resize(line + 1, false);
+                }
+                result[line] = true;
             }
-            has_asm[line] = true;
+            return result;
+        };
+        std::vector<uint32_t> device_lines;
+        if (const std::vector<IRPosition> *positions = device_code_lines(m)) {
+            for (const IRPosition &p : *positions) {
+                device_lines.push_back(p.line);
+            }
         }
-        print_lines(stream, ir_lines.lines, has_asm);
+        print_lines(stream, ir_lines.lines, lines_with_code(host_asm.stmt_lines), lines_with_code(device_lines));
         stream << "</div>\n";
+    }
+
+    // Where in the IR shown each line of the device code shown came from,
+    // if that is known. The conceptual stmt is the IR that has the code of
+    // the kernels, so only it is linked to them.
+    const std::vector<IRPosition> *device_code_lines(const Module &m) const {
+        Buffer<> buf = m.get_device_code_buffer();
+        if (!conceptual || !buf.defined()) {
+            return nullptr;
+        }
+        auto it = m.get_device_code_lines().find(buf.name());
+        return it == m.get_device_code_lines().end() ? nullptr : &it->second;
     }
 
     // Generate pane: Generated host assembly code, rendered by the page
@@ -706,7 +726,7 @@ private:
     }
 
     // Generate pane: Generated device code
-    void generate_device_code_pane(const Buffer<> &buf) {
+    void generate_device_code_pane(const Module &m, const Buffer<> &buf) {
         stream << "<div id='device-code-pane' class='pane'>\n";
         int length = buf.size_in_bytes();
         while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
@@ -717,11 +737,20 @@ private:
 
         // The page highlights the code, PTX in its own way.
         stream << "<div class='code" << (ptx ? " ptx" : "") << "'>\n";
-        int number = 0;
+        const std::vector<IRPosition> *ir_of_code = device_code_lines(m);
+        size_t number = 0;
         for (size_t start = 0; start < code.size();) {
             const size_t end = std::min(code.find('\n', start), code.size());
-            stream << "<span class='line' data-n='" << ++number << "'>"
-                   << escape_html(code.substr(start, end - start)) << "</span>\n";
+            stream << "<span class='line' data-n='" << number + 1 << "'";
+            if (ir_of_code && number < ir_of_code->size() && (*ir_of_code)[number].line) {
+                // The line and the node of IR it was generated for.
+                stream << " data-ir='" << (*ir_of_code)[number].line << "'";
+                if ((*ir_of_code)[number].node) {
+                    stream << " data-node='" << (*ir_of_code)[number].node << "'";
+                }
+            }
+            stream << ">" << escape_html(code.substr(start, end - start)) << "</span>\n";
+            number++;
             start = end + 1;
         }
         stream << "</div>\n";

@@ -21,6 +21,8 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
+#include <sstream>
+#include <string_view>
 
 #include <fstream>
 #include <set>
@@ -232,6 +234,65 @@ void CodeGen_PTX_Dev::set_kernel_max_registers(int n) {
     kernel_max_registers = n;
 }
 
+namespace {
+
+// Takes the line information out of PTX: the .loc and .file directives, and
+// the labels and sections that only they use. Returns for each line that is
+// left where in source the .loc directives say its code came from.
+std::vector<IRPosition> strip_line_info(std::string &ptx, const StmtSourceMap &source) {
+    std::vector<IRPosition> lines;
+    std::string stripped;
+    IRPosition current;
+    for (size_t start = 0; start < ptx.size();) {
+        const size_t end = std::min(ptx.find('\n', start), ptx.size());
+        const std::string_view whole = std::string_view(ptx).substr(start, end - start);
+        start = end + 1;
+        const size_t first = whole.find_first_not_of(" \t");
+        const std::string_view line = first == std::string_view::npos ? std::string_view() : whole.substr(first);
+        auto begins = [&](std::string_view prefix) {
+            return line.substr(0, prefix.size()) == prefix;
+        };
+        if (begins(".loc\t") || begins(".loc ")) {
+            // .loc <file> <line> <column>
+            std::istringstream in{std::string(line.substr(4))};
+            uint32_t file = 0, l = 0, column = 0;
+            in >> file >> l >> column;
+            const StmtSourceMap::Location *at = source.at(l, column);
+            current = IRPosition{l, at ? at->order : 0};
+            continue;
+        }
+        if (begins(".file\t") || begins(".file ") || begins(".section\t.debug") || begins(".section .debug")) {
+            continue;
+        }
+        bool is_label = false;
+        for (std::string_view label : {"$L__tmp", "$L__func_begin", "$L__func_end"}) {
+            if (begins(label)) {
+                const std::string_view rest = line.substr(label.size());
+                is_label = !rest.empty() && rest.back() == ':' &&
+                           rest.substr(0, rest.size() - 1).find_first_not_of("0123456789") == std::string_view::npos;
+            }
+        }
+        if (is_label) {
+            continue;
+        }
+        if (begins("}")) {
+            // The end of a function.
+            current = IRPosition();
+        }
+        // Only instructions are code; labels, directives and declarations
+        // are not.
+        const bool is_instruction = first != 0 && first != std::string_view::npos &&
+                                    line[0] != '.' && line[0] != '/' && line.back() != ':';
+        stripped.append(whole);
+        stripped.push_back('\n');
+        lines.push_back(is_instruction ? current : IRPosition());
+    }
+    ptx = std::move(stripped);
+    return lines;
+}
+
+}  // namespace
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
@@ -263,6 +324,13 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     function->setCallingConv(llvm::CallingConv::PTX_Kernel);
 
+    std::vector<std::pair<bool, Type>> debug_args;
+    debug_args.reserve(args.size());
+    for (const auto &arg : args) {
+        debug_args.emplace_back(arg.is_buffer, arg.type);
+    }
+    begin_debug_function(name, name, stmt.get(), nullptr, debug_args);
+
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
@@ -291,7 +359,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     debug(1) << "Generating llvm bitcode for kernel...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
-    stmt.accept(this);
+    codegen(stmt);
 
     // Now we need to end the function
     builder->CreateRetVoid();
@@ -333,6 +401,8 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                  << kernel_max_registers << " registers per thread\n";
     }
 
+    end_debug_function();
+
     // Now verify the function is ok
     verifyFunction(*function);
 
@@ -358,6 +428,12 @@ void CodeGen_PTX_Dev::init_module() {
 
     module = get_initial_module_for_ptx_device(target, context);
     init_builder();
+
+    if (line_source) {
+        // Just the .loc directives is all it takes to know where the lines of
+        // PTX came from.
+        init_debug_info(*line_source, /* line_tables_only */ true);
+    }
 
     struct Intrinsic {
         const char *name;
@@ -1382,6 +1458,8 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
+    finalize_debug_info();
+
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
     /*int argc = sizeof(argv)/sizeof(char*);*/
@@ -1528,6 +1606,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
              << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
+    source_lines.clear();
+    if (line_source) {
+        // The line information says where the PTX came from, and is not part
+        // of the device code.
+        std::string ptx(outstr.begin(), outstr.end());
+        source_lines = strip_line_info(ptx, *line_source);
+        buffer.assign(ptx.begin(), ptx.end());
+    }
 
     // Dump the SASS too if the cuda SDK is in the path
     debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";

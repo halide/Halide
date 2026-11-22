@@ -87,6 +87,13 @@ numbers of the assembly file, without the lines that hold the debug info.
 This needs every IR node to be printed in one place only, so lowering copies the
 IR nodes that the stmt uses in more than one place.
 
+The `conceptual_stmt_html` output also links the device code of GPU kernels to
+the conceptual stmt it was made from, for CUDA (PTX) and for the APIs whose
+device code is C-like source (OpenCL, Metal, D3D12, WebGPU), in the same way as
+the assembly: by line of IR, and within a line by IR node. The device code
+itself is not changed for this, and has no line information in it. Device code
+that isn't text to read, like SPIR-V, is not linked.
+
 ## Caveats
 
 - The code is still fully optimized, so many variables are `<optimized out>`,

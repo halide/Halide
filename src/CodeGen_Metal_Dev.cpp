@@ -308,7 +308,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
-        loop->body.accept(this);
+        print_stmt(loop->body);
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside Metal kernel\n";
@@ -569,7 +569,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 
     if (is_gpu_shared(op->memory_type)) {
         // Already handled
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -600,7 +600,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -857,7 +857,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         }
     }
 
-    print(s);
+    print_stmt(s);
     close_scope("kernel " + name);
 
     for (const auto &arg : args) {
@@ -881,6 +881,8 @@ void CodeGen_Metal_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+    metal_c.line_source = line_source;
+    metal_c.printed_nodes.clear();
 
     // Write out the Halide math functions.
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
@@ -917,6 +919,7 @@ void CodeGen_Metal_Dev::init_module() {
 
 vector<char> CodeGen_Metal_Dev::compile_to_src() {
     string str = src_stream.str();
+    source_lines = line_source ? lines_of_printed_nodes(str, metal_c.printed_nodes) : std::vector<IRPosition>();
     debug(1) << "Metal kernel:\n"
              << str << "\n";
 
@@ -960,6 +963,8 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
 
         // Read the metallib into a buffer.
         buffer = read_entire_file(metallib);
+        // A metallib has no lines.
+        source_lines.clear();
         debug(2) << "Metallib size: " << buffer.size() << "\n";
     } else {
         buffer.push_back(0);

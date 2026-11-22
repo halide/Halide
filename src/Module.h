@@ -161,6 +161,15 @@ struct AutoSchedulerResults;
 using MetadataNameMap = std::map<std::string, std::string>;
 using RuntimeNamespaceMap = std::map<RuntimeLinkage, std::string>;
 
+namespace Internal {
+/** Where code came from in a printing of IR (see StmtSourceMap): the 1-based
+ * line, and the IR node as its StmtSourceMap::Location::order. Either is 0
+ * if unknown. */
+struct IRPosition {
+    uint32_t line = 0, node = 0;
+};
+}  // namespace Internal
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
@@ -252,6 +261,14 @@ public:
 
     /** Get the remembered conceptual Stmt, remembered before device-specific offloading. */
     const Internal::Stmt &get_conceptual_stmt() const;
+
+    /** Remember, for the device code in the Buffer of each name: where in
+     * the conceptual Stmt, as it is printed, each of its lines came from.
+     * The html outputs link the two with this. */
+    void set_device_code_lines(std::map<std::string, std::vector<Internal::IRPosition>> lines);
+
+    /** Get the remembered lines of the device code. */
+    const std::map<std::string, std::vector<Internal::IRPosition>> &get_device_code_lines() const;
 };
 
 /** Link a set of modules together into one module. */
