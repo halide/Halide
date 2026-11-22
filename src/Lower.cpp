@@ -147,6 +147,29 @@ public:
     }
 };
 
+// Rebuild every node of s, so that no node is used in more than one place.
+// Rebuilding the nodes that have no IR in them forces all others to be
+// rebuilt too.
+Stmt copy_shared_nodes(const Stmt &s) {
+    return mutate_with(
+        s,
+        [](auto *self, const IntImm *op) { return IntImm::make(op->type, op->value); },
+        [](auto *self, const UIntImm *op) { return UIntImm::make(op->type, op->value); },
+        [](auto *self, const FloatImm *op) { return FloatImm::make(op->type, op->value); },
+        [](auto *self, const StringImm *op) { return StringImm::make(op->value); },
+        [](auto *self, const Variable *op) {
+            return Variable::make(op->type, op->name, op->image, op->param, op->reduction_domain);
+        },
+        [](auto *self, const Call *op) -> Expr {
+            if (op->args.empty()) {
+                return Call::make(op->type, op->name, op->args, op->call_type, op->func,
+                                  op->value_index, op->image, op->param);
+            }
+            return self->visit_base(op);
+        },
+        [](auto *self, const Free *op) { return Free::make(op->name); });
+}
+
 void lower_impl(const vector<Function> &output_funcs,
                 const string &pipeline_name,
                 const Target &t,
@@ -513,6 +536,12 @@ void lower_impl(const vector<Function> &output_funcs,
                      << s << "\n\n";
         }
     }
+
+    // The html outputs and the debug symbols say where code came from by the
+    // IR node of the stmt it was made from, which must then be printed in one
+    // place only.
+    s = copy_shared_nodes(s);
+    log("Lowering after copying shared IR nodes:", s);
 
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);

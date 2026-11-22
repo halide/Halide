@@ -157,6 +157,95 @@ struct StyledText {
     IRPrinterStyle style;
 };
 
+/** Where an IRPrinter printed things, as byte offsets into its stream. */
+struct IRPrinterRecord {
+    struct Location {
+        const IRNode *node;
+        /** Where printing of the node began. */
+        uint32_t start;
+        /** The node's most telling character, e.g. the operator of a binary
+         * op. Equal to start for most nodes. */
+        uint32_t anchor;
+        /** Where printing of the node ended. */
+        uint32_t end;
+        /** The index of the location of the node this one is printed
+         * within, or -1. */
+        int parent;
+    };
+    std::vector<Location> locations;
+
+    /** Where each LoweredFunc began, in the order they were printed. */
+    std::vector<uint32_t> function_starts;
+};
+
+/** The text of a Module or Stmt exactly as operator<< prints it (minus any
+ * ANSI colors), together with where each IR node in it ended up in that text.
+ * Debug info uses this to point into the .stmt files. */
+struct StmtSourceMap {
+    struct Location {
+        const IRNode *node;
+        /** Byte offsets at which printing of the node began and ended. A node
+         * shared by several parents is printed once per parent, this tells
+         * the copies apart. */
+        uint32_t start, end;
+        /** 1-based line and column of the node's anchor. */
+        uint32_t line, column;
+        /** The place of the node among those printed, in the order they
+         * began printing, counting from 1. */
+        uint32_t order;
+        /** 1-based line of the last character of the node, e.g. its closing
+         * brace. */
+        uint32_t end_line;
+    };
+
+    struct Function {
+        std::string name;
+        /** Byte offset of the function header. */
+        uint32_t start;
+        /** 1-based line and column of the function header. */
+        uint32_t line, column;
+    };
+
+    std::string text;
+
+    /** The file debug info refers to. The text is expected to be written
+     * there by whoever sets it. */
+    std::string path;
+
+    /** Sorted by node, then by start. */
+    std::vector<Location> locations;
+
+    /** In Module::functions() order. Empty when printing a Stmt. */
+    std::vector<Function> functions;
+
+    /** Find the printed copy of node that sits under a parent which began
+     * printing at parent_start: the first copy at or after parent_start, or
+     * the last copy before it if there is none. Returns nullptr if the node
+     * was never printed. */
+    const Location *find(const IRNode *node, uint32_t parent_start) const;
+
+    /** The location with the given anchor. Of nested nodes that share one,
+     * the innermost. Returns nullptr if there is none. */
+    const Location *at(uint32_t line, uint32_t column) const;
+
+    /** Indices into locations, sorted by line and column, for at(). */
+    std::vector<uint32_t> by_anchor;
+};
+
+/** Print a Module the same way operator<< does, without colors, and record
+ * where all IR nodes of its functions went. */
+StmtSourceMap print_with_source_map(const Module &m);
+
+/** Print a Stmt the same way operator<< does, without colors, and record
+ * where all of its IR nodes went. */
+StmtSourceMap print_with_source_map(const Stmt &s);
+
+/** For each location of from, in from.locations order: the location in to of
+ * the same IR node, or else that of its nearest enclosing node that to has, or
+ * else nullptr. Nodes are printed in both when to is a printing of IR that
+ * from's IR was lowered from, e.g. the conceptual Stmt of a Module. */
+std::vector<const StmtSourceMap::Location *> map_locations(const StmtSourceMap &from, const StmtSourceMap &to);
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
@@ -195,6 +284,10 @@ public:
     virtual void begin_style(IRPrinterStyle style) const;
     virtual void end_style(IRPrinterStyle style) const;
 
+    /** If set, where every node and LoweredFunc is printed gets noted here,
+     * as offsets into the stream, which must support tellp(). */
+    IRPrinterRecord *record = nullptr;
+
 protected:
     Indentation get_indent() const {
         return Indentation{indent};
@@ -218,6 +311,13 @@ protected:
 
     bool ansi = false;
     int paren_depth = 0;
+
+    /** The index in record->locations of the node being printed, or -1. */
+    int current_location = -1;
+
+    /** Mark the current stream position as the anchor of the node being
+     * printed. */
+    void anchor();
 
     // clang-format off
     template<typename T> StyledText<T> hl(const T &t);
@@ -319,12 +419,10 @@ protected:
     void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
 
-    /** Called before and after an Expr or Stmt is emitted. Do nothing by
-     * default. */
-    virtual void begin_node(const IRNode *) {
-    }
-    virtual void end_node(const IRNode *) {
-    }
+    /** Called before and after an Expr or Stmt is emitted. By default,
+     * these note where it went in record, if that is set. */
+    virtual void begin_node(const IRNode *node);
+    virtual void end_node(const IRNode *node);
 
 private:
     /** Emit a node, between begin_node() and end_node(). */

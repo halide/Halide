@@ -47,6 +47,31 @@ body {
     --grey0:            #aaa;
     --grey1:            #999;
     --grey2:            #555;
+
+    /* The backgrounds that mark lines, chosen for this color scheme: each is
+     * as far from the background of the pane as it takes to see it, in the
+     * color on which the text colors keep the most of their contrast (see
+     * the comments where they are used).
+     * Of linked IR and code: the line and the node on it, while hovered and
+     * once selected. */
+    --link-hover-line:    #fdffe2;
+    --link-hover-node:    #fdffc5;
+    --link-selected-line: #ffeee4;
+    --link-selected-node: #fae3d4;
+    /* Of selected code, in the colors of rainbow parentheses by the nesting
+     * depth of the node it was generated for, and for a node without one. */
+    --rainbow-bg-0: #fedbd5;
+    --rainbow-bg-1: #dcffd8;
+    --rainbow-bg-2: #fdffc8;
+    --rainbow-bg-3: #d6e3ff;
+    --rainbow-bg-4: #fed6eb;
+    --rainbow-bg-5: #c5fffe;
+    --rainbow-bg-n: #e4e4e4;
+    /* Of parallel and GPU loops: the line along them, and their shade. */
+    --par-edge: #888800;
+    --par-fill: #fefff3;
+    --thr-edge: #aa5500;
+    --thr-fill: #fef7f2;
 }
 
 
@@ -88,6 +113,31 @@ body {
     --grey0:            #888;
     --grey1:            #aaa;
     --grey2:            #ccc;
+
+    /* The backgrounds that mark lines, chosen for this color scheme: each is
+     * as far from the background of the pane as it takes to see it, in the
+     * color on which the text colors keep the most of their contrast (see
+     * the comments where they are used).
+     * Of linked IR and code: the line and the node on it, while hovered and
+     * once selected. */
+    --link-hover-line:    #1e1e00;
+    --link-hover-node:    #343508;
+    --link-selected-line: #2e1300;
+    --link-selected-node: #4b2400;
+    /* Of selected code, in the colors of rainbow parentheses by the nesting
+     * depth of the node it was generated for, and for a node without one. */
+    --rainbow-bg-0: #4f0000;
+    --rainbow-bg-1: #013401;
+    --rainbow-bg-2: #32331a;
+    --rainbow-bg-3: #050056;
+    --rainbow-bg-4: #430137;
+    --rainbow-bg-5: #004040;
+    --rainbow-bg-n: #353535;
+    /* Of parallel and GPU loops: the line along them, and their shade. */
+    --par-edge: #ffff00;
+    --par-fill: #121200;
+    --thr-edge: #ff8800;
+    --thr-fill: #1d0c02;
 }
 
 [data-theme="gruvbox-light"] {
@@ -127,6 +177,31 @@ body {
     --grey0:            #a89984;
     --grey1:            #928374;
     --grey2:            #7c6f64;
+
+    /* The backgrounds that mark lines, chosen for this color scheme: each is
+     * as far from the background of the pane as it takes to see it, in the
+     * color on which the text colors keep the most of their contrast (see
+     * the comments where they are used).
+     * Of linked IR and code: the line and the node on it, while hovered and
+     * once selected. */
+    --link-hover-line:    #fff1e2;
+    --link-hover-node:    #ffd2a2;
+    --link-selected-line: #ffeee5;
+    --link-selected-node: #ecd6ca;
+    /* Of selected code, in the colors of rainbow parentheses by the nesting
+     * depth of the node it was generated for, and for a node without one. */
+    --rainbow-bg-0: #ffd9d6;
+    --rainbow-bg-1: #edffa2;
+    --rainbow-bg-2: #ffd4a5;
+    --rainbow-bg-3: #d1f6ff;
+    --rainbow-bg-4: #ffe1f3;
+    --rainbow-bg-5: #c4ffd8;
+    --rainbow-bg-n: #e0e0e0;
+    /* Of parallel and GPU loops: the line along them, and their shade. */
+    --par-edge: #b47109;
+    --par-fill: #ffebd6;
+    --thr-edge: #c35e0a;
+    --thr-fill: #feefe6;
 }
 [data-theme="gruvbox-dark"] {
     --bg-color: #f9f5d7;
@@ -166,6 +241,31 @@ body {
     --grey0:            #7c6f64;
     --grey1:            #928374;
     --grey2:            #a89984;
+
+    /* The backgrounds that mark lines, chosen for this color scheme: each is
+     * as far from the background of the pane as it takes to see it, in the
+     * color on which the text colors keep the most of their contrast (see
+     * the comments where they are used).
+     * Of linked IR and code: the line and the node on it, while hovered and
+     * once selected. */
+    --link-hover-line:    #372403;
+    --link-hover-node:    #533805;
+    --link-selected-line: #401d04;
+    --link-selected-node: #5c2a02;
+    /* Of selected code, in the colors of rainbow parentheses by the nesting
+     * depth of the node it was generated for, and for a node without one. */
+    --rainbow-bg-0: #520006;
+    --rainbow-bg-1: #383e00;
+    --rainbow-bg-2: #523600;
+    --rainbow-bg-3: #08483e;
+    --rainbow-bg-4: #57082a;
+    --rainbow-bg-5: #073c00;
+    --rainbow-bg-n: #444444;
+    /* Of parallel and GPU loops: the line along them, and their shade. */
+    --par-edge: #d8a657;
+    --par-fill: #302617;
+    --thr-edge: #e78a4e;
+    --thr-fill: #33241c;
 }
 
 body {
@@ -859,21 +959,60 @@ div.ir-code div.l {
 div.ir-code div.l:hover {
     background-color: rgba(128, 128, 128, 0.08);
 }
-div.ir-code div.l.selected {
-    background-color: var(--bg_visual_yellow);
+/* The IR that code was generated for, and that code: yellow while the
+ * pointer is on either, orange when it was double-clicked. The backgrounds
+ * are faint, so that the text stays legible: the line and the node on it
+ * stand out by a bar in front of the line, and a line around the node and
+ * under its punctuation. */
+body {
+    --link-hover: var(--yellow);
+    --link-selected: var(--orange);
+}
+div.ir-code div.l.line-selected {
+    background-color: var(--link-selected-line);
+}
+div.ir-code div.l.line-selected span.g {
+    box-shadow: inset 5px 0 0 var(--link-selected);
+}
+div.ir-code .e.node-selected {
+    background-color: var(--link-selected-node);
+    outline: 1px solid var(--link-selected);
+}
+div.ir-code .node-selected:not(.e) {
+    background-color: var(--link-selected-node);
+    box-shadow: inset 0 -2px 0 var(--link-selected);
+}
+div.ir-code div.l.line-hover {
+    background-color: var(--link-hover-line);
+}
+div.ir-code div.l.line-hover span.g {
+    box-shadow: inset 5px 0 0 var(--link-hover);
+}
+div.ir-code .e.node-hover {
+    background-color: var(--link-hover-node);
+    outline: 1px solid var(--link-hover);
+}
+div.ir-code .node-hover:not(.e) {
+    background-color: var(--link-hover-node);
+    box-shadow: inset 0 -2px 0 var(--link-hover);
+}
+div.ir-code.linkable,
+div#asm-code.linkable {
+    cursor: pointer;
 }
 div.ir-code div.l[data-hidden]:not([data-hidden="0"]) {
     display: none;
 }
 
-/* Shading of parallel loops and loops over GPU blocks, and of loops over GPU
- * threads: from just left of the column of the loop, with a line along its
- * left. */
-div.ir-code {
-    --par-edge: rgba(240, 200, 0, 0.35);
-    --par-fill: rgba(240, 200, 0, 0.07);
-    --thr-edge: rgba(240, 100, 50, 0.35);
-    --thr-fill: rgba(240, 100, 50, 0.07);
+/* Parallel loops and loops over GPU blocks, and loops over GPU threads, have
+ * a line along their left, at the column of the loop. They are shaded from
+ * there on, but only just: the line is what shows them. A linked line has
+ * the background of the link instead of the shade. The colors are those of
+ * the color scheme. */
+div.ir-code div.l.line-hover,
+div.ir-code div.l.line-selected {
+    --par-fill: transparent;
+    --thr-fill: transparent;
 }
 div.ir-code div.l.in-par {
     --par-x: calc(var(--ir-gutter) + var(--par) * 1ch - 0.8ch);
@@ -909,12 +1048,9 @@ div.ir-code span.n {
 [data-show-line-nums="false"] div.ir-code span.n {
     visibility: hidden;
 }
-div.ir-code div.l[data-asm] span.n {
-    cursor: pointer;
-    text-decoration: underline dotted;
-}
-div.ir-code div.l[data-asm] span.n:hover {
-    color: var(--red);
+/* A mark in front of the lines that code was generated for. */
+div.ir-code div.l[data-asm] span.g {
+    box-shadow: inset 2px 0 0 var(--cs-line-num);
 }
 div.ir-code span.t {
     width: 1.5em;
@@ -980,15 +1116,17 @@ div.ir-code .op    { color: var(--cs-operator); }
 div.ir-code .op.bold { font-weight: bold; }
 div.ir-code .dim   { opacity: 0.6; }
 div.ir-code .hl    { text-decoration: underline; }
-div.ir-code .op.Highlight { background-color: var(--bg_visual_blue); }
+/* The punctuation of the node under the pointer. */
+div.ir-code .Highlight[data-g] { text-decoration: underline; }
 
-[data-rainbow-parens="true"] {
-    div.ir-code .op.d0 { color: var(--red); }
-    div.ir-code .op.d1 { color: var(--green); }
-    div.ir-code .op.d2 { color: var(--yellow); }
-    div.ir-code .op.d3 { color: var(--blue); }
-    div.ir-code .op.d4 { color: var(--purple); }
-    div.ir-code .op.d5 { color: var(--aqua); }
+/* Rainbow parentheses: punctuation in a color by how deeply it is nested. */
+[data-rainbow-parens="true"] div.ir-code {
+    .op.d0, .kw.d0 { color: var(--red); }
+    .op.d1, .kw.d1 { color: var(--green); }
+    .op.d2, .kw.d2 { color: var(--yellow); }
+    .op.d3, .kw.d3 { color: var(--blue); }
+    .op.d4, .kw.d4 { color: var(--purple); }
+    .op.d5, .kw.d5 { color: var(--aqua); }
 }
 
 /* Host assembly, with the numbers of the lines in the assembly file */
@@ -997,8 +1135,13 @@ div#asm-code {
 }
 div#assemblyContent {
     position: relative;
+    /* The text is on top of what marks its lines. */
+    z-index: 5;
     font-family: monospace;
     font-size: 12px;
+}
+div#asm-code.linkable div#assemblyContent,
+div#assemblyContent span.asm-label {
     cursor: pointer;
 }
 div#assemblyContent > div {
@@ -1023,11 +1166,49 @@ div.asm-hl {
     right: 0;
     pointer-events: none;
 }
-div.asm-hl.hover {
-    background-color: rgba(255, 200, 0, 0.15);
+/* The assembly of a line of IR, and of the node on it, which has a bar in
+ * front of it, next to its stripe. */
+div.asm-hl.line-selected {
+    background-color: var(--link-selected-line);
+    z-index: 1;
 }
-div.asm-hl.selected {
-    background-color: rgba(255, 120, 0, 0.3);
+/* The assembly of the selected node. That of the node itself, rather than of
+ * what is nested in it, has a bar in front of it: what the line under its
+ * punctuation is in the IR. */
+div.asm-hl.node-selected {
+    background-color: var(--link-selected-node);
+    z-index: 2;
+}
+div.asm-hl.node-selected.own {
+    box-shadow: inset 6px 0 0 var(--link-selected);
+}
+/* With rainbow parentheses, the assembly that is selected (of the node, or
+ * else of the whole line) has the color of the punctuation of the node each
+ * line of it was generated for instead. */
+[data-rainbow-parens="true"] {
+    div.asm-hl.d0 { background-color: var(--rainbow-bg-0); }
+    div.asm-hl.d1 { background-color: var(--rainbow-bg-1); }
+    div.asm-hl.d2 { background-color: var(--rainbow-bg-2); }
+    div.asm-hl.d3 { background-color: var(--rainbow-bg-3); }
+    div.asm-hl.d4 { background-color: var(--rainbow-bg-4); }
+    div.asm-hl.d5 { background-color: var(--rainbow-bg-5); }
+    div.asm-hl.dn { background-color: var(--rainbow-bg-n); }
+    div.asm-hl.own.d0 { box-shadow: inset 6px 0 0 var(--red); }
+    div.asm-hl.own.d1 { box-shadow: inset 6px 0 0 var(--green); }
+    div.asm-hl.own.d2 { box-shadow: inset 6px 0 0 var(--yellow); }
+    div.asm-hl.own.d3 { box-shadow: inset 6px 0 0 var(--blue); }
+    div.asm-hl.own.d4 { box-shadow: inset 6px 0 0 var(--purple); }
+    div.asm-hl.own.d5 { box-shadow: inset 6px 0 0 var(--aqua); }
+    div.asm-hl.own.dn { box-shadow: inset 6px 0 0 var(--grey1); }
+}
+div.asm-hl.line-hover {
+    background-color: var(--link-hover-line);
+    z-index: 3;
+}
+div.asm-hl.node-hover {
+    background-color: var(--link-hover-node);
+    box-shadow: inset 8px 0 0 var(--link-hover);
+    z-index: 4;
 }
 
 /* Device code, with the numbers of its lines in the source */

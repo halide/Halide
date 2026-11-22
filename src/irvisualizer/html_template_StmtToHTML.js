@@ -208,19 +208,25 @@ function revealIRLine(line) {
         }
     }
 }
-function selectIRLine(line) {
-    irPane.querySelectorAll('div.l.selected').forEach(el => el.classList.remove('selected'));
-    if (line > 0 && line <= irLines.length) {
-        irLines[line - 1].classList.add('selected');
-    }
-}
 
-/* The host assembly, as text. asmIRLines holds, for each line of it, the line
- * of IR it was generated for (or 0). */
+/* The shown lines of the host assembly, as text. For each of them,
+ * asmLineNumbers holds its line number in the assembly file, asmIRLines the
+ * line of IR it was generated for (or 0), and asmIRNodes the node of IR it
+ * was generated for (or 0): the data-g of the expression and of the
+ * punctuation of that node. */
 const asmLines = document.getElementById('asm-text').textContent.split('\n');
 const asmPane = document.getElementById('host-assembly-pane');
 const asmCode = document.getElementById('asm-code');
 const asmHighlights = document.getElementById('asm-highlights');
+const asmOfIRNode = new Map();
+asmIRNodes.forEach((node, i) => {
+    if (node) {
+        if (!asmOfIRNode.has(node)) {
+            asmOfIRNode.set(node, []);
+        }
+        asmOfIRNode.get(node).push(i);
+    }
+});
 const asmOfIRLine = new Map();
 asmIRLines.forEach((line, i) => {
     if (line) {
@@ -326,6 +332,20 @@ function asmToHTML(line) {
     return out;
 }
 
+// The nesting depth that the punctuation of each node of IR is colored by
+// with rainbow parentheses, which the selected code that was generated for
+// the node is colored by too.
+const depthOfIRNode = new Map();
+irPane.querySelectorAll('span.op[data-g], span.kw[data-g]').forEach(el => {
+    const depth = /\bd(\d)\b/.exec(el.className);
+    if (depth && !depthOfIRNode.has(el.dataset.g)) {
+        depthOfIRNode.set(el.dataset.g, depth[1]);
+    }
+});
+function depthClassOfIRNode(node) {
+    const depth = depthOfIRNode.get(String(node));
+    return depth === undefined ? 'dn' : 'd' + depth;
+}
 let asmRendered = [-1, -1];
 function renderAsm() {
     const top = asmPane.scrollTop - asmCode.offsetTop;
@@ -337,7 +357,7 @@ function renderAsm() {
     asmRendered = [first, last];
     let html = '';
     for (let i = first; i < last; i++) {
-        html += '<div style="top:' + (i * asmRowHeight) + 'px"><span class="n">' + (i + 1) + '</span>' +
+        html += '<div style="top:' + (i * asmRowHeight) + 'px"><span class="n">' + asmLineNumbers[i] + '</span>' +
                 asmToHTML(asmLines[i]) + '</div>';
     }
     asmContent.innerHTML = html;
@@ -346,20 +366,28 @@ asmContent.style.height = (asmLines.length * asmRowHeight) + 'px';
 asmPane.addEventListener('scroll', renderAsm);
 window.addEventListener('resize', renderAsm);
 renderAsm();
-function highlightAsm(lines, cls) {
+// Marks lines of the assembly. With rainbow set, each also gets the class of
+// the nesting depth of the node of IR it was generated for, and those of the
+// node with the number own are marked as that node's own.
+function highlightAsm(lines, cls, rainbow, own) {
     asmHighlights.querySelectorAll('div.' + cls).forEach(el => el.remove());
     const lineHeight = asmRowHeight;
     for (const i of lines) {
         const el = document.createElement('div');
-        el.className = 'asm-hl ' + cls;
+        el.className = 'asm-hl ' + cls + (rainbow ? ' ' + depthClassOfIRNode(asmIRNodes[i]) : '') +
+                       (own && asmIRNodes[i] === own ? ' own' : '');
         el.style.top = (i * lineHeight) + 'px';
         el.style.height = lineHeight + 'px';
         asmHighlights.appendChild(el);
     }
 }
+// How to scroll when going to code or to the IR it was generated for.
+function scrollBehavior() {
+    return document.getElementsByName('checkbox-smooth-scroll')[0].checked ? 'smooth' : 'instant';
+}
 function scrollToHostAsm(i) {
     asmPane.scrollTo({
-        behavior : 'instant',
+        behavior : scrollBehavior(),
         top : i * asmRowHeight - asmPane.clientHeight / 3
     });
 }
@@ -494,7 +522,6 @@ if (devicePane) {
     highlightPTX(devicePane);
     addHighlight('#device-code-pane');
 }
-// Hovering a line of IR shows its code, clicking its number goes there.
 // Marks (or unmarks) the lines that collapsing a block would hide, down to
 // its closing brace, along the indentation of the block.
 function markFold(header, mark) {
@@ -509,25 +536,146 @@ function markFold(header, mark) {
     }
 }
 
-irPane.addEventListener('mouseover', function(event) {
-    const op = event.target.closest('span.op[data-g]');
-    if (op) {
-        irPane.querySelectorAll('span.op[data-g="' + op.dataset.g + '"]').forEach(el => el.classList.add('Highlight'));
+/* Linking the IR to the code generated for it. What is linked is a line of
+ * IR, and within it possibly one node: an expression with all that is nested
+ * in it, or the node that one instruction was generated for. Hovering shows
+ * the link, double-clicking keeps it shown, and double-clicking it again or
+ * pressing Escape lets go of it. The line is marked faintly, the node
+ * strongly. With rainbow parentheses, the code that is selected (of the
+ * node, or else of the line) is colored by the nesting depth of the node
+ * each line of it was generated for, like the punctuation of that node. */
+
+// The nodes of IR an element stands for: the node it is of, and for
+// punctuation and expressions, the nodes nested in that one.
+function irNodesOf(el) {
+    const node = el.dataset.g;
+    const nodes = [parseInt(node)];
+    // The punctuation of an expression is in the span of the expression.
+    const e = el.classList.contains('e') ? el : el.closest('span.e[data-g="' + node + '"]');
+    if (e) {
+        e.querySelectorAll('span.e[data-g]').forEach(inner => nodes.push(parseInt(inner.dataset.g)));
     }
+    return nodes;
+}
+function asmOfIRNodes(nodes) {
+    const rows = new Set();
+    for (const n of nodes) {
+        for (const row of (asmOfIRNode.get(n) || [])) {
+            rows.add(row);
+        }
+    }
+    return Array.from(rows).sort((a, b) => a - b);
+}
+// What is linked at an element of the IR, or null if no code was generated
+// for it: its line with the lines of assembly of it, and its node (or 0)
+// with the lines of assembly of that.
+function linkAtIR(target) {
+    const l = target.closest('div.l');
+    if (!l) {
+        return null;
+    }
+    const line = parseInt(l.dataset.line);
+    const lineRows = asmOfIRLine.get(line) || [];
+    const g = target.closest('[data-g]');
+    const rows = g ? asmOfIRNodes(irNodesOf(g)) : [];
+    if (!rows.length && !lineRows.length) {
+        return null;
+    }
+    return {line : line, node : rows.length ? parseInt(g.dataset.g) : 0, rows : rows, lineRows : lineRows, nested : true};
+}
+// What is linked at a line of the assembly, or null if it is not known which
+// IR it was generated for.
+function linkAtAsm(i) {
+    const line = asmIRLines[i];
+    if (!line) {
+        return null;
+    }
+    const node = asmIRNodes[i];
+    return {line : line, node : node, rows : asmOfIRNode.get(node) || [], lineRows : asmOfIRLine.get(line) || [], nested : false};
+}
+function sameLink(a, b) {
+    return a && b && a.line === b.line && a.node === b.node && a.nested === b.nested;
+}
+// Shows a link (or none) as hovered or as selected, in the IR and in the
+// assembly.
+function showLink(link, kind) {
+    irPane.querySelectorAll('.line-' + kind + ', .node-' + kind)
+        .forEach(el => el.classList.remove('line-' + kind, 'node-' + kind));
+    if (link && link.line > 0 && link.line <= irLines.length) {
+        irLines[link.line - 1].classList.add('line-' + kind);
+        if (link.node) {
+            irPane.querySelectorAll('[data-g="' + link.node + '"]').forEach(el => el.classList.add('node-' + kind));
+        }
+    }
+    if (kind === 'selected') {
+        // What is selected is the node, or else all of the line: that is
+        // what rainbow parentheses color.
+        if (link && link.node) {
+            highlightAsm(link.lineRows, 'line-selected');
+            highlightAsm(link.rows, 'node-selected', true, link.node);
+        } else {
+            highlightAsm(link ? link.lineRows : [], 'line-selected', true);
+            highlightAsm([], 'node-selected');
+        }
+    } else {
+        highlightAsm(link ? link.lineRows : [], 'line-' + kind);
+        highlightAsm(link ? link.rows : [], 'node-' + kind);
+    }
+}
+// A few words about a node of IR: its punctuation.
+function describeIRNode(node) {
+    const el = irPane.querySelector('[data-g="' + node + '"]:not(.e)') || irPane.querySelector('[data-g="' + node + '"]');
+    const text = el ? el.textContent.trim() : '';
+    return text.length > 24 ? text.slice(0, 24) + '…' : text;
+}
+let selectedLink = null;
+const linkStatus = document.getElementById('link-status');
+const linkClear = document.getElementById('link-clear');
+function selectLink(link) {
+    selectedLink = sameLink(link, selectedLink) ? null : link;
+    showLink(selectedLink, 'selected');
+    if (selectedLink) {
+        const s = selectedLink;
+        const count = n => n + (n === 1 ? ' instruction' : ' instructions');
+        linkStatus.textContent = 'line ' + s.line +
+            (s.node ? ', ' + describeIRNode(s.node) + ' : ' + count(s.rows.length) + ' of ' + s.lineRows.length + ' on the line' :
+                      ' : ' + count(s.lineRows.length));
+    } else {
+        linkStatus.textContent = 'double-click IR or assembly';
+    }
+    linkClear.disabled = !selectedLink;
+    return selectedLink;
+}
+linkClear.addEventListener('click', () => selectLink(null));
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        selectLink(null);
+    }
+});
+selectLink(null);
+
+// Marks (or unmarks) the punctuation of the same node as an element.
+function markPunctuation(target, mark) {
+    const g = target.closest('[data-g]:not(.e)');
+    if (g) {
+        irPane.querySelectorAll('[data-g="' + g.dataset.g + '"]:not(.e)').forEach(el => el.classList.toggle('Highlight', mark));
+    }
+}
+irPane.addEventListener('mouseover', function(event) {
+    markPunctuation(event.target, true);
     if (event.target.classList.contains('t')) {
         const header = event.target.closest('div.l');
         if (header && header.dataset.blockEnd) {
             markFold(header, true);
         }
     }
-    const l = event.target.closest('div.l');
-    highlightAsm(l ? (asmOfIRLine.get(parseInt(l.dataset.line)) || []) : [], 'hover');
+    const link = linkAtIR(event.target);
+    showLink(link, 'hover');
+    // The pointer says whether there is code to link to.
+    irPane.classList.toggle('linkable', link !== null);
 });
 irPane.addEventListener('mouseout', function(event) {
-    const op = event.target.closest('span.op[data-g]');
-    if (op) {
-        irPane.querySelectorAll('span.op[data-g="' + op.dataset.g + '"]').forEach(el => el.classList.remove('Highlight'));
-    }
+    markPunctuation(event.target, false);
     if (event.target.classList.contains('t')) {
         const header = event.target.closest('div.l');
         if (header && header.dataset.blockEnd) {
@@ -536,8 +684,16 @@ irPane.addEventListener('mouseout', function(event) {
     }
 });
 irPane.addEventListener('mouseleave', function() {
-    highlightAsm([], 'hover');
+    showLink(null, 'hover');
 });
+// Double-clicking is not for selecting text here.
+function noTextSelection(event) {
+    if (event.detail > 1) {
+        event.preventDefault();
+    }
+}
+irPane.addEventListener('mousedown', noTextSelection);
+asmCode.addEventListener('mousedown', noTextSelection);
 
 // Clicking a variable highlights it everywhere, in one of a few colors.
 const variableHighlights = new Map();
@@ -572,26 +728,25 @@ irPane.addEventListener('click', function(event) {
     }
     if (event.target.classList.contains('t') && l.dataset.blockEnd) {
         toggleBlock(l);
-    } else if (event.target.classList.contains('n') && l.dataset.asm) {
-        const line = parseInt(l.dataset.line);
-        const asm = asmOfIRLine.get(line) || [];
-        selectIRLine(line);
-        highlightAsm(asm, 'selected');
-        if (asm.length) {
-            scrollToHostAsm(asm[0]);
-        }
     } else if (event.target.classList.contains('var')) {
         toggleVariableHighlight(event.target.textContent);
     }
 });
+irPane.addEventListener('dblclick', function(event) {
+    if (event.target.classList.contains('t')) {
+        return;
+    }
+    const link = linkAtIR(event.target);
+    if (link && selectLink(link)) {
+        scrollToHostAsm(link.rows.length ? link.rows[0] : link.lineRows[0]);
+    }
+});
 
-// Clicking code goes to the line of IR it was generated for.
+// Goes to a line of IR.
 function goToIRLine(line) {
     revealIRLine(line);
-    selectIRLine(line);
-    highlightAsm(asmOfIRLine.get(line) || [], 'selected');
     irLines[line - 1].scrollIntoView({
-        behavior : 'instant',
+        behavior : scrollBehavior(),
         block : 'center'
     });
 }
@@ -639,11 +794,34 @@ asmCode.addEventListener('click', function(event) {
             scrollToHostAsm(row);
             highlightAsm([row], 'label-target');
         }
+    }
+});
+// Hovering assembly shows the IR it was generated for, double-clicking it
+// goes there.
+function asmRowAt(event) {
+    return Math.floor((event.clientY - asmCode.getBoundingClientRect().top) / asmRowHeight);
+}
+let asmHoverRow = -1;
+asmCode.addEventListener('mousemove', function(event) {
+    const i = asmRowAt(event);
+    if (i !== asmHoverRow) {
+        asmHoverRow = i;
+        const link = linkAtAsm(i);
+        showLink(link, 'hover');
+        asmCode.classList.toggle('linkable', link !== null);
+    }
+});
+asmCode.addEventListener('mouseleave', function() {
+    asmHoverRow = -1;
+    showLink(null, 'hover');
+});
+asmCode.addEventListener('dblclick', function(event) {
+    if (event.target.closest('span.asm-label')) {
         return;
     }
-    const line = asmIRLines[i];
-    if (line) {
-        goToIRLine(line);
+    const link = linkAtAsm(asmRowAt(event));
+    if (link && selectLink(link)) {
+        goToIRLine(link.line);
     }
 });
 
