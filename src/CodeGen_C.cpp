@@ -14,7 +14,6 @@
 #include "Param.h"
 #include "Simplify.h"
 #include "StrictifyFloat.h"
-#include "Substitute.h"
 #include "Type.h"
 #include "Util.h"
 #include "Var.h"
@@ -1376,15 +1375,18 @@ void CodeGen_C::close_scope(const std::string &comment) {
 }
 
 void CodeGen_C::visit(const Variable *op) {
-    if (starts_with(op->name, "::")) {
+    // A variable that a let defines is the id of the value of the let.
+    const string *bound = bound_ids.find(op->name);
+    const string &name = bound ? *bound : op->name;
+    if (starts_with(name, "::")) {
         // This is the name of a global, so we can't modify it.
-        id = op->name;
+        id = name;
     } else {
         // This substitution ensures const correctness for all calls
-        if (op->name == "__user_context") {
+        if (name == "__user_context") {
             id = "_ucon";
         } else {
-            id = print_name(op->name);
+            id = print_name(name);
         }
     }
 }
@@ -2136,7 +2138,6 @@ void CodeGen_C::visit(const Store *op) {
 
 void CodeGen_C::visit(const Let *op) {
     string id_value = print_expr(op->value);
-    Expr body = op->body;
     if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
@@ -2144,11 +2145,10 @@ void CodeGen_C::visit(const Let *op) {
         stream << get_indent() << "auto "
                << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
-    } else {
-        Expr new_var = Variable::make(op->value.type(), id_value);
-        body = substitute(op->name, new_var, body);
+        id_value = op->name;
     }
-    print_expr(body);
+    ScopedBinding<string> bind(bound_ids, op->name, id_value);
+    print_expr(op->body);
 }
 
 void CodeGen_C::visit(const Select *op) {
@@ -2230,8 +2230,6 @@ void CodeGen_C::visit(const VectorReduce *op) {
 
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
-    Stmt body = op->body;
-
     if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
@@ -2239,11 +2237,10 @@ void CodeGen_C::visit(const LetStmt *op) {
         stream << get_indent() << "auto "
                << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
-    } else {
-        Expr new_var = Variable::make(op->value.type(), id_value);
-        body = substitute(op->name, new_var, body);
+        id_value = op->name;
     }
-    body.accept(this);
+    ScopedBinding<string> bind(bound_ids, op->name, id_value);
+    op->body.accept(this);
 }
 
 // Halide asserts have different semantics to C asserts.  They're
@@ -2350,7 +2347,10 @@ void CodeGen_C::visit(const For *op) {
            << "++)\n";
 
     open_scope();
-    op->body.accept(this);
+    {
+        ScopedBinding<string> bind(bound_ids, op->name, op->name);
+        op->body.accept(this);
+    }
     close_scope("for " + print_name(op->name));
 }
 
