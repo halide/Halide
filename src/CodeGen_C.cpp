@@ -1313,7 +1313,18 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
 string CodeGen_C::print_expr(const Expr &e) {
     id = "$$ BAD ID $$";
+    // An Expr that was rewritten since line_source was printed is not noted:
+    // what is printed for it goes to what it is printed within.
+    const StmtSourceMap::Location *l = line_source ? line_source->find(e.get(), 0) : nullptr;
+    if (!l) {
+        e.accept(this);
+        return id;
+    }
+    const size_t i = printed_nodes.size();
+    const uint32_t start = (uint32_t)stream.tellp();
+    printed_nodes.push_back({start, start, IRPosition{l->line, l->order}});
     e.accept(this);
+    printed_nodes[i].end = (uint32_t)stream.tellp();
     return id;
 }
 
@@ -1334,7 +1345,16 @@ string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
 }
 
 void CodeGen_C::print_stmt(const Stmt &s) {
+    if (!line_source) {
+        s.accept(this);
+        return;
+    }
+    const StmtSourceMap::Location *l = line_source->find_within(s.get());
+    const size_t i = printed_nodes.size();
+    const uint32_t start = (uint32_t)stream.tellp();
+    printed_nodes.push_back({start, start, l ? IRPosition{l->line, l->order} : IRPosition()});
     s.accept(this);
+    printed_nodes[i].end = (uint32_t)stream.tellp();
 }
 
 string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
@@ -2240,7 +2260,7 @@ void CodeGen_C::visit(const LetStmt *op) {
         id_value = op->name;
     }
     ScopedBinding<string> bind(bound_ids, op->name, id_value);
-    op->body.accept(this);
+    print_stmt(op->body);
 }
 
 // Halide asserts have different semantics to C asserts.  They're
@@ -2308,7 +2328,7 @@ void CodeGen_C::visit(const Acquire *op) {
     open_scope();
     stream << get_indent() << "#pragma omp taskyield\n";
     close_scope("");
-    op->body.accept(this);
+    print_stmt(op->body);
     close_scope("");
 }
 
@@ -2317,11 +2337,11 @@ void CodeGen_C::visit(const Atomic *op) {
         internal_assert(!inside_atomic_mutex_node)
             << "Nested atomic mutex locks detected. This might causes a deadlock.\n";
         ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         // Issue atomic stores.
         ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
-        op->body.accept(this);
+        print_stmt(op->body);
     }
 }
 
@@ -2349,7 +2369,7 @@ void CodeGen_C::visit(const For *op) {
     open_scope();
     {
         ScopedBinding<string> bind(bound_ids, op->name, op->name);
-        op->body.accept(this);
+        print_stmt(op->body);
     }
     close_scope("for " + print_name(op->name));
 }
@@ -2517,7 +2537,7 @@ void CodeGen_C::visit(const Allocate *op) {
         emit_halide_free_helper(op_name, free_function);
     }
 
-    op->body.accept(this);
+    print_stmt(op->body);
 
     // Free the memory if it was allocated on the heap and there is no matching
     // Free node.
@@ -2554,13 +2574,13 @@ void CodeGen_C::visit(const IfThenElse *op) {
 
     stream << get_indent() << "if (" << cond_id << ")\n";
     open_scope();
-    op->then_case.accept(this);
+    print_stmt(op->then_case);
     close_scope("if " + cond_id);
 
     if (op->else_case.defined()) {
         stream << get_indent() << "else\n";
         open_scope();
-        op->else_case.accept(this);
+        print_stmt(op->else_case);
         close_scope("if " + cond_id + " else");
     }
 }

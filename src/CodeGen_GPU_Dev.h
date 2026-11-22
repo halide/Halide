@@ -14,9 +14,24 @@
 namespace Halide {
 namespace Internal {
 
+struct StmtSourceMap;
+
+/** For each line of text, C-like source that a CodeGen_C printed: where the
+ * innermost Stmt or Expr that it was printed for is (see
+ * CodeGen_C::line_source), of those that it is known of. */
+std::vector<IRPosition> lines_of_printed_nodes(const std::string &text, const std::vector<CodeGen_C::PrintedNode> &nodes);
+
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {
     virtual ~CodeGen_GPU_Dev();
+
+    /** If set before init_module(): a printing of IR that holds the Stmts of
+     * the kernels, or that they were lowered from. compile_to_src() then says
+     * in source_lines where in it each line of the source it returns came
+     * from. That stays empty for code generators that don't keep track, or
+     * whose output isn't text. */
+    const StmtSourceMap *line_source = nullptr;
+    std::vector<IRPosition> source_lines;
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

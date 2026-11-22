@@ -340,6 +340,10 @@ struct ModuleContents {
      * etc...). In other words, we'd like to keep this
      * conceptually relevant and human-readable. */
     Stmt conceptual_code;
+
+    /** Where the lines of the device code came from in conceptual_code, by
+     * the name of the Buffer that holds it. */
+    std::map<std::string, std::vector<Internal::IRPosition>> device_code_lines;
 };
 
 template<>
@@ -580,6 +584,14 @@ void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
 
 const Internal::Stmt &Module::get_conceptual_stmt() const {
     return contents->conceptual_code;
+}
+
+void Module::set_device_code_lines(std::map<std::string, std::vector<Internal::IRPosition>> lines) {
+    contents->device_code_lines = std::move(lines);
+}
+
+const std::map<std::string, std::vector<Internal::IRPosition>> &Module::get_device_code_lines() const {
+    return contents->device_code_lines;
 }
 
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {

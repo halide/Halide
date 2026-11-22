@@ -224,6 +224,12 @@ struct StmtSourceMap {
      * was never printed. */
     const Location *find(const IRNode *node, uint32_t parent_start) const;
 
+    /** The first printed copy of node, or else that of the first node within
+     * it that was printed, in the order IR is visited. IR that was rewritten
+     * after it was printed is found by what is left of it this way. Returns
+     * nullptr if there is none. */
+    const Location *find_within(const IRNode *node) const;
+
     /** The location with the given anchor. Of nested nodes that share one,
      * the innermost. Returns nullptr if there is none. */
     const Location *at(uint32_t line, uint32_t column) const;

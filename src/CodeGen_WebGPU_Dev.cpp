@@ -163,6 +163,8 @@ void CodeGen_WebGPU_Dev::init_module() {
     // Wipe the internal shader source.
     src_stream.str("");
     src_stream.clear();
+    wgsl.line_source = line_source;
+    wgsl.printed_nodes.clear();
 
     // Write out the Halide math functions.
     src_stream
@@ -192,6 +194,7 @@ void CodeGen_WebGPU_Dev::init_module() {
 
 vector<char> CodeGen_WebGPU_Dev::compile_to_src() {
     string str = src_stream.str();
+    source_lines = line_source ? lines_of_printed_nodes(str, wgsl.printed_nodes) : std::vector<IRPosition>();
     debug(1) << "WGSL shader:\n"
              << str << "\n";
     vector<char> buffer(str.begin(), str.end());
@@ -383,7 +386,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     }
 
     // Generate function body.
-    print(s);
+    print_stmt(s);
 
     close_scope("shader " + name);
 
@@ -413,7 +416,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
     if (is_gpu_shared(op->memory_type)) {
         internal_assert(!workgroup_allocations.count(op->name));
         workgroup_allocations.insert({op->name, op});
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -441,7 +444,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -662,7 +665,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
                << "let " << print_name(loop->name)
                << " = i32(" << simt_intrinsic(loop->name) << ");\n";
 
-        loop->body.accept(this);
+        print_stmt(loop->body);
 
     } else {
         user_assert(loop->for_type == ForType::Serial)
@@ -677,7 +680,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
                // TODO: Use increment statement when supported by Chromium.
                << id_counter << " = " << id_counter << " + 1)\n";
         open_scope();
-        loop->body.accept(this);
+        print_stmt(loop->body);
         close_scope("for " + print_name(loop->name));
     }
 }

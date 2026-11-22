@@ -447,7 +447,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
            << " = " << simt_intrinsic(loop->name) << ";\n";
 
-    loop->body.accept(this);
+    print_stmt(loop->body);
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Ramp *op) {
@@ -1437,7 +1437,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
         // Already handled
         internal_assert(!groupshared_allocations.contains(op->name));
         groupshared_allocations.push(op->name);
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -1467,7 +1467,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -2141,7 +2141,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     // Emit the kernel code:
 
     open_scope();
-    print(s);
+    print_stmt(s);
     close_scope("kernel " + name);
 
     for (const auto &arg : args) {
@@ -2161,6 +2161,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+    d3d12compute_c.line_source = line_source;
+    d3d12compute_c.printed_nodes.clear();
 
     // Emit SM version marker for runtime to select FXC (SM 5.1) vs DXC (SM 6.x).
     // Emitted as a real #define (not a comment) so generated shader code can
@@ -2270,6 +2272,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 
 vector<char> CodeGen_D3D12Compute_Dev::compile_to_src() {
     string str = src_stream.str();
+    source_lines = line_source ? lines_of_printed_nodes(str, d3d12compute_c.printed_nodes) : std::vector<IRPosition>();
     debug(1) << "D3D12Compute kernel:\n"
              << str << "\n";
     vector<char> buffer(str.begin(), str.end());

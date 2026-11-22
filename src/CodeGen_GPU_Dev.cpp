@@ -6,6 +6,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include <algorithm>
 
 namespace Halide {
 namespace Internal {
@@ -276,6 +277,31 @@ std::string CodeGen_GPU_C::print_extern_call(const Call *op) {
     debug(3) << "Writing out call to " << name << "\n";
     rhs << name << "(" << with_commas(args) << ")";
     return rhs.str();
+}
+
+std::vector<IRPosition> lines_of_printed_nodes(const std::string &text, const std::vector<CodeGen_C::PrintedNode> &nodes) {
+    std::vector<uint32_t> line_starts{0};
+    for (uint32_t i = 0; i < (uint32_t)text.size(); i++) {
+        if (text[i] == '\n') {
+            line_starts.push_back(i + 1);
+        }
+    }
+    // The nodes are in the order they began printing, so those within a node
+    // come after it, and overwrite its lines. What is left to a node is what
+    // was printed for it alone, like the line that assigns the value of an
+    // Expr after the lines of its operands.
+    std::vector<IRPosition> result(line_starts.size());
+    for (const CodeGen_C::PrintedNode &n : nodes) {
+        if (n.position.line == 0 || n.end <= n.start) {
+            continue;
+        }
+        const size_t first = std::upper_bound(line_starts.begin(), line_starts.end(), n.start) - line_starts.begin() - 1;
+        const size_t last = std::upper_bound(line_starts.begin(), line_starts.end(), n.end - 1) - line_starts.begin() - 1;
+        for (size_t i = first; i <= last; i++) {
+            result[i] = n.position;
+        }
+    }
+    return result;
 }
 
 }  // namespace Internal

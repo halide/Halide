@@ -213,9 +213,14 @@ protected:
     void add_debug_variable(const std::string &name, const Type &type, llvm::Value *value, unsigned arg_no = 0);
 
     /** Set up debug_info for the module being generated, pointing into
-     * source, a printing of input or of its conceptual Stmt. If source is
-     * null, input is printed, or its conceptual Stmt if conceptual is set. */
-    void init_debug_info(const StmtSourceMap *source, const Module &input, bool conceptual);
+     * source, a printing of the IR that is compiled or of IR it was lowered
+     * from. If line_tables_only, the debug info only says which code came
+     * from where, and not what the values in it are. */
+    void init_debug_info(const StmtSourceMap &source, bool line_tables_only = false);
+
+    /** The printing compile() made itself for the debug info to point
+     * into, if any. */
+    std::unique_ptr<StmtSourceMap> own_debug_source;
 
     /** If there is debug info, give the function being generated a
      * subprogram, starting at where node was printed. If node is null, it is

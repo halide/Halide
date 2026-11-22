@@ -98,6 +98,8 @@ protected:
     const Target &target;
     const std::map<std::string, Function> &env;
 
+    std::map<std::string, std::vector<IRPosition>> *device_code_lines;
+
     Expr get_state_var(const string &name) {
         // Expr v = Variable::make(type_of<void *>(), name);
         state_needed[name] = true;
@@ -272,8 +274,10 @@ protected:
 
 public:
     InjectGpuOffload(const Target &target, bool any_strict_float,
-                     const std::map<std::string, Function> &env)
-        : target(target), env(env) {
+                     const std::map<std::string, Function> &env,
+                     const StmtSourceMap *line_source,
+                     std::map<std::string, std::vector<IRPosition>> *device_code_lines)
+        : target(target), env(env), device_code_lines(device_code_lines) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
         // generated kernel code unintentionally having any dependence on the
@@ -301,6 +305,7 @@ public:
 
         for (auto &i : cgdev) {
             i.second->set_any_strict_float(any_strict_float);
+            i.second->line_source = line_source;
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
@@ -328,6 +333,9 @@ public:
             debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
             vector<char> kernel_src = i.second->compile_to_src();
             Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_gpu_source_kernels");
+            if (device_code_lines && !i.second->source_lines.empty()) {
+                (*device_code_lines)[api_unique_name + "_gpu_source_kernels"] = i.second->source_lines;
+            }
 
             string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
             vector<Expr> init_args = {state_ptr_var, kernel_src_buf, Expr((int)kernel_src.size())};
@@ -420,9 +428,11 @@ class FlattenAliasedAllocations : public IRMutator {
 }  // namespace
 
 Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float,
-                        const std::map<std::string, Function> &env) {
+                        const std::map<std::string, Function> &env,
+                        const StmtSourceMap *line_source,
+                        std::map<std::string, std::vector<IRPosition>> *device_code_lines) {
     Stmt flattened = FlattenAliasedAllocations()(s);
-    return InjectGpuOffload(host_target, any_strict_float, env).inject(flattened);
+    return InjectGpuOffload(host_target, any_strict_float, env, line_source, device_code_lines).inject(flattened);
 }
 
 }  // namespace Internal

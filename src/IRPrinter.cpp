@@ -870,6 +870,34 @@ const StmtSourceMap::Location *StmtSourceMap::find(const IRNode *node, uint32_t 
     return nullptr;
 }
 
+const StmtSourceMap::Location *StmtSourceMap::find_within(const IRNode *node) const {
+    if (const Location *l = find(node, 0)) {
+        return l;
+    }
+    class FirstPrinted : public IRGraphVisitor {
+        using IRGraphVisitor::include;
+        void include(const Expr &e) override {
+            if (!found && !(found = source.find(e.get(), 0))) {
+                IRGraphVisitor::include(e);
+            }
+        }
+        void include(const Stmt &s) override {
+            if (!found && !(found = source.find(s.get(), 0))) {
+                IRGraphVisitor::include(s);
+            }
+        }
+
+    public:
+        const StmtSourceMap &source;
+        const Location *found = nullptr;
+        explicit FirstPrinted(const StmtSourceMap &source)
+            : source(source) {
+        }
+    } first(*this);
+    node->accept(&first);
+    return first.found;
+}
+
 const StmtSourceMap::Location *StmtSourceMap::at(uint32_t line, uint32_t column) const {
     auto it = std::lower_bound(by_anchor.begin(), by_anchor.end(), std::make_pair(line, column),
                                [&](uint32_t i, const std::pair<uint32_t, uint32_t> &lc) {

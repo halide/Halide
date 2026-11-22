@@ -248,7 +248,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
-        loop->body.accept(this);
+        print_stmt(loop->body);
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
@@ -794,7 +794,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 
     if (is_gpu_shared(op->memory_type)) {
         // Already handled
-        op->body.accept(this);
+        print_stmt(op->body);
     } else {
         open_scope();
 
@@ -825,7 +825,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        op->body.accept(this);
+        print_stmt(op->body);
 
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
@@ -1112,7 +1112,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
         }
     }
 
-    print(s);
+    print_stmt(s);
     close_scope("kernel " + name);
 
     for (const auto &arg : args) {
@@ -1136,6 +1136,8 @@ void CodeGen_OpenCL_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+    clc.line_source = line_source;
+    clc.printed_nodes.clear();
 
     const Target &target = clc.get_target();
 
@@ -1186,6 +1188,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
+    source_lines = line_source ? lines_of_printed_nodes(str, clc.printed_nodes) : std::vector<IRPosition>();
     debug(1) << "OpenCL kernel:\n"
              << str << "\n";
     vector<char> buffer(str.begin(), str.end());

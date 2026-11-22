@@ -1049,8 +1049,46 @@ div.ir-code span.n {
     visibility: hidden;
 }
 /* A mark in front of the lines that code was generated for. */
-div.ir-code div.l[data-asm] span.g {
+div.ir-code div.l[data-asm] span.g,
+div.ir-code div.l[data-device] span.g {
     box-shadow: inset 2px 0 0 var(--cs-line-num);
+}
+/* The device code of a line of IR, and of the node on it, marked like its
+ * assembly. */
+div#device-code-pane span.line.line-selected {
+    background-color: var(--link-selected-line);
+}
+div#device-code-pane span.line.node-selected {
+    background-color: var(--link-selected-node);
+}
+div#device-code-pane span.line.node-selected.own {
+    box-shadow: inset 5px 0 0 var(--link-selected);
+}
+[data-rainbow-parens="true"] div#device-code-pane {
+    span.line.d0 { background-color: var(--rainbow-bg-0); }
+    span.line.d1 { background-color: var(--rainbow-bg-1); }
+    span.line.d2 { background-color: var(--rainbow-bg-2); }
+    span.line.d3 { background-color: var(--rainbow-bg-3); }
+    span.line.d4 { background-color: var(--rainbow-bg-4); }
+    span.line.d5 { background-color: var(--rainbow-bg-5); }
+    span.line.dn { background-color: var(--rainbow-bg-n); }
+    span.line.own.d0 { box-shadow: inset 5px 0 0 var(--red); }
+    span.line.own.d1 { box-shadow: inset 5px 0 0 var(--green); }
+    span.line.own.d2 { box-shadow: inset 5px 0 0 var(--yellow); }
+    span.line.own.d3 { box-shadow: inset 5px 0 0 var(--blue); }
+    span.line.own.d4 { box-shadow: inset 5px 0 0 var(--purple); }
+    span.line.own.d5 { box-shadow: inset 5px 0 0 var(--aqua); }
+    span.line.own.dn { box-shadow: inset 5px 0 0 var(--grey1); }
+}
+div#device-code-pane span.line.line-hover {
+    background-color: var(--link-hover-line);
+}
+div#device-code-pane span.line.node-hover {
+    background-color: var(--link-hover-node);
+    box-shadow: inset 4px 0 0 var(--link-hover);
+}
+div#device-code-pane.linkable {
+    cursor: pointer;
 }
 div.ir-code span.t {
     width: 1.5em;
