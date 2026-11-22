@@ -61,6 +61,7 @@ protected:
         CodeGen_OpenCL_C(std::ostream &s, Target t)
             : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
+            hex_float_literals = true;
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
             abs_returns_unsigned_type = true;
 
@@ -273,8 +274,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
+    Type vector_type = op->type.with_lanes(op->lanes);
 
-    print_assignment(op->type.with_lanes(op->lanes), id_value);
+    print_assignment(vector_type, "(" + print_type(vector_type) + ")(" + id_value + ")");
 }
 
 namespace {
@@ -639,7 +641,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             // }
             stream << get_indent() << "{\n";
             indent += 2;
-            string id_index = print_expr(op->index);
+            // Used in the loop below.
+            string id_index = force_declaration(print_expr(op->index));
             std::string int_type = t.bits() == 32 ? "int" : "long";
             if (t.is_float() || t.is_uint()) {
                 int_type = "unsigned " + int_type;
