@@ -1646,7 +1646,10 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hlsl_sm69,              ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
     halide_target_feature_no_metadata,            ///< Don't emit the _argv() and _metadata() entry points for exported functions, keeping the argument names and target string out of the binary.
     halide_target_feature_arm64e,                 ///< Enable Apple ARM64e pointer authentication ABI (requires ARMv8.3a; 64-bit iOS/macOS only).
-    halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_debug_symbols,          ///< Emit debug info that maps the generated code to the lines of the .stmt output, so debuggers and profilers can step through and annotate the lowered IR.
+    /// Like debug_symbols, but map the generated code to the lines of the .conceptual.stmt output instead.
+    halide_target_feature_debug_symbols_conceptual,
+    halide_target_feature_end  ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** The specific processor a compilation Target can be tuned for.

@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <tuple>
 
 #include "IRPrinter.h"
 
@@ -699,6 +701,9 @@ void IRPrinter::print_summary(const Stmt &ir) {
 }
 
 void IRPrinter::print(const LoweredFunc &function) {
+    if (record) {
+        record->function_starts.push_back((uint32_t)stream.tellp());
+    }
     stream << function.linkage << " func " << function.name << " (";
     for (size_t i = 0; i < function.args.size(); i++) {
         stream << function.args[i].name;
@@ -726,6 +731,182 @@ void IRPrinter::print(const Module &m) {
         print(f);
         stream << "\n";
     }
+}
+
+void IRPrinter::begin_node(const IRNode *node) {
+    if (record) {
+        const uint32_t at = (uint32_t)stream.tellp();
+        record->locations.push_back({node, at, at, at, current_location});
+        current_location = (int)record->locations.size() - 1;
+    }
+}
+
+void IRPrinter::end_node(const IRNode *) {
+    if (record) {
+        IRPrinterRecord::Location &l = record->locations[current_location];
+        l.end = (uint32_t)stream.tellp();
+        current_location = l.parent;
+    }
+}
+
+void IRPrinter::anchor() {
+    if (record && current_location >= 0) {
+        record->locations[current_location].anchor = (uint32_t)stream.tellp();
+    }
+}
+
+namespace {
+
+// Turn the locations recorded while printing text into a source map of it.
+// If the text is that of a Module, m is set.
+StmtSourceMap make_source_map(string text, const IRPrinterRecord &record, const Module *m) {
+    StmtSourceMap result;
+    result.text = std::move(text);
+    const string &t = result.text;
+
+    vector<uint32_t> line_starts{0};
+    for (uint32_t i = 0; i < (uint32_t)t.size(); i++) {
+        if (t[i] == '\n') {
+            line_starts.push_back(i + 1);
+        }
+    }
+    auto line_of = [&](uint32_t offset) {
+        return (uint32_t)(std::upper_bound(line_starts.begin(), line_starts.end(), offset) - line_starts.begin());
+    };
+
+    // Offsets usually sit on indentation or on the space in front of an
+    // operator. Point at the first thing actually printed instead.
+    auto line_and_column = [&](uint32_t offset, uint32_t &line, uint32_t &column) {
+        while (offset < t.size() && (t[offset] == ' ' || t[offset] == '\n')) {
+            offset++;
+        }
+        line = line_of(offset);
+        column = offset - line_starts[line - 1] + 1;
+    };
+
+    // The end is just past the last thing printed, which is usually a
+    // newline.
+    auto end_line = [&](uint32_t start, uint32_t end) {
+        while (end > start && (t[end - 1] == ' ' || t[end - 1] == '\n')) {
+            end--;
+        }
+        return line_of(end > start ? end - 1 : start);
+    };
+
+    result.locations.resize(record.locations.size());
+    for (size_t i = 0; i < record.locations.size(); i++) {
+        const IRPrinterRecord::Location &r = record.locations[i];
+        StmtSourceMap::Location &l = result.locations[i];
+        l.node = r.node;
+        l.start = r.start;
+        l.end = r.end;
+        l.order = (uint32_t)i + 1;
+        line_and_column(r.anchor, l.line, l.column);
+        l.end_line = end_line(l.start, l.end);
+    }
+    std::sort(result.locations.begin(), result.locations.end(),
+              [](const StmtSourceMap::Location &a, const StmtSourceMap::Location &b) {
+                  return a.node != b.node ? std::less<>()(a.node, b.node) : a.start < b.start;
+              });
+
+    // Nodes nested in one another can share an anchor, e.g. a Block and its
+    // first Stmt. The innermost one began printing last, or ended first.
+    result.by_anchor.resize(result.locations.size());
+    for (uint32_t i = 0; i < (uint32_t)result.by_anchor.size(); i++) {
+        result.by_anchor[i] = i;
+    }
+    std::sort(result.by_anchor.begin(), result.by_anchor.end(), [&](uint32_t i, uint32_t j) {
+        const StmtSourceMap::Location &a = result.locations[i], &b = result.locations[j];
+        return std::tie(a.line, a.column, b.start, a.end) < std::tie(b.line, b.column, a.start, b.end);
+    });
+
+    if (m) {
+        // The functions of submodules are printed first, so those of the
+        // Module itself are the last ones.
+        const size_t n = m->functions().size();
+        internal_assert(record.function_starts.size() >= n);
+        result.functions.resize(n);
+        for (size_t i = 0; i < n; i++) {
+            StmtSourceMap::Function &f = result.functions[i];
+            f.name = m->functions()[i].name;
+            f.start = record.function_starts[record.function_starts.size() - n + i];
+            line_and_column(f.start, f.line, f.column);
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
+StmtSourceMap print_with_source_map(const Module &m) {
+    std::ostringstream stream;
+    IRPrinterRecord record;
+    IRPrinter printer(stream);
+    printer.record = &record;
+    printer.print(m);
+    return make_source_map(std::move(stream).str(), record, &m);
+}
+
+StmtSourceMap print_with_source_map(const Stmt &s) {
+    std::ostringstream stream;
+    IRPrinterRecord record;
+    IRPrinter printer(stream);
+    printer.record = &record;
+    printer.print(s);
+    return make_source_map(std::move(stream).str(), record, nullptr);
+}
+
+const StmtSourceMap::Location *StmtSourceMap::find(const IRNode *node, uint32_t parent_start) const {
+    auto it = std::lower_bound(locations.begin(), locations.end(), parent_start,
+                               [&](const Location &l, uint32_t start) {
+                                   return l.node != node ? std::less<>()(l.node, node) : l.start < start;
+                               });
+    if (it != locations.end() && it->node == node) {
+        return &*it;
+    }
+    if (it != locations.begin() && (it - 1)->node == node) {
+        return &*(it - 1);
+    }
+    return nullptr;
+}
+
+const StmtSourceMap::Location *StmtSourceMap::at(uint32_t line, uint32_t column) const {
+    auto it = std::lower_bound(by_anchor.begin(), by_anchor.end(), std::make_pair(line, column),
+                               [&](uint32_t i, const std::pair<uint32_t, uint32_t> &lc) {
+                                   return std::make_pair(locations[i].line, locations[i].column) < lc;
+                               });
+    if (it != by_anchor.end() && locations[*it].line == line && locations[*it].column == column) {
+        return &locations[*it];
+    }
+    return nullptr;
+}
+
+std::vector<const StmtSourceMap::Location *> map_locations(const StmtSourceMap &from, const StmtSourceMap &to) {
+    // Walk the locations of from in the order they were printed, which visits
+    // each node before the nodes nested in it.
+    std::vector<uint32_t> order(from.locations.size());
+    for (uint32_t i = 0; i < (uint32_t)order.size(); i++) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](uint32_t i, uint32_t j) {
+        const StmtSourceMap::Location &a = from.locations[i], &b = from.locations[j];
+        return a.start != b.start ? a.start < b.start : a.end > b.end;
+    });
+
+    std::vector<const StmtSourceMap::Location *> result(from.locations.size(), nullptr);
+    // The enclosing nodes of the current one.
+    std::vector<uint32_t> stack;
+    for (uint32_t i : order) {
+        const StmtSourceMap::Location &l = from.locations[i];
+        while (!stack.empty() && from.locations[stack.back()].end < l.end) {
+            stack.pop_back();
+        }
+        const StmtSourceMap::Location *parent = stack.empty() ? nullptr : result[stack.back()];
+        const StmtSourceMap::Location *found = to.find(l.node, parent ? parent->start : 0);
+        result[i] = found ? found : parent;
+        stack.push_back(i);
+    }
+    return result;
 }
 
 void IRPrinter::print_list(const std::vector<Expr> &exprs) {
@@ -846,6 +1027,7 @@ void IRPrinter::visit(const Variable *op) {
             print_type_in_parens(op->type);
         }
     }
+    anchor();
     stream << var(op->name);
 }
 
@@ -881,6 +1063,7 @@ void IRPrinter::closef() {
 void IRPrinter::print_binary(const Expr &a, const char *op, const Expr &b) {
     open();
     print(a);
+    anchor();
     stream << paren(op);
     print(b);
     close();
@@ -982,6 +1165,7 @@ void IRPrinter::visit(const Load *op) {
         print_type_in_parens(op->type);
     }
     paren_depth++;
+    anchor();
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
@@ -1046,6 +1230,7 @@ void IRPrinter::visit(const Call *op) {
                 print_type_in_parens(op->type);
             }
         }
+        anchor();
         openf(op->name.c_str());
         print_list(op->args);
         closef();
