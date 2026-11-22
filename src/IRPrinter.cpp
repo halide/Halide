@@ -103,18 +103,7 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    for (const auto &s : m.submodules()) {
-        stream << s << "\n";
-    }
-
-    // The module retains implied features, but print it in minimal form.
-    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
-    for (const auto &b : m.buffers()) {
-        stream << b << "\n";
-    }
-    for (const auto &f : m.functions()) {
-        stream << f << "\n";
-    }
+    Internal::IRPrinter(stream).print(m);
     return stream;
 }
 
@@ -415,26 +404,12 @@ ostream &operator<<(ostream &out, const NameMangling &m) {
 }
 
 ostream &operator<<(ostream &stream, const Stmt &ir) {
-    if (!ir.defined()) {
-        stream << "(undefined)\n";
-    } else {
-        Internal::IRPrinter p(stream);
-        p.print(ir);
-    }
+    IRPrinter(stream).print(ir);
     return stream;
 }
 
 ostream &operator<<(ostream &stream, const LoweredFunc &function) {
-    stream << function.linkage << " func " << function.name << " (";
-    for (size_t i = 0; i < function.args.size(); i++) {
-        stream << function.args[i].name;
-        if (i + 1 < function.args.size()) {
-            stream << ", ";
-        }
-    }
-    stream << ") {\n";
-    stream << function.body;
-    stream << "}\n\n";
+    IRPrinter(stream).print(function);
     return stream;
 }
 
@@ -588,24 +563,7 @@ IRPrinter::IRPrinter(ostream &s)
             use_colors = get_env_variable("NO_COLOR").empty() && supports_ansi(terminal);
         }
 
-        if (use_colors) {
-            ansi = true;
-            // Simple palette using standard VGA colors.
-            // clang-format off
-            ansi_hl        = "\033[4m";
-            ansi_dim       = "\033[2m";
-            ansi_kw        = "\033[35;1m";
-            ansi_imm_int   = "\033[36m";
-            ansi_imm_float = "\033[96m";
-            ansi_imm_str   = "\033[32m";
-            ansi_var       = "";
-            ansi_buf       = "\033[33m";
-            ansi_fn        = "\033[31m";
-            ansi_type      = "\033[34m";
-            ansi_reset_col = "\033[39m";
-            ansi_reset     = "\033[0m";
-            // clang-format on
-        }
+        ansi = use_colors;
     };
 
     switch (debug_stream_sink(stream)) {
@@ -629,86 +587,145 @@ IRPrinter::IRPrinter(ostream &s)
     }
 }
 
-#define ansi_helper(name)                                                          \
-    template<typename T>                                                           \
-    Ansi<T> IRPrinter::name(const T &t) {                                          \
-        return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset_col : nullptr}; \
-    }
-#define ansi_helper_r(name)                                                    \
-    template<typename T>                                                       \
-    Ansi<T> IRPrinter::name(const T &t) {                                      \
-        return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset : nullptr}; \
+#define styled_helper(name, style)               \
+    template<typename T>                         \
+    StyledText<T> IRPrinter::name(const T &t) {  \
+        return {t, this, IRPrinterStyle::style}; \
     }
 
-ansi_helper_r(hl);
-ansi_helper_r(kw);
-ansi_helper(imm_int);
-ansi_helper(imm_float);
-ansi_helper(imm_str);
-ansi_helper(var);
-ansi_helper(buf);
-ansi_helper(fn);
-ansi_helper(type);
+styled_helper(hl, Highlight);
+styled_helper(kw, Keyword);
+styled_helper(imm_int, ImmInt);
+styled_helper(imm_float, ImmFloat);
+styled_helper(imm_str, ImmString);
+styled_helper(buf, Buffer);
+styled_helper(fn, Function);
+styled_helper(type, Type);
 
 template<typename T>
-Ansi<T> IRPrinter::typep(const T &t) {
-    return {t, ansi ? "\033[34m(" : "(", ansi ? ")\033[0m" : ")"};
+StyledText<T> IRPrinter::var(const T &t) {
+    // The variables of the loops over GPU threads stand out.
+    IRPrinterStyle style = IRPrinterStyle::Var;
+    if (t == ".thread_id_x") {
+        style = IRPrinterStyle::GPUThreadX;
+    } else if (t == ".thread_id_y") {
+        style = IRPrinterStyle::GPUThreadY;
+    } else if (t == ".thread_id_z") {
+        style = IRPrinterStyle::GPUThreadZ;
+    }
+    return {t, this, style};
 }
 
 template<typename T>
-Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
+StyledText<T> IRPrinter::paren(const T &t, bool bold) {
+    return {t, this, bold ? IRPrinterStyle::BoldParen : IRPrinterStyle::Paren};
+}
+
+void IRPrinter::begin_style(IRPrinterStyle style) const {
     if (!ansi) {
-        return {t, nullptr, nullptr};
+        return;
     }
-    if (depth == -1) {
-        depth = paren_depth;
-    }
-    const char *open = "";
-    if (bold) {
-        // clang-format off
-        switch (depth % 6) {
-        case 0: open = "\033[91;1m"; break;
-        case 1: open = "\033[92;1m"; break;
-        case 2: open = "\033[93;1m"; break;
-        case 3: open = "\033[94;1m"; break;
-        case 4: open = "\033[95;1m"; break;
-        case 5: open = "\033[96;1m"; break;
-        default: break;
-        }
-        // clang-format on
+    // A simple palette using standard VGA colors, indexed by IRPrinterStyle.
+    // clang-format off
+    static const char *const styles[] = {
+        "\033[4m",     // Highlight
+        "\033[2m",     // Dim
+        "\033[35;1m",  // Keyword
+        "\033[36m",    // ImmInt
+        "\033[96m",    // ImmFloat
+        "\033[32m",    // ImmString
+        "",            // Var
+        "\033[33m",    // Buffer
+        "\033[31m",    // Function
+        "\033[34m",    // Type
+        "\033[31m",    // GPUThreadX
+        "\033[32m",    // GPUThreadY
+        "\033[34m",    // GPUThreadZ
+    };
+    static const char *const parens[2][6] = {
+        {"\033[91m", "\033[92m", "\033[93m", "\033[94m", "\033[95m", "\033[96m"},
+        {"\033[91;1m", "\033[92;1m", "\033[93;1m", "\033[94;1m", "\033[95;1m", "\033[96;1m"}};
+    // clang-format on
+    if (style == IRPrinterStyle::Paren || style == IRPrinterStyle::BoldParen) {
+        stream << parens[style == IRPrinterStyle::BoldParen][paren_depth % 6];
     } else {
-        // clang-format off
-        switch (depth % 6) {
-        case 0: open = "\033[91m"; break;
-        case 1: open = "\033[92m"; break;
-        case 2: open = "\033[93m"; break;
-        case 3: open = "\033[94m"; break;
-        case 4: open = "\033[95m"; break;
-        case 5: open = "\033[96m"; break;
-        default: break;
-        }
-        // clang-format on
+        stream << styles[(int)style];
     }
-    return {t, open, ansi_reset};
+}
+
+void IRPrinter::end_style(IRPrinterStyle style) const {
+    if (!ansi) {
+        return;
+    }
+    // Immediates and names only have a color, and can be within text that is
+    // styled otherwise. The other styles end by resetting all attributes.
+    const bool color_only = style >= IRPrinterStyle::ImmInt && style < IRPrinterStyle::Paren;
+    stream << (color_only ? "\033[39m" : "\033[0m");
+}
+
+void IRPrinter::print_type_in_parens(const Type &t) {
+    begin_style(IRPrinterStyle::Type);
+    stream << "(" << t << ")";
+    end_style(IRPrinterStyle::Type);
+}
+
+void IRPrinter::print_node(const IRNode *node) {
+    begin_node(node);
+    node->accept(this);
+    end_node(node);
 }
 
 void IRPrinter::print(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, false);
-    ir.accept(this);
+    print_node(ir.get());
 }
 
 void IRPrinter::print_no_parens(const Expr &ir) {
     ScopedValue<bool> old(implicit_parens, true);
-    ir.accept(this);
+    print_node(ir.get());
 }
 
 void IRPrinter::print(const Stmt &ir) {
-    ir.accept(this);
+    if (!ir.defined()) {
+        stream << "(undefined)\n";
+        return;
+    }
+    print_node(ir.get());
 }
 
 void IRPrinter::print_summary(const Stmt &ir) {
     ScopedValue<bool> old(is_summary, true);
-    ir.accept(this);
+    print_node(ir.get());
+}
+
+void IRPrinter::print(const LoweredFunc &function) {
+    stream << function.linkage << " func " << function.name << " (";
+    for (size_t i = 0; i < function.args.size(); i++) {
+        stream << function.args[i].name;
+        if (i + 1 < function.args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    print(function.body);
+    stream << "}\n\n";
+}
+
+void IRPrinter::print(const Module &m) {
+    for (const auto &s : m.submodules()) {
+        print(s);
+        stream << "\n";
+    }
+
+    // The module retains implied features, but print it in minimal form.
+    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
+    for (const auto &b : m.buffers()) {
+        stream << b << "\n";
+    }
+    for (const auto &f : m.functions()) {
+        print(f);
+        stream << "\n";
+    }
 }
 
 void IRPrinter::print_list(const std::vector<Expr> &exprs) {
@@ -724,15 +741,21 @@ void IRPrinter::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         stream << imm_int(op->value);
     } else {
-        stream << ansi_imm_int << op->value << "_i" << op->type.bits() << ansi_reset;
+        begin_style(IRPrinterStyle::ImmInt);
+        stream << op->value << "_i" << op->type.bits();
+        end_style(IRPrinterStyle::ImmInt);
     }
 }
 
 void IRPrinter::visit(const UIntImm *op) {
     if (op->type.bits() == 1) {
-        stream << ansi_imm_int << (op->value ? "true" : "false") << ansi_reset;
+        begin_style(IRPrinterStyle::ImmInt);
+        stream << (op->value ? "true" : "false");
+        end_style(IRPrinterStyle::ImmInt);
     } else {
-        stream << ansi_imm_int << op->value << "_u" << op->type.bits() << ansi_reset;
+        begin_style(IRPrinterStyle::ImmInt);
+        stream << op->value << "_u" << op->type.bits();
+        end_style(IRPrinterStyle::ImmInt);
     }
 }
 
@@ -742,7 +765,7 @@ void IRPrinter::visit(const FloatImm *op) {
         stream << std::scientific;
     }
 
-    stream << ansi_imm_float;
+    begin_style(IRPrinterStyle::ImmFloat);
 
     switch (op->type.bits()) {
     case 64:
@@ -758,7 +781,7 @@ void IRPrinter::visit(const FloatImm *op) {
         internal_error << "Bad bit-width for float: " << op->type << "\n";
     }
 
-    stream << ansi_reset;
+    end_style(IRPrinterStyle::ImmFloat);
 
     if (use_scientific_format) {
         stream << std::fixed;
@@ -766,7 +789,7 @@ void IRPrinter::visit(const FloatImm *op) {
 }
 
 void IRPrinter::visit(const StringImm *op) {
-    stream << ansi_imm_str;
+    begin_style(IRPrinterStyle::ImmString);
     stream << "\"";
     for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
@@ -796,7 +819,7 @@ void IRPrinter::visit(const StringImm *op) {
         }
     }
     stream << "\"";
-    stream << ansi_reset;
+    end_style(IRPrinterStyle::ImmString);
 }
 
 void IRPrinter::visit(const Cast *op) {
@@ -820,7 +843,7 @@ void IRPrinter::visit(const Variable *op) {
         if (op->type.is_handle()) {
             stream << type(op->type);
         } else {
-            stream << typep(op->type);
+            print_type_in_parens(op->type);
         }
     }
     stream << var(op->name);
@@ -855,44 +878,32 @@ void IRPrinter::closef() {
     paren_depth--;
 }
 
-void IRPrinter::visit(const Add *op) {
+void IRPrinter::print_binary(const Expr &a, const char *op, const Expr &b) {
     open();
-    print(op->a);
-    stream << paren(" + ");
-    print(op->b);
+    print(a);
+    stream << paren(op);
+    print(b);
     close();
+}
+
+void IRPrinter::visit(const Add *op) {
+    print_binary(op->a, " + ", op->b);
 }
 
 void IRPrinter::visit(const Sub *op) {
-    open();
-    print(op->a);
-    stream << paren(" - ");
-    print(op->b);
-    close();
+    print_binary(op->a, " - ", op->b);
 }
 
 void IRPrinter::visit(const Mul *op) {
-    open();
-    print(op->a);
-    stream << paren("*");
-    print(op->b);
-    close();
+    print_binary(op->a, "*", op->b);
 }
 
 void IRPrinter::visit(const Div *op) {
-    open();
-    print(op->a);
-    stream << paren("/");
-    print(op->b);
-    close();
+    print_binary(op->a, "/", op->b);
 }
 
 void IRPrinter::visit(const Mod *op) {
-    open();
-    print(op->a);
-    stream << paren(" % ");
-    print(op->b);
-    close();
+    print_binary(op->a, " % ", op->b);
 }
 
 void IRPrinter::visit(const Min *op) {
@@ -912,67 +923,35 @@ void IRPrinter::visit(const Max *op) {
 }
 
 void IRPrinter::visit(const EQ *op) {
-    open();
-    print(op->a);
-    stream << paren(" == ");
-    print(op->b);
-    close();
+    print_binary(op->a, " == ", op->b);
 }
 
 void IRPrinter::visit(const NE *op) {
-    open();
-    print(op->a);
-    stream << paren(" != ");
-    print(op->b);
-    close();
+    print_binary(op->a, " != ", op->b);
 }
 
 void IRPrinter::visit(const LT *op) {
-    open();
-    print(op->a);
-    stream << paren(" < ");
-    print(op->b);
-    close();
+    print_binary(op->a, " < ", op->b);
 }
 
 void IRPrinter::visit(const LE *op) {
-    open();
-    print(op->a);
-    stream << paren(" <= ");
-    print(op->b);
-    close();
+    print_binary(op->a, " <= ", op->b);
 }
 
 void IRPrinter::visit(const GT *op) {
-    open();
-    print(op->a);
-    stream << paren(" > ");
-    print(op->b);
-    close();
+    print_binary(op->a, " > ", op->b);
 }
 
 void IRPrinter::visit(const GE *op) {
-    open();
-    print(op->a);
-    stream << paren(" >= ");
-    print(op->b);
-    close();
+    print_binary(op->a, " >= ", op->b);
 }
 
 void IRPrinter::visit(const And *op) {
-    open();
-    print(op->a);
-    stream << paren(" && ");
-    print(op->b);
-    close();
+    print_binary(op->a, " && ", op->b);
 }
 
 void IRPrinter::visit(const Or *op) {
-    open();
-    print(op->a);
-    stream << paren(" || ");
-    print(op->b);
-    close();
+    print_binary(op->a, " || ", op->b);
 }
 
 void IRPrinter::visit(const Not *op) {
@@ -1000,18 +979,18 @@ void IRPrinter::visit(const Load *op) {
         stream << kw("streaming ");
     }
     if (!known_type.contains(op->name)) {
-        stream << typep(op->type);
+        print_type_in_parens(op->type);
     }
     paren_depth++;
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        stream << ansi_dim;
+        begin_style(IRPrinterStyle::Dim);
         stream << " aligned("
                << imm_int(op->alignment.modulus)
                << ", "
                << imm_int(op->alignment.remainder) << ")";
-        stream << ansi_reset;
+        end_style(IRPrinterStyle::Dim);
     }
     stream << paren("]");
     paren_depth--;
@@ -1032,10 +1011,10 @@ void IRPrinter::visit(const Ramp *op) {
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << ansi_kw;
+    begin_style(IRPrinterStyle::Keyword);
     stream << "x" << op->lanes;
     stream << "(";
-    stream << ansi_reset;
+    end_style(IRPrinterStyle::Keyword);
     paren_depth++;
     print_no_parens(op->value);
     paren_depth--;
@@ -1045,25 +1024,13 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
 
     if (op->is_intrinsic(Call::bitwise_or)) {
-        open();
-        print(op->args[0]);
-        stream << paren(" | ");
-        print(op->args[1]);
-        close();
+        print_binary(op->args[0], " | ", op->args[1]);
     } else if (op->is_intrinsic(Call::bitwise_and)) {
-        open();
-        print(op->args[0]);
-        stream << paren(" & ");
-        print(op->args[1]);
-        close();
+        print_binary(op->args[0], " & ", op->args[1]);
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
-        open();
-        print(op->args[0]);
-        stream << paren(" ^ ");
-        print(op->args[1]);
-        close();
+        print_binary(op->args[0], " ^ ", op->args[1]);
     } else if (op->is_intrinsic(Call::bitwise_not)) {
-        stream << ansi_kw << "~(" << ansi_reset;
+        stream << kw("~(");
         paren_depth++;
         print_no_parens(op->args[0]);
         paren_depth--;
@@ -1076,7 +1043,7 @@ void IRPrinter::visit(const Call *op) {
             if (op->type.is_handle()) {
                 stream << type(op->type);  // Already has parens
             } else {
-                stream << typep(op->type);
+                print_type_in_parens(op->type);
             }
         }
         openf(op->name.c_str());
@@ -1166,6 +1133,7 @@ void IRPrinter::visit(const Acquire *op) {
 }
 
 void IRPrinter::print_lets(const Let *let) {
+    begin_node(let);
     stream << get_indent();
     ScopedBinding<> bind(known_type, let->name);
     stream << kw("let ") << var(let->name) << kw(" = ");
@@ -1180,6 +1148,7 @@ void IRPrinter::print_lets(const Let *let) {
         print_no_parens(let->body);
         stream << "\n";
     }
+    end_node(let);
 }
 
 void IRPrinter::print_braced_stmt(const Stmt &stmt, int extra_indent) {
@@ -1215,12 +1184,12 @@ void IRPrinter::visit(const Store *op) {
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        stream << ansi_dim;
+        begin_style(IRPrinterStyle::Dim);
         stream << " aligned("
                << imm_int(op->alignment.modulus)
                << ", "
                << imm_int(op->alignment.remainder) << ")";
-        stream << ansi_reset;
+        end_style(IRPrinterStyle::Dim);
     }
     stream << paren("] = ");
     if (const Let *let = op->value.as<Let>()) {
@@ -1417,34 +1386,34 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
-    while (true) {
-        stream << paren("if (");
-        print_no_parens(op->condition);
-        stream << paren(") {\n");
+    print_if_chain(op);
+}
+
+void IRPrinter::print_if_chain(const IfThenElse *op) {
+    stream << paren("if (");
+    print_no_parens(op->condition);
+    stream << paren(") {\n");
+    paren_depth++;
+    indent++;
+    print(op->then_case);
+    indent--;
+    paren_depth--;
+
+    if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
+        stream << get_indent() << paren("} else ");
+        begin_node(nested_if);
+        print_if_chain(nested_if);
+        end_node(nested_if);
+        return;
+    }
+    if (op->else_case.defined()) {
+        stream << get_indent() << paren("}") << (" else {\n");
         paren_depth++;
         indent++;
-        print(op->then_case);
+        print(op->else_case);
         indent--;
         paren_depth--;
-
-        if (!op->else_case.defined()) {
-            break;
-        }
-
-        if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
-            stream << get_indent() << paren("} else ");
-            op = nested_if;
-        } else {
-            stream << get_indent() << paren("}") << (" else {\n");
-            paren_depth++;
-            indent++;
-            print(op->else_case);
-            indent--;
-            paren_depth--;
-            break;
-        }
     }
-
     stream << get_indent() << paren("}\n");
 }
 
@@ -1498,7 +1467,7 @@ void IRPrinter::visit(const Shuffle *op) {
 }
 
 void IRPrinter::visit(const VectorReduce *op) {
-    stream << typep(op->type);
+    print_type_in_parens(op->type);
     paren_depth++;
     stream << paren("vector_reduce_", false) << paren(op->op, false) << paren("(");
     print_no_parens(op->value);
