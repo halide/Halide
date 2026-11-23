@@ -102,6 +102,11 @@ protected:
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
 
+    /** What the Variables with the names that the enclosing Lets, LetStmts
+     * and For loops define are printed as: the id of the value of a let, or
+     * else the name itself. */
+    Scope<std::string> bound_ids;
+
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
     std::string print_expr(const Expr &);
