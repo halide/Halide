@@ -525,6 +525,7 @@ SOURCE_FILES = \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
+  Inductive.cpp \
   InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
   Inline.cpp \
@@ -736,6 +737,7 @@ HEADER_FILES = \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
+  Inductive.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
   Inline.h \

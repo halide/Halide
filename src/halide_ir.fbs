@@ -594,6 +594,7 @@ enum DimType: ubyte {
     PureVar,
     PureRVar,
     ImpureRVar,
+    InductiveVar,
 }
 
 table Dim {

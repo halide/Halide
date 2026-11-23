@@ -835,11 +835,13 @@ Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx,
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
-    internal_assert(func.has_pure_definition() || func.has_extern_definition())
+    const bool defined = func.has_pure_definition() || func.has_extern_definition();
+    internal_assert(defined || !func.required_types().empty())
         << "Call to undefined halide function\n";
     FunctionPtr fp = func.get_contents();
     fp.follow_global_wrappers = follow_global_wrappers;
-    return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
+    const Type &t = defined ? func.output_types()[(size_t)idx] : func.required_types()[(size_t)idx];
+    return make(t, func.name(), args, Halide,
                 fp, idx, Buffer<>(), Parameter());
 }
 
