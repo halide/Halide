@@ -2086,10 +2086,13 @@ void CodeGen_ARM::visit(const Shuffle *op) {
 
 #if LLVM_VERSION >= 240
         // LLVM 24 folds slices into deinterleave shuffles, obscuring the
-        // interleaved-load pattern. Load one native-width result at a time.
+        // interleaved-load pattern, and removed InterleavedAccessPass lowering
+        // of multi-vector SVE deinterleave intrinsics (whose post-legalize DAG
+        // combine fails to match consecutive loads under vscale_range). Load
+        // one native-width result at a time.
         const Ramp *ramp = load->index.as<Ramp>();
         internal_assert(ramp && is_const_one(ramp->stride));
-        const int native_lanes = target_vscale() == 0 ? native_vector_bits() / op->type.bits() : op->type.lanes();
+        const int native_lanes = native_vector_bits() / op->type.bits();
         vector<Value *> slices;
         for (int i = 0; i < op->type.lanes(); i += native_lanes) {
             const int slice_lanes = std::min(native_lanes, op->type.lanes() - i);
