@@ -115,6 +115,14 @@ protected:
 
         std::string shared_name;
 
+        struct ActiveCAS {
+            std::string buffer;
+            Expr index;
+            std::string id_index;
+            std::string old_val;
+        };
+        ActiveCAS active_cas;
+
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
@@ -515,6 +523,49 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &na
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
 
+    // Inside a compare-and-swap loop, any load from the buffer being updated
+    // must use the compared value when reading the updated element, and must
+    // not emit a non-atomic load of the buffer.
+    if (!active_cas.old_val.empty() && op->name == active_cas.buffer) {
+        user_assert(op->type.is_scalar())
+            << "OpenCL atomic CAS loop does not support vector loads from the updated buffer.\n";
+        Expr same_index = (op->index.type() == active_cas.index.type()) ?
+                              simplify(op->index == active_cas.index) :
+                              Expr();
+        if (same_index.defined() && is_const_one(same_index)) {
+            id = active_cas.old_val;
+            return;
+        }
+        string id_index = print_expr(op->index);
+        if (id_index == active_cas.id_index) {
+            id = active_cas.old_val;
+            return;
+        }
+        Type t = op->type;
+        user_assert(t.bits() >= 32) << "OpenCL only supports 32 and 64 bit atomics.\n";
+        if (t.bits() == 64) {
+            user_assert(target.has_feature(Target::CLAtomics64))
+                << "Enable feature CLAtomics64 for 64-bit atomics in OpenCL.\n";
+        }
+        const char *cmpxchg_fn = (t.bits() == 32) ? "atomic_cmpxchg" : "atom_cmpxchg";
+        string int_type = print_type((t.is_float() || t.is_uint()) ? UInt(t.bits()) : Int(t.bits()));
+        string array_access = print_array_access(op->name, t, id_index);
+        ostringstream atomic_load;
+        atomic_load << cmpxchg_fn << "((volatile " << get_memory_space(op->name) << " "
+                    << int_type << " *)&(" << array_access << "), (" << int_type << ")0, ("
+                    << int_type << ")0)";
+        string loaded = t.is_float() ? ("as_" + print_type(t) + "(" + atomic_load.str() + ")") : atomic_load.str();
+        id = unique_name('_');
+        stream << get_indent() << print_type(t) << " " << id << " = ";
+        if (same_index.defined() && is_const_zero(same_index)) {
+            stream << loaded << ";\n";
+        } else {
+            stream << "(" << id_index << " == " << active_cas.id_index << ") ? "
+                   << active_cas.old_val << " : " << loaded << ";\n";
+        }
+        return;
+    }
+
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
@@ -599,86 +650,72 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         // For atomicAdd, we check if op->value - store[index] is independent of store.
         // The atomicAdd operations in OpenCL only supports integers so we also check that.
         bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
-        const auto *alloc = allocations.find(op->name);
-        bool type_cast_needed = !(alloc && alloc->type == t);
-        auto print_store_var = [&]() {
-            if (type_cast_needed) {
-                stream << "(("
-                       << get_memory_space(op->name) << " "
-                       << print_type(t)
-                       << " *)"
-                       << print_name(op->name)
-                       << ")";
-            } else {
-                stream << print_name(op->name);
-            }
-        };
         if (is_atomic_add) {
             string id_index = print_expr(op->index);
             string id_delta = print_expr(delta);
+            string array_access = print_array_access(op->name, t, id_index);
             stream << get_indent();
             // atomic_add(&x[i], delta);
             if (t.bits() == 32) {
-                stream << "atomic_add(&";
+                stream << "atomic_add(&(";
             } else {
-                stream << "atom_add(&";
+                stream << "atom_add(&(";
             }
-
-            print_store_var();
-            stream << "[" << id_index << "]";
-            stream << "," << id_delta << ");\n";
+            stream << array_access << "), " << id_delta << ");\n";
         } else {
-            // CmpXchg loop
-            // {
-            //   union {unsigned int i; float f;} old_val;
-            //   union {unsigned int i; float f;} new_val;
-            //   do {
-            //     old_val.f = x[id_index];
-            //     new_val.f = ...
-            //   } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
-            // }
+            // Compare-and-swap loop: seed old_val atomically and feed back the
+            // value returned by cmpxchg on failure. Any self-load of op->name
+            // inside op->value reads old_val via active_cas rather than
+            // reloading non-atomically from memory.
+            string id_index = print_expr(op->index);
+            const char *cmpxchg_fn = (t.bits() == 32) ? "atomic_cmpxchg" : "atom_cmpxchg";
+            string int_type = print_type((t.is_float() || t.is_uint()) ? UInt(t.bits()) : Int(t.bits()));
+            string array_access = print_array_access(op->name, t, id_index);
+
             stream << get_indent() << "{\n";
             indent += 2;
-            string id_index = print_expr(op->index);
-            std::string int_type = t.bits() == 32 ? "int" : "long";
-            if (t.is_float() || t.is_uint()) {
-                int_type = "unsigned " + int_type;
-            }
+            stream << get_indent() << "volatile " << get_memory_space(op->name) << " "
+                   << int_type << " *cas_ptr = (volatile " << get_memory_space(op->name) << " "
+                   << int_type << " *)&(" << array_access << ");\n";
             if (t.is_float()) {
-                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} old_val;\n";
-                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} new_val;\n";
+                stream << get_indent() << int_type << " old_bits = " << cmpxchg_fn
+                       << "(cas_ptr, (" << int_type << ")0, (" << int_type << ")0);\n";
+                stream << get_indent() << "for (;;) {\n";
+                indent += 2;
+                stream << get_indent() << print_type(t) << " old_val = as_" << print_type(t) << "(old_bits);\n";
+                cache.clear();
+                string id_value;
+                {
+                    ScopedValue<ActiveCAS> old_cas(active_cas, {op->name, op->index, id_index, "old_val"});
+                    id_value = print_expr(op->value);
+                }
+                stream << get_indent() << int_type << " new_bits = as_" << int_type << "(" << id_value << ");\n";
+                stream << get_indent() << int_type << " prev_bits = " << cmpxchg_fn
+                       << "(cas_ptr, old_bits, new_bits);\n";
+                stream << get_indent() << "if (prev_bits == old_bits) break;\n";
+                stream << get_indent() << "old_bits = prev_bits;\n";
+                indent -= 2;
+                stream << get_indent() << "}\n";
             } else {
-                stream << get_indent() << int_type << " old_val;\n";
-                stream << get_indent() << int_type << " new_val;\n";
+                stream << get_indent() << int_type << " old_val = " << cmpxchg_fn
+                       << "(cas_ptr, (" << int_type << ")0, (" << int_type << ")0);\n";
+                stream << get_indent() << "for (;;) {\n";
+                indent += 2;
+                cache.clear();
+                string id_value;
+                {
+                    ScopedValue<ActiveCAS> old_cas(active_cas, {op->name, op->index, id_index, "old_val"});
+                    id_value = print_expr(op->value);
+                }
+                stream << get_indent() << int_type << " prev_val = " << cmpxchg_fn
+                       << "(cas_ptr, old_val, " << id_value << ");\n";
+                stream << get_indent() << "if (prev_val == old_val) break;\n";
+                stream << get_indent() << "old_val = prev_val;\n";
+                indent -= 2;
+                stream << get_indent() << "}\n";
             }
-            stream << get_indent() << "do {\n";
-            indent += 2;
-            stream << get_indent();
-            if (t.is_float()) {
-                stream << "old_val.f = ";
-            } else {
-                stream << "old_val = ";
-            }
-            print_store_var();
-            stream << "[" << id_index << "];\n";
-            string id_value = print_expr(op->value);
-            stream << get_indent();
-            if (t.is_float()) {
-                stream << "new_val.f = ";
-            } else {
-                stream << "new_val = ";
-            }
-            stream << id_value << ";\n";
             indent -= 2;
-            std::string old_val = t.is_float() ? "old_val.i" : "old_val";
-            std::string new_val = t.is_float() ? "new_val.i" : "new_val";
-            stream << get_indent()
-                   << "} while(atomic_cmpxchg((volatile "
-                   << get_memory_space(op->name) << " " << int_type << "*)&"
-                   << print_name(op->name) << "[" << id_index << "], "
-                   << old_val << ", " << new_val << ") != " << old_val << ");\n"
-                   << get_indent() << "}\n";
-            indent -= 2;
+            stream << get_indent() << "}\n";
         }
         cache.clear();
         return;

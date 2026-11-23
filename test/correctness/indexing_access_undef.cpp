@@ -60,6 +60,31 @@ int main(int argc, char **argv) {
         h.realize({1024});
     }
 
+    {
+        // Indirect scatter: Provide::args must also be clamped when indexing
+        // via a Func whose allocation bounds may be wider than its compute
+        // bounds (so over-computed lanes reading uninitialized memory from h
+        // cannot write out of bounds).
+        Func f{"f"}, h{"h"}, out{"out"};
+        Var y{"y"};
+
+        const int min = -10000000;
+        const int max = min + 20;
+
+        h(x) = clamp(x, min, max);
+
+        f(x, y) = 0;
+        f(h(y), y) = 1;
+        f.update().vectorize(y, 64, TailStrategy::RoundUp);
+
+        out(x, y) = f(x + min, y);
+
+        h.compute_root();
+        f.compute_root();
+
+        out.realize({1, 1});
+    }
+
     // No crash means success
 
     printf("Success!\n");
