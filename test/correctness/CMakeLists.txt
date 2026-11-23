@@ -803,6 +803,7 @@ set_target_properties(
     correctness_skip_stages
     correctness_skip_stages_cse_bug
     correctness_skip_stages_external_array_functions
+    correctness_slide_directive
     correctness_sliding_backwards
     correctness_sliding_over_guard_with_if
     correctness_sliding_reduction
