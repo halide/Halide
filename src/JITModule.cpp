@@ -364,6 +364,9 @@ void compile_module_impl(
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
+#if LLVM_VERSION >= 240
+    m->getContext().getLibraryOptions().assign(get_llvm_library_options());
+#endif
 
     if (!WasmModule::can_jit_target(target)) {
         auto pac_abi = [](const Target &x) {

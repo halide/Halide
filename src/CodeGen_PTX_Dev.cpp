@@ -185,6 +185,9 @@ protected:
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
     : CodeGen_LLVM(host) {
     context = new llvm::LLVMContext();
+#if LLVM_VERSION >= 240
+    context->getLibraryOptions().assign(get_llvm_library_options());
+#endif
 }
 
 CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {

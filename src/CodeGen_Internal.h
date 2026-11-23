@@ -29,6 +29,11 @@ class Type;
 class Value;
 template<typename, typename>
 class IRBuilder;
+#if LLVM_VERSION >= 240
+namespace cl {
+class LibraryOptionsContext;
+}  // namespace cl
+#endif
 }  // namespace llvm
 
 namespace Halide {
@@ -97,6 +102,12 @@ Expr lower_round_half_away_from_zero(const Expr &);
 
 /** Given an llvm::Module, set llvm:TargetOptions information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);
+
+#if LLVM_VERSION >= 240
+/** Return the process-wide LLVM LibraryOptionsContext populated from
+ * HL_LLVM_ARGS during CodeGen_LLVM::initialize_llvm(). */
+llvm::cl::LibraryOptionsContext &get_llvm_library_options();
+#endif
 
 /** Given two llvm::Modules, clone target options from one to the other */
 void clone_target_options(const llvm::Module &from, llvm::Module &to);

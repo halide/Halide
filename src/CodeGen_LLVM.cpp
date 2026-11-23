@@ -207,6 +207,9 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
+#if LLVM_VERSION >= 240
+    context.getLibraryOptions().assign(get_llvm_library_options());
+#endif
     set_effective_vscale(target_vscale());
 }
 
@@ -284,7 +287,11 @@ void CodeGen_LLVM::initialize_llvm() {
                     c_arg_vec.push_back(s.c_str());
                 }
             }
+#if LLVM_VERSION >= 240
+            cl::parseCommandLineOptions(get_llvm_library_options(), c_arg_vec, "Halide compiler\n");
+#else
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
+#endif
         }
     });
 }
