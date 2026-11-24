@@ -233,8 +233,6 @@ ALWAYS_INLINE void atomic_load_relaxed(T *addr, T *val) {
 template<typename T>
 ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
     __atomic_load(addr, val, __ATOMIC_ACQUIRE);
-    __sync_synchronize();
-    *val = *addr;
 }
 
 template<typename T>
