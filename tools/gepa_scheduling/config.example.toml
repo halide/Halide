@@ -1,0 +1,12 @@
+repository = "../.."
+halide_dir = "/path/to/installed/Halide/lib/cmake/Halide"
+task_manifest = "tasks/tasks.json"
+run_dir = "runs"
+copilot_model = "claude-sonnet-5.5"
+reflection_model = "claude-sonnet-5.5"
+copilot_executable = "copilot"
+max_metric_calls = 40
+max_workers = 1
+rollout_timeout_seconds = 900
+reflection_timeout_seconds = 300
+max_output_bytes = 1048576
