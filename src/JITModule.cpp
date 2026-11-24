@@ -4,16 +4,6 @@
 #include <set>
 #include <string>
 
-#ifdef _WIN32
-#ifdef _MSC_VER
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#include <sys/mman.h>
-#endif
-
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
@@ -24,6 +14,18 @@
 #include "Pipeline.h"
 #include "Util.h"
 #include "WasmExecutor.h"
+
+// Must be included after LLVM_Headers.h because <windows.h> defines macros
+// (e.g. IMAGE_FILE_MACHINE_UNKNOWN) that conflict with llvm/BinaryFormat/COFF.h.
+#ifdef _WIN32
+#ifdef _MSC_VER
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#include <sys/mman.h>
+#endif
 
 namespace Halide {
 namespace Internal {
@@ -362,6 +364,9 @@ void compile_module_impl(
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
+#if LLVM_VERSION >= 240
+    m->getContext().getLibraryOptions().assign(get_llvm_library_options());
+#endif
 
     if (!WasmModule::can_jit_target(target)) {
         auto pac_abi = [](const Target &x) {

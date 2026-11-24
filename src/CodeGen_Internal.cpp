@@ -622,46 +622,36 @@ const llvm::cl::LibraryOptionsContext *get_arm64e_x1_library_options() {
     static std::once_flag init_once;
     std::call_once(init_once, []() {
         CodeGen_LLVM::initialize_llvm();
-        std::vector<std::string> env_tokens;
-        std::string env_args = get_env_variable("HL_LLVM_ARGS");
-        if (!env_args.empty()) {
-            env_tokens = split_string(env_args, " ");
-        }
-        std::vector<const char *> c_args = {"llc"};
-        bool next_is_featcpa_value = false;
-        for (const std::string &tok : env_tokens) {
-            if (tok.empty()) {
-                continue;
-            }
-            if (next_is_featcpa_value) {
-                next_is_featcpa_value = false;
-                if (tok[0] != '-') {
-                    c_args.push_back(tok.c_str());
-                    continue;
-                }
-            }
-            llvm::StringRef stripped(tok);
-            stripped.consume_front("-");
-            stripped.consume_front("-");
-            if (stripped.starts_with("aarch64-use-featcpa-codegen")) {
-                c_args.push_back(tok.c_str());
-                next_is_featcpa_value = !stripped.contains('=');
-            }
-        }
-        if (c_args.size() == 1) {
-            c_args.push_back("-aarch64-use-featcpa-codegen=true");
-        }
+        const llvm::cl::LibraryOptionsContext &base = get_llvm_library_options();
         // In LLVM 24+, target backend flags migrated from cl::opt to per-context
         // TableGen LibraryOptions read from TargetOptions::MCOptions::LibraryOptions.
-        // Pass &llvm::nulls() so this stays non-fatal if a future LLVM release
-        // enables CPA codegen unconditionally and removes the flag.
-        llvm::cl::parseCommandLineOptions(ctx, c_args, "Halide compiler\n", &llvm::nulls());
+        // Enable aarch64-use-featcpa-codegen first, then replay any LibraryOptions
+        // parsed from HL_LLVM_ARGS so explicit user overrides still win and other
+        // HL_LLVM_ARGS flags remain active. Pass &llvm::nulls() so this stays
+        // non-fatal if a future LLVM release enables CPA codegen unconditionally
+        // and removes the flag.
+        std::vector<const char *> default_args = {"llc", "-aarch64-use-featcpa-codegen=true"};
+        llvm::cl::parseCommandLineOptions(ctx, default_args, "Halide compiler\n", &llvm::nulls());
+        if (!base.args().empty()) {
+            std::vector<const char *> replay_args;
+            replay_args.reserve(base.args().size() + 1);
+            replay_args.push_back("llc");
+            replay_args.insert(replay_args.end(), base.args().begin(), base.args().end());
+            llvm::cl::parseCommandLineOptions(ctx, replay_args, "Halide compiler\n", &llvm::nulls());
+        }
     });
     return &ctx;
 }
 #endif
 
 }  // namespace
+
+#if LLVM_VERSION >= 240
+llvm::cl::LibraryOptionsContext &get_llvm_library_options() {
+    static llvm::cl::LibraryOptionsContext ctx;
+    return ctx;
+}
+#endif
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
     std::string mabi = get_modflag_string(module, "halide_mabi");
@@ -685,10 +675,14 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = true;
     options.MCOptions.X86RelaxRelocations = false;
     options.MCOptions.ABIName = mabi;
-#if defined(WITH_AARCH64) && LLVM_VERSION >= 240
+#if LLVM_VERSION >= 240
+    CodeGen_LLVM::initialize_llvm();
+    options.MCOptions.LibraryOptions = &get_llvm_library_options();
+#ifdef WITH_AARCH64
     if (get_modflag_bool(module, "halide_arm64e_x1")) {
         options.MCOptions.LibraryOptions = get_arm64e_x1_library_options();
     }
+#endif
 #endif
 }
 
