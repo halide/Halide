@@ -66,13 +66,15 @@ int main() {
 
     double t1 = test(target, {3, 2, 0, 1}, {1024, 1024, 3, 2});
     double t2 = test(target, {3, 2, 0, 1}, {1024, 1024, 6, 1});
-    double t3 = test(target, {0, 1, 2, 3}, {1024, 1024, 3, 2});
-    double t4 = test(target, {0, 1, 2, 3}, {1024, 1024, 6, 1});
+    double t3 = test(target, {3, 2, 0, 1}, {1, 1024, 1024, 6});
+    double t4 = test(target, {0, 1, 2, 3}, {1024, 1024, 3, 2});
+    double t5 = test(target, {0, 1, 2, 3}, {1024, 1024, 6, 1});
+    double t6 = test(target, {0, 1, 2, 3}, {1, 1024, 1024, 6});
 
-    double slowest = std::max({t1, t2, t3, t4});
-    double fastest = std::min({t1, t2, t3, t4});
+    double slowest = std::max({t1, t2, t3, t4, t5, t6});
+    double fastest = std::min({t1, t2, t3, t4, t5, t6});
 
-    printf("Timings: %f %f %f %f\n", t1, t2, t3, t4);
+    printf("Timings: %f %f %f %f %f %f\n", t1, t2, t3, t4, t5, t6);
 
     // If one of these gets broken into a large number of separate copies, it
     // will be a lot more than 10x slower.

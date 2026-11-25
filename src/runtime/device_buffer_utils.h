@@ -130,9 +130,11 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     // the extents and strides from the halide_buffer_ts. Dimensions
     // are added to the copy by inserting it such that the stride is
     // in ascending order in the dst.
+    int inserted = 0;
     for (int i = 0; i < dst->dimensions; i++) {
+        int copy_extent = min(src->dim[i].extent, dst->dim[i].extent);
         // Skip extent-one dimensions
-        if (dst->dim[i].extent == 1) {
+        if (copy_extent == 1) {
             continue;
         }
         // TODO: deal with negative strides.
@@ -140,21 +142,22 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         uint64_t src_stride_bytes = (uint64_t)src->dim[i].stride * src->type.bytes();
         // Insert the dimension sorted into the buffer copy.
         int insert;
-        for (insert = 0; insert < i; insert++) {
+        for (insert = 0; insert < inserted; insert++) {
             // If the stride is 0, we put it at the end because it can't be
             // folded.
             if (dst_stride_bytes < c.dst_stride_bytes[insert] && dst_stride_bytes != 0) {
                 break;
             }
         }
-        for (int j = i; j > insert; j--) {
+        for (int j = inserted; j > insert; j--) {
             c.extent[j] = c.extent[j - 1];
             c.dst_stride_bytes[j] = c.dst_stride_bytes[j - 1];
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
-        c.extent[insert] = min(src->dim[i].extent, dst->dim[i].extent);
+        c.extent[insert] = copy_extent;
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
+        inserted++;
     };
 
     // Attempt to fold contiguous dimensions into the chunk
