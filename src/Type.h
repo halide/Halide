@@ -453,12 +453,11 @@ public:
     }
 
     /** A cheap hash of the type, for use in the hashes of Expr nodes that
-     * embed a Type (see Expr.h). Just the bits of type_code, type_bits, and
-     * type_lanes, ignoring metadata_index_. */
+     * embed a Type (see Expr.h). Packs type_code, type_bits, and the low 16
+     * bits of type_lanes, ignoring metadata_index_. */
     HALIDE_ALWAYS_INLINE
     uint32_t hash() const {
-        uint32_t code_and_bits = (uint32_t)type_code | ((uint32_t)type_bits << 8);
-        return code_and_bits ^ (type_lanes << 16) ^ (type_lanes >> 16);
+        return (uint32_t)type_code | ((uint32_t)type_bits << 8) | (type_lanes << 16);
     }
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
