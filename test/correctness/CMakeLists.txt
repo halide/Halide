@@ -250,6 +250,7 @@ tests(
     gpu_condition_lifting.cpp
     gpu_cpu_simultaneous_read.cpp
     gpu_data_flows.cpp
+    gpu_device_alignment.cpp
     gpu_different_blocks_threads_dimensions.cpp
     gpu_dynamic_and_register_realization.cpp
     gpu_dynamic_shared.cpp

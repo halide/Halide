@@ -2823,12 +2823,11 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
             alignment *= 2;
         }
 
-        // If it is an external buffer, then we cannot assume that the host pointer
+        // If it is an external buffer, then we cannot assume that its pointer
         // is aligned to at least the native vector width. However, we may be able to do
         // better than just assuming that it is unaligned.
         if (op->param.defined()) {
-            int host_alignment = op->param.host_alignment();
-            alignment = gcd(alignment, host_alignment);
+            alignment = gcd(alignment, external_buffer_alignment(op->param));
         }
 
         // For dense vector stores wider than the native vector
@@ -2931,6 +2930,10 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
     }
 }
 
+int CodeGen_LLVM::external_buffer_alignment(const Parameter &p) const {
+    return p.host_alignment();
+}
+
 llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                                const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
                                                bool is_streaming, llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
@@ -2955,12 +2958,11 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         align_bytes *= 2;
     }
 
-    // If it is an external buffer, then we cannot assume that the host pointer
+    // If it is an external buffer, then we cannot assume that its pointer
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
     if (param.defined()) {
-        int host_alignment = param.host_alignment();
-        align_bytes = gcd(align_bytes, host_alignment);
+        align_bytes = gcd(align_bytes, external_buffer_alignment(param));
     } else if (get_target().has_feature(Target::JIT) && image.defined()) {
         // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
         align_bytes = gcd(align_bytes, (int)(((uintptr_t)image.data()) & std::numeric_limits<int>::max()));
@@ -4511,12 +4513,11 @@ void CodeGen_LLVM::visit(const Store *op) {
                 alignment *= 2;
             }
 
-            // If it is an external buffer, then we cannot assume that the host pointer
+            // If it is an external buffer, then we cannot assume that its pointer
             // is aligned to at least the native vector width. However, we may be able to do
             // better than just assuming that it is unaligned.
             if (op->param.defined()) {
-                int host_alignment = op->param.host_alignment();
-                alignment = gcd(alignment, host_alignment);
+                alignment = gcd(alignment, external_buffer_alignment(op->param));
             }
 
             // For dense vector stores wider than the native vector

@@ -40,6 +40,15 @@ OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
     return *this;
 }
 
+int OutputImageParam::device_alignment() const {
+    return param.device_alignment();
+}
+
+OutputImageParam &OutputImageParam::set_device_alignment(int bytes) {
+    param.set_device_alignment(bytes);
+    return *this;
+}
+
 int OutputImageParam::dimensions() const {
     return param.dimensions();
 }

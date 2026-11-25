@@ -17,6 +17,7 @@ struct ParameterContents {
     Buffer<> buffer;
     std::optional<halide_scalar_value_t> scalar_data;
     int host_alignment;
+    int device_alignment;
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
@@ -26,7 +27,7 @@ struct ParameterContents {
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()),
-          host_alignment(t.bytes()), buffer_constraints(std::max(0, dimensions)), is_buffer(b) {
+          host_alignment(t.bytes()), device_alignment(t.bytes()), buffer_constraints(std::max(0, dimensions)), is_buffer(b) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -85,8 +86,8 @@ Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &na
 }
 
 Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
-                     const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
-                     MemoryType memory_type)
+                     const Buffer<void> &buffer, int host_alignment, int device_alignment,
+                     const std::vector<BufferConstraint> &buffer_constraints, MemoryType memory_type)
     : contents(new Internal::ParameterContents(t, /*is_buffer*/ true, dimensions, name)) {
     // Every other constructor keeps buffer_constraints sized to the
     // dimensionality, and check_dim_ok() relies on that when indexing it. This
@@ -98,6 +99,7 @@ Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
         << " dimensions but " << buffer_constraints.size() << " dimension constraints\n";
     contents->buffer = buffer;
     contents->host_alignment = host_alignment;
+    contents->device_alignment = device_alignment;
     contents->buffer_constraints = buffer_constraints;
     contents->memory_type = memory_type;
 }
@@ -342,6 +344,11 @@ void Parameter::set_host_alignment(int bytes) {
     contents->host_alignment = bytes;
 }
 
+void Parameter::set_device_alignment(int bytes) {
+    check_is_buffer();
+    contents->device_alignment = bytes;
+}
+
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
@@ -375,6 +382,11 @@ Expr Parameter::extent_constraint_estimate(int dim) const {
 int Parameter::host_alignment() const {
     check_is_buffer();
     return contents->host_alignment;
+}
+
+int Parameter::device_alignment() const {
+    check_is_buffer();
+    return contents->device_alignment;
 }
 
 const std::vector<BufferConstraint> &Parameter::buffer_constraints() const {

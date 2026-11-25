@@ -1574,6 +1574,7 @@ WEAK halide_device_interface_impl_t opencl_device_interface_impl = {
     halide_opencl_device_release_crop,
     halide_opencl_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
+    nullptr,
 };
 
 WEAK halide_device_interface_t opencl_device_interface = {
@@ -1974,6 +1975,7 @@ WEAK halide_device_interface_impl_t opencl_image_device_interface_impl = {
     halide_opencl_image_device_release_crop,
     halide_opencl_image_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
+    nullptr,
 };
 
 WEAK halide_device_interface_t opencl_image_device_interface = {

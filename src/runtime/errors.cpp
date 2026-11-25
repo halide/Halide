@@ -193,6 +193,15 @@ WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
     return halide_error_code_unaligned_host_ptr;
 }
 
+WEAK int halide_error_unaligned_device_ptr(void *user_context, const char *func,
+                                           int alignment) {
+    error(user_context)
+        << "The device pointer of " << func
+        << " is not aligned to a " << alignment
+        << " bytes boundary.";
+    return halide_error_code_unaligned_device_ptr;
+}
+
 WEAK int halide_error_device_dirty_with_no_device_support(void *user_context, const char *func) {
     error(user_context)
         << "The buffer " << func

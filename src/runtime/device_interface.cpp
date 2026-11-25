@@ -380,6 +380,35 @@ WEAK int halide_default_device_and_host_free(void *user_context, struct halide_b
     return result;
 }
 
+WEAK int halide_device_check_alignment(void *user_context, struct halide_buffer_t *buf,
+                                       const char *func_name, int alignment) {
+    auto result = debug_log_and_validate_buf(user_context, buf, "halide_device_check_alignment");
+    if (result) {
+        return result;
+    }
+    const halide_device_interface_t *device_interface = buf->device_interface;
+    if (device_interface == nullptr || buf->device == 0) {
+        return halide_error_no_device_interface(user_context);
+    }
+    if (device_interface->impl->device_alignment == nullptr) {
+        error(user_context) << "The device API of " << func_name
+                            << " can't report the alignment of its device pointer, "
+                            << "so its device alignment of " << alignment
+                            << " can't be checked.";
+        return halide_error_code_unaligned_device_ptr;
+    }
+    uint64_t actual = 0;
+    result = call_device_interface(device_interface, device_interface->impl->device_alignment,
+                                   user_context, buf, &actual);
+    if (result) {
+        return result;
+    }
+    if (actual % (uint64_t)alignment != 0) {
+        return halide_error_unaligned_device_ptr(user_context, func_name, alignment);
+    }
+    return halide_error_code_success;
+}
+
 WEAK int halide_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                                    const halide_device_interface_t *device_interface) {
     auto result = debug_log_and_validate_buf(user_context, buf, "halide_device_wrap_native");

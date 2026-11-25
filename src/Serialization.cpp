@@ -1405,13 +1405,14 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
     // or fill 0 or default values for the unavailable fields.
     if (is_buffer) {
         const int host_alignment = parameter.host_alignment();
+        const int device_alignment = parameter.device_alignment();
         std::vector<Offset<Serialize::BufferConstraint>> buffer_constraints_serialized;
         buffer_constraints_serialized.reserve(parameter.buffer_constraints().size());
         for (const auto &buffer_constraint : parameter.buffer_constraints()) {
             buffer_constraints_serialized.push_back(serialize_buffer_constraint(builder, buffer_constraint));
         }
         const auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
-        return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
+        return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment, device_alignment,
                                           builder.CreateVector(buffer_constraints_serialized), memory_type_serialized, std::nullopt,
                                           Serialize::Expr::NONE, 0, Serialize::Expr::NONE, 0,
                                           Serialize::Expr::NONE, 0, Serialize::Expr::NONE, 0);
@@ -1428,7 +1429,7 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         const auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         const auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized,
-                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType::Auto, scalar_data,
+                                          dimensions, name_serialized, 0, 0, 0, Serialize::MemoryType::Auto, scalar_data,
                                           scalar_default_serialized.first, scalar_default_serialized.second,
                                           scalar_min_serialized.first, scalar_min_serialized.second,
                                           scalar_max_serialized.first, scalar_max_serialized.second,

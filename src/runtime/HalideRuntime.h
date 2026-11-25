@@ -1080,6 +1080,14 @@ extern int halide_device_wrap_native(void *user_context,
 extern int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf);
 // @}
 
+/** Check that the device memory of a buffer, as kernels see it, is
+ * aligned to the given number of bytes, returning
+ * halide_error_code_unaligned_device_ptr if it isn't or if the
+ * buffer's device API can't report its alignment. func_name names the
+ * buffer in the error message. */
+extern int halide_device_check_alignment(void *user_context, struct halide_buffer_t *buf,
+                                         const char *func_name, int alignment);
+
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
  * HL_GPU_DEVICE. If that variable is unset, Halide uses the last
@@ -1422,6 +1430,10 @@ enum halide_error_code_t {
     /** "vscale" value of Streaming Scalable Vector detected in runtime does not
      * match the streaming vscale value used in compilation. */
     halide_error_code_streaming_vscale_invalid = -49,
+
+    /** A pointer to a buffer's device memory was not aligned as required
+     * by set_device_alignment, or its device API can't tell. */
+    halide_error_code_unaligned_device_ptr = -50,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1478,6 +1490,7 @@ extern int halide_error_buffer_argument_is_null(void *user_context, const char *
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
 extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+extern int halide_error_unaligned_device_ptr(void *user_context, const char *func_name, int alignment);
 extern int halide_error_host_is_null(void *user_context, const char *func_name);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);

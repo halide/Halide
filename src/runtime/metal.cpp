@@ -1396,7 +1396,9 @@ WEAK halide_device_interface_impl_t metal_device_interface_impl = {
     halide_metal_device_slice,
     halide_metal_device_release_crop,
     halide_metal_wrap_buffer,
-    halide_metal_detach_buffer};
+    halide_metal_detach_buffer,
+    nullptr,
+};
 
 WEAK halide_device_interface_t metal_device_interface = {
     halide_device_malloc,

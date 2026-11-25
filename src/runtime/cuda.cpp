@@ -1432,6 +1432,11 @@ WEAK const char *get_cuda_error_name(CUresult err) {
     }
 }
 
+WEAK int cuda_device_alignment(void *user_context, const struct halide_buffer_t *buf, uint64_t *alignment) {
+    *alignment = buf->device & -buf->device;
+    return halide_error_code_success;
+}
+
 WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
@@ -1449,6 +1454,7 @@ WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_cuda_device_release_crop,
     halide_cuda_wrap_device_ptr,
     halide_cuda_detach_device_ptr,
+    cuda_device_alignment,
 };
 
 WEAK halide_device_interface_t cuda_device_interface = {

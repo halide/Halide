@@ -1192,6 +1192,7 @@ WEAK halide_device_interface_impl_t webgpu_device_interface_impl = {
     halide_webgpu_device_release_crop,
     halide_webgpu_wrap_native,
     halide_webgpu_detach_native,
+    nullptr,
 };
 
 WEAK halide_device_interface_t webgpu_device_interface = {

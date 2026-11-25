@@ -34,6 +34,10 @@ struct halide_device_interface_impl_t {
                                struct halide_buffer_t *buf);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
+    // The largest power of two the address of the buffer's device memory,
+    // as kernels see it, is known to be a multiple of. Null if the device
+    // API can't tell.
+    int (*device_alignment)(void *user_context, const struct halide_buffer_t *buf, uint64_t *alignment);
 };
 
 extern WEAK int halide_default_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,

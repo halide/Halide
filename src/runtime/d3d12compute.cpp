@@ -4452,7 +4452,9 @@ WEAK halide_device_interface_impl_t d3d12compute_device_interface_impl = {
     halide_d3d12compute_device_slice,
     halide_d3d12compute_device_release_crop,
     halide_d3d12compute_wrap_buffer,
-    halide_d3d12compute_detach_buffer};
+    halide_d3d12compute_detach_buffer,
+    nullptr,
+};
 
 WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_device_malloc,
@@ -4488,7 +4490,9 @@ WEAK halide_device_interface_impl_t d3d12compute_image_device_interface_impl = {
     halide_d3d12compute_device_slice,
     halide_d3d12compute_device_release_crop,
     halide_d3d12compute_wrap_buffer,
-    halide_d3d12compute_detach_buffer};
+    halide_d3d12compute_detach_buffer,
+    nullptr,
+};
 
 WEAK halide_device_interface_t d3d12compute_image_device_interface = {
     halide_device_malloc,

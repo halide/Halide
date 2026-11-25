@@ -1508,6 +1508,7 @@ WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_vulkan_device_release_crop,
     halide_vulkan_wrap_vk_buffer,
     halide_vulkan_detach_vk_buffer,
+    nullptr,
 };
 
 WEAK halide_device_interface_t vulkan_device_interface = {

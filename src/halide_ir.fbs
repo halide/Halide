@@ -676,6 +676,7 @@ table Parameter {
     dimensions: int32;
     name: string;
     host_alignment: int32;
+    device_alignment: int32;
     buffer_constraints: [BufferConstraint];
     memory_type: MemoryType;
     scalar_data: uint64 = null;  // Note: it is valid for this to be omitted, even if is_buffer = false.

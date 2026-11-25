@@ -143,6 +143,10 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
+    /** The alignment in bytes of the pointer to an external buffer's data
+     * that the generated code receives. */
+    virtual int external_buffer_alignment(const Parameter &p) const;
+
     /** Used to decide whether to break a vector up into multiple smaller
      * operations. This is the largest size the architecture supports. */
     virtual int maximum_vector_bits() const {

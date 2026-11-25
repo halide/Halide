@@ -159,6 +159,10 @@ protected:
 
     MemoryType memory_type;
 
+    // The alignment the buffer's device pointer must be checked to have
+    // whenever it gets a device allocation, or zero for none.
+    int device_alignment;
+
     enum FlagState {
         Unknown,
         False,
@@ -197,6 +201,15 @@ protected:
         Stmt device_malloc = call_extern_and_assert("halide_device_malloc",
                                                     {buffer_var(), device_interface});
         return device_malloc;
+    }
+
+    // Check the device pointer's alignment after a call that may have given
+    // the buffer a new device allocation.
+    void push_device_alignment_check(vector<Stmt> &stmts) {
+        if (device_alignment) {
+            stmts.push_back(call_extern_and_assert("halide_device_check_alignment",
+                                                   {buffer_var(), StringImm::make(buffer), device_alignment}));
+        }
     }
 
     Stmt make_copy_to_host() {
@@ -315,6 +328,7 @@ protected:
 
         if (needs_copy_to_device) {
             stmts.push_back(make_copy_to_device(touching_device));
+            push_device_alignment_check(stmts);
             state.host_dirty = False;
             state.device_allocation_exists = True;
             state.current_device = touching_device;
@@ -322,6 +336,7 @@ protected:
 
         if (needs_device_malloc) {
             stmts.push_back(make_device_malloc(touching_device));
+            push_device_alignment_check(stmts);
             state.device_allocation_exists = True;
             state.current_device = touching_device;
         }
@@ -470,8 +485,8 @@ public:
     // to inject a device free after the last use.
     Stmt last_use;
 
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, MemoryType m)
-        : buffer(b), is_external(e), memory_type(m) {
+    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, MemoryType m, int device_alignment = 0)
+        : buffer(b), is_external(e), memory_type(m), device_alignment(device_alignment) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
@@ -748,6 +763,9 @@ protected:
             if (p.defined()) {
                 result.insert(p.name());
                 result_storage[p.name()] = p.memory_type();
+                if (p.is_buffer() && p.device_alignment() != p.type().bytes()) {
+                    result_device_alignment[p.name()] = p.device_alignment();
+                }
             }
         }
 
@@ -787,6 +805,7 @@ protected:
     public:
         set<string> result;
         std::map<string, MemoryType> result_storage;
+        std::map<string, int> result_device_alignment;
     };
 
 public:
@@ -798,7 +817,9 @@ public:
             finder(s);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
-                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf))(new_stmt);
+                auto it = finder.result_device_alignment.find(buf);
+                int device_alignment = it == finder.result_device_alignment.end() ? 0 : it->second;
+                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf), device_alignment)(new_stmt);
             }
             return new_stmt;
         } else {

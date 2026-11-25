@@ -67,6 +67,18 @@ public:
     /** Set the expected alignment of the host pointer in bytes. */
     OutputImageParam &set_host_alignment(int);
 
+    /** Get the alignment of the device pointer in bytes, i.e. of the
+     * address of the buffer's data as GPU kernels see it. Defaults to
+     * the size of type. */
+    int device_alignment() const;
+
+    /** Set the expected alignment of the device pointer in bytes. It is
+     * checked whenever the pipeline gives the buffer a device
+     * allocation or copies it to the device. Only CUDA supports
+     * this check; on other device APIs requesting it is a runtime
+     * error. */
+    OutputImageParam &set_device_alignment(int);
+
     /** Get the dimensionality of this image parameter */
     int dimensions() const;
 

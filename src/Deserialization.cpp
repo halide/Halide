@@ -1313,11 +1313,12 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
     const std::string name = deserialize_string(parameter->name());
     if (is_buffer) {
         const int host_alignment = parameter->host_alignment();
+        const int device_alignment = parameter->device_alignment();
         std::vector<BufferConstraint> buffer_constraints =
             deserialize_vector<Serialize::BufferConstraint, BufferConstraint>(parameter->buffer_constraints(),
                                                                               &Deserializer::deserialize_buffer_constraint);
         const auto memory_type = deserialize_memory_type(parameter->memory_type());
-        return Parameter(type, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
+        return Parameter(type, dimensions, name, Buffer<>(), host_alignment, device_alignment, buffer_constraints, memory_type);
     } else {
         static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
         const auto make_optional_halide_scalar_value_t = [](const std::optional<uint64_t> &v) -> std::optional<halide_scalar_value_t> {

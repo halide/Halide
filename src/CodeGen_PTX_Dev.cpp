@@ -99,6 +99,9 @@ protected:
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
+    int external_buffer_alignment(const Parameter &p) const override {
+        return p.device_alignment();
+    }
     bool promote_indices() const override {
         return false;
     }
@@ -853,7 +856,8 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     // TODO: lanes >= 4, not lanes == 4
     if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
         ModulusRemainder align = op->alignment;
-        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
+        bool base_aligned = op->param.defined() ? external_buffer_alignment(op->param) % 16 == 0 : !op->image.defined();
+        if (base_aligned && align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr equiv = Load::make(UInt(128), op->name, index,
                                     op->image, op->param, const_true(), align / 4, op->is_streaming);
@@ -1163,7 +1167,8 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     // TODO: lanes >= 4, not lanes == 4
     if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
         ModulusRemainder align = op->alignment;
-        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
+        bool base_aligned = !op->param.defined() || external_buffer_alignment(op->param) % 16 == 0;
+        if (base_aligned && align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
             Stmt equiv = op->with(value, index, const_true(), align / 4);

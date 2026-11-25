@@ -76,8 +76,8 @@ protected:
 
     /** Construct a new buffer parameter via deserialization. */
     Parameter(const Type &t, int dimensions, const std::string &name,
-              const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
-              MemoryType memory_type);
+              const Buffer<void> &buffer, int host_alignment, int device_alignment,
+              const std::vector<BufferConstraint> &buffer_constraints, MemoryType memory_type);
 
     /** Construct a new scalar parameter via deserialization. */
     Parameter(const Type &t, int dimensions, const std::string &name,
@@ -176,12 +176,14 @@ public:
     void set_min_constraint_estimate(int dim, const Expr &min);
     void set_extent_constraint_estimate(int dim, const Expr &extent);
     void set_host_alignment(int bytes);
+    void set_device_alignment(int bytes);
     Expr min_constraint(int dim) const;
     Expr extent_constraint(int dim) const;
     Expr stride_constraint(int dim) const;
     Expr min_constraint_estimate(int dim) const;
     Expr extent_constraint_estimate(int dim) const;
     int host_alignment() const;
+    int device_alignment() const;
     //@}
 
     /** Get buffer constraints for all dimensions,

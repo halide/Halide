@@ -1075,6 +1075,7 @@ WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_hexagon_device_release_crop,
     halide_default_device_wrap_native,
     halide_default_device_detach_native,
+    nullptr,
 };
 
 WEAK halide_device_interface_t hexagon_device_interface = {
