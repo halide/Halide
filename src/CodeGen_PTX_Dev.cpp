@@ -51,6 +51,7 @@ public:
                     const std::vector<DeviceArgument> &args) override;
 
     void set_kernel_max_registers(int n) override;
+    void set_kernel_min_resident_blocks(int n) override;
 
     static void test();
 
@@ -70,6 +71,7 @@ protected:
 
     /** What the schedule asked for, if anything. Zero leaves it to ptxas. */
     int kernel_max_registers = 0;
+    int kernel_min_resident_blocks = 0;
 
     /** (Re)initialize the PTX module. This is separate from compile, since
      * a PTX device module will often have many kernels compiled into it for
@@ -235,6 +237,10 @@ void CodeGen_PTX_Dev::set_kernel_max_registers(int n) {
     kernel_max_registers = n;
 }
 
+void CodeGen_PTX_Dev::set_kernel_min_resident_blocks(int n) {
+    kernel_min_resident_blocks = n;
+}
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
@@ -334,6 +340,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         function->addFnAttr("nvvm.maxnreg", std::to_string(kernel_max_registers));
         debug(2) << "Kernel " << name << " is capped at "
                  << kernel_max_registers << " registers per thread\n";
+    }
+    if (kernel_min_resident_blocks > 0) {
+        function->addFnAttr("nvvm.minctasm", std::to_string(kernel_min_resident_blocks));
     }
 
     // Now verify the function is ok

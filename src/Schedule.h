@@ -667,6 +667,14 @@ public:
     int gpu_max_registers() const;
     int &gpu_max_registers();
     // @}
+
+    /** How many blocks of the kernel this Func's loop over gpu blocks becomes
+     * the backend should aim to fit on one processor. Zero means let the
+     * backend decide. */
+    // @{
+    int gpu_min_resident_blocks() const;
+    int &gpu_min_resident_blocks();
+    // @}
     // @}
 
     /** You may explicitly bound some of the dimensions of a function,

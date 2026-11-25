@@ -174,9 +174,10 @@ protected:
         string kernel_name = c_print_name(unique_name("kernel_" + loop->name));
 
         // The loop the kernel is made from is named after the Func it came
-        // from, so the schedule that asked for a register cap can be found
-        // again here, where the kernel is handed to the backend.
+        // from, so the schedule that asked for per-kernel resource limits can
+        // be found again here, where the kernel is handed to the backend.
         int max_registers = 0;
+        int min_resident_blocks = 0;
         {
             const std::string &n = loop->name;
             for (size_t i = 0; i + 2 < n.size(); i++) {
@@ -184,6 +185,7 @@ protected:
                     auto it = env.find(n.substr(0, i));
                     if (it != env.end()) {
                         max_registers = it->second.schedule().gpu_max_registers();
+                        min_resident_blocks = it->second.schedule().gpu_min_resident_blocks();
                     }
                     break;
                 }
@@ -195,6 +197,7 @@ protected:
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
         gpu_codegen->set_kernel_max_registers(max_registers);
+        gpu_codegen->set_kernel_min_resident_blocks(min_resident_blocks);
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop

@@ -2350,6 +2350,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, gpu)
     HALIDE_FORWARD_METHOD(Func, gpu_blocks)
     HALIDE_FORWARD_METHOD(Func, gpu_max_registers)
+    HALIDE_FORWARD_METHOD(Func, gpu_min_resident_blocks)
     HALIDE_FORWARD_METHOD(Func, gpu_single_thread)
     HALIDE_FORWARD_METHOD(Func, gpu_threads)
     HALIDE_FORWARD_METHOD(Func, gpu_tile)

@@ -31,6 +31,12 @@ struct CodeGen_GPU_Dev {
     virtual void set_kernel_max_registers(int n) {
     }
 
+    /** Ask the backend to fit at least n blocks of the next kernel added on
+     * one processor. Zero, the default, leaves it to the backend. Only CUDA does
+     * anything with this. */
+    virtual void set_kernel_min_resident_blocks(int n) {
+    }
+
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
      * for a single pipeline. */

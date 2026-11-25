@@ -2977,6 +2977,20 @@ Func &Func::gpu_max_registers(DeviceAPI device_api, int n) {
     return *this;
 }
 
+Func &Func::gpu_min_resident_blocks(DeviceAPI device_api, int n) {
+    invalidate_cache();
+    user_assert(n >= 0) << "gpu_min_resident_blocks must be given a non-negative number "
+                        << "of blocks, but " << name() << " was given " << n
+                        << ".\n";
+    if (device_api != DeviceAPI::CUDA) {
+        user_warning << "gpu_min_resident_blocks only has an effect when compiling for "
+                     << "CUDA. " << name() << " requested it for "
+                     << device_api << ", which offers no equivalent and will ignore it.\n";
+    }
+    func.schedule().gpu_min_resident_blocks() = n;
+    return *this;
+}
+
 Func &Func::stream_loads() {
     invalidate_cache();
     Stage(func, func.definition(), 0).stream_loads();

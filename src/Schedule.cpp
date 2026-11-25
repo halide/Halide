@@ -245,6 +245,7 @@ struct FuncScheduleContents {
     // map<DeviceAPI, int>, not just an int, so that the correct limit (or lack
     // thereof) is picked up by each backend.
     int gpu_max_registers = 0;
+    int gpu_min_resident_blocks = 0;
     bool memoized = false;
     bool async = false;
     // This is an extent of the ring buffer and expected to be a positive integer.
@@ -392,6 +393,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->estimates = contents->estimates;
     copy.contents->memory_type = contents->memory_type;
     copy.contents->gpu_max_registers = contents->gpu_max_registers;
+    copy.contents->gpu_min_resident_blocks = contents->gpu_min_resident_blocks;
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
@@ -425,6 +427,14 @@ int FuncSchedule::gpu_max_registers() const {
 
 int &FuncSchedule::gpu_max_registers() {
     return contents->gpu_max_registers;
+}
+
+int FuncSchedule::gpu_min_resident_blocks() const {
+    return contents->gpu_min_resident_blocks;
+}
+
+int &FuncSchedule::gpu_min_resident_blocks() {
+    return contents->gpu_min_resident_blocks;
 }
 
 bool &FuncSchedule::memoized() {

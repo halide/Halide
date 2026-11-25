@@ -262,6 +262,7 @@ tests(
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
     gpu_max_registers.cpp
+    gpu_min_resident_blocks.cpp
     gpu_metal_completion_handler_error_check.cpp
     gpu_mixed_dimensionality.cpp
     gpu_mixed_shared_mem_types.cpp

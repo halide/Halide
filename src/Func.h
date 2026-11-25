@@ -2858,6 +2858,17 @@ public:
      * use has the .maxnreg directive. */
     Func &gpu_max_registers(DeviceAPI device_api, int n);
 
+    /** Tell the GPU compiler how many blocks of the kernel this Func's loop
+     * over gpu blocks becomes should fit on one of the GPU's processors at
+     * once. The compiler limits per-block resources, such as registers, to
+     * meet that target. Zero, which is what an unscheduled Func gets, leaves
+     * the choice to the compiler.
+     *
+     * The device API must be given explicitly and must be DeviceAPI::CUDA,
+     * where this becomes the .minnctapersm directive; passing anything else
+     * warns and has no effect. */
+    Func &gpu_min_resident_blocks(DeviceAPI device_api, int n);
+
     /** Use non-temporal (streaming) loads for every direct read this Func's
      * pure (initial) definition makes of another Func. Equivalent to calling
      * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
