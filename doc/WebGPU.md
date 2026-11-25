@@ -27,29 +27,31 @@ device codegen may be required before it becomes profitable to use.
 
 ## Running with WebAssembly via Emscripten: `HL_TARGET=wasm-32-wasmrt-webgpu`
 
-> _Tested with top-of-tree Emscripten as of 2023-02-23, against Chrome v113._
+> _Tested with Emscripten 5.0.0 (a7c5deabd7c88ba1c38ebe988112256775f944c6)_
+> _Tested with Node.js 25.5.0_ _Requires Node.js 25 or later_
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
 
 When invoking `emcc` to link Halide-generated objects, include these flags:
-`-s USE_WEBGPU=1 -s ASYNCIFY`.
+`--use-port=emdawnwebgpu -s JSPI`.
 
-Tests that use AOT compilation can be run using a native WebGPU implementation
-that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
-You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that has an
-absolute path to the bindings to run these tests, e.g.
-`HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
+Tests that use AOT compilation require a WebGPU implementation with Node.js
+bindings. There are two options:
 
-See [below](#setting-up-dawn) for instructions on building the Dawn Node.js
-bindings.
+- **`webgpu` npm package (recommended)**: Run `npm install` in the Halide source
+  root. The test runner will find and use the package automatically, with no
+  additional environment variables needed. See
+  [below](#webgpu-provider-webgpu-npm-package-recommended) for setup
+  instructions.
+- **Custom `dawn.node`**: Set `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`. See
+  [Setting up Dawn](#setting-up-dawn) for build instructions.
 
 JIT compilation is not supported when using WebGPU with WASM.
 
 ## Running natively: `HL_TARGET=host-webgpu`
 
-> _Tested with top-of-tree Dawn as of 2023-11-27 \[commit
-> b5d38fc7dc2a20081312c95e379c4a918df8b7d4\]._
+> _Tested with Dawn release v20260911.162847_
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
 [Dawn](https://dawn.googlesource.com/dawn/) or
@@ -57,9 +59,8 @@ For testing purposes, Halide can also target native WebGPU libraries, such as
 run the JIT correctness tests. See [below](#setting-up-dawn) for instructions on
 building Dawn.
 
-> Note that as of 2023-11-27, wgpu is not supported due to
-> [lacking `override` support for WGSL](https://github.com/gfx-rs/wgpu/issues/1762)
-> which we require > in order to set GPU block sizes.
+> Note that as of 2026-02-17, wgpu is not supported due to lack of WaitAny
+> timeout support.
 
 When targeting WebGPU with a native target, Halide defaults to looking for a
 build of Dawn (with several common names and suffixes); you can override this by
@@ -70,9 +71,159 @@ Note that it is explicitly legal to define both `HL_WEBGPU_NATIVE_LIB` and
 `HL_WEBGPU_NODE_BINDINGS` at the same time; the correct executable environment
 will be selected based on the Halide target specified.
 
-Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
-WEBGPU_NODE_BINDINGS for the same build; the correct executable environment will
-be selected based on the Halide target specified.
+## Setting up for WASM+WebGPU testing
+
+### Installing Node.js 25 via nvm
+
+Install [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager), then use it
+to install and activate Node.js 25:
+
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+nvm install 25
+nvm use 25
+```
+
+To activate Node.js 25 automatically in future shell sessions, add `nvm use 25`
+(or `nvm alias default 25`) to your shell profile.
+
+### Installing Emscripten via emsdk
+
+Install Emscripten using the [emsdk](https://github.com/emscripten-core/emsdk):
+
+```
+git clone https://github.com/emscripten-core/emsdk.git
+cd emsdk
+./emsdk install latest
+./emsdk activate latest
+source ./emsdk_env.sh
+```
+
+Add `source /path/to/emsdk/emsdk_env.sh` to your shell profile to activate
+Emscripten automatically in future sessions.
+
+### WebGPU provider: `webgpu` npm package (recommended)
+
+The simplest way to provide a WebGPU implementation for Node.js testing is to
+install the [`webgpu`](https://www.npmjs.com/package/webgpu) npm package, which
+bundles pre-built Dawn Node.js bindings. From the Halide source root, run:
+
+```
+npm install
+```
+
+The `package.json` in the Halide source root lists `webgpu` as a dependency.
+Once installed, the test runner (`tools/launch_wasm_test.js`) will find and use
+it automatically — no `HL_WEBGPU_NODE_BINDINGS` environment variable is needed.
+
+### WebGPU provider: building Dawn Node.js bindings from scratch (alternative)
+
+As an alternative to the `webgpu` npm package, you can build the Dawn Node.js
+bindings from source. See [Setting up Dawn](#setting-up-dawn) for instructions.
+After building, point the test runner at your build by setting:
+
+```
+HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node
+```
+
+## Setting up Dawn via vcpkg
+
+> _Tested with Dawn vcpkg port version 20260911.162847#1 on macOS (arm64); this
+> is the version `vcpkg.json` pins, and CI verifies it_
+
+The Halide repository includes vcpkg support for automatically downloading and
+building Dawn as part of the CMake configure step. This is the easiest path for
+native WebGPU testing and does not require `depot_tools` or `gclient`.
+
+Note: the vcpkg Dawn port builds only the native `libwebgpu_dawn` shared
+library. It does **not** include Node.js bindings (`dawn.node`), so this path
+only supports `HL_TARGET=host-webgpu` (native JIT). For the WASM+Node.js path,
+see [Setting up Dawn](#setting-up-dawn) below.
+
+### Install vcpkg
+
+Clone and bootstrap vcpkg locally (no system-wide installation needed):
+
+```
+git clone https://github.com/microsoft/vcpkg <vcpkg_dir>
+<vcpkg_dir>/bootstrap-vcpkg.sh -disableMetrics
+```
+
+### Configure and build Halide
+
+Use the provided `arm64-osx-halide` (or `x64-osx-halide`) overlay triplet. These
+triplets use static linkage for all packages except Dawn, which must be a shared
+library so it can be loaded via `dlopen` at runtime:
+
+```
+cmake <halide_root_dir> -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE=<vcpkg_dir>/scripts/buildsystems/vcpkg.cmake \
+    -DVCPKG_TARGET_TRIPLET=arm64-osx-halide \
+    -DVCPKG_MANIFEST_FEATURES=webgpu-native \
+    -DLLVM_DIR=<llvm_dir>/lib/cmake/llvm \
+    -DClang_DIR=<llvm_dir>/lib/cmake/clang \
+    -DHalide_TARGET=host-webgpu
+
+cmake --build <build_dir>
+```
+
+vcpkg will download and build Dawn automatically during the configure step,
+installing it into `<build_dir>/vcpkg_installed/`.
+
+You may need to add `-DWITH_SERIALIZATION=OFF`, `-DWITH_PYTHON_BINDINGS=OFF`,
+and `-DHalide_WASM_BACKEND=OFF` flags because vcpkg disables FetchContent, and
+those features depend on packages (`flatbuffers`, `pybind11`, `wabt`) that are
+not included in the `webgpu-native` manifest feature.
+
+Note that the CI preset (`ci-macos-arm-64-webgpu`) additionally selects the
+`developer` manifest feature, because the autoscheduler plugins used by some
+tests are only built when `WITH_DEVELOPER_MODE` is on:
+
+```
+-DVCPKG_MANIFEST_FEATURES="developer;webgpu-native"
+```
+
+### Why the Dawn pin is conservative
+
+`vcpkg.json` pins `dawn` via an override, and that pin is deliberately **older**
+than the newest port release. The vcpkg registry snapshot bundled on the GitHub
+Actions runners has no version-DB entry for newer Dawn versions, so bumping the
+pin past what the runners ship fails at configure time:
+
+```
+error: no version database entry for dawn at <version>.
+```
+
+The same error appears locally when the vcpkg checkout is too old (Homebrew's
+`vcpkg` is frequently behind). Use a recent vcpkg clone instead, e.g.
+`-DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake`.
+
+### Keeping the pin and the vendored header in sync
+
+**The one rule:** bumping `dawn` in `vcpkg.json` requires re-synchronizing
+`src/runtime/mini_webgpu.h` from that same Dawn release. Dawn's C ABI is not
+append-only -- it has inserted fields into the middle of descriptors -- so a
+header from a different release than the linked `libwebgpu_dawn` is silent
+memory corruption, not a compile error. CI enforces this pairing (see
+[`mini_webgpu.h`](#updating-mini_webgpuh)).
+
+```sh
+# after configuring/building with the new pin
+python3 tools/mini-webgpu-tool.py sync     # rewrites mini_webgpu.h, then verifies
+python3 tools/mini-webgpu-tool.py selftest # verifies the guard itself still works
+```
+
+### Run tests
+
+Set `HL_WEBGPU_NATIVE_LIB` to the vcpkg-installed Dawn library and run via
+CTest:
+
+```
+HL_JIT_TARGET=host-webgpu \
+HL_WEBGPU_NATIVE_LIB=<build_dir>/vcpkg_installed/arm64-osx-halide/lib/libwebgpu_dawn.dylib \
+ctest --test-dir <build_dir> -R correctness_gpu
+```
 
 ## Setting up Dawn
 
@@ -122,16 +273,167 @@ This will produce the following artifacts:
 These paths can then be used for the `HL_WEBGPU_NODE_BINDINGS` and
 `HL_WEBGPU_NATIVE_LIB` environment variables when using Halide.
 
-## Updating mini_webgpu.h
+## Updating `mini_webgpu.h`
 
-The recommended method for updating `mini_webgpu.h` is to copy the
-`gen/include/dawn/webgpu.h` file from the Dawn build directory, then:
+`src/runtime/mini_webgpu.h` is a vendored copy of the Dawn-generated C header
+`<webgpu/webgpu.h>`, with exactly two local modifications:
 
-- Restore the `// clang-format {off,on}` lines.
-- Comment out the `#include <std*>` lines.
-- Remove the `void` parameter from the `WGPUProc` declaration.
+1. the `<stdint.h>/<stddef.h>/<math.h>` includes are replaced by a
+   `BEGIN/END Halide-specific changes` block, because the Halide runtime cannot
+   include libc headers; and
+2. a `HALIDE_MINI_WEBGPU_DAWN_VERSION` marker recording which Dawn release the
+   copy came from.
 
-This guarantees a version of the WebGPU header that is compatible with Dawn.
-When the native API eventually stabilizes, it should be possible to obtain a
-header from the `webgpu-native` GitHub organization that will be compatible with
-Dawn, wgpu, and Emscripten.
+Use the tool rather than editing the file by hand:
+
+```sh
+python3 tools/mini-webgpu-tool.py sync
+```
+
+It locates the Dawn-generated header under the build directory (`sync` accepts
+an explicit path or glob too, e.g.
+`sync 'build/vcpkg_installed/*/include/dawn/webgpu.h'`), preserves the
+Halide-specific block, stamps the `dawn` version pinned in `vcpkg.json` into the
+marker, and runs the verification pass afterwards. It is idempotent: re-running
+it when the header already matches prints `nothing to do`.
+
+`check` performs the same verification without writing anything, and is what CI
+runs. It asserts the marker equals the `vcpkg.json` pin (this half needs no
+build tree, so it runs before Configure), and when a build tree is present it
+also compares struct layouts, enum values and declarations against the
+Dawn-generated header, and checks the `libwebgpu_dawn` export table against
+every entry point Halide calls. `selftest` exercises those failure paths against
+throwaway fixtures.
+
+Note that `check` exits `PASS` even when it only managed the marker comparison,
+so a build-tree-less invocation is not a real gate. CI therefore runs it twice:
+once before Configure for a cheap pin check, and once afterwards with the build
+dir passed explicitly (`check build`), where a "no Dawn-generated webgpu.h" note
+or a missing `PASS` fails the job.
+
+### Knowing when the pin can move
+
+`check` answers "is the header consistent with the pin?". It deliberately says
+nothing about whether the pin is *current*, because a pin can lag behind Dawn
+indefinitely without anything being wrong. The gap worth watching is the one
+between the pin and what the CI runners' vcpkg can actually install:
+
+```sh
+python3 tools/mini-webgpu-tool.py pinstatus --remote
+```
+
+```text
+vcpkg.json pins dawn 20260624.223603#1
+asking vcpkg /path/to/vcpkg @ 15b12b99a227 (2026-10-27)
+that snapshot offers dawn 20260911.162847#1
+UPDATE AVAILABLE: ...
+PIN-UPDATE-AVAILABLE
+```
+
+(example output, from a machine whose vcpkg snapshot had moved past the pin)
+
+It asks, in order, `--vcpkg-root`, `$VCPKG_INSTALLATION_ROOT`, `$VCPKG_ROOT`,
+then `vcpkg` on `PATH`, and reads `ports/dawn/vcpkg.json` from the first
+instance found. On GitHub-hosted runners `$VCPKG_INSTALLATION_ROOT` is the
+checkout baked into the image, so its registry snapshot *is* what CI can install
+-- which is what constrains the pin there, and it needs no network. `--remote`
+additionally fetches the `dawn` port from vcpkg master, showing what a newer
+baseline (or a refreshed runner image) would expose; if the network is
+unavailable it notes that and stays local.
+
+The verdict is one of four lines, and **none of them is a failure**: the exit
+code is always 0, and the CI step is additionally `continue-on-error`.
+
+| Verdict                 | Meaning                                                                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PIN-UP-TO-DATE`        | the snapshot offers exactly what is pinned                                                                                                               |
+| `PIN-UPDATE-AVAILABLE`  | the snapshot is newer, so the pin *can* move                                                                                                             |
+| `PIN-AHEAD-OF-REGISTRY` | the pin is newer than the snapshot, so a checkout of that registry cannot install it and a runner on the same baseline will fail to resolve the manifest |
+| `PIN-UNKNOWN`           | no vcpkg instance visible, or the port manifest was unreadable                                                                                           |
+
+`--strict` flips only `PIN-UPDATE-AVAILABLE` into exit 1, for a local cron or
+scheduled workflow that wants to be noisy about staleness. CI does not use it:
+staleness is maintenance, not breakage.
+
+Moving the pin is a two-file change, because the vendored header has to travel
+with it. Bump the `dawn` override in `vcpkg.json`, re-Configure so the new
+header lands in the build tree, then:
+
+```sh
+python3 tools/mini-webgpu-tool.py sync   # rewrites + restamps, then checks
+```
+
+`sync` re-emits the vendored header from the new Dawn, restamps the marker from
+the pin, and runs `check` itself -- so a layout change mid-descriptor surfaces
+as `struct layout mismatches` instead of as memory corruption at runtime.
+
+This is not hypothetical. The `20260624.223603` -> `20260911.162847` re-pin
+removed three fields (`loadDataFunction`, `storeDataFunction`,
+`functionUserdata`) from the *middle* of `WGPUDawnCacheDeviceDescriptor`,
+renamed `wgpuResourceTable{Insert,Remove}Binding` to
+`wgpuResourceTable{Insert,Remove}` and dropped five entry points while adding
+four -- while leaving every entry point Halide actually calls intact. A stale
+header against a newer `libwebgpu_dawn` would have parsed that descriptor at the
+wrong offsets, silently.
+
+<details>
+<summary>Manual fallback (what the sync tool does)</summary>
+
+Copy `gen/include/dawn/webgpu.h` from the Dawn build directory (at vcpkg install
+time this is `<build_dir>/vcpkg_installed/<triplet>/include/dawn/webgpu.h`; note
+that the sibling `include/webgpu/webgpu.h` is only a 33-line forwarder to it,
+not the generated header), then:
+
+- Replace the `#include <stdint.h>`, `#include <stddef.h>` and
+  `#include <math.h>` lines with the block below.
+- Add the version marker naming the Dawn release.
+
+The file is listed in `.clang-format-ignore`, so no formatting markers are
+needed.
+
+```
+// BEGIN Halide-specific changes
+//
+// For the Halide runtime, we can't include these headers,
+// so we define NULL, SIZE_MAX, and integer limit macros here.
+// #include <stdint.h>
+// #include <stddef.h>
+// #include <math.h>
+
+#ifndef NULL
+#ifdef __cplusplus
+#define NULL nullptr
+#else
+#define NULL ((void*)0)
+#endif
+#endif
+
+#ifndef SIZE_MAX
+#define SIZE_MAX (~(size_t)0)
+#endif
+
+#ifndef UINT32_MAX
+#define UINT32_MAX (~(uint32_t)0)
+#endif
+
+#ifndef UINT64_MAX
+#define UINT64_MAX (~(uint64_t)0)
+#endif
+
+// This _should_ be correct on all platforms we support, but needs checking.
+#ifndef UINT32_C
+#define UINT32_C(x) ((uint32_t)(x))
+#endif
+
+// The Dawn release this copy was synced from. CI asserts this matches the
+// dawn override in vcpkg.json (see tools/mini-webgpu-tool.py check).
+#define HALIDE_MINI_WEBGPU_DAWN_VERSION "<dawn version from vcpkg.json>"
+
+// END Halide-specific changes
+
+```
+
+This guarantees a version of the WebGPU header that is compatible with how
+Halide builds the runtime.
+
+</details>
