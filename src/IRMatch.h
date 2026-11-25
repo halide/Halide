@@ -75,35 +75,6 @@ constexpr int max_wild = 6;
 
 static const Type i64_type = {halide_type_int, 64, 1};
 
-/** The matcher only ever binds the types of *constants* (IntImm / UIntImm /
- * FloatImm, possibly wrapped in a Broadcast), which are always numeric and thus
- * never carry handle metadata. Storing them as full 8-byte `Type`s would double
- * both the size of MatcherState and the per-node data movement during matching
- * to carry a handle index that provably cannot be set. This 4-byte
- * code+bits+lanes triple is full-fidelity for a constant's type — it preserves
- * the broadcast lane count — at half the width, and restores the compact
- * representation the matcher used before `Type` grew a handle-type index.
- * Full `Type`s (with handles) still flow through the reconstruction path
- * (`make(..., type_hint)`) and pattern-embedded types (e.g. CastOp), which is
- * where handle fidelity actually matters. */
-struct BoundConstType {
-    halide_type_code_t code = halide_type_int;
-    uint8_t bits = 0;
-    uint16_t lanes = 0;
-
-    HALIDE_ALWAYS_INLINE BoundConstType() noexcept = default;
-    HALIDE_ALWAYS_INLINE BoundConstType(Type t) noexcept
-        : code(t.code()), bits((uint8_t)t.bits()), lanes((uint16_t)t.lanes()) {
-    }
-    HALIDE_ALWAYS_INLINE operator Type() const noexcept {
-        return Type(code, bits, lanes);
-    }
-    HALIDE_ALWAYS_INLINE bool operator==(const BoundConstType &other) const noexcept {
-        return code == other.code && bits == other.bits && lanes == other.lanes;
-    }
-};
-static_assert(sizeof(BoundConstType) == 4, "BoundConstType should be a compact 4-byte numeric type");
-
 /** To save stack space, the matcher objects are largely stateless and
  * immutable. This state object is built up during matching and then
  * consumed when constructing a replacement Expr.
@@ -112,7 +83,7 @@ struct MatcherState {
     const BaseExprNode *bindings[max_wild];
     halide_scalar_value_t bound_const[max_wild];
 
-    BoundConstType bound_const_type[max_wild];
+    Type bound_const_type[max_wild];
 
     // The simplifier running the match, if any. Predicates that consult
     // learned facts (can_prove, min_diff, in_range, ...) require it.
@@ -154,15 +125,6 @@ struct MatcherState {
 
     HALIDE_ALWAYS_INLINE
     void get_bound_const(int i, halide_scalar_value_t &val, Type &type) const noexcept {
-        val = bound_const[i];
-        type = bound_const_type[i];
-    }
-
-    // Overload for the hot matching path: hand back the compact bound-const type
-    // directly so a re-match can compare types in 4-byte space without
-    // materializing (and re-comparing) two full 8-byte Types.
-    HALIDE_ALWAYS_INLINE
-    void get_bound_const(int i, halide_scalar_value_t &val, BoundConstType &type) const noexcept {
         val = bound_const[i];
         type = bound_const_type[i];
     }
@@ -264,9 +226,9 @@ struct WildConstInt {
         int64_t value = ((const IntImm *)op)->value;
         if (bound & binds) {
             halide_scalar_value_t val;
-            BoundConstType type;
+            Type type;
             state.get_bound_const(i, val, type);
-            return type == BoundConstType(e.type) && value == val.u.i64;
+            return type == e.type && value == val.u.i64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -330,9 +292,9 @@ struct WildConstUInt {
         uint64_t value = ((const UIntImm *)op)->value;
         if (bound & binds) {
             halide_scalar_value_t val;
-            BoundConstType type;
+            Type type;
             state.get_bound_const(i, val, type);
-            return type == BoundConstType(e.type) && value == val.u.u64;
+            return type == e.type && value == val.u.u64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -383,9 +345,9 @@ struct WildConstFloat {
         double value = ((const FloatImm *)op)->value;
         if (bound & binds) {
             halide_scalar_value_t val;
-            BoundConstType type;
+            Type type;
             state.get_bound_const(i, val, type);
-            return type == BoundConstType(e.type) && value == val.u.f64;
+            return type == e.type && value == val.u.f64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -1894,7 +1856,7 @@ struct BroadcastOp {
         halide_scalar_value_t lanes_val;
         Type lanes_ty(halide_type_int, 0, 0);
         overflow |= lanes.make_folded_const(lanes_val, lanes_ty, state);
-        uint16_t l = (uint16_t)lanes_val.u.i64;
+        int l = (int)lanes_val.u.i64;
         overflow |= a.make_folded_const(val, ty, state);
         ty = ty.with_lanes(l);
         return overflow;

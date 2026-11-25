@@ -362,7 +362,7 @@ public:
             }
         }
         table.push_back(ptr);
-        internal_assert(table.size() < (size_t)0xffffffffu) << "intern table overflow";
+        internal_assert(table.size() <= (size_t)0xffffu) << "intern table overflow";
         return (uint32_t)table.size();
     }
 

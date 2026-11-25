@@ -312,13 +312,13 @@ struct Type {
 private:
     halide_type_code_t type_code;
     uint8_t type_bits;
-    uint16_t type_lanes;
     // Index into a process-wide intern table. Its meaning is selected by
     // type_code: for a Handle it indexes the handle-type table (0 == void *),
     // for a Struct it indexes the struct-type table (0 == malformed struct).
     // Unused (0) for numeric types. A Type is never both a handle and a struct,
     // so one slot serves both and keeps sizeof(Type) == 8.
-    uint32_t metadata_index_ = 0;
+    uint16_t metadata_index_ = 0;
+    uint32_t type_lanes;
 
 public:
     /** Aliases for halide_type_code_t values for legacy compatibility
@@ -335,7 +335,7 @@ public:
     /** Exposed so code that needs to reason about the maximum representable
      * lanes count (e.g. overflow checks when combining vectors) can derive
      * it from Type itself instead of hardcoding a width. */
-    static constexpr int kLanesBits = 8 * sizeof(type_lanes);
+    static constexpr int kLanesBits = 31;
 
     /** The number of bytes required to store a single scalar value of this
      * type. Ignores vector lanes. For a struct type, this is the packed
@@ -377,10 +377,11 @@ public:
      * lanes: The number of vector elements in the type. */
     HALIDE_ALWAYS_INLINE
     Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
-        : type_code(code), type_bits((uint8_t)bits), type_lanes((uint16_t)lanes),
-          metadata_index_(handle_type ? Internal::intern_handle_type(handle_type) : 0) {
-        internal_assert(lanes == (int)type_lanes)
-            << "Halide only supports vector types with up to 65535 lanes. " << lanes << " lanes requested.";
+        : type_code(code), type_bits((uint8_t)bits),
+          metadata_index_(handle_type ? Internal::intern_handle_type(handle_type) : 0),
+          type_lanes((uint32_t)lanes) {
+        internal_assert(lanes >= 0)
+            << "Number of vector lanes must be non-negative; got " << lanes << "\n";
         internal_assert(bits == (int)type_bits)
             << "Halide only supports types with up to 255 bits. " << bits << " bits requested.";
         internal_assert(code == Handle || !handle_type)
@@ -448,17 +449,16 @@ public:
     /** Return the number of vector elements in this type. */
     HALIDE_ALWAYS_INLINE
     int lanes() const {
-        return type_lanes;
+        return (int)type_lanes;
     }
 
     /** A cheap hash of the type, for use in the hashes of Expr nodes that
      * embed a Type (see Expr.h). Just the bits of type_code, type_bits, and
-     * type_lanes (which happen to pack into 32 bits), ignoring handle_index_. */
+     * type_lanes, ignoring metadata_index_. */
     HALIDE_ALWAYS_INLINE
     uint32_t hash() const {
-        uint32_t result;
-        memcpy(&result, this, sizeof(result));
-        return result;
+        uint32_t code_and_bits = (uint32_t)type_code | ((uint32_t)type_bits << 8);
+        return code_and_bits ^ (type_lanes << 16) ^ (type_lanes >> 16);
     }
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
@@ -493,7 +493,7 @@ public:
     HALIDE_ALWAYS_INLINE
     Type with_lanes(int new_lanes) const {
         Type t = *this;
-        t.type_lanes = (uint16_t)new_lanes;
+        t.type_lanes = (uint32_t)new_lanes;
         // Handle and struct metadata describe the *element* type, so they
         // survive a change in lane count (a vector of handles/structs keeps
         // the same element metadata); no need to touch metadata_index_.
