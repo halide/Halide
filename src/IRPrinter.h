@@ -123,23 +123,39 @@ struct Indentation {
 };
 std::ostream &operator<<(std::ostream &stream, const Indentation &);
 
-template<typename T>
-struct Ansi {
-    const T &cnt;
-    const char *open, *close;
+/** The kinds of text that IRPrinter styles, e.g. with colors. */
+enum class IRPrinterStyle {
+    Highlight,
+    Dim,
+    Keyword,
+    ImmInt,
+    ImmFloat,
+    ImmString,
+    Var,
+    Buffer,
+    Function,
+    Type,
+    /** The variables of the loops over GPU threads: .thread_id_x,
+     * .thread_id_y and .thread_id_z. */
+    GPUThreadX,
+    GPUThreadY,
+    GPUThreadZ,
+    /** Punctuation and operators, styled by how deeply they are nested. */
+    Paren,
+    BoldParen,
 };
 
+class IRPrinter;
+
+/** Text that an IRPrinter styles, as made by its kw(), var(), paren(), ...
+ * helpers. Writing it to a stream writes the text between the printer's
+ * begin_style() and end_style(). */
 template<typename T>
-std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
-    if (a.open) {
-        out << a.open;
-    }
-    out << a.cnt;
-    if (a.close) {
-        out << a.close;
-    }
-    return out;
-}
+struct StyledText {
+    const T &cnt;
+    const IRPrinter *printer;
+    IRPrinterStyle style;
+};
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -167,6 +183,18 @@ public:
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
 
+    /** Emit a LoweredFunc on the output stream */
+    void print(const LoweredFunc &);
+
+    /** Emit a Module on the output stream */
+    void print(const Module &);
+
+    /** Called before and after text of the given style is emitted. By
+     * default, these emit the colors of the style, if the output stream is a
+     * terminal. */
+    virtual void begin_style(IRPrinterStyle style) const;
+    virtual void end_style(IRPrinterStyle style) const;
+
 protected:
     Indentation get_indent() const {
         return Indentation{indent};
@@ -191,32 +219,25 @@ protected:
     bool ansi = false;
     int paren_depth = 0;
 
-    const char *ansi_hl = "";
-    const char *ansi_dim = "";
-    const char *ansi_kw = "";
-    const char *ansi_imm_int = "";
-    const char *ansi_imm_float = "";
-    const char *ansi_imm_str = "";
-    const char *ansi_var = "";
-    const char *ansi_buf = "";
-    const char *ansi_fn = "";
-    const char *ansi_type = "";
-    const char *ansi_reset_col = "";
-    const char *ansi_reset = "";
-
     // clang-format off
-    template<typename T> Ansi<T> hl(const T &t);
-    template<typename T> Ansi<T> kw(const T &t);
-    template<typename T> Ansi<T> imm_int(const T &t);
-    template<typename T> Ansi<T> imm_float(const T &t);
-    template<typename T> Ansi<T> imm_str(const T &t);
-    template<typename T> Ansi<T> var(const T &t);
-    template<typename T> Ansi<T> buf(const T &t);
-    template<typename T> Ansi<T> fn(const T &t);
-    template<typename T> Ansi<T> type(const T &t);
-    template<typename T> Ansi<T> typep(const T &t);
-    template<typename T> Ansi<T> paren(const T &t, bool bold = true, int d = -1);
+    template<typename T> StyledText<T> hl(const T &t);
+    template<typename T> StyledText<T> kw(const T &t);
+    template<typename T> StyledText<T> imm_int(const T &t);
+    template<typename T> StyledText<T> imm_float(const T &t);
+    template<typename T> StyledText<T> imm_str(const T &t);
+    template<typename T> StyledText<T> var(const T &t);
+    template<typename T> StyledText<T> buf(const T &t);
+    template<typename T> StyledText<T> fn(const T &t);
+    template<typename T> StyledText<T> type(const T &t);
+    template<typename T> StyledText<T> paren(const T &t, bool bold = true);
     // clang-format on
+
+    /** Emits a type in parentheses, styled as a type */
+    void print_type_in_parens(const Type &);
+
+    /** Emits a binary operator between its operands, in parentheses unless
+     * implicit_parens is set */
+    void print_binary(const Expr &a, const char *op, const Expr &b);
 
     /** Either emits "(" or "", depending on the value of implicit_parens */
     void open();
@@ -239,6 +260,10 @@ protected:
 
     /** A helper for printing a chain of lets with line breaks */
     void print_lets(const Let *let);
+
+    /** A helper for printing an if statement from its "if" on, and the ifs
+     * chained in as its else case with it */
+    void print_if_chain(const IfThenElse *op);
 
     /** A helper for printing a braced statement */
     void print_braced_stmt(const Stmt &, int extra_indent = 2);
@@ -293,7 +318,26 @@ protected:
     void visit(const StreamingStore *) override;
     void visit(const StreamingLoads *) override;
     void visit(const HoistedStorage *) override;
+
+    /** Called before and after an Expr or Stmt is emitted. Do nothing by
+     * default. */
+    virtual void begin_node(const IRNode *) {
+    }
+    virtual void end_node(const IRNode *) {
+    }
+
+private:
+    /** Emit a node, between begin_node() and end_node(). */
+    void print_node(const IRNode *);
 };
+
+template<typename T>
+std::ostream &operator<<(std::ostream &out, const StyledText<T> &a) {
+    a.printer->begin_style(a.style);
+    out << a.cnt;
+    a.printer->end_style(a.style);
+    return out;
+}
 
 /** Debugging helpers for interactive debuggers (LLDB/GDB).
  *

@@ -47,8 +47,6 @@ body {
     --grey0:            #aaa;
     --grey1:            #999;
     --grey2:            #555;
-
-    --cost-Lf: 1.0;
 }
 
 
@@ -90,8 +88,6 @@ body {
     --grey0:            #888;
     --grey1:            #aaa;
     --grey2:            #ccc;
-
-    --cost-Lf: 1.0;
 }
 
 [data-theme="gruvbox-light"] {
@@ -131,8 +127,6 @@ body {
     --grey0:            #a89984;
     --grey1:            #928374;
     --grey2:            #7c6f64;
-
-    --cost-Lf: 0.8;
 }
 [data-theme="gruvbox-dark"] {
     --bg-color: #f9f5d7;
@@ -172,8 +166,6 @@ body {
     --grey0:            #7c6f64;
     --grey1:            #928374;
     --grey2:            #a89984;
-
-    --cost-Lf: 0.6;
 }
 
 body {
@@ -226,22 +218,22 @@ span.Highlight, span.Highlight * {
     color: var(--bg0) !important;
 }
 [data-theme*="light"] {
-    b.HighlightToggle0 { font-weight: bold; background-color: oklch(80% 0.18 0); }
-    b.HighlightToggle1 { font-weight: bold; background-color: oklch(80% 0.18 50); }
-    b.HighlightToggle2 { font-weight: bold; background-color: oklch(80% 0.18 100); }
-    b.HighlightToggle3 { font-weight: bold; background-color: oklch(80% 0.18 150); }
-    b.HighlightToggle4 { font-weight: bold; background-color: oklch(80% 0.18 200); }
-    b.HighlightToggle5 { font-weight: bold; background-color: oklch(80% 0.18 260); }
-    b.HighlightToggle6 { font-weight: bold; background-color: oklch(80% 0.18 310); }
+    .HighlightToggle0 { font-weight: bold; background-color: oklch(80% 0.18 0); }
+    .HighlightToggle1 { font-weight: bold; background-color: oklch(80% 0.18 50); }
+    .HighlightToggle2 { font-weight: bold; background-color: oklch(80% 0.18 100); }
+    .HighlightToggle3 { font-weight: bold; background-color: oklch(80% 0.18 150); }
+    .HighlightToggle4 { font-weight: bold; background-color: oklch(80% 0.18 200); }
+    .HighlightToggle5 { font-weight: bold; background-color: oklch(80% 0.18 260); }
+    .HighlightToggle6 { font-weight: bold; background-color: oklch(80% 0.18 310); }
 }
 [data-theme*="dark"] {
-    b.HighlightToggle0 { background-color: oklch(40% 0.18 0); }
-    b.HighlightToggle1 { background-color: oklch(40% 0.18 50); }
-    b.HighlightToggle2 { background-color: oklch(40% 0.18 100); }
-    b.HighlightToggle3 { background-color: oklch(40% 0.18 150); }
-    b.HighlightToggle4 { background-color: oklch(40% 0.18 200); }
-    b.HighlightToggle5 { background-color: oklch(40% 0.18 260); }
-    b.HighlightToggle6 { background-color: oklch(40% 0.18 310); }
+    .HighlightToggle0 { background-color: oklch(40% 0.18 0); }
+    .HighlightToggle1 { background-color: oklch(40% 0.18 50); }
+    .HighlightToggle2 { background-color: oklch(40% 0.18 100); }
+    .HighlightToggle3 { background-color: oklch(40% 0.18 150); }
+    .HighlightToggle4 { background-color: oklch(40% 0.18 200); }
+    .HighlightToggle5 { background-color: oklch(40% 0.18 260); }
+    .HighlightToggle6 { background-color: oklch(40% 0.18 310); }
 }
 
 span.OpF32  { color: hsl(106deg 100% 40%); font-weight: bold; }
@@ -275,6 +267,7 @@ span.Label b { background-color: var(--bg_visual_red); font-weight: bold !import
 }
 .shj-syn-err,.shj-syn-kwd{
     color: var(--cs-keyword);
+    font-weight: bold;
 }
 .shj-syn-num,.shj-syn-class{
     color: var(--cs-int);
@@ -301,19 +294,6 @@ span.Label b { background-color: var(--bg_visual_red); font-weight: bold !import
 }
 
 
-[data-rainbow-parens="true"] {
-    #ir-code-pane {
-        color: var(--aqua);
-        span.expr-depth-1 { color: var(--red); }
-        span.expr-depth-2 { color: var(--blue); }
-        span.expr-depth-3 { color: var(--green); }
-        span.expr-depth-4 { color: var(--yellow); }
-        span.expr-depth-5 { color: var(--purple); }
-        span.expr-depth-6 { color: var(--aqua); }
-        span.expr-depth-7 { color: var(--orange); }
-        span.expr-depth-8 { color: var(--green); }
-    }
-}
 
 a,
 a:hover,
@@ -401,11 +381,6 @@ div#ir-code-pane {
     }
     #ir-code-pane div.Module {
         width: max-content;
-    }
-}
-[data-show-line-nums="true"] {
-    div#ir-code-pane {
-        padding-left: 50px;
     }
 }
 
@@ -815,170 +790,6 @@ div.Let {
     padding-left: 15px;
 }
 
-.tooltip-parent {
-    position: absolute;
-    overflow: visible;
-}
-
-span.tooltip {
-    opacity: 1;
-    color: black;
-    font-weight: normal;
-    visibility: hidden;
-    position: absolute;
-    left: 50px;
-    top: -10px;
-    width: max-content;
-    display: block;
-    padding: 8px;
-    background: #fff7e0;
-    font-size: 12px;
-    border-radius: 5px;
-    border: 1px solid #aaa;
-    z-index: 9999;
-    box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0;
-    text-indent: 0px;
-}
-
-.tooltip-parent:hover span.tooltip {
-    visibility: visible;
-}
-
-/* Cost model */
-
-[data-hide-cost="true"] {
-    div.node-cost {
-        display: none;
-    }
-    .ModuleBody {
-        padding-left: 30px !important;
-    }
-}
-[data-show-line-nums="false"] {
-    div.node-cost {
-        left: 15px;
-    }
-}
-
-div.node-cost {
-    position: absolute;
-    left: 52px; /* Enough for 4 digit line counter. */
-    width: 40px;
-}
-div.cost-btn {
-    width: 16px;
-    height: 10px;
-    margin-top: 0px;
-    /*border: 1px solid rgba(0,0,0,0.1);*/
-    position: relative;
-    float: left;
-    margin-right: 3px;
-    box-sizing: border-box;
-    outline: 1px solid rgba(0,0,0,0.1);
-}
-div.cost-btn:hover {
-    cursor: pointer;
-    /*border: 1px solid lightgray;*/
-}
-[data-theme*="dark"] {
-    div.cost-btn {
-        outline: 1px solid rgba(255,255,255,0.15);
-    }
-    .line-CostColorNone.block-CostColorNone { outline: none; }
-}
-
-.block-CostColor0:first-child { border-left: 8px solid oklch(calc(90.0% * var(--cost-Lf)) 0.05 140); }
-.block-CostColor1:first-child { border-left: 8px solid oklch(calc(87.4% * var(--cost-Lf)) 0.06 140); }
-.block-CostColor2:first-child { border-left: 8px solid oklch(calc(84.7% * var(--cost-Lf)) 0.06 140); }
-.block-CostColor3:first-child { border-left: 8px solid oklch(calc(82.1% * var(--cost-Lf)) 0.07 140); }
-.block-CostColor4:first-child { border-left: 8px solid oklch(calc(79.5% * var(--cost-Lf)) 0.07 140); }
-.block-CostColor5:first-child { border-left: 8px solid oklch(calc(76.8% * var(--cost-Lf)) 0.08 140); }
-.block-CostColor6:first-child { border-left: 8px solid oklch(calc(74.2% * var(--cost-Lf)) 0.08 140); }
-.block-CostColor7:first-child { border-left: 8px solid oklch(calc(71.6% * var(--cost-Lf)) 0.09 140); }
-.block-CostColor8:first-child { border-left: 8px solid oklch(calc(68.9% * var(--cost-Lf)) 0.09 140); }
-.block-CostColor9:first-child { border-left: 8px solid oklch(calc(66.3% * var(--cost-Lf)) 0.10 140); }
-.block-CostColor10:first-child { border-left: 8px solid oklch(calc(63.7% * var(--cost-Lf)) 0.10 140); }
-.block-CostColor11:first-child { border-left: 8px solid oklch(calc(61.1% * var(--cost-Lf)) 0.11 140); }
-.block-CostColor12:first-child { border-left: 8px solid oklch(calc(58.4% * var(--cost-Lf)) 0.11 140); }
-.block-CostColor13:first-child { border-left: 8px solid oklch(calc(55.8% * var(--cost-Lf)) 0.12 140); }
-.block-CostColor14:first-child { border-left: 8px solid oklch(calc(53.2% * var(--cost-Lf)) 0.12 140); }
-.block-CostColor15:first-child { border-left: 8px solid oklch(calc(50.5% * var(--cost-Lf)) 0.13 140); }
-.block-CostColor16:first-child { border-left: 8px solid oklch(calc(47.9% * var(--cost-Lf)) 0.13 140); }
-.block-CostColor17:first-child { border-left: 8px solid oklch(calc(45.3% * var(--cost-Lf)) 0.14 140); }
-.block-CostColor18:first-child { border-left: 8px solid oklch(calc(42.6% * var(--cost-Lf)) 0.14 140); }
-.block-CostColor19:first-child { border-left: 8px solid oklch(calc(40.0% * var(--cost-Lf)) 0.15 140); }
-.block-CostColorNone:first-child { border-left: transparent; }
-
-.line-CostColor0:first-child { border-right: 8px solid oklch(calc(90.0% * var(--cost-Lf)) 0.05 140); }
-.line-CostColor1:first-child { border-right: 8px solid oklch(calc(87.4% * var(--cost-Lf)) 0.06 140); }
-.line-CostColor2:first-child { border-right: 8px solid oklch(calc(84.7% * var(--cost-Lf)) 0.06 140); }
-.line-CostColor3:first-child { border-right: 8px solid oklch(calc(82.1% * var(--cost-Lf)) 0.07 140); }
-.line-CostColor4:first-child { border-right: 8px solid oklch(calc(79.5% * var(--cost-Lf)) 0.07 140); }
-.line-CostColor5:first-child { border-right: 8px solid oklch(calc(76.8% * var(--cost-Lf)) 0.08 140); }
-.line-CostColor6:first-child { border-right: 8px solid oklch(calc(74.2% * var(--cost-Lf)) 0.08 140); }
-.line-CostColor7:first-child { border-right: 8px solid oklch(calc(71.6% * var(--cost-Lf)) 0.09 140); }
-.line-CostColor8:first-child { border-right: 8px solid oklch(calc(68.9% * var(--cost-Lf)) 0.09 140); }
-.line-CostColor9:first-child { border-right: 8px solid oklch(calc(66.3% * var(--cost-Lf)) 0.10 140); }
-.line-CostColor10:first-child { border-right: 8px solid oklch(calc(63.7% * var(--cost-Lf)) 0.10 140); }
-.line-CostColor11:first-child { border-right: 8px solid oklch(calc(61.1% * var(--cost-Lf)) 0.11 140); }
-.line-CostColor12:first-child { border-right: 8px solid oklch(calc(58.4% * var(--cost-Lf)) 0.11 140); }
-.line-CostColor13:first-child { border-right: 8px solid oklch(calc(55.8% * var(--cost-Lf)) 0.12 140); }
-.line-CostColor14:first-child { border-right: 8px solid oklch(calc(53.2% * var(--cost-Lf)) 0.12 140); }
-.line-CostColor15:first-child { border-right: 8px solid oklch(calc(50.5% * var(--cost-Lf)) 0.13 140); }
-.line-CostColor16:first-child { border-right: 8px solid oklch(calc(47.9% * var(--cost-Lf)) 0.13 140); }
-.line-CostColor17:first-child { border-right: 8px solid oklch(calc(45.3% * var(--cost-Lf)) 0.14 140); }
-.line-CostColor18:first-child { border-right: 8px solid oklch(calc(42.6% * var(--cost-Lf)) 0.14 140); }
-.line-CostColor19:first-child { border-right: 8px solid oklch(calc(40.0% * var(--cost-Lf)) 0.15 140); }
-.line-CostColorNone:first-child { border-right: transparent; }
-
-.block-CostColor0:last-child { border-left: 8px solid oklch(calc(90.0% * var(--cost-Lf)) 0.05 300); }
-.block-CostColor1:last-child { border-left: 8px solid oklch(calc(87.4% * var(--cost-Lf)) 0.06 300); }
-.block-CostColor2:last-child { border-left: 8px solid oklch(calc(84.7% * var(--cost-Lf)) 0.06 300); }
-.block-CostColor3:last-child { border-left: 8px solid oklch(calc(82.1% * var(--cost-Lf)) 0.07 300); }
-.block-CostColor4:last-child { border-left: 8px solid oklch(calc(79.5% * var(--cost-Lf)) 0.07 300); }
-.block-CostColor5:last-child { border-left: 8px solid oklch(calc(76.8% * var(--cost-Lf)) 0.08 300); }
-.block-CostColor6:last-child { border-left: 8px solid oklch(calc(74.2% * var(--cost-Lf)) 0.08 300); }
-.block-CostColor7:last-child { border-left: 8px solid oklch(calc(71.6% * var(--cost-Lf)) 0.09 300); }
-.block-CostColor8:last-child { border-left: 8px solid oklch(calc(68.9% * var(--cost-Lf)) 0.09 300); }
-.block-CostColor9:last-child { border-left: 8px solid oklch(calc(66.3% * var(--cost-Lf)) 0.10 300); }
-.block-CostColor10:last-child { border-left: 8px solid oklch(calc(63.7% * var(--cost-Lf)) 0.10 300); }
-.block-CostColor11:last-child { border-left: 8px solid oklch(calc(61.1% * var(--cost-Lf)) 0.11 300); }
-.block-CostColor12:last-child { border-left: 8px solid oklch(calc(58.4% * var(--cost-Lf)) 0.11 300); }
-.block-CostColor13:last-child { border-left: 8px solid oklch(calc(55.8% * var(--cost-Lf)) 0.12 300); }
-.block-CostColor14:last-child { border-left: 8px solid oklch(calc(53.2% * var(--cost-Lf)) 0.12 300); }
-.block-CostColor15:last-child { border-left: 8px solid oklch(calc(50.5% * var(--cost-Lf)) 0.13 300); }
-.block-CostColor16:last-child { border-left: 8px solid oklch(calc(47.9% * var(--cost-Lf)) 0.13 300); }
-.block-CostColor17:last-child { border-left: 8px solid oklch(calc(45.3% * var(--cost-Lf)) 0.14 300); }
-.block-CostColor18:last-child { border-left: 8px solid oklch(calc(42.6% * var(--cost-Lf)) 0.14 300); }
-.block-CostColor19:last-child { border-left: 8px solid oklch(calc(40.0% * var(--cost-Lf)) 0.15 300); }
-.block-CostColorNone:last-child { border-left: transparent; }
-
-.line-CostColor0:last-child { border-right: 8px solid oklch(calc(90.0% * var(--cost-Lf)) 0.05 300); }
-.line-CostColor1:last-child { border-right: 8px solid oklch(calc(87.4% * var(--cost-Lf)) 0.06 300); }
-.line-CostColor2:last-child { border-right: 8px solid oklch(calc(84.7% * var(--cost-Lf)) 0.06 300); }
-.line-CostColor3:last-child { border-right: 8px solid oklch(calc(82.1% * var(--cost-Lf)) 0.07 300); }
-.line-CostColor4:last-child { border-right: 8px solid oklch(calc(79.5% * var(--cost-Lf)) 0.07 300); }
-.line-CostColor5:last-child { border-right: 8px solid oklch(calc(76.8% * var(--cost-Lf)) 0.08 300); }
-.line-CostColor6:last-child { border-right: 8px solid oklch(calc(74.2% * var(--cost-Lf)) 0.08 300); }
-.line-CostColor7:last-child { border-right: 8px solid oklch(calc(71.6% * var(--cost-Lf)) 0.09 300); }
-.line-CostColor8:last-child { border-right: 8px solid oklch(calc(68.9% * var(--cost-Lf)) 0.09 300); }
-.line-CostColor9:last-child { border-right: 8px solid oklch(calc(66.3% * var(--cost-Lf)) 0.10 300); }
-.line-CostColor10:last-child { border-right: 8px solid oklch(calc(63.7% * var(--cost-Lf)) 0.10 300); }
-.line-CostColor11:last-child { border-right: 8px solid oklch(calc(61.1% * var(--cost-Lf)) 0.11 300); }
-.line-CostColor12:last-child { border-right: 8px solid oklch(calc(58.4% * var(--cost-Lf)) 0.11 300); }
-.line-CostColor13:last-child { border-right: 8px solid oklch(calc(55.8% * var(--cost-Lf)) 0.12 300); }
-.line-CostColor14:last-child { border-right: 8px solid oklch(calc(53.2% * var(--cost-Lf)) 0.12 300); }
-.line-CostColor15:last-child { border-right: 8px solid oklch(calc(50.5% * var(--cost-Lf)) 0.13 300); }
-.line-CostColor16:last-child { border-right: 8px solid oklch(calc(47.9% * var(--cost-Lf)) 0.13 300); }
-.line-CostColor17:last-child { border-right: 8px solid oklch(calc(45.3% * var(--cost-Lf)) 0.14 300); }
-.line-CostColor18:last-child { border-right: 8px solid oklch(calc(42.6% * var(--cost-Lf)) 0.14 300); }
-.line-CostColor19:last-child { border-right: 8px solid oklch(calc(40.0% * var(--cost-Lf)) 0.15 300); }
-.line-CostColorNone:last-child { border-right: transparent; }
-
-.NoChildCost { border-left: none !important; }
-
-.line-CostColorNone.block-CostColorNone { outline: none; }
-
 /* Below is the style for the Syntax Highlighting with speed-highlight.
  * It's adapted from the default style from: https://unpkg.com/@speed-highlight/core@1.1.11/dist/themes/default.css
  */
@@ -1018,4 +829,229 @@ div.cost-btn:hover {
     background:#58f3;
     border-radius:5px;
     margin-bottom:20px
+}
+
+/* IR code: the text of the stmt, one div per line */
+div#ir-code-pane {
+    padding-left: 4px;
+}
+div.ir-code {
+    font-family: monospace;
+    --ir-gutter: 5.5em;
+}
+div.ir-code div.l {
+    position: relative;
+    white-space: pre;
+    padding-left: var(--ir-gutter);
+    min-height: 1.3em;
+    line-height: 1.3em;
+}
+/* A wrapped line continues a little deeper than it is indented: the first
+ * row starts at the gutter, the others after the indentation. */
+div.ir-code div.l {
+    --hang: calc(var(--ind, 0) * 1ch + 4ch);
+    padding-left: calc(var(--ir-gutter) + var(--hang));
+    text-indent: calc(-1 * var(--hang));
+}
+[data-wrap="true"] div.ir-code div.l {
+    white-space: pre-wrap;
+}
+div.ir-code div.l:hover {
+    background-color: rgba(128, 128, 128, 0.08);
+}
+div.ir-code div.l.selected {
+    background-color: var(--bg_visual_yellow);
+}
+div.ir-code div.l[data-hidden]:not([data-hidden="0"]) {
+    display: none;
+}
+
+/* Shading of parallel loops and loops over GPU blocks, and of loops over GPU
+ * threads: from just left of the column of the loop, with a line along its
+ * left. */
+div.ir-code {
+    --par-edge: rgba(240, 200, 0, 0.35);
+    --par-fill: rgba(240, 200, 0, 0.07);
+    --thr-edge: rgba(240, 100, 50, 0.35);
+    --thr-fill: rgba(240, 100, 50, 0.07);
+}
+div.ir-code div.l.in-par {
+    --par-x: calc(var(--ir-gutter) + var(--par) * 1ch - 0.8ch);
+    background-image: linear-gradient(to right, transparent var(--par-x), var(--par-edge) var(--par-x),
+                                      var(--par-edge) calc(var(--par-x) + 3px), var(--par-fill) calc(var(--par-x) + 3px));
+}
+div.ir-code div.l.in-thr {
+    --thr-x: calc(var(--ir-gutter) + var(--thr) * 1ch - 0.8ch);
+    background-image: linear-gradient(to right, transparent var(--thr-x), var(--thr-edge) var(--thr-x),
+                                      var(--thr-edge) calc(var(--thr-x) + 3px), var(--thr-fill) calc(var(--thr-x) + 3px));
+}
+div.ir-code div.l.in-par.in-thr {
+    background-image: linear-gradient(to right, transparent var(--thr-x), var(--thr-edge) var(--thr-x),
+                                      var(--thr-edge) calc(var(--thr-x) + 3px), var(--thr-fill) calc(var(--thr-x) + 3px)),
+                      linear-gradient(to right, transparent var(--par-x), var(--par-edge) var(--par-x),
+                                      var(--par-edge) calc(var(--par-x) + 3px), var(--par-fill) calc(var(--par-x) + 3px));
+}
+div.ir-code span.g {
+    position: absolute;
+    left: 0;
+    width: var(--ir-gutter);
+    display: inline-flex;
+    white-space: nowrap;
+    text-indent: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+div.ir-code span.n {
+    width: 4em;
+    text-align: right;
+    color: var(--cs-line-num);
+}
+[data-show-line-nums="false"] div.ir-code span.n {
+    visibility: hidden;
+}
+div.ir-code div.l[data-asm] span.n {
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+div.ir-code div.l[data-asm] span.n:hover {
+    color: var(--red);
+}
+div.ir-code span.t {
+    width: 1.5em;
+    text-align: center;
+    cursor: pointer;
+    color: var(--cs-line-num);
+    font-size: 1.4em;
+    line-height: 0.93em;
+}
+div.ir-code span.t:hover {
+    color: var(--red);
+}
+/* While hovering the collapse toggle of a block, a line marks the lines it
+ * collapses. */
+div.ir-code div.l.fold::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--ir-gutter) + var(--fold) * 1ch + 0.4ch);
+    border-left: 2px dotted var(--fg0);
+    pointer-events: none;
+}
+div.ir-code div.l.fold-end::after {
+    bottom: 50%;
+    width: 0.6ch;
+    border-bottom: 2px dotted var(--fg0);
+}
+div.ir-code span.t:before {
+    content: "\25BE";
+}
+div.ir-code div.l.collapsed span.t:before {
+    content: "\25B8";
+}
+div.ir-code span.t.none {
+    cursor: default;
+}
+div.ir-code span.t.none:before {
+    content: "";
+}
+div.ir-code div.l.collapsed span.c:after {
+    content: " \2026";
+    color: gray;
+    font-style: italic;
+}
+div.ir-code div.l span.icon-btn {
+    margin-left: 1em;
+    position: relative;
+}
+
+div.ir-code .kw    { color: var(--cs-keyword); font-weight: bold; }
+div.ir-code .type  { color: var(--cs-type); }
+div.ir-code .num   { color: var(--cs-int); }
+div.ir-code .str   { color: var(--cs-str); }
+div.ir-code .buf   { color: var(--cs-symbol); }
+div.ir-code .fn    { color: var(--cs-symbol); }
+div.ir-code .var   { color: var(--cs-variable); cursor: pointer; }
+/* The variables of the loops over GPU threads. */
+div.ir-code .var.gpu-x { color: var(--red); }
+div.ir-code .var.gpu-y { color: var(--green); }
+div.ir-code .var.gpu-z { color: var(--blue); }
+div.ir-code .op    { color: var(--cs-operator); }
+div.ir-code .op.bold { font-weight: bold; }
+div.ir-code .dim   { opacity: 0.6; }
+div.ir-code .hl    { text-decoration: underline; }
+div.ir-code .op.Highlight { background-color: var(--bg_visual_blue); }
+
+[data-rainbow-parens="true"] {
+    div.ir-code .op.d0 { color: var(--red); }
+    div.ir-code .op.d1 { color: var(--green); }
+    div.ir-code .op.d2 { color: var(--yellow); }
+    div.ir-code .op.d3 { color: var(--blue); }
+    div.ir-code .op.d4 { color: var(--purple); }
+    div.ir-code .op.d5 { color: var(--aqua); }
+}
+
+/* Host assembly, with the numbers of the lines in the assembly file */
+div#asm-code {
+    position: relative;
+}
+div#assemblyContent {
+    position: relative;
+    font-family: monospace;
+    font-size: 12px;
+    cursor: pointer;
+}
+div#assemblyContent > div {
+    position: absolute;
+    left: 0;
+    height: 14px;
+    line-height: 14px;
+    white-space: pre;
+}
+div#assemblyContent span.n {
+    display: inline-block;
+    width: 4.5em;
+    padding-right: 1em;
+    text-align: right;
+    color: var(--cs-line-num);
+    user-select: none;
+    -webkit-user-select: none;
+}
+div.asm-hl {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+div.asm-hl.hover {
+    background-color: rgba(255, 200, 0, 0.15);
+}
+div.asm-hl.selected {
+    background-color: rgba(255, 120, 0, 0.3);
+}
+
+/* Device code, with the numbers of its lines in the source */
+div#device-code-pane span.line[data-n]:before {
+    content: attr(data-n) ".";
+}
+
+/* Labels in the assembly link to where they are defined. */
+div#assemblyContent span.asm-label:hover {
+    text-decoration: underline;
+}
+div#assemblyContent span.asm-label.Highlight {
+    background-color: var(--bg_visual_blue);
+}
+div.asm-hl.label-target {
+    background-color: rgba(80, 160, 255, 0.3);
+    /* Pulses after a jump, to show where it went. */
+    animation: asm-label-pulse 0.3s ease-in-out 2;
+}
+@keyframes asm-label-pulse {
+    0%, 100% {
+        background-color: rgba(80, 160, 255, 0.3);
+    }
+    50% {
+        background-color: rgba(80, 160, 255, 0.8);
+    }
 }
