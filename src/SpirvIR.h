@@ -673,6 +673,10 @@ struct SpvFactory {
     static SpvInstruction exec_mode_local_size_id(SpvId function_id, SpvId local_size_x_id, SpvId local_size_y_id, SpvId local_size_z_id);  // only avail in 1.2
     static SpvInstruction memory_barrier(SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, SpvId semantics_mask_id);
+    static SpvInstruction atomic_load(SpvId type_id, SpvId result_id, SpvId ptr_id, SpvId memory_scope_id, SpvId semantics_mask_id);
+    static SpvInstruction atomic_store(SpvId ptr_id, SpvId memory_scope_id, SpvId semantics_mask_id, SpvId value_id);
+    static SpvInstruction atomic_binary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId ptr_id, SpvId memory_scope_id, SpvId semantics_mask_id, SpvId value_id);
+    static SpvInstruction atomic_compare_exchange(SpvId type_id, SpvId result_id, SpvId ptr_id, SpvId memory_scope_id, SpvId equal_semantics_mask_id, SpvId unequal_semantics_mask_id, SpvId value_id, SpvId comparator_id);
     static SpvInstruction bitwise_not(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction bitwise_and(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction logical_not(SpvId type_id, SpvId result_id, SpvId src_id);
