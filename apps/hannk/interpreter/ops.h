@@ -285,6 +285,9 @@ class PadOp : public Op {
 public:
     PadOp(const TensorPtr &input, const TensorPtr &padding, const TensorPtr &output)
         : Op({input, padding}, {output}) {
+        HCHECK(padding->rank() == 2 && padding->extent(0) == 2 &&
+               padding->extent(1) == input->rank() && output->rank() == input->rank())
+            << "Pad requires a [2, rank] padding tensor matching the input and output ranks\n";
         if (input->rank() == 0 || !padding->is_constant()) {
             output->set_dynamic();
         }
