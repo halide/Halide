@@ -700,6 +700,7 @@ tests(
     nested_parallel_stack.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
+    opencl_platform_count.cpp
     parallel.cpp
     parallel_alloc.cpp
     parallel_fork.cpp

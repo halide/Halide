@@ -417,6 +417,11 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     if (err != CL_SUCCESS) {
         return error_opencl(user_context, err, "clGetPlatformIDs failed");
     }
+    // platform_count is the number of platforms available, which can be more
+    // than the number written to platforms.
+    if (platform_count > max_platforms) {
+        platform_count = max_platforms;
+    }
 
     cl_platform_id platform = nullptr;
 
@@ -489,6 +494,10 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount);
     if (err != CL_SUCCESS) {
         return error_opencl(user_context, err, "clGetDeviceIDs failed");
+    }
+    // Likewise, deviceCount can be more than the number written to devices.
+    if (deviceCount > maxDevices) {
+        deviceCount = maxDevices;
     }
 
     // If the user indicated a specific device index to use, use
