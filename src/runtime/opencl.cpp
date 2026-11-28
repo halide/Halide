@@ -971,6 +971,17 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
+// Whether a rectangle of the given number of slices, starting at byte offset
+// origin of the cl_mem, lies in it, counting the padding after its last row
+// and slice: drivers check the bounds of a rectangle that way (NVIDIA rejects
+// a rectangle whose last slice ends at the end of the buffer but whose slice
+// pitch reaches past it).
+WEAK bool opencl_rect_in_bounds(uint64_t c_mem, uint64_t origin, size_t slices, size_t slice_pitch) {
+    size_t mem_size = 0;
+    cl_int err = clGetMemObjectInfo(((device_handle *)c_mem)->mem, CL_MEM_SIZE, sizeof(size_t), &mem_size, nullptr);
+    return err == CL_SUCCESS && origin + slices * slice_pitch <= mem_size;
+}
+
 WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
                                          const device_copy &c,
                                          int64_t src_idx, int64_t dst_idx,
@@ -978,6 +989,74 @@ WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU";
         return halide_error_code_bad_dimensions;
+    } else if (d > 0 && d < c.rect_dims && !(from_host && to_host)) {
+        // Copy the innermost d dimensions and the contiguous chunk as one
+        // rectangle.
+        size_t region[3] = {(size_t)c.chunk_size, (size_t)c.extent[0], (size_t)(d == 2 ? c.extent[1] : 1)};
+        size_t src_row_pitch = c.src_stride_bytes[0];
+        size_t dst_row_pitch = c.dst_stride_bytes[0];
+        size_t src_slice_pitch = d == 2 ? c.src_stride_bytes[1] : region[1] * src_row_pitch;
+        size_t dst_slice_pitch = d == 2 ? c.dst_stride_bytes[1] : region[1] * dst_row_pitch;
+        uint64_t src_off = from_host ? src_idx : src_idx + ((device_handle *)c.src)->offset;
+        uint64_t dst_off = to_host ? dst_idx : dst_idx + ((device_handle *)c.dst)->offset;
+
+        bool in_bounds = (from_host || opencl_rect_in_bounds(c.src, src_off, region[2], src_slice_pitch)) &&
+                         (to_host || opencl_rect_in_bounds(c.dst, dst_off, region[2], dst_slice_pitch));
+        if (!in_bounds) {
+            // The padding after the last row or slice reaches past the end of
+            // the buffer: copy all but the last row or slice as a rectangle
+            // (which ends where the last one starts), and the last one as a
+            // copy of one dimension less.
+            int outer = d - 1;
+            uint64_t last = c.extent[outer] - 1;
+            if (last > 0) {
+                device_copy head = c;
+                head.extent[outer] = last;
+                auto result = opencl_do_multidimensional_copy(user_context, ctx, head, src_idx, dst_idx,
+                                                              d, from_host, to_host);
+                if (result) {
+                    return result;
+                }
+            }
+            return opencl_do_multidimensional_copy(user_context, ctx, c,
+                                                   src_idx + last * c.src_stride_bytes[outer],
+                                                   dst_idx + last * c.dst_stride_bytes[outer],
+                                                   outer, from_host, to_host);
+        }
+
+        debug(user_context) << "    rect copy from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << (void *)c.src << " + " << src_off
+                            << " -> " << (void *)c.dst << " + " << dst_off
+                            << ", " << (uint64_t)region[0] << " x " << (uint64_t)region[1]
+                            << " x " << (uint64_t)region[2] << " bytes\n";
+        // The spec computes a buffer's offset as origin[2] * slice_pitch +
+        // origin[1] * row_pitch + origin[0] and only requires the rectangle to
+        // lie in the buffer, so the whole byte offset goes in origin[0]. On the
+        // host side it goes in the pointer.
+        size_t zero[3] = {0, 0, 0};
+        size_t src_origin[3] = {(size_t)src_off, 0, 0};
+        size_t dst_origin[3] = {(size_t)dst_off, 0, 0};
+        cl_int err;
+        if (!from_host && to_host) {
+            err = clEnqueueReadBufferRect(ctx.cmd_queue, ((device_handle *)c.src)->mem, CL_FALSE,
+                                          src_origin, zero, region,
+                                          src_row_pitch, src_slice_pitch, dst_row_pitch, dst_slice_pitch,
+                                          (void *)(c.dst + dst_off), 0, nullptr, nullptr);
+        } else if (from_host && !to_host) {
+            err = clEnqueueWriteBufferRect(ctx.cmd_queue, ((device_handle *)c.dst)->mem, CL_FALSE,
+                                           dst_origin, zero, region,
+                                           dst_row_pitch, dst_slice_pitch, src_row_pitch, src_slice_pitch,
+                                           (const void *)(c.src + src_off), 0, nullptr, nullptr);
+        } else {
+            err = clEnqueueCopyBufferRect(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
+                                          src_origin, dst_origin, region,
+                                          src_row_pitch, src_slice_pitch, dst_row_pitch, dst_slice_pitch,
+                                          0, nullptr, nullptr);
+        }
+        if (err) {
+            return error_opencl(user_context, err, "rectangular buffer copy failed");
+        }
     } else if (d == 0) {
         cl_int err = 0;
 
