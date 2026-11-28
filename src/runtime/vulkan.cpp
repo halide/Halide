@@ -441,9 +441,12 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 
     // We construct a staging buffer to copy into from host memory.  Then,
     // we use vkCmdCopyBuffer() to copy from the staging buffer into the
-    // the actual device memory.
+    // the actual device memory. The staging buffer holds just the copied
+    // data, packed densely.
+    device_copy staging_copy = copy_helper;
     MemoryRequest request = {0};
-    request.size = halide_buffer->size_in_bytes();
+    request.size = make_dst_dense(staging_copy);
+    make_src_dense(copy_helper);
     request.properties.usage = MemoryUsage::TransferSrc;
     request.properties.caching = MemoryCaching::UncachedCoherent;
     request.properties.visibility = MemoryVisibility::HostToDevice;
@@ -463,8 +466,8 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     }
 
     // copy to the (host-visible/coherent) staging buffer
-    copy_helper.dst = (uint64_t)(stage_host_ptr);
-    copy_memory(copy_helper, user_context);
+    staging_copy.dst = (uint64_t)(stage_host_ptr);
+    copy_memory(staging_copy, user_context);
 
     // retrieve the buffer from the region
     VkBuffer *staging_buffer = reinterpret_cast<VkBuffer *>(staging_region->handle);
@@ -629,9 +632,12 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     device_copy copy_helper = make_device_to_host_copy(halide_buffer);
 
     // This is the inverse of copy_to_device: we create a staging buffer, copy into
-    // it, map it so the host can see it, then copy into the host buffer
+    // it, map it so the host can see it, then copy into the host buffer. The
+    // staging buffer holds just the copied data, packed densely.
+    device_copy staging_copy = copy_helper;
     MemoryRequest request = {0};
-    request.size = halide_buffer->size_in_bytes();
+    request.size = make_src_dense(staging_copy);
+    make_dst_dense(copy_helper);
     request.properties.usage = MemoryUsage::TransferDst;
     request.properties.caching = MemoryCaching::CachedCoherent;  // The host reads it.
     request.properties.visibility = MemoryVisibility::DeviceToHost;
@@ -701,7 +707,6 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     // define the src and dst config
     bool from_host = false;
     bool to_host = true;
-    uint64_t copy_dst = copy_helper.dst;
     uint64_t src_offset = copy_helper.src_begin + (device_region->indexing.offset * halide_buffer->type.bytes());
     uint64_t dst_offset = copy_helper.dst_begin;
 
@@ -760,10 +765,9 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         return halide_error_code_copy_to_device_failed;
     }
 
-    // copy to the (host-visible/coherent) staging buffer
-    copy_helper.dst = copy_dst;
-    copy_helper.src = (uint64_t)(stage_host_ptr);
-    copy_memory(copy_helper, user_context);
+    // copy from the (host-visible/coherent) staging buffer
+    staging_copy.src = (uint64_t)(stage_host_ptr);
+    copy_memory(staging_copy, user_context);
 
     // unmap the pointer and reclaim the staging region
     error_code = ctx.allocator->unmap(user_context, staging_region);
@@ -821,6 +825,22 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
     device_copy copy_helper = make_buffer_copy(src, from_host, dst, to_host);
 
+    // Copies between host and device memory go through a staging buffer that
+    // holds just the copied data, packed densely: staging_copy copies between
+    // it and host memory, and copy_helper between it and device memory.
+    device_copy staging_copy = copy_helper;
+    uint64_t staging_size = 0;
+    if (from_host && !to_host) {
+        staging_size = make_dst_dense(staging_copy);
+        make_src_dense(copy_helper);
+    } else if (!from_host && to_host) {
+        staging_size = make_src_dense(staging_copy);
+        make_dst_dense(copy_helper);
+    }
+    if (from_host != to_host && staging_size == 0) {
+        return halide_error_code_success;
+    }
+
     int error_code = halide_error_code_success;
     {
         VulkanContext ctx(user_context);
@@ -866,7 +886,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
             // Need to make sure all reads and writes to/from source are complete.
             MemoryRequest request = {0};
-            request.size = src->size_in_bytes();
+            request.size = staging_size;
 
             // NOTE: We may re-use this buffer so enable both src and dst
             request.properties.usage = MemoryUsage::TransferSrcDst;
@@ -890,7 +910,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
             // Need to make sure all reads and writes to/from destination are complete.
             MemoryRequest request = {0};
-            request.size = src->size_in_bytes();
+            request.size = staging_size;
 
             // NOTE: We may re-use this buffer so enable both src and dst
             request.properties.usage = MemoryUsage::TransferSrcDst;
@@ -911,11 +931,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
                 return halide_error_code_copy_to_device_failed;
             }
 
-            // copy to the (host-visible/coherent) staging buffer, then restore the dst pointer
-            uint64_t copy_dst_ptr = copy_helper.dst;
-            copy_helper.dst = (uint64_t)(stage_host_ptr);
-            copy_memory(copy_helper, user_context);
-            copy_helper.dst = copy_dst_ptr;
+            // copy to the (host-visible/coherent) staging buffer
+            staging_copy.dst = (uint64_t)(stage_host_ptr);
+            copy_memory(staging_copy, user_context);
 
             // unmap the pointer
             error_code = ctx.allocator->unmap(user_context, staging_region);
@@ -982,7 +1000,6 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
 
         // define the src and dst config
-        uint64_t copy_dst = copy_helper.dst;
         uint64_t src_offset = copy_helper.src_begin + (src_buffer_region->indexing.offset * src->type.bytes());
         uint64_t dst_offset = copy_helper.dst_begin + (dst_buffer_region->indexing.offset * dst->type.bytes());
 
@@ -1049,10 +1066,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
                 return halide_error_code_internal_error;
             }
 
-            // copy to the (host-visible/coherent) staging buffer
-            copy_helper.dst = copy_dst;
-            copy_helper.src = (uint64_t)(stage_host_ptr);
-            copy_memory(copy_helper, user_context);
+            // copy from the (host-visible/coherent) staging buffer
+            staging_copy.src = (uint64_t)(stage_host_ptr);
+            copy_memory(staging_copy, user_context);
 
             // unmap the pointer and reclaim the staging region
             error_code = ctx.allocator->unmap(user_context, staging_region);

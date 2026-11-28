@@ -115,14 +115,6 @@ int main() {
         printf("[SKIP] This test requires a GPU target.\n");
         return 0;
     }
-    if (target.has_feature(Target::Vulkan)) {
-        printf("[SKIP-WITH-ISSUE-9694] Vulkan does not yet copy correctly between host and device buffers with different strides. See https://github.com/halide/Halide/issues/9694\n");
-        return 0;
-    }
-    if (target.has_feature(Target::D3D12Compute)) {
-        printf("[SKIP-WITH-ISSUE-9707] D3D12 copies of large strided regions are very slow and can lose the device. See https://github.com/halide/Halide/issues/9707\n");
-        return 0;
-    }
     const halide_device_interface_t *itf =
         get_device_interface_for_device_api(DeviceAPI::Default_GPU, target);
 
@@ -136,9 +128,12 @@ int main() {
         double strided = test(itf, dir, image_width / 64, region_elems * 64 / image_width);
         printf("%-15s contiguous: %8.4f ms  strided: %8.4f ms  ratio: %5.2f\n",
                name(dir), contiguous * 1e3, strided * 1e3, strided / contiguous);
-        // A strided region should be copied with a handful of
-        // operations, not one per row.
-        if (strided > 4 * contiguous) {
+        // A strided region should be copied with a handful of submissions,
+        // not one per row. (Runtimes that copy it as a rectangle take about
+        // as long as for a contiguous one; runtimes that copy each row with
+        // its own command in one submission take a few times longer; one
+        // submission per row takes 50 to 2000 times longer.)
+        if (strided > 10 * contiguous) {
             printf("Copying a strided %s region is much slower than "
                    "copying a contiguous one of the same size.\n",
                    name(dir));
